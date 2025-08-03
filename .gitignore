@@ -41,6 +41,13 @@ bower_components
 # Next.js build output
 .next/
 
+# Node modules
+node_modules/
+
+# Prisma generated binaries and engines
+generated/prisma/
+carrot/generated/prisma/
+
 # node-waf configuration
 .lock-wscript
 
