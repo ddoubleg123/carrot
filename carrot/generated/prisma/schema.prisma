@@ -1,0 +1,31 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  name         String? // optional until onboarding
+  firstName    String?
+  lastName     String?
+  username     String? @unique
+  phone        String?
+  country      String?
+  postalCode   String?
+  image        String? // stores profile image URL/data
+  profilePhoto String? // onboarding-uploaded avatar URL
+  isOnboarded  Boolean @default(false)
+  // Add any other fields as needed
+}

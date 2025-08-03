@@ -1,0 +1,47 @@
+:root {
+  --sbw: 272px;
+  --gutter-left: clamp(16px,2vw,28px);
+  --col-gap: clamp(20px,2.4vw,32px);
+  --page-pad: clamp(12px,1.8vw,24px);
+  --icon: 20px;
+  --row-h: 48px;
+  --hit: 44px;
+  --gap-s: 8px;
+  --gap-m: 12px;
+  --gap-l: 16px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-m);
+  height: var(--row-h);
+  padding-inline: 16px;
+  line-height: 20px;
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 0;
+  min-height: var(--hit);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.nav-item .icon {
+  width: var(--icon);
+  height: var(--icon);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-item .label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-s);
+  margin-bottom: var(--gap-l);
+}

@@ -1,0 +1,152 @@
+import { auth } from '@/auth';
+import { NextResponse } from 'next/server';
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+};
+
+export default auth(async (req) => {
+  const { nextUrl } = req;
+  
+  // Enhanced debug logging
+  console.log('\n=== MIDDLEWARE DEBUG ===');
+  console.log('Path:', nextUrl.pathname);
+  console.log('Full URL:', nextUrl.toString());
+  console.log('Method:', req.method);
+  console.log('Is logged in:', !!req.auth);
+  
+  // Log all cookies
+  const cookies = req.cookies.getAll?.() || [];
+  console.log('Cookies:', cookies);
+  
+  // Log auth state in detail
+  console.log('Auth state:', {
+    user: req.auth?.user ? {
+      id: req.auth.user.id,
+      name: req.auth.user.name,
+      email: req.auth.user.email,
+      isOnboarded: (req.auth.user as any)?.isOnboarded
+    } : 'No user',
+    expires: (req.auth as any)?.expires,
+    error: (req.auth as any)?.error,
+    status: (req.auth as any)?.status
+  });
+  
+  // Log headers for debugging
+  console.log('Headers:', {
+    'content-type': req.headers.get('content-type'),
+    'authorization': req.headers.get('authorization') ? '***' : 'none',
+    'x-forwarded-host': req.headers.get('x-forwarded-host'),
+    'host': req.headers.get('host'),
+    'referer': req.headers.get('referer')
+  });
+  
+  // Log query parameters
+  console.log('Query params:', Object.fromEntries(nextUrl.searchParams.entries()));
+  
+  // Public routes that don't require authentication
+  const publicRoutes = [
+    '/',
+    '/login',
+    '/onboarding',
+    '/favicon.ico',
+    '/_next',
+    '/api/auth',
+    '/api/auth/callback/google',
+    '/carrot-logo.png',
+    '/logo.png',
+    '/images',
+    '/_next/static',
+    '/_next/image',
+    '/_next/data',
+    '/_next/webpack-hmr',
+  ];
+
+  // Check if the current path is public
+  const isPublicRoute = publicRoutes.some(route => {
+    return nextUrl.pathname === route || 
+           nextUrl.pathname.startsWith(`${route}/`) ||
+           nextUrl.pathname === `${route}.json`;
+  });
+
+  if (isPublicRoute) {
+    console.log(`Allowing access to public route: ${nextUrl.pathname}`);
+    return NextResponse.next();
+  }
+  
+  // Skip middleware for API routes
+  if (nextUrl.pathname.startsWith('/api')) {
+    // Special handling for auth callbacks
+    if (nextUrl.pathname.startsWith('/api/auth/callback')) {
+      console.log('Auth callback detected, allowing request');
+    }
+    return NextResponse.next();
+  }
+  
+  // Check if user is authenticated
+  const isLoggedIn = !!req.auth;
+  
+  // If not logged in, redirect to login
+  if (!isLoggedIn) {
+    console.log('User not authenticated, redirecting to login');
+    const loginUrl = new URL('/login', nextUrl.origin);
+    loginUrl.searchParams.set('callbackUrl', nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+  
+  // If user is logged in but not onboarded, redirect to onboarding
+  if (!req.auth?.user?.isOnboarded) {
+    console.log('User not onboarded, redirecting to onboarding');
+    return NextResponse.redirect(new URL('/onboarding', nextUrl.origin));
+  }
+  
+  // Handle API routes
+  if (nextUrl.pathname.startsWith('/api')) {
+    return NextResponse.next();
+  }
+  
+  // Handle login page
+  if (nextUrl.pathname.startsWith('/login')) {
+    if (isLoggedIn) {
+      console.log('User is logged in, redirecting to dashboard');
+      return NextResponse.redirect(new URL('/dashboard', nextUrl.origin));
+    }
+    return NextResponse.next();
+  }
+  
+  // Handle onboarding page
+  if (nextUrl.pathname.startsWith('/onboarding')) {
+    if (!isLoggedIn) {
+      console.log('User not logged in, redirecting to login with callback');
+      const callbackUrl = new URL('/onboarding', nextUrl.origin);
+      return NextResponse.redirect(
+        new URL(`/login?callbackUrl=${encodeURIComponent(callbackUrl.toString())}`, nextUrl.origin)
+      );
+    }
+    
+    // Check if user is already onboarded
+    if (req.auth?.user?.isOnboarded) {
+      console.log('User already onboarded, redirecting to dashboard');
+      return NextResponse.redirect(new URL('/dashboard', nextUrl.origin));
+    }
+    
+    return NextResponse.next();
+  }
+  
+  // Allow access to protected routes
+  console.log('Allowing access to protected route:', nextUrl.pathname);
+  const response = NextResponse.next();
+  response.headers.set('x-pathname', nextUrl.pathname);
+  return response;
+});
+
+// Matcher configuration is already defined at the top of the file

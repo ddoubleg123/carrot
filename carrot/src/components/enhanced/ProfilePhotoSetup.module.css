@@ -1,0 +1,136 @@
+.profile-photo-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+}
+
+.initial-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.photo-placeholder {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.placeholder-img {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(135deg, #e0e0e0 0 8px, #f0f0f0 8px 16px);
+  border-radius: 50%;
+}
+
+.photo-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.btn {
+  padding: 0.5rem 1.2rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: #0070f3;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 0.2rem 0;
+  transition: background 0.15s;
+}
+.btn:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+.camera-btn { background: #0070f3; }
+.upload-btn { background: #444; }
+.capture-btn { background: #0070f3; }
+.cancel-btn { background: #aaa; color: #222; }
+.close-btn { background: #e00; }
+.retake-btn { background: #444; }
+.save-btn { background: #2ecc40; }
+
+.camera-modal, .crop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.camera-view {
+  width: 90vw;
+  max-width: 400px;
+  aspect-ratio: 1/1;
+  border-radius: 1rem;
+  background: #222;
+}
+.cropper-wrapper {
+  width: 90vw;
+  max-width: 400px;
+  height: 90vw;
+  max-height: 400px;
+  position: relative;
+  background: #222;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+.crop-controls input[type="range"] {
+  width: 200px;
+}
+.feedback-success {
+  margin-top: 1rem;
+  color: #2ecc40;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.error-msg {
+  color: #e00;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+}
+@media (max-width: 600px) {
+  .profile-photo-setup {
+    max-width: 100vw;
+    padding: 0.5rem;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .camera-modal, .crop-modal {
+    padding: 0;
+    border-radius: 0;
+  }
+  .camera-view, .cropper-wrapper {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vw;
+    max-height: 100vw;
+    border-radius: 0;
+  }
+}

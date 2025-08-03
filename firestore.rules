@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(ownerId) { return isSignedIn() && request.auth.uid == ownerId; }
+
+    // USERS: user can read/write their own profile.
+    match /users/{uid} {
+      allow read, create, update: if isOwner(uid);
+    }
+
+    // ONBOARDING SESSIONS
+    match /onboardingSessions/{sessionId} {
+      allow read, create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+      // STAGED ASSETS SUBCOLLECTION
+      match /stagedAssets/{assetId} {
+        allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+        allow create: if isSignedIn()
+                      && request.resource.data.ownerId == request.auth.uid
+                      && request.resource.data.storagePath.matches(
+                          'users/' + request.auth.uid + '/staged/' + sessionId + '/[A-Za-z0-9._-]+'
+                         );
+        allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

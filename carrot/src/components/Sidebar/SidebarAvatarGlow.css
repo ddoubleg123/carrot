@@ -1,0 +1,42 @@
+.avatar-wrap {
+  position: relative;
+  display: inline-block;
+  z-index: 0;
+  overflow: visible;
+}
+.avatar-wrap .sidebar-avatar-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  object-fit: cover;
+  display: block;
+  background: #FEF3C7;
+}
+.avatar-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side,
+    rgba(255,127,26,0.80) 0%,
+    rgba(255,127,26,0.25) 40%,
+    rgba(255,127,26,0.00) 70%
+  );
+  filter: blur(20px);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: -1;
+  transition: opacity 1.4s ease-in-out, transform 1.4s ease-in-out;
+  animation: avatar-glow-breathe 2.8s ease-in-out infinite alternate;
+}
+@keyframes avatar-glow-breathe {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 0.70;
+    transform: scale(1.02);
+  }
+}

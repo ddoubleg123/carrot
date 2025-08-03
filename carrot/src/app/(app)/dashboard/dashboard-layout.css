@@ -1,0 +1,991 @@
+/* === Responsive Dashboard Flex Layout (2025-07-29) === */
+:root {
+  --sidebar-expanded: 240px;
+  --sidebar-collapsed: 64px;
+  --feed-min-width: 600px;
+  --feed-max-width: 700px;
+  --right-panel-width: 300px;
+}
+
+.dashboard {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+/* Sidebar (desktop/tablet) */
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: #fff;
+  border-right: 1px solid #ddd;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sidebar icon-only mode (<=1024px) */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: var(--sidebar-collapsed);
+    min-width: var(--sidebar-collapsed);
+    max-width: var(--sidebar-collapsed);
+  }
+  .sidebar .label { display: none; }
+}
+
+/* Sidebar hidden (<=768px, mobile) */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none !important;
+  }
+}
+
+/* Main feed section */
+.feed {
+  flex-grow: 1;
+  width: 100%;
+  min-width: 600px;
+  padding-left: 24px;
+  padding-right: 24px;
+  box-sizing: border-box;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  max-width: none;
+}
+
+@media (max-width: 1200px) {
+  .widgets { display: none !important; }
+  .feed {
+    max-width: none;
+    width: 100vw;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    width: var(--sidebar-collapsed);
+    min-width: var(--sidebar-collapsed);
+    max-width: var(--sidebar-collapsed);
+  }
+  .sidebar .label { display: none; }
+}
+
+@media screen and (max-width: 768px) {
+  .sidebar {
+    display: none !important;
+  }
+  .feed {
+    min-width: 0;
+    max-width: 100vw;
+    width: 100vw;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+.drawer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: var(--sidebar-expanded);
+  background: #fff;
+  z-index: 50;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.08);
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+}
+.drawer.open {
+  transform: translateX(0);
+}
+@media (min-width: 769px) {
+  .drawer { display: none !important; }
+}
+
+.widgets {
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  align-self: stretch;
+  display: block;
+}
+@media screen and (max-width: 1200px) {
+  .widgets { display: none !important; }
+  .feed { max-width: 100%; }
+}
+
+.dashboard > .sidebar + #feed { margin-left: 0; }
+
+html, body {
+  width: 100vw;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+#feed, #misc, .sidebar {
+  box-sizing: border-box;
+}
+
+/* Remove all grid, centering, and legacy placement CSS */
+main, .container, .mx-auto, .centered, .dashboard .container, .dashboard .mx-auto {
+  margin: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.feed, #feed {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* Remove excess gap between sidebar and feed */
+.dashboard > .sidebar + #feed {
+  margin-left: 0;
+}
+
+/* Right panel (widgets/misc) */
+#misc {
+  width: var(--right-panel-width);
+  min-width: var(--right-panel-width);
+  max-width: var(--right-panel-width);
+  margin-left: 0;
+  align-self: stretch;
+  display: block;
+}
+
+/* Hide right panel <=1200px */
+@media (max-width: 1200px) {
+  #misc {
+    display: none !important;
+  }
+}
+
+/* Feed expands when right panel is gone */
+@media (max-width: 1200px) {
+  #feed {
+    max-width: 100vw;
+  }
+}
+
+/* Mobile: feed full width, px-4, no sidebar/misc */
+@media (max-width: 768px) {
+  .dashboard {
+    flex-direction: column;
+    width: 100vw;
+  }
+  #feed {
+    min-width: 0;
+    max-width: 100vw;
+    width: 100vw;
+    padding-left: 16px;
+    padding-right: 16px;
+    margin: 0;
+  }
+}
+
+html, body {
+  width: 100vw;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+#feed, #misc, .sidebar {
+  box-sizing: border-box;
+}
+
+/* Hamburger menu button for mobile is handled in TSX/JS */
+
+:root {
+  --sidebar-expanded: 240px;
+  --sidebar-collapsed: 64px;
+  --feed-min-width: 600px;
+  --feed-max-width: 640px;
+  --misc-min-width: 320px;
+  --gutter: 24px;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)
+    minmax(var(--feed-min-width), var(--feed-max-width))
+    minmax(var(--misc-min-width), 1fr);
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+  width: 100vw;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Sidebar (Desktop) */
+@media (min-width: 1025px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    width: var(--sidebar);
+    min-width: var(--sidebar);
+    max-width: var(--sidebar);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 40;
+    background: #fff;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar .label { display: inline; }
+  #feed {
+    max-width: var(--feed-max-width);
+    min-width: var(--feed-min-width);
+    margin-left: calc(var(--sidebar) + var(--gutter));
+    margin-right: var(--gutter);
+    width: 100%;
+    justify-self: center;
+  }
+  #misc {
+    min-width: var(--misc-min-width);
+    max-width: 400px;
+    margin-right: var(--gutter);
+  }
+}
+
+/* Sidebar (Tablet: icon-only, right column hidden) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    width: var(--sidebar);
+    min-width: var(--sidebar);
+    max-width: var(--sidebar);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 40;
+    background: #fff;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar .label { display: none; }
+  #feed {
+    min-width: var(--feed-min-width);
+    max-width: var(--feed-max-width);
+    margin-left: calc(var(--sidebar) + var(--gutter));
+    margin-right: var(--gutter);
+    width: 100%;
+    justify-self: center;
+  }
+  #misc {
+    display: none !important;
+  }
+}
+
+/* Mobile: sidebar hidden, feed full-width, misc hidden */
+@media (max-width: 767px) {
+  .sidebar, #misc {
+    display: none !important;
+  }
+  .dashboard {
+    grid-template-columns: 1fr;
+    row-gap: var(--gutter);
+    width: 100vw;
+  }
+  #feed {
+    min-width: 0;
+    max-width: 100vw;
+    margin: 0;
+    width: 100vw;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Remove excess horizontal space and prevent scroll */
+html, body {
+  width: 100vw;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+#feed, #misc, .sidebar {
+  box-sizing: border-box;
+}
+
+/* Consistent explicit grid placement */
+#feed {
+  grid-column: 2;
+  position: relative;
+  z-index: auto;
+}
+#misc {
+  grid-column: 3;
+  position: relative;
+  z-index: auto;
+}
+
+/* Mobile nav toggle button is handled in JS/TSX */
+
+:root {
+  --sidebar-expanded: 272px;
+  --sidebar-collapsed: 72px;
+  --gutter: 24px;
+}
+
+/* === 2. Dashboard Grid === */
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)
+    minmax(var(--feed-min-width), 1fr)
+    minmax(var(--misc-min-width), 360px);
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+}
+
+/* Newsfeed must never shrink below --feed-min-width */
+#feed {
+  min-width: var(--feed-min-width);
+}
+
+/*
+  Hide right widgets panel (misc) before newsfeed shrinks.
+  At (max-width: 1280px + sidebar width + gutter), hide #misc and switch to 2-column grid.
+  This ensures newsfeed stays readable.
+*/
+@media (max-width: 1279px) {
+  #misc {
+    display: none !important;
+  }
+  .dashboard {
+    grid-template-columns: var(--sidebar) minmax(var(--feed-min-width), 1fr);
+  }
+}
+
+/*
+  On mobile/tablet (sidebar collapses or hides), only show newsfeed.
+  Sidebar and misc both hidden, grid is 1 column.
+*/
+@media (max-width: 768px) {
+  .sidebar, #misc {
+    display: none !important;
+  }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  #feed {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+
+/* === 3. Sidebar Responsive Behavior === */
+@media (min-width: 1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar);
+    overflow-y: auto;
+    z-index: 40;
+    background: #fff;
+    border-right: 1px solid #ddd;
+  }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar);
+    overflow-y: auto;
+    z-index: 40;
+  }
+  .sidebar .label { display: none; } /* Icons-only mode */
+}
+@media (max-width: 639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* === 4. Main Wrapper Offsets for Fixed Sidebar === */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* === 5. Explicit Grid Placement === */
+#feed {
+  grid-column: 2;
+  min-width: 0;
+  position: relative;
+  z-index: auto;
+}
+#misc {
+  grid-column: 3;
+  min-width: 0;
+  position: relative;
+  z-index: auto;
+}
+
+/* === 6. Mobile Stack Behavior === */
+@media (max-width: 639px) {
+  #feed { grid-column: 1; }
+  #misc { grid-column: 1; }
+}
+
+/* === 7. Global Guards === */
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+#feed, #misc {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.sidebar, #feed, #misc {
+  box-sizing: border-box;
+}
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+#feed { grid-column: 2; min-width: 0; position: relative; z-index: auto; }
+#misc { grid-column: 3; min-width: 0; position: relative; z-index: auto; }
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+/* 2) Dashboard grid: sidebar | newsfeed | misc */
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)      /* sidebar width from media queries */
+    1fr                 /* newsfeed fills remaining space */
+    minmax(280px,360px) /* misc column */
+  ;
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+}
+
+/* 3) Explicit placement & prevent overlap */
+#feed { grid-column: 2; min-width: 0; position: relative; z-index: auto; }
+#misc { grid-column: 3; min-width: 0; position: relative; z-index: auto; }
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+
+/* 2) Dashboard grid: sidebar | newsfeed | misc */
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)      /* sidebar width from media queries */
+    1fr                 /* newsfeed fills remaining space */
+    minmax(280px,360px) /* misc column */
+  ;
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+}
+
+/* 3) Explicit placement & prevent overlap */
+#feed { grid-column: 2; min-width: 0; position: relative; z-index: auto; }
+#misc { grid-column: 3; min-width: 0; position: relative; z-index: auto; }
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+ misc column :root {
+  --sidebar-expanded: 272px;
+  --sidebar-collapsed: 72px;
+  --gutter: 24px;
+}
+
+/* 2) Dashboard grid: sidebar | newsfeed | misc */
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)      /* sidebar width from media queries */
+    1fr                 /* newsfeed fills remaining space */
+    minmax(280px,360px) /* misc column */
+  ;
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+}
+
+/* 3) Explicit placement & prevent overlap */
+#feed { grid-column: 2; min-width: 0; position: relative; z-index: auto; }
+#misc { grid-column: 3; min-width: 0; position: relative; z-index: auto; }
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+
+/* 2) Dashboard grid: sidebar | newsfeed | misc */
+.dashboard {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar)      /* sidebar width from media queries */
+    1fr                 /* newsfeed fills remaining space */
+    minmax(280px,360px) /* misc column */
+  ;
+  column-gap: var(--gutter);
+  row-gap: var(--gutter);
+}
+
+/* 3) Explicit placement & prevent overlap */
+#feed { grid-column: 2; min-width: 0; position: relative; z-index: auto; }
+#misc { grid-column: 3; min-width: 0; position: relative; z-index: auto; }
+
+/* 4) Sidebar fixed & responsive */
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar {
+    position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+    width: var(--sidebar);
+    display: block;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .sidebar .label { display: none; } /* icons-only */
+}
+@media (max-width:639px) {
+  .sidebar { display: none; }
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 5) Main pushes content to the right of fixed sidebar */
+main {
+  width: 100%;
+  padding-left: 0 !important;
+}
+
+
+/* 6) Prevent horizontal scroll & accidental overlap */
+html, body { height: 100%; overflow-x: hidden; }
+#sidebar { scrollbar-gutter: stable both-edges; }
+#feed, #misc { overflow-wrap: anywhere; }
+
+/* 7) (Optional) Avatar glow & pulse remains unchanged */
+/* …existing avatar CSS… */
+
+@media (max-width:639px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    row-gap: var(--gutter);
+  }
+  #misc {
+    margin-top: var(--gutter);
+  }
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar);
+  height: 100vh;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  z-index: 40;
+  transition: width 0.2s cubic-bezier(.4,0,.2,1);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar .label {
+  display: inline;
+  transition: opacity 0.15s;
+}
+
+@media (min-width:1024px) {
+  :root { --sidebar: var(--sidebar-expanded); }
+  .sidebar .label { display: inline; opacity: 1; }
+}
+@media (min-width:640px) and (max-width:1023px) {
+  :root { --sidebar: var(--sidebar-collapsed); }
+  .sidebar .label { display: none !important; opacity: 0; }
+}
+@media (max-width:639px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    row-gap: var(--gutter);
+  }
+  .sidebar {
+    display: none !important;
+  }
+  .drawer {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 85vw;
+    max-width: 320px;
+    background: #fff;
+    border-right: 1px solid #e5e7eb;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s cubic-bezier(.4,0,.2,1);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+#newsfeed, #misc {
+  min-width: 0;
+}
+
+@media (max-width:639px) {
+  #misc {
+    margin-top: var(--gutter);
+  }
+}
+
+body, html {
+  height: 100%;
+  overflow-x: hidden;
+}

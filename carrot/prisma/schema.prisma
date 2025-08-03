@@ -1,0 +1,122 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  profilePhoto  String? // onboarding-uploaded avatar URL
+  isOnboarded   Boolean  @default(false)
+  username      String?  @unique
+  firstName     String?
+  lastName      String?
+  phone         String?
+  country       String?
+  postalCode    String?
+
+  /// Flexible, future-proof metadata
+  metadata      Json?
+
+  /// Onboarding survey answers
+  onboardingAnswers OnboardingAnswer[]
+
+  /// User interests (freeform, sanitized)
+  interests    String?
+
+  // Relation to posts
+  posts       Post[]
+}
+
+model OnboardingQuestion {
+  id       String   @id @default(cuid())
+  slug     String   @unique
+  label    String
+  type     String   // e.g. "multi-select", "text", "rating"
+  options  Json?    // for select-style questions (array of options)
+  answers  OnboardingAnswer[]
+}
+
+model OnboardingAnswer {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  question   OnboardingQuestion @relation(fields: [questionId], references: [id])
+  questionId String
+  answer     Json     // whatever the user submitted
+
+  @@unique([userId, questionId], name: "userId_questionId")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Post {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  gradientDirection String
+  gradientFromColor String
+  gradientViaColor  String?
+  gradientToColor   String
+  imageUrls         String
+  gifUrl            String?
+  audioUrl          String?
+  emoji             String?
+  carrotText        String?
+  stickText         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+

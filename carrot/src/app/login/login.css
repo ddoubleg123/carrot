@@ -1,0 +1,12 @@
+.create-account-btn {
+  background: transparent;
+  color: #00FF00;
+  border: 2px solid #00FF00;
+  font-weight: bold;
+  transition: background 0.2s, color 0.2s, border 0.2s;
+}
+.create-account-btn:hover, .create-account-btn:focus-visible {
+  background: #00FF00 !important;
+  color: #fff !important;
+  border: 2px solid #00FF00 !important;
+}
