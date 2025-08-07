@@ -1,313 +1,281 @@
-// ⚠️ CommitmentComposer layout is pixel-perfect and QA-locked. Do not change structure or spacing without design/QA signoff. See Figma spec and screenshot.
-'use client';
+"use client";
 
-import { useState, useRef, useMemo } from 'react';
-import CreatePostModal from './CreatePostModal';
-import { useMediaUpload } from './useMediaUpload';
-import { uploadFilesToFirebase } from '@/lib/uploadToFirebase';
-import dynamic from 'next/dynamic';
-// Dynamically import emoji picker for SSR safety
-// If you see a type error, install emoji-picker-react: npm install emoji-picker-react
-// and add: declare module 'emoji-picker-react'; to a global.d.ts file if needed.
-const EmojiPicker = dynamic<any>(() => import('emoji-picker-react'), { ssr: false });
-import { useSession } from 'next-auth/react';
-import { PaperClipIcon, FaceSmileIcon, PhotoIcon, GifIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
-import { PhotoIcon as PhotoIconSolid, FaceSmileIcon as FaceSmileIconSolid, GifIcon as GifIconSolid, MicrophoneIcon as MicrophoneIconSolid } from '@heroicons/react/24/solid';
-import { UserCircleIcon } from '@heroicons/react/24/solid';
-import { Tooltip } from '../ui/tooltip';
-import ColorWheelIcon from './ColorWheelIcon';
-import LightningBoltIcon from './LightningBoltIcon';
+import React, { useState, useRef } from "react";
 
-interface CommitmentComposerProps {
-  onSubmit: (post: any) => void;
-  isSubmitting?: boolean;
-  onPostOptimistic?: (post: any) => void;
-}
+import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from "./icons";
+import Tooltip from "../ui/tooltip";
+import ModalPortal from "./ModalPortal";
+import { useRouter } from "next/navigation";
+import { useMediaUpload } from "./useMediaUpload";
+import { uploadFilesToFirebase } from 'src/lib/uploadToFirebase';
 
-// Text formatting types
-type TextFormat = 'bold' | 'italic' | 'strikethrough';
+const ColorWheelIcon = (props: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    {...props}
+    className="w-12 h-12 rounded-full border-4 border-white"
+    style={{
+      background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+      ...props.style,
+    }}
+  />
+);
 
-function CommitmentComposer({ onSubmit }: CommitmentComposerProps) {
-  const { data: session, status, update } = useSession();
-  console.log('[CommitmentComposer] session:', session);
-  console.log('[CommitmentComposer] session.user:', session?.user);
-  console.log('[CommitmentComposer] session.user.profilePhoto:', session?.user?.profilePhoto);
-  console.log('[CommitmentComposer] session.user.image:', session?.user?.image);
-  console.log('[CommitmentComposer] session.user.username:', session?.user?.username);
-  console.log('[CommitmentComposer] session status:', status);
-
-  // Log after session update
-  const logSessionUpdate = async () => {
-    const updated = await update();
-    console.log('[CommitmentComposer] session updated:', updated);
-  };
-
-  const user = session?.user;
-  const [content, setContent] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
-  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-
-  // Emoji state
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedEmoji, setSelectedEmoji] = useState<string | undefined>(undefined);
-  // GIF state
-  const [gifFile, setGifFile] = useState<File | null>(null);
-  const [gifPreview, setGifPreview] = useState<string | null>(null);
-  const [gifUrl, setGifUrl] = useState<string | undefined>(undefined);
-  // Audio state
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
-  const [audioPreview, setAudioPreview] = useState<string | null>(null);
-  // Refs for GIF/audio file inputs
-  const gifInputRef = useRef<HTMLInputElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
-
-  const [activeFormats, setActiveFormats] = useState<Set<TextFormat>>(new Set());
-  const fileInputRef = useRef<HTMLInputElement>(null);
+export default function CommitmentComposer() {
+  const [content, setContent] = React.useState("");
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  const [showModal, setShowModal] = React.useState(false);
+  React.useEffect(() => {
+    if (showModal && modalRef.current) {
+      const { offsetWidth, offsetHeight } = modalRef.current;
+      console.log('Modal rendered width:', offsetWidth, 'px');
+      console.log('Modal rendered height:', offsetHeight, 'px');
+    }
+  }, [showModal]);
+  const [mediaType, setMediaType] = React.useState<string | null>(null);
+  const [mediaFile, setMediaFile] = React.useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = React.useState<string | null>(null);
+  const [uploadedMedia, setUploadedMedia] = React.useState<string | null>(null);
   const { previewURL, handleSelect, removePreview, uploading, uploadProgress } = useMediaUpload();
+  const router = useRouter();
 
-  // Interactive gradient backgrounds
-  const gradients = [
-    'bg-gradient-to-br from-pink-200 via-yellow-100 to-orange-200',
-    'bg-gradient-to-br from-green-200 via-blue-100 to-cyan-200',
-    'bg-gradient-to-br from-purple-200 via-pink-100 to-indigo-200',
-    'bg-gradient-to-br from-orange-200 via-yellow-100 to-red-200',
-    'bg-gradient-to-br from-blue-200 via-cyan-100 to-teal-200',
-    'bg-gradient-to-br from-fuchsia-200 via-rose-100 to-yellow-100',
-  ];
-  const [composerGradient, setComposerGradient] = useState(() => gradients[Math.floor(Math.random() * gradients.length)]);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  React.useEffect(() => {
+    if (previewURL) setMediaPreview(previewURL);
+  }, [previewURL]);
 
-  // --- MODAL STATE ---
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMediaPreview, setModalMediaPreview] = useState<string | null>(null);
-  const [modalMediaType, setModalMediaType] = useState<string | null>(null);
-  const [modalFile, setModalFile] = useState<File | null>(null);
-
-  // --- HANDLERS TO FIX LINTS ---
-  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('[handleMediaUpload] called');
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const preview = URL.createObjectURL(file);
-    setModalMediaPreview(preview);
-    setModalMediaType(file.type);
-    setModalFile(file);
-    setModalOpen(true);
-    // DO NOT update mediaFiles or mediaPreviews here!
-    setTimeout(() => {
-      console.log('[handleMediaUpload][debug] modalOpen:', modalOpen);
-      console.log('[handleMediaUpload][debug] modalMediaPreview:', preview);
-      console.log('[handleMediaUpload][debug] modalMediaType:', file.type);
-    }, 0);
-    console.log('[handleMediaUpload] set modalOpen to true, preview:', preview, 'type:', file.type);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-  const removeMedia = (index: number) => {
-    // TODO: implement remove media logic
-  };
-  const handleGifUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // TODO: implement gif upload logic
-  };
-  const removeGif = () => {
-    // TODO: implement remove gif logic
-  };
-  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // TODO: implement audio upload logic
-  };
-  const removeAudio = () => {
-    // TODO: implement remove audio logic
-  };
-  const handleEmojiClick = (emoji: any) => {
-    // TODO: implement emoji click logic
-  };
-
-  // --- END HANDLERS ---
-
-  const handleColorWheelClick = () => {
-    // Pick a new random gradient different from current
-    let next;
-    do {
-      next = gradients[Math.floor(Math.random() * gradients.length)];
-    } while (next === composerGradient && gradients.length > 1);
-    setComposerGradient(next);
-  };
-
-  // --- POST SUBMIT STATE ---
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // --- SUBMIT HANDLER ---
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!content.trim()) return;
-    setIsSubmitting(true);
-    setErrorMsg?.(null);
-    let imageUrls: string[] = [];
-    let gifUrlToSend: string | undefined = undefined;
-    let audioUrlToSend: string | undefined = undefined;
-    const basePath = `users/${user?.id || 'anon'}/posts/${Date.now()}/`;
-    try {
-      // Upload images
-      if (mediaFiles.length > 0) {
-        imageUrls = await uploadFilesToFirebase(mediaFiles, basePath + 'media/');
-      }
-      // Upload GIF
-      if (gifFile) {
-        const [url] = await uploadFilesToFirebase([gifFile], basePath + 'gif/');
-        gifUrlToSend = url;
-      }
-      // Upload audio
-      if (audioFile) {
-        const [url] = await uploadFilesToFirebase([audioFile], basePath + 'audio/');
-        audioUrlToSend = url;
-        setAudioUrl(audioUrlToSend);
-      }
-
-      // Compose post object
-      const emoji = selectedEmoji;
-      const carrotText = undefined; // TODO: implement carrot text
-      const stickText = undefined; // TODO: implement stick text;
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content,
-          imageUrls,
-          gifUrl: gifUrlToSend,
-          audioUrl: audioUrlToSend,
-          emoji,
-          carrotText,
-          stickText,
-        })
-      });
-      if (!res.ok) throw new Error('Failed to create post');
-      setContent('');
-      setMediaPreviews([]);
-      setMediaFiles([]);
-      setGifFile(null);
-      setGifPreview(null);
-      setGifUrl(undefined);
-      setAudioFile(null);
-      setAudioPreview(null);
-      setAudioUrl(undefined);
-      setSelectedEmoji(undefined);
-      setSuccessMsg?.('Post submitted – View Post');
-      setTimeout(() => setSuccessMsg?.(null), 2500);
-      if (onSubmit) onSubmit({ content, imageUrls, gifUrl: gifUrlToSend, audioUrl: audioUrlToSend, emoji });
-    } catch (err) {
-      setErrorMsg?.('Failed to submit post. Please try again.');
-      setTimeout(() => setErrorMsg?.(null), 3500);
-      console.error('Failed to submit post:', err);
-    } finally {
-      setIsSubmitting(false);
+  const openFileDialog = (accept: string) => {
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = accept;
+      fileInputRef.current.click();
     }
   };
 
-  // --- END SUBMIT HANDLER ---
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMediaType(file.type);
+    setMediaFile(file);
+    setShowModal(true);
+    handleSelect(e);
+    e.target.value = "";
+  };
+
+  const confirmUpload = async () => {
+    setShowModal(false);
+    setMediaPreview(null);
+    setMediaFile(null);
+    setMediaType(null);
+    setContent("");
+    setUploadedMedia(null);
+    removePreview();
+    router.push("/dashboard");
+  };
+
+  const cancelUpload = () => {
+    setShowModal(false);
+    setMediaPreview(null);
+    setMediaFile(null);
+    setMediaType(null);
+    removePreview();
+  };
+
+  const postButtonRef = React.useRef<HTMLButtonElement>(null);
+  const actionRowRef = React.useRef<HTMLDivElement>(null);
+  const bisRef = React.useRef<HTMLDivElement>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [qaLeft, setQaLeft] = React.useState<number | null>(null);
+  const [dynamicPaddingRight, setDynamicPaddingRight] = React.useState(64);
+
+  React.useEffect(() => {
+    function updatePadding() {
+      if (textareaRef.current && bisRef.current) {
+        const textareaRect = textareaRef.current.getBoundingClientRect();
+        const bisRect = bisRef.current.getBoundingClientRect();
+        const gap = Math.max(0, textareaRect.right - bisRect.left + 8);
+        setDynamicPaddingRight(gap);
+      }
+    }
+    updatePadding();
+    window.addEventListener('resize', updatePadding);
+    return () => window.removeEventListener('resize', updatePadding);
+  }, [qaLeft]);
+
+  React.useEffect(() => {
+    function updateQaLine() {
+      if (postButtonRef.current && actionRowRef.current) {
+        const btnRect = postButtonRef.current.getBoundingClientRect();
+        const rowRect = actionRowRef.current.getBoundingClientRect();
+        setQaLeft(btnRect.left - rowRect.left + btnRect.width / 2);
+      }
+    }
+    updateQaLine();
+    window.addEventListener('resize', updateQaLine);
+    return () => window.removeEventListener('resize', updateQaLine);
+  }, []);
 
   return (
-    <>
-      {modalOpen && modalMediaPreview && modalMediaType && (
-        <CreatePostModal
-          open={modalOpen}
-          mediaPreview={modalMediaPreview}
-          mediaType={modalMediaType}
-          onClose={() => {
-            setModalOpen(false);
-            setModalMediaPreview(null);
-            setModalMediaType(null);
-            setModalFile(null);
-          }}
-          onPost={(caption, emoji) => {
-            if (modalFile && modalMediaPreview) {
-              setMediaFiles([modalFile]);
-              setMediaPreviews([modalMediaPreview]);
-            }
-            setModalOpen(false);
-          }}
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center pt-20">
+      <div className="relative w-full px-4 sm:px-6 lg:px-8 mx-auto">
+        {/* Upload Modal - Create Post UX */}
+        {showModal && (
+          <ModalPortal>
+            <div className="fixed inset-0 z-[1100] flex justify-center items-center bg-black bg-opacity-40">
+              {/* DIAGNOSTIC: Render CommitmentComposerTest wrapper here */}
+              <div className="max-w-md mx-auto border-2 border-red-500 mt-10 p-2 bg-white z-[1200]">
+                <div className="rounded-3xl bg-gradient-to-br from-[#f7b5e6] via-[#fdf6b4] to-[#ffd6a7] shadow-xl flex items-center justify-center" style={{ height: 200 }}>
+  <div className="bg-white rounded-2xl shadow-md px-6 py-5 h-[140px] relative flex flex-col items-center justify-center overflow-hidden">
+  <button
+    onClick={cancelUpload}
+    className="absolute top-4 right-5 text-gray-400 hover:text-gray-600 text-2xl font-bold z-10"
+    aria-label="Close"
+    style={{ lineHeight: 1 }}
+  >
+    &times;
+  </button>
+  <div className="text-center mb-2 pt-1 w-full">
+    <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Create Post</h2>
+  </div>
+  {/* Media preview */}
+  <div className="flex justify-center items-center mb-4">
+    {mediaPreview ? (
+      <img
+        src={mediaPreview}
+        alt="Preview"
+        className="rounded-md max-w-full h-auto"
+        style={{ maxHeight: 400 }}
+      />
+    ) : (
+      <div className="bg-gray-200 rounded-md" style={{ width: 320, height: 180 }} />
+    )}
+  </div>
+      {/* Textarea and formatting icons */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-2 w-full">
+        <textarea
+          ref={textareaRef}
+          className="w-full h-24 px-4 py-2 text-lg border-none bg-transparent focus:outline-none resize-none rounded-md"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="What's happening?"
         />
+        {/* Formatting icons (B/I/S) */}
+        <div className="flex items-center gap-2 mt-2">
+          <Tooltip content="Bold">
+            <button type="button" title="Bold" className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100" aria-label="Bold"><span style={{ fontWeight: 700, fontSize: 18 }}>B</span></button>
+          </Tooltip>
+          <Tooltip content="Italic">
+            <button type="button" title="Italic" className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100" aria-label="Italic"><span style={{ fontStyle: 'italic', fontSize: 18 }}>I</span></button>
+          </Tooltip>
+          <Tooltip content="Strikethrough">
+            <button type="button" title="Strikethrough" className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100" aria-label="Strikethrough"><span style={{ textDecoration: 'line-through', fontSize: 18 }}>S</span></button>
+          </Tooltip>
+        </div>
+      </div>
+      {/* Action row */}
+      <div className="flex items-center w-full px-4 sm:px-6 lg:px-8 mt-2 pt-2 pb-1">
+        <div className="flex gap-4 flex-1">
+          <Tooltip content="Add image/video">
+            <button className="bg-transparent p-0" onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}> <IconPhoto /></button>
+          </Tooltip>
+          <button className="bg-transparent p-0" title="GIF" onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}> <IconGif /></button>
+          <button className="bg-transparent p-0" title="Emoji"><IconEmoji /></button>
+          <button className="bg-transparent p-0" title="Audio" aria-label="Audio"><IconAudio /></button>
+          <button className="bg-transparent p-0" title="Commitment" aria-label="Commitment"><IconCarrot /></button>
+          <button className="bg-transparent p-0" title="Lightning"><IconLightning /></button>
+        </div>
+        <button
+          className="ml-4 px-6 py-2 bg-primary text-white rounded-full font-semibold text-base shadow-md hover:bg-primary-dark transition disabled:opacity-50"
+          disabled={!content.trim()}
+          onClick={() => {}}
+        >
+          Post
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+        </ModalPortal>
       )}
-      <form onSubmit={handleSubmit} className="w-full">
-        <div className={`relative rounded-2xl ${composerGradient} px-5 mx-2 md:mx-4 mt-[36px] pt-8 pb-2 max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto`}>
-          {/* QA green line for alignment check */}
-          <div className="absolute left-0 top-0 w-full h-[2px] bg-green-500 opacity-60 rounded-t-2xl pointer-events-none" />
-          {/* Avatar */}
-          <div className="absolute -top-7 left-8">
-            {user?.profilePhoto || user?.image ? (
-              <img
-                src={user?.profilePhoto || user?.image || ''}
-                alt="Profile"
-                className="w-14 h-14 md:w-12 md:h-12 lg:w-16 lg:h-16 rounded-full border-4 border-white shadow-md object-cover"
+        {/* Hidden file input for uploads */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,.mp4,.mov,.webm"
+          className="hidden"
+          onChange={onFileChange}
+        />
+        {/* Composer gradient card */}
+        <div className="bg-gradient-to-br from-[#e0eafe] via-[#f6e6fa] to-[#d1f7e6] rounded-2xl pt-8 pb-6 w-full relative flex flex-col items-stretch">
+          {/* White input card */}
+          <div className="relative bg-white pt-4 pb-2 w-full flex flex-col items-end" style={{ minHeight: 140 }}>
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              className="w-full h-24 px-4 sm:px-6 lg:px-8 py-0 text-lg border-none bg-transparent focus:outline-none resize-none"
+              style={{ paddingRight: dynamicPaddingRight }}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="What's happening?"
+            />
+            {/* Absolutely positioned color wheel overlay */}
+            {qaLeft !== null && (
+              <ColorWheelIcon
+                className="w-16 h-16"
+                style={{
+                  position: 'absolute',
+                  left: qaLeft,
+                  top: '-32px',
+                  transform: 'translateX(-50%)',
+                  zIndex: 45
+                }}
               />
-            ) : (
-              <UserCircleIcon className="w-14 h-14 md:w-12 md:h-12 lg:w-16 lg:h-16 text-gray-300 bg-white rounded-full border-4 border-white shadow-md" />
+            )}
+            {/* Absolutely positioned B/I/S stack overlay */}
+            {qaLeft !== null && (
+              <div
+                ref={bisRef}
+                style={{
+                  position: 'absolute',
+                  left: qaLeft,
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 40,
+                  pointerEvents: 'auto',
+                  width: 'max-content'
+                }}
+              >
+                <div className="flex flex-col items-center" style={{ position: 'relative', zIndex: 42 }}>
+                  <Tooltip content="Bold">
+                    <button type="button" title="Bold" style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: '#f3f4f6', border: 'none', marginBottom: 4 }} aria-label="Bold"><span style={{ fontWeight: 700, fontSize: 20 }}>B</span></button>
+                  </Tooltip>
+                  <Tooltip content="Italic">
+                    <button type="button" title="Italic" style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: '#f3f4f6', border: 'none', marginBottom: 4 }} aria-label="Italic"><span style={{ fontStyle: 'italic', fontSize: 20 }}>I</span></button>
+                  </Tooltip>
+                  <Tooltip content="Strikethrough">
+                    <button type="button" title="Strikethrough" style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: '#f3f4f6', border: 'none', marginBottom: 8 }} aria-label="Strikethrough"><span style={{ textDecoration: 'line-through', fontSize: 20 }}>S</span></button>
+                  </Tooltip>
+                </div>
+              </div>
             )}
           </div>
-          {/* Color wheel right */}
-          <div className="absolute -top-7 right-8">
-            <button type="button" onClick={handleColorWheelClick} className="w-14 h-14 md:w-12 md:h-12 lg:w-16 lg:h-16 flex items-center justify-center rounded-full bg-white shadow-md">
-              <ColorWheelIcon className="w-8 h-8" />
+          {/* Action row */}
+          <div ref={actionRowRef} className="flex items-center w-full px-4 sm:px-6 lg:px-8 mt-2 pt-2 pb-1 relative">
+            <div className="flex gap-4 flex-1">
+              <Tooltip content="Add image/video">
+                <button className="bg-transparent p-0" onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}> <IconPhoto /></button>
+              </Tooltip>
+              <button className="bg-transparent p-0" title="GIF" onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}> <IconGif /></button>
+              <button className="bg-transparent p-0" title="Emoji"><IconEmoji /></button>
+              <button className="bg-transparent p-0" title="Audio" aria-label="Audio"><IconAudio /></button>
+              <button className="bg-transparent p-0" title="Commitment" aria-label="Commitment"><IconCarrot /></button>
+              <button className="bg-transparent p-0" title="Lightning"><IconLightning /></button>
+            </div>
+            <button ref={postButtonRef} className="ml-auto bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded-full shadow disabled:opacity-50" disabled={!content.trim()}>
+              Post
             </button>
           </div>
-          {/* Main flex row */}
-          <div className="flex flex-row gap-4 pt-2">
-            {/* Left: vertical tools */}
-            <div className="flex flex-col items-center gap-3 pt-2">
-              {/* B/I/S formatting tools stacked vertically */}
-              <button type="button" className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow hover:bg-gray-100 font-bold text-lg">B</button>
-              <button type="button" className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow hover:bg-gray-100 italic text-lg">I</button>
-              <button type="button" className="w-8 h-8 flex items-center justify-center rounded-full bg-white shadow hover:bg-gray-100 line-through text-lg">S</button>
-            </div>
-            {/* Center: input box */}
-            <div className="flex-1">
-              <textarea
-                className="w-full bg-transparent text-lg placeholder-gray-500 focus:outline-none resize-none min-h-[60px] max-h-[200px]"
-                placeholder="What's happening?"
-                value={content || ''}
-                onChange={e => setContent(e.target.value)}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                rows={3}
-                maxLength={280}
-              />
-              {/* Emoji picker */}
-              {showEmojiPicker && (
-                <div className="absolute z-10 mt-2">
-                  <EmojiPicker onEmojiClick={(emojiObject: { emoji: string }, _?: unknown) => { setSelectedEmoji(emojiObject.emoji); setShowEmojiPicker(false); }} />
-                </div>
-              )}
-            </div>
-            {/* Right: action row */}
-            <div className="flex flex-col items-end justify-between gap-3">
-              <div className="flex flex-row gap-2">
-                <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-[#ffe3f7] hover:bg-[#ffd1f1] transition">
-                  <GifIcon className="w-6 h-6 text-[#b86bff]" />
-                </button>
-                <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e3ffe8] hover:bg-[#d1ffd8] transition">
-                  <MicrophoneIcon className="w-6 h-6 text-[#2fd97c]" />
-                </button>
-                <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fffbe3] hover:bg-[#fff4c7] transition">
-                  <LightningBoltIcon className="w-6 h-6" />
-                </button>
-                <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-[#ffe6c7] hover:bg-[#ffd9a3] transition">
-                  <span className="text-[22px]">🥕</span>
-                </button>
-              </div>
-              <button
-                type="submit"
-                className="mt-2 px-6 py-2 bg-[#2fd97c] text-white font-bold rounded-full shadow-md hover:bg-[#27c46f] mr-[49px]"
-                disabled={isSubmitting || !content.trim()}
-              >
-                {isSubmitting ? 'Posting...' : 'Post'}
-              </button>
-            </div>
-          </div>
         </div>
-      </form>
-    </>
+      </div>
+      </div>
   );
 }
-
-export default CommitmentComposer;

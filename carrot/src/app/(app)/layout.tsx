@@ -1,7 +1,5 @@
-import { auth } from '@/auth';
-import Sidebar from '@/components/Sidebar/Sidebar';
+import { auth } from '../../auth';
 import { redirect } from 'next/navigation';
-import { SessionProvider } from 'next-auth/react';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +11,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <>
-      <Sidebar />
-      <main className="flex-1 min-h-screen bg-gray-50">{children}</main>
-    </>
+    <main className="flex-1 min-h-screen bg-gray-50">{children}</main>
   );
 }

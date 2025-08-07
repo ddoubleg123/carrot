@@ -1,7 +1,7 @@
 "use client";
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { getFunctions } from "@firebase/functions";
-import { firebaseApp as app } from "@/lib/firebase";
+import { firebaseApp as app } from '../../../../lib/firebase';
 
 // Defensive: ensure app is initialized (workaround for Next.js/Firebase 12+ bug)
 const firebaseConfig = {

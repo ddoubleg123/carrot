@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 export default function FirebaseClientInit() {
   useEffect(() => {
     (async () => {
-      const { firebaseApp } = await import("@/lib/firebase");
+      const { firebaseApp } = await import("../../../../lib/firebase");
       if (typeof window !== "undefined" && firebaseApp) {
         const functions = getFunctions(firebaseApp, "us-central1");
         window.carrotFunctions = {

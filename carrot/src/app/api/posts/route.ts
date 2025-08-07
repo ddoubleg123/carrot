@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { auth } from '@/auth';
+import prisma from '../../../lib/prisma';
+import { auth } from '../../../auth';
 
 // POST /api/posts - create a new post
 export async function POST(req: NextRequest) {

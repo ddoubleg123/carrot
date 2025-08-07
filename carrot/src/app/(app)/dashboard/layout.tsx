@@ -1,8 +1,8 @@
 import { Inter } from 'next/font/google';
 import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
-import { SessionProvider } from 'next-auth/react';
-import Sidebar from '@/components/Sidebar/Sidebar';
+import { auth } from '../../../auth';
+import ClientSessionProvider from './components/ClientSessionProvider';
+import Sidebar from '../../../components/Sidebar/Sidebar';
 import Widgets from './components/Widgets';
 import MobileNav from './components/MobileNav';
 import CreateCommitmentButton from './components/CreateCommitmentButton';
@@ -18,7 +18,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <SessionProvider session={session}>
+    <ClientSessionProvider>
       <div className={`flex w-full max-w-[1400px] mx-auto px-4 sm:px-6 gap-6 ${inter.className}`}>
         {/* LEFT SIDEBAR */}
         <aside className="hidden md:flex w-[220px] flex-shrink-0 z-10">
@@ -51,6 +51,6 @@ export default async function Layout({ children }: { children: React.ReactNode }
           <Widgets />
         </aside>
       </div>
-    </SessionProvider>
+    </ClientSessionProvider>
   );
 }

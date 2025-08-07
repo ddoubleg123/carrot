@@ -47,6 +47,7 @@ export function useMediaUpload() {
       }
 
       // 3️⃣ get presigned URL from our API
+      console.log("Requesting presigned URL with type:", toUpload.type);
       const presignedResp = await fetch("/api/getPresignedURL", {
         method: "POST",
         body: JSON.stringify({ type: toUpload.type }),
@@ -55,8 +56,10 @@ export function useMediaUpload() {
       const { uploadURL, publicURL } = await presignedResp.json();
 
       // 4️⃣ upload directly to storage
+      console.log("Uploading with type:", toUpload.type);
       const uploadResp = await fetch(uploadURL, {
         method: "PUT",
+        headers: { "Content-Type": toUpload.type },
         body: toUpload,
         // Progress tracking is not natively supported by fetch, would need XMLHttpRequest for real progress
       });

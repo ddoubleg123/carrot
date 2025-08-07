@@ -80,7 +80,7 @@ export default function ProfilePhotoRow({ avatar, onAvatarChange, userId }: { av
       // Fetch the download URL from Firebase Storage and update avatar
       try {
         const { getDownloadURL, ref: storageRef } = await import('firebase/storage');
-        const storage = (await import('@/lib/firebase')).storage;
+        const storage = (await import('../../../lib/firebase')).storage;
         const photoRef = storageRef(storage, image.storagePath);
         const downloadUrl = await getDownloadURL(photoRef);
         setProfilePhotoPreview(downloadUrl); // Swap to remote URL as soon as available

@@ -16,7 +16,7 @@ interface DashboardClientProps {
 
 
 
-import { useSyncFirebaseAuth } from '@/lib/useSyncFirebaseAuth';
+import { useSyncFirebaseAuth } from '../../../lib/useSyncFirebaseAuth';
 
 export default function DashboardClient({ initialCommitments }: DashboardClientProps) {
   useSyncFirebaseAuth();
@@ -60,7 +60,7 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
   return (
     <div className="dashboard-feed-root" style={{ marginTop: 40, display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="w-full max-w-[680px] mx-auto">
-        <CommitmentComposer onSubmit={handleCreateCommitment} />
+        <CommitmentComposer />
         <div className="space-y-4">
           {commitments.map((commitment) => (
             <CommitmentCard

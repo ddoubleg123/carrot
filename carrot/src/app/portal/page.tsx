@@ -4,10 +4,9 @@ import { ADMIN_USERS } from '@/config/auth';
 
 export default async function PortalPage() {
   const session = await auth();
-  if (!session?.user?.email || !ADMIN_USERS.includes(session.user.email)) {
+  if (!session || !session.user?.email || !ADMIN_USERS.includes(session.user.email)) {
     redirect('/login');
   }
-  // Optionally, display onboarding status for debugging
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <h1 className="text-3xl font-bold mb-4">Admin Portal</h1>

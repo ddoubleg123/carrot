@@ -1,6 +1,5 @@
 'use client';
 
-import './login.css';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
@@ -64,56 +63,22 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
       setIsGoogleLoading(true);
       setError('');
       
-      // Always redirect to /onboarding after successful Google sign-in
-      const redirectUrl = '/onboarding';
-      const absoluteCallbackUrl = new URL(redirectUrl, window.location.origin).toString();
-      
       console.log('=== GOOGLE SIGN-IN INITIATED ===');
       console.log('Current URL:', window.location.href);
-      console.log('Redirecting to onboarding after sign-in:', absoluteCallbackUrl);
+      console.log('Redirecting to Google OAuth...');
       
-      // Sign in with Google - force redirect to onboarding
-      console.log('Initiating Google sign-in with redirect to onboarding...');
+      // Use proper OAuth flow with redirect: true (default)
+      // This will redirect to Google OAuth, then back to our callback
+      await signIn('google', {
+        callbackUrl: '/onboarding'
+      });
       
-      // First, sign in with Google
-      const result = await signIn('google', {
-        redirect: false,
-        callbackUrl: absoluteCallbackUrl,
-      });
-
-      console.log('SignIn result:', {
-        error: result?.error,
-        status: result?.status,
-        ok: result?.ok,
-        url: result?.url
-      });
-
-      if (result?.error) {
-        console.error('Google sign-in error:', result.error);
-        setError(result.error);
-        return;
-      }
-
-      // If we have a URL, redirect to it
-      if (result?.url) {
-        // Check if this is an error URL
-        if (result.url.includes('error=')) {
-          console.error('Error in OAuth response URL:', result.url);
-          setError('An error occurred during sign-in. Please try again.');
-          return;
-        }
-        
-        console.log('OAuth flow completed, redirecting to:', result.url);
-        window.location.href = result.url;
-      } else {
-        // Fallback to the onboarding page if no URL is returned
-        console.log('No URL returned from OAuth, redirecting to onboarding:', absoluteCallbackUrl);
-        window.location.href = absoluteCallbackUrl;
-      }
+      // Note: This code won't execute because signIn() redirects the page
+      // The user will be redirected to Google OAuth, then back to /onboarding
+      
     } catch (error) {
       console.error('Google Sign-In error:', error);
       setError('Failed to sign in with Google. Please try again.');
-    } finally {
       setIsGoogleLoading(false);
     }
   };
@@ -152,7 +117,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
               <div className="h-24 w-24 flex items-center justify-center">
                 {!isClient ? (
                   // Server-side placeholder
-                  <div className="h-full w-full bg-gray-200 animate-pulse rounded-full" />
+                  <div className="h-full w-full bg-[#F6F5FF] animate-pulse rounded-full" />
                 ) : useFallback ? (
                   // Fallback SVG
                   <svg 
@@ -269,7 +234,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
       <div className="mt-4 flex flex-col items-center">
         <Link
           href="/signup"
-          className="w-full h-10 flex items-center justify-center rounded-xl font-bold border-2 border-orange-300 text-orange-400 bg-white hover:bg-orange-50 hover:text-orange-500 transition-colors duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+          className="w-full h-10 flex items-center justify-center rounded-xl font-bold border-2 border-orange-300 text-orange-400 bg-white hover:bg-[#F6F5FF] hover:text-orange-500 transition-colors duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
         >
           Create Account
         </Link>
@@ -289,7 +254,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={isGoogleLoading || isSubmitting || isLoading}
-                  className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-[#F6F5FF] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                     <path
@@ -324,7 +289,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F5FF]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
       </div>
     }>

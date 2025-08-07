@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import PhotoModal from "@/components/PhotoModal";
-import { useSession } from 'next-auth/react';
+
 
 export default function ProfilePhotoSection() {
-  const { update } = useSession();
   const [modal, setModal] = useState<null | "camera" | "upload">(null);
   const [avatar, setAvatar] = useState<string | null>(null); // <- saved dataURL
 

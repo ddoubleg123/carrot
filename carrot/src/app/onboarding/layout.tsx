@@ -1,13 +1,5 @@
-import { auth } from '@/auth';
-import { redirect } from 'next/navigation';
-import { SessionProvider } from 'next-auth/react';
-
-export const dynamic = 'force-dynamic';
-
-export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
-  if (!session?.user) {
-    redirect('/login');
-  }
-  return <SessionProvider session={session}>{children}</SessionProvider>;
+// No layout needed - session is passed as props from server component
+// Authentication is handled in the page.tsx server component
+export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

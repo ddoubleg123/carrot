@@ -19,8 +19,9 @@ export async function GET(request: Request) {
     const imagePath = join(process.cwd(), 'public', src);
     const image = await readFile(imagePath);
     const mimeType = getMimeType(src);
-    
-    return new NextResponse(image, {
+    // Convert Buffer to Uint8Array for NextResponse
+    const imageData = new Uint8Array(image);
+    return new NextResponse(imageData, {
       headers: {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',

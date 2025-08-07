@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import './avatar-glow.css';
 import '../../app/(app)/dashboard/dashboard-tokens.css';
-import { signOutAction } from '@/actions/auth-actions';
+import { signOutAction } from '../../actions/auth-actions';
 import { useSession } from 'next-auth/react';
-import CarrotLogo from '@/components/CarrotLogo';
-import { SidebarIcons } from '@/components/icons/SidebarIcons';
+import CarrotLogo from '../CarrotLogo';
+import { SidebarIcons } from '../icons/SidebarIcons';
 
 const MENU = [
   {

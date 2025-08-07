@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Combobox, Transition } from "@headlessui/react";
-import { countries, Country, findByCode } from "@/lib/countries";
+import { countries, Country, findByCode } from "../lib/countries";
 import { Controller, Control } from "react-hook-form";
 
 type Props = {

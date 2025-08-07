@@ -1,0 +1,82 @@
+/* Global CSS override for react-international-phone library */
+/* This file specifically targets and removes inner input borders */
+
+/* Target the main container and all child elements */
+.react-international-phone-input-container,
+.react-international-phone-input-container *,
+.react-international-phone-country-selector,
+.react-international-phone-country-selector *,
+.react-international-phone-country-selector-button,
+.react-international-phone-country-selector-button *,
+.react-international-phone-input,
+input[type="tel"],
+input[class*="phone"],
+input[class*="international"],
+input.react-international-phone-input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  
+  /* Override browser defaults */
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  
+  /* Remove any inset shadows that might look like borders */
+  -webkit-box-shadow: none !important;
+  -moz-box-shadow: none !important;
+  
+  /* Remove any background that might create border effect */
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+/* Specifically target the country selector button which often has borders */
+.react-international-phone-country-selector-button {
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* Focus states */
+.react-international-phone-input-container input:focus,
+.react-international-phone-input-container .react-international-phone-input:focus,
+.react-international-phone-input:focus,
+input[type="tel"]:focus,
+input[class*="phone"]:focus,
+input[class*="international"]:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+}
+
+/* Active states */
+.react-international-phone-input-container input:active,
+.react-international-phone-input-container .react-international-phone-input:active,
+.react-international-phone-input:active,
+input[type="tel"]:active,
+input[class*="phone"]:active,
+input[class*="international"]:active {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+}
+
+/* Target any div that might have borders inside phone input */
+.react-international-phone-input-container div,
+.react-international-phone-input-container span {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

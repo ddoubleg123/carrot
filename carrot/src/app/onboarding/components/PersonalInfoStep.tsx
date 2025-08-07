@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import PhotoModal from '@/components/PhotoModal';
-import { useSession } from 'next-auth/react';
+
 import { useRouter } from 'next/navigation';
 import ProgressHeader from './ProgressHeader';
 import ProfilePhotoRow from './ProfilePhotoRow';
@@ -38,7 +38,7 @@ import { useForm, FormProvider, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
-import { countries } from "@/lib/countries"; // [{ value:"US", label:"United States" }, ...]
+import { countries } from "../../../lib/countries"; // [{ value:"US", label:"United States" }, ...]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schema (adjust messages/rules as needed)
@@ -53,7 +53,17 @@ const Schema = z.object({
   email:     z.string().email("Invalid email"),
   phone:     z.string().trim().min(7, "Phone number is required"),
   country:   z.string().min(1, "Country of residence is required"), // store ISO like "US"
-  zip:       z.string().trim().min(2, "ZIP/Postal code is required"),
+  zip:       z.string().trim().min(1, "ZIP/Postal code is required"),
+}).refine((data) => {
+  // For US addresses, require exactly 5 digits
+  if (data.country === "US") {
+    return /^\d{5}$/.test(data.zip);
+  }
+  // For other countries, just require minimum 2 characters
+  return data.zip.length >= 2;
+}, {
+  message: "US ZIP codes must be exactly 5 digits",
+  path: ["zip"], // This will show the error on the zip field
 });
 type FormData = z.infer<typeof Schema>;
 

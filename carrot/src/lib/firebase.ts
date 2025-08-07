@@ -1,3 +1,15 @@
+console.log("FIREBASE CONFIG:", {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+});
+console.log("Before Firebase initializeApp");
+
+
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
@@ -28,12 +40,14 @@ let googleProvider: GoogleAuthProvider;
 const initializeFirebase = () => {
   if (!getApps().length) {
     const app = initializeApp(firebaseConfig);
+    console.log("After Firebase initializeApp");
     firebaseApp = app;
     
     // Initialize Firestore with settings that work in both server and client
     db = initializeFirestore(firebaseApp, {
       experimentalForceLongPolling: true
     });
+    console.log("After Firestore initialized");
     
     // Initialize other services
     auth = getAuth(firebaseApp);
@@ -41,10 +55,12 @@ const initializeFirebase = () => {
     googleProvider = new GoogleAuthProvider();
   } else {
     firebaseApp = getApp();
+    console.log("After getApp");
     db = getFirestore(firebaseApp);
     auth = getAuth(firebaseApp);
     storage = getStorage(firebaseApp);
     googleProvider = new GoogleAuthProvider();
+    console.log("After getFirestore/getAuth/getStorage/GoogleAuthProvider");
   }
   
   return { firebaseApp, auth, db, storage, googleProvider };

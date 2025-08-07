@@ -5,15 +5,15 @@ import { useSession } from 'next-auth/react';
 
 // Simple debug page to display session and cookie information
 export default function DebugPage() {
-  const { data: session, status } = useSession();
   const [cookies, setCookies] = useState<Record<string, string>>({});
   const [windowUrl, setWindowUrl] = useState('');
   const [isClient, setIsClient] = useState(false);
+  // Only call useSession on the client
+  const { data: session, status } = isClient ? useSession() : { data: undefined, status: 'loading' } as any;
 
   useEffect(() => {
     setIsClient(true);
     setWindowUrl(window.location.href);
-    
     // Parse cookies
     const cookieMap: Record<string, string> = {};
     document.cookie.split(';').forEach(cookie => {

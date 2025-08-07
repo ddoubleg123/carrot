@@ -1,7 +1,7 @@
 
 import FirebaseClientInit from './components/FirebaseClientInit';
-import '@/lib/firebase';
-import { auth } from '@/auth';
+import '../../../lib/firebase';
+import { auth } from '../../../auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';

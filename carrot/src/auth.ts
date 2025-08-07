@@ -95,7 +95,7 @@ function logObjectSize(name: string, obj: any) {
 
 const adapter = patchAdapter(PrismaAdapter(prisma));
 
-export const { handlers, auth } = NextAuth({
+export const authOptions = {
   adapter,
   cookies: {
     sessionToken: {
@@ -184,5 +184,14 @@ export const { handlers, auth } = NextAuth({
       return session;
     },
   }
-});
+};
+
+import { getServerSession } from "next-auth";
+
+
+
+export async function auth() {
+  return getServerSession(authOptions);
+}
+
 export { signOut } from "next-auth/react";

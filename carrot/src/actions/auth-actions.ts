@@ -1,11 +1,12 @@
 'use server';
 
-import { signOut } from '@/auth';
+// import { signOut } from '../config/auth';
 import { redirect } from 'next/navigation';
 
 export async function signOutAction() {
   try {
-    await signOut({ redirect: false });
+    // TODO: Implement signOut logic or integrate with correct auth provider
+    // await signOut({ redirect: false });
     // Force a hard redirect to ensure the session is cleared
     redirect('/login');
   } catch (error) {

@@ -1,11 +1,11 @@
 import React, { useState, useRef } from "react";
-import { auth, storage } from '@/lib/firebase';
+import { auth, storage } from '../../lib/firebase';
 import type { Firestore } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '../../lib/firebase';
 import { doc, setDoc, serverTimestamp, writeBatch, getDoc } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, UploadTask, getDownloadURL } from "firebase/storage";
 import { DraftImage, OnboardingDraft } from "./types";
-import { ensureFirebaseSignedIn } from '@/lib/ensureFirebaseSignedIn';
+import { ensureFirebaseSignedIn } from '../../lib/ensureFirebaseSignedIn';
 
 // Hook for managing staged onboarding uploads and Firestore draft state
 export function useStagedOnboardingUpload(sessionId: string, userId: string) {
@@ -15,13 +15,29 @@ export function useStagedOnboardingUpload(sessionId: string, userId: string) {
     if (!draft && userId && sessionId) {
       const fetchDraft = async () => {
         try {
+          // Ensure Firebase Auth is ready before Firestore operations
+          await ensureFirebaseSignedIn();
+          
+          // Debug: Check current Firebase Auth user
+          console.log('[fetchDraft] Current Firebase Auth user:', (auth as any).currentUser?.uid);
+          console.log('[fetchDraft] Attempting to read from path:', `users/${userId}/onboardingDrafts/${sessionId}`);
+          
           const draftRef = doc(db, `users/${userId}/onboardingDrafts/${sessionId}`);
           const snap = await getDoc(draftRef);
           if (snap.exists()) {
             setDraft(snap.data() as OnboardingDraft);
+            console.log('✅ [fetchDraft] Successfully loaded draft from Firestore');
+          } else {
+            console.log('ℹ️ [fetchDraft] No existing draft found in Firestore');
           }
         } catch (err) {
           console.error('[useStagedOnboardingUpload] Failed to fetch onboarding draft:', err);
+          console.error('[fetchDraft] Error details:', {
+            userId,
+            sessionId,
+            firebaseUser: (auth as any).currentUser?.uid,
+            error: err
+          });
         }
       };
       fetchDraft();
@@ -143,6 +159,10 @@ export function useStagedOnboardingUpload(sessionId: string, userId: string) {
   // Save/merge draft doc in Firestore with robust error handling and correct timestamp usage
   async function saveDraft(draftData: Partial<OnboardingDraft>): Promise<boolean> {
     if (!userId) throw new Error("No user id");
+    
+    // Ensure Firebase Auth is ready before Firestore operations
+    await ensureFirebaseSignedIn();
+    
     const draftRef = doc(db, `users/${userId}/onboardingDrafts/${sessionId}`);
     // Deep clean utility to remove undefined from all nested fields
     function cleanFirestorePayload(obj: Record<string, any>): any {
@@ -163,6 +183,7 @@ export function useStagedOnboardingUpload(sessionId: string, userId: string) {
     setDraft(payload as OnboardingDraft);
     try {
       await setDoc(draftRef, payload, { merge: true });
+      console.log('✅ [saveDraft] Firestore write successful');
       return true; // success
     } catch (err) {
       console.error('[saveDraft] Firestore write error:', err);
@@ -187,7 +208,7 @@ export function useStagedOnboardingUpload(sessionId: string, userId: string) {
     }
     try {
       // Dynamically import the utility to avoid circular deps
-      const { finalizeOnboardingSession } = await import('@/lib/finalizeOnboarding');
+      const { finalizeOnboardingSession } = await import('../../lib/finalizeOnboarding');
       const result = await finalizeOnboardingSession(sessionId);
       return result; // { ok: true, photoURL, photoRev }
     } catch (err) {

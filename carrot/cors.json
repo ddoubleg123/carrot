@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "http://localhost:3005",
+      "https://localhost:3005",
+      "https://gotcarrot.com"
+    ],
+    "method": ["PUT", "POST", "GET", "HEAD", "DELETE"],
+    "responseHeader": ["Content-Type", "x-goog-resumable", "x-goog-meta-*"],
+    "maxAgeSeconds": 3600
+  }
+]

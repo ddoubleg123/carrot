@@ -7,7 +7,7 @@ import type { Area } from 'react-easy-crop';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Camera, Upload, X, Check, RotateCw, Loader2 as LucideLoader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 
 interface ImageUploaderProps {
   onSave: (blob: Blob, url: string) => Promise<void>;
