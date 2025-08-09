@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import PhotoModal from "@/components/PhotoModal";
+import { useSession } from 'next-auth/react';
+import PhotoModal from "../../../components/PhotoModal";
 
 
 export default function ProfilePhotoSection() {
+  const { update } = useSession();
   const [modal, setModal] = useState<null | "camera" | "upload">(null);
   const [avatar, setAvatar] = useState<string | null>(null); // <- saved dataURL
 
@@ -109,7 +111,7 @@ export default function ProfilePhotoSection() {
             setModal(null);
             try {
               // Dynamically import upload util to avoid SSR issues
-              const { uploadProfilePhotoToFirebase } = await import('@/lib/uploadProfilePhotoToFirebase');
+              const { uploadProfilePhotoToFirebase } = await import('../../../lib/uploadProfilePhotoToFirebase');
               const { data: session } = await import('next-auth/react').then(mod => mod.useSession());
               const userId = session?.user?.id;
               if (!userId) throw new Error('No user ID in session');
@@ -126,7 +128,7 @@ export default function ProfilePhotoSection() {
                 throw new Error(err.error || 'Failed to update profile photo');
               }
               // Force session update so profilePhoto is reflected everywhere
-              await update();
+              if (update) await update();
             } catch (err) {
               console.error('[ProfilePhotoSection] ERROR during upload:', err);
               alert('Photo upload failed: ' + (err as Error).message);

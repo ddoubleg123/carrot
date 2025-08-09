@@ -73,6 +73,35 @@ model User {
   posts       Post[]
 }
 
+model Post {
+  id                String   @id @default(cuid())
+  content           String
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Gradient styling
+  gradientDirection String?
+  gradientFromColor String?
+  gradientViaColor  String?
+  gradientToColor   String?
+  
+  // Media content
+  imageUrls         String?  // JSON array of image URLs
+  gifUrl            String?  // Single GIF or video URL
+  audioUrl          String?  // Audio file URL
+  
+  // Post metadata
+  emoji             String?
+  carrotText        String?
+  stickText         String?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("posts")
+}
+
 model OnboardingQuestion {
   id       String   @id @default(cuid())
   slug     String   @unique
@@ -102,21 +131,5 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-model Post {
-  id                String   @id @default(cuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
-  gradientDirection String
-  gradientFromColor String
-  gradientViaColor  String?
-  gradientToColor   String
-  imageUrls         String
-  gifUrl            String?
-  audioUrl          String?
-  emoji             String?
-  carrotText        String?
-  stickText         String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-}
+
 

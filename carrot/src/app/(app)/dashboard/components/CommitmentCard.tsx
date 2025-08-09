@@ -17,10 +17,35 @@ import {
   HandThumbUpIcon as HandThumbUpIconSolid,
   HandThumbDownIcon as HandThumbDownIconSolid
 } from '@heroicons/react/24/solid';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { SadFaceIcon, NeutralFaceIcon, HappyFaceIcon } from './FaceIcons';
+
+// Helper function to get relative time (e.g., "2m ago", "1h ago")
+function getRelativeTime(timestamp: string | Date): string {
+  const now = new Date();
+  const postTime = new Date(timestamp);
+  const diffInSeconds = Math.floor((now.getTime() - postTime.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds}s ago`;
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes}m ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours}h ago`;
+  } else {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days}d ago`;
+  }
+}
+
+import VideoPlayer from './VideoPlayer';
+// Testing regular import instead of dynamic import to isolate SSR/hydration issues
+
+
 
 export type VoteType = 'carrot' | 'stick' | null;
 
@@ -57,6 +82,7 @@ export interface CommitmentCardProps {
   innerBoxColor?: string;
   imageUrls?: string[];
   gifUrl?: string;
+  thumbnailUrl?: string;
   audioUrl?: string;
   emoji?: string;
   gradientFromColor?: string;
@@ -80,6 +106,7 @@ export default function CommitmentCard({
   timestamp,
   imageUrls,
   gifUrl,
+  thumbnailUrl,
   audioUrl,
   emoji,
   gradientFromColor,
@@ -114,14 +141,12 @@ export default function CommitmentCard({
     else formattedTimestamp = `${Math.floor(diff/86400)}d`;
   }
 
-  // Gradient background from DB fields
-  let gradientBg = '';
-  if (typeof gradientFromColor === 'string' && typeof gradientToColor === 'string') {
-    gradientBg = `bg-gradient-to-br from-[${gradientFromColor}] to-[${gradientToColor}]`;
-    if (gradientViaColor) {
-      gradientBg = `bg-gradient-to-br from-[${gradientFromColor}] via-[${gradientViaColor}] to-[${gradientToColor}]`;
-    }
-  }
+  // Gradient background from DB fields - using inline styles instead of dynamic Tailwind classes
+  const gradientStyle = (gradientFromColor && gradientToColor) ? {
+    background: gradientViaColor 
+      ? `linear-gradient(to bottom right, ${gradientFromColor}, ${gradientViaColor}, ${gradientToColor})`
+      : `linear-gradient(to bottom right, ${gradientFromColor}, ${gradientToColor})`
+  } : {};
   
   // Handle vote for carrot or stick
   const handleVote = (type: VoteType) => {
@@ -217,12 +242,16 @@ export default function CommitmentCard({
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[15px] text-gray-900 truncate">{author.name}</span>
-            {flag && <span className="ml-1 text-lg leading-none">{flag}</span>}
-            <span className="text-sm text-gray-500">@{author.username}</span>
+            <span className="font-bold text-[15px] text-gray-900">@{author.username}</span>
+            {flag && <span className="text-lg leading-none">{flag}</span>}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">{time} ago</span>
+            <Link 
+              href={`/post/${id}`}
+              className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
+            >
+              {getRelativeTime(timestamp || new Date().toISOString())}
+            </Link>
           </div>
         </div>
         {/* Follow/Following Button */}
@@ -239,7 +268,10 @@ export default function CommitmentCard({
         </button>
       </div>
       {/* Content Box - colored background with white overlay box-in-box */}
-      <div className={`relative rounded-xl px-5 py-4 ${gradientBg || customInnerBoxColor} ${textColor} transition-colors min-h-[56px] mb-1 overflow-visible`}>
+      <div 
+        className="relative rounded-xl px-5 py-4 transition-colors min-h-[56px] mb-1 overflow-visible"
+        style={gradientStyle}
+      >
         {/* White overlay as an inner box */}
         <div className="relative z-10 mx-2 my-2 md:mx-4 md:my-3">
           <div className="rounded-xl bg-white/50 px-6 py-5 text-black relative">
@@ -255,24 +287,33 @@ export default function CommitmentCard({
                 </button>
               </div>
             )}
-            {/* Emoji */}
-            {emoji && (
-              <div className="mt-3 text-3xl text-center">{emoji}</div>
-            )}
-            {/* Image Gallery */}
+            {/* Emoji - Removed per user request */}
+            {/* Single Image - Centered with Smart Sizing */}
             {Array.isArray(imageUrls) && imageUrls.length > 0 && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {imageUrls.map((url: string, i: number) => (
-                  <div key={i} className="relative aspect-w-16 aspect-h-9 rounded-lg overflow-hidden bg-gray-100">
-                    <Image src={url} alt={`Post image ${i+1}`} fill className="object-cover" />
+              <div className="mt-4 flex justify-center">
+                <div className="w-full max-w-[550px] min-w-[320px] mx-4">
+                  <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
+                    <Image 
+                      src={imageUrls[0]} 
+                      alt="Post image" 
+                      width={550}
+                      height={400}
+                      priority
+                      className="w-full h-auto object-contain" 
+                      style={{ width: 'auto', height: 'auto' }}
+                      sizes="(max-width: 640px) calc(100vw - 32px), 550px"
+                    />
                   </div>
-                ))}
+                </div>
               </div>
             )}
-            {/* GIF */}
+            {/* Video/GIF - Centered with Smart Sizing */}
             {gifUrl && (
               <div className="mt-4 flex justify-center">
-                <img src={gifUrl} alt="GIF" className="rounded-xl max-h-64" />
+                <VideoPlayer 
+                  videoUrl={gifUrl}
+                  thumbnailUrl={thumbnailUrl}
+                />
               </div>
             )}
             {/* Audio */}

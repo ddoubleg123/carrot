@@ -69,11 +69,6 @@ export function CustomPhoneInput({
           background: 'transparent',
           width: '100%'
         }}
-        containerStyle={{
-          border: 'none',
-          outline: 'none',
-          boxShadow: 'none'
-        }}
         inputClassName={cn(
           'w-full bg-transparent',
           '[border:none!important] [outline:none!important] [box-shadow:none!important]',

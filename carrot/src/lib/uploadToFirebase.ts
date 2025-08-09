@@ -1,5 +1,6 @@
 import { storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ensureFirebaseSignedIn } from './ensureFirebaseSignedIn';
 
 /**
  * Uploads a File to Firebase Storage and returns its download URL.
@@ -7,9 +8,20 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
  * @param path Storage path (e.g. 'posts/${userId}/${timestamp}_${filename}')
  */
 export async function uploadFileToFirebase(file: File, path: string): Promise<string> {
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
-  return await getDownloadURL(storageRef);
+  try {
+    // Ensure user is properly signed in to Firebase (fixes 403 permission errors)
+    await ensureFirebaseSignedIn();
+    
+    console.log('Starting Firebase Storage upload:', { path, fileType: file.type, fileSize: file.size });
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log('Firebase Storage upload successful:', downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error('Firebase Storage upload failed:', error);
+    throw error;
+  }
 }
 
 /**

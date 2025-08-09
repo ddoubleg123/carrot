@@ -21,16 +21,16 @@ export default async function Layout({ children }: { children: React.ReactNode }
     <ClientSessionProvider>
       <div className={`flex w-full max-w-[1400px] mx-auto px-4 sm:px-6 gap-6 ${inter.className}`}>
         {/* LEFT SIDEBAR */}
-        <aside className="hidden md:flex w-[220px] flex-shrink-0 z-10">
+        <aside className="hidden sm:flex w-[220px] max-lg:w-[80px] flex-shrink-0 z-10">
           <Sidebar />
         </aside>
 
-        {/* Mobile/off-canvas drawer (unchanged) */}
-        <button id="menuBtn" className="md:hidden fixed left-4 top-3 z-50" aria-label="Open menu">&#9776;</button>
-        <aside className="drawer md:hidden">
+        {/* Mobile hamburger menu */}
+        <button id="menuBtn" className="sm:hidden fixed left-4 top-3 z-50 bg-white p-2 rounded-md shadow-md" aria-label="Open menu">&#9776;</button>
+        <aside className="drawer sm:hidden">
           <Sidebar />
         </aside>
-        <div id="scrim" className="md:hidden fixed inset-0 bg-black/30 z-40 hidden"></div>
+        <div id="scrim" className="sm:hidden fixed inset-0 bg-black/30 z-40 hidden"></div>
         <script dangerouslySetInnerHTML={{__html:`
           const btn = document.getElementById('menuBtn');
           const drawer = document.querySelector('.drawer');
@@ -42,12 +42,12 @@ export default async function Layout({ children }: { children: React.ReactNode }
         `}} />
 
         {/* CENTER FEED */}
-        <main className="flex-1 w-full max-w-[680px] ml-0 md:ml-[220px] z-0 mt-10">
+        <main className="flex-1 w-full max-w-[680px] ml-0 sm:ml-[220px] max-lg:ml-[80px] z-0">
           {children}
         </main>
 
-        {/* RIGHT SIDEBAR (optional) */}
-        <aside className="hidden xl:block w-[300px] flex-shrink-0 z-10">
+        {/* RIGHT SIDEBAR - Hidden below 1200px */}
+        <aside className="hidden min-[1200px]:block w-[300px] flex-shrink-0 z-10">
           <Widgets />
         </aside>
       </div>

@@ -58,10 +58,11 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
   };
 
   return (
-    <div className="dashboard-feed-root" style={{ marginTop: 40, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div className="w-full max-w-[680px] mx-auto">
-        <CommitmentComposer />
-        <div className="space-y-4">
+    <div className="dashboard-feed-root">
+      <div className="w-full max-w-[800px] mx-auto px-4 pt-[50px]">
+        <CommitmentComposer onPost={handleCreateCommitment} />
+        {/* Professional compact spacing for social media feed */}
+        <div className="space-y-3 mt-6">
           {commitments.map((commitment) => (
             <CommitmentCard
               key={commitment.id}

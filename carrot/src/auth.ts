@@ -109,9 +109,8 @@ export const authOptions = {
     },
   },
   session: {
-    strategy: 'jwt', // TEMP: debug session/cookie issues
+    strategy: 'jwt' as const,
   },
-
   debug: true,
 
   providers: [
@@ -134,7 +133,7 @@ export const authOptions = {
     newUser: '/onboarding',
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account }: { token: any; user: any; account: any }) {
       if (user) {
         if (account?.provider) {
           token.provider = account.provider;
@@ -161,7 +160,7 @@ export const authOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       session.user = {
         id: token.id as string,
         email: token.email as string,

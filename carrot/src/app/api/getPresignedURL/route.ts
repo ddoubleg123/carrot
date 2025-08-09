@@ -18,13 +18,22 @@ export async function POST(req: NextRequest) {
     const ext = type.split('/')[1] || 'bin';
     const filename = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const file = storage.bucket(BUCKET!).file(filename);
+    
+    // Generate signed URL for upload
     const [uploadURL] = await file.getSignedUrl({
       version: 'v4',
       action: 'write',
       expires: Date.now() + 10 * 60 * 1000,
       contentType: type,
     });
-    const publicURL = `https://storage.googleapis.com/${BUCKET}/${filename}`;
+    
+    // Generate signed URL for reading (valid for 24 hours)
+    const [publicURL] = await file.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    });
+    
     return NextResponse.json({ uploadURL, publicURL });
   } catch (error) {
     console.error('[getPresignedURL] Error:', error);

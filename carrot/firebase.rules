@@ -12,8 +12,13 @@ service cloud.firestore {
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /users/{uid}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    // Temporary: Allow any authenticated user to upload anywhere for testing
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
     }
+    // Original rule (commented out for testing):
+    // match /users/{uid}/{allPaths=**} {
+    //   allow read, write: if request.auth != null && request.auth.uid == uid;
+    // }
   }
 }

@@ -15,7 +15,7 @@ const firebaseAdminConfig = {
 };
 
 console.log('[firebase-admin] using storageBucket:', firebaseAdminConfig.storageBucket);
-let app;
+let app: App;
 if (!admin.apps.length) {
   app = admin.initializeApp(firebaseAdminConfig);
 } else {

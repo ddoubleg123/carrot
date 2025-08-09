@@ -20,8 +20,8 @@ export default function CreatePostModal({ open, mediaPreview, mediaType, onClose
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-auto p-0 relative">
+    <div className="relative w-full mt-2 z-10">
+      <div className="bg-white rounded-2xl shadow-2xl w-full p-0 relative border border-gray-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold">Create Post</h2>

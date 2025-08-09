@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { app } from '../../../../lib/firebase-admin';
-const admin = require('firebase-admin');
+import * as admin from 'firebase-admin';
 const db = admin.firestore(app);
 
 export async function POST(request: Request) {

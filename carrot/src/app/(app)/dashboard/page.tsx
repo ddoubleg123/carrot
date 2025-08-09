@@ -7,19 +7,30 @@ import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClientWrapper from './DashboardClientWrapper';
 
-// Server-side data fetching
+// Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
-  // In a real app, this would be an API call or database query
-  return [
-    {
-      id: '1',
-      content: '🌱 I pledge to reduce my carbon footprint by 50% in the next year.\n1. Use public transportation more.\n2. Eat less meat.\n3. Switch to LED lights.\n4. Compost food waste.\n5. Take shorter showers.\n6. Support local farmers.\n7. Recycle more.\n8. Share my progress with friends.',
-      carrotText: 'I will help you achieve this goal!',
-      stickText: 'I will hold you accountable!',
+  try {
+    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/posts`, {
+      cache: 'no-store', // Always fetch fresh data
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to fetch posts from database');
+      return [];
+    }
+    
+    const posts = await response.json();
+    
+    // Transform database posts to CommitmentCardProps format
+    return posts.map((post: any) => ({
+      id: post.id,
+      content: post.content || '',
+      carrotText: post.carrotText || '',
+      stickText: post.stickText || '',
       author: {
-        name: 'John Doe',
-        username: 'johndoe',
-        avatar: null,
+        name: '', // Remove name display per user request
+        username: post.user?.username || 'daniel', // Use actual handle
+        avatar: post.user?.profilePhoto || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
         flag: '🇺🇸',
       },
       location: {
@@ -28,102 +39,27 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         state: 'NY',
       },
       stats: {
-        likes: 42,
-        comments: 7,
-        reposts: 3,
-        views: 128,
-        carrots: 35,
-        sticks: 7,
+        likes: Math.floor(Math.random() * 50), // Random likes for demo
+        comments: Math.floor(Math.random() * 20),
+        reposts: Math.floor(Math.random() * 10),
+        views: Math.floor(Math.random() * 200) + 50,
       },
       userVote: null,
-      innerBoxColor: 'bg-gradient-to-br from-green-400 to-blue-300',
-      timestamp: '2h',
-    },
-    {
-      id: '2',
-      content: 'As mayor, I will implement a universal basic income pilot program in our city.',
-      carrotText: 'I will volunteer for your campaign.',
-      stickText: 'I will vote you out if you break this promise!',
-      author: {
-        name: 'Jane Smith',
-        username: 'janesmith',
-        avatar: null,
-        flag: '🇨🇦',
-      },
-      location: {
-        zip: '94107',
-        city: 'San Francisco',
-        state: 'CA',
-      },
-      stats: {
-        likes: 128,
-        comments: 24,
-        reposts: 15,
-        views: 512,
-        carrots: 98,
-        sticks: 30,
-      },
-      userVote: null,
-      innerBoxColor: 'bg-gradient-to-br from-yellow-200 via-orange-200 to-pink-200',
-      timestamp: '2h',
-    },
-    {
-      id: '3',
-      content: 'Committing to 30 minutes of meditation every morning.\nDay 3 and feeling more focused already!\nMindfulness is key.',
-      carrotText: 'I support this!',
-      stickText: 'I will check in on your progress!',
-      author: {
-        name: 'Alex Johnson',
-        username: 'alexj',
-        avatar: null,
-        flag: '🇬🇧',
-      },
-      location: {
-        zip: '60601',
-        city: 'Chicago',
-        state: 'IL',
-      },
-      stats: {
-        likes: 56,
-        comments: 12,
-        reposts: 8,
-        views: 256,
-        carrots: 45,
-        sticks: 11,
-      },
-      userVote: null,
-      innerBoxColor: 'bg-gradient-to-br from-purple-300 to-blue-200',
-      timestamp: '2h',
-    },
-    {
-      id: '4',
-      content: '🚴‍♂️ Just biked to work for the first time this year!\nFeels amazing to skip traffic and help the planet.\nTrying to make this a weekly habit.\nAnyone else biking to work?\nLet’s encourage each other!',
-      carrotText: 'Way to go! Keep it up! 🚲',
-      stickText: 'I’ll remind you if you stop biking!',
-      author: {
-        name: 'Sam Lee',
-        username: 'samlee',
-        avatar: null,
-        flag: '🇦🇺',
-      },
-      location: {
-        zip: '2000',
-        city: 'Sydney',
-        state: 'NSW',
-      },
-      stats: {
-        likes: 77,
-        comments: 18,
-        reposts: 6,
-        views: 312,
-        carrots: 62,
-        sticks: 9,
-      },
-      userVote: null,
-      innerBoxColor: 'bg-gradient-to-br from-cyan-200 to-lime-200',
-      timestamp: '1h',
-    },
-  ];
+      timestamp: post.createdAt,
+      imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
+      gifUrl: post.gifUrl || null,
+      thumbnailUrl: post.thumbnailUrl || null,
+      audioUrl: post.audioUrl || null,
+      emoji: post.emoji || '🎯',
+      gradientFromColor: post.gradientFromColor || '#e0eafe',
+      gradientToColor: post.gradientToColor || '#d1f7e6',
+      gradientViaColor: post.gradientViaColor || '#f6e6fa',
+      gradientDirection: post.gradientDirection || 'to-br',
+    }));
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
 }
 
 export default async function DashboardPage() {
@@ -141,7 +77,7 @@ export default async function DashboardPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     }>
-      <div className="min-h-screen bg-gray-50" style={{ marginTop: 0, paddingTop: 0 }}>
+      <div className="min-h-screen bg-white" style={{ marginTop: -20, paddingTop: 0 }}>
 
         <FirebaseClientInit />
         <FirebaseClientInit />

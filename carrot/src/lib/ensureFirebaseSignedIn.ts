@@ -44,6 +44,6 @@ export async function ensureFirebaseSignedIn() {
     
     console.log('[ensureFirebaseSignedIn] Successfully signed in to Firebase:', (auth as Auth).currentUser?.uid);
   } else {
-    console.log('[ensureFirebaseSignedIn] Already signed in to Firebase:', (auth as Auth).currentUser.uid);
+    console.log('[ensureFirebaseSignedIn] Already signed in to Firebase:', (auth as Auth).currentUser?.uid);
   }
 }

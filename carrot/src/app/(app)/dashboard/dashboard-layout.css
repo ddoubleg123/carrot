@@ -41,11 +41,26 @@
   .sidebar .label { display: none; }
 }
 
-/* Sidebar hidden (<=768px, mobile) */
-@media (max-width: 768px) {
-  .sidebar {
-    display: none !important;
-  }
+/* Mobile drawer styles */
+.drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 100vh;
+  background: white;
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-in-out;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Hamburger button styling */
+#menuBtn {
+  font-size: 18px;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
 }
 
 /* Main feed section */

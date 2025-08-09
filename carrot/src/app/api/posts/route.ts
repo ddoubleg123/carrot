@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
-
+        content,
         gradientDirection,
         gradientFromColor,
         gradientViaColor,
@@ -46,8 +46,17 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(post, { status: 201 });
   } catch (error) {
-    console.error('Error creating post:', error);
-    return NextResponse.json({ error: 'Failed to create post' }, { status: 500 });
+    console.error('💥 Detailed error creating post:', error);
+    if (error instanceof Error) {
+      console.error('💥 Error name:', error.name);
+      console.error('💥 Error message:', error.message);
+      console.error('💥 Error stack:', error.stack);
+    }
+    return NextResponse.json({ 
+      error: 'Failed to create post',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      name: error instanceof Error ? error.name : 'UnknownError'
+    }, { status: 500 });
   }
 }
 
