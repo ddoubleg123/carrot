@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
     gradientViaColor,
     gradientToColor,
     imageUrls,
+    videoUrl,
+    thumbnailUrl,
     gifUrl,
     audioUrl,
     emoji,
@@ -36,6 +38,8 @@ export async function POST(req: NextRequest) {
           : typeof imageUrls === 'string'
             ? JSON.stringify([imageUrls])
             : '[]',
+        videoUrl,
+        thumbnailUrl,
         gifUrl,
         audioUrl,
         emoji,

@@ -87,7 +87,9 @@ model Post {
   
   // Media content
   imageUrls         String?  // JSON array of image URLs
-  gifUrl            String?  // Single GIF or video URL
+  videoUrl          String?  // Video file URL
+  thumbnailUrl      String?  // Video thumbnail URL
+  gifUrl            String?  // Single GIF URL
   audioUrl          String?  // Audio file URL
   
   // Post metadata

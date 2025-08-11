@@ -3,15 +3,20 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
+import { useSession } from 'next-auth/react';
 import { uploadFilesToFirebase } from '../../../../lib/uploadToFirebase';
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
 import Toast from './Toast';
+import GifPicker from './GifPicker';
 
 interface CommitmentComposerProps {
   onPost?: (post: any) => void;
 }
 
 export default function CommitmentComposer({ onPost }: CommitmentComposerProps) {
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  
   const [content, setContent] = React.useState<string>('');
   const [showModal, setShowModal] = React.useState<boolean>(false);
   const [mediaPreview, setMediaPreview] = React.useState<string | null>(null);
@@ -26,6 +31,10 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
   const [thumbnailsLoading, setThumbnailsLoading] = React.useState<boolean>(false);
   const [currentThumbnailIndex, setCurrentThumbnailIndex] = React.useState<number>(0);
   
+  // GIF picker state
+  const [showGifPicker, setShowGifPicker] = React.useState<boolean>(false);
+  const [selectedGifUrl, setSelectedGifUrl] = React.useState<string | null>(null);
+  
   // Color wheel state with localStorage persistence
   const [currentColorScheme, setCurrentColorScheme] = React.useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -35,37 +44,127 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
     return 0;
   });
   
-  // Color schemes for the gradient backgrounds
+  // Color schemes for the gradient backgrounds - 20 beautiful options
   const colorSchemes = [
     {
-      name: 'Blue to Green',
+      name: 'Ocean Breeze',
       gradientFromColor: '#e0eafe',
       gradientToColor: '#d1f7e6',
       gradientViaColor: '#f6e6fa'
     },
     {
-      name: 'Purple to Pink',
+      name: 'Lavender Dreams',
       gradientFromColor: '#f3e8ff',
       gradientToColor: '#fce7f3',
       gradientViaColor: '#e0e7ff'
     },
     {
-      name: 'Orange to Yellow',
+      name: 'Sunset Glow',
       gradientFromColor: '#fed7aa',
       gradientToColor: '#fef3c7',
       gradientViaColor: '#fecaca'
     },
     {
-      name: 'Green to Blue',
+      name: 'Forest Mist',
       gradientFromColor: '#d1fae5',
       gradientToColor: '#dbeafe',
       gradientViaColor: '#e0f2fe'
     },
     {
-      name: 'Pink to Purple',
+      name: 'Rose Garden',
       gradientFromColor: '#fce7f3',
       gradientToColor: '#e9d5ff',
       gradientViaColor: '#fed7d7'
+    },
+    {
+      name: 'Arctic Aurora',
+      gradientFromColor: '#ecfdf5',
+      gradientToColor: '#f0f9ff',
+      gradientViaColor: '#f3e8ff'
+    },
+    {
+      name: 'Coral Reef',
+      gradientFromColor: '#ffedd5',
+      gradientToColor: '#fef2f2',
+      gradientViaColor: '#fce7f3'
+    },
+    {
+      name: 'Midnight Sky',
+      gradientFromColor: '#e0e7ff',
+      gradientToColor: '#ddd6fe',
+      gradientViaColor: '#e0f2fe'
+    },
+    {
+      name: 'Golden Hour',
+      gradientFromColor: '#fef3c7',
+      gradientToColor: '#fed7aa',
+      gradientViaColor: '#fde68a'
+    },
+    {
+      name: 'Cherry Blossom',
+      gradientFromColor: '#fdf2f8',
+      gradientToColor: '#f3e8ff',
+      gradientViaColor: '#fce7f3'
+    },
+    {
+      name: 'Mint Fresh',
+      gradientFromColor: '#f0fdfa',
+      gradientToColor: '#ecfdf5',
+      gradientViaColor: '#d1fae5'
+    },
+    {
+      name: 'Peach Sorbet',
+      gradientFromColor: '#fff7ed',
+      gradientToColor: '#fef2f2',
+      gradientViaColor: '#fed7d7'
+    },
+    {
+      name: 'Sapphire Waves',
+      gradientFromColor: '#eff6ff',
+      gradientToColor: '#e0f2fe',
+      gradientViaColor: '#dbeafe'
+    },
+    {
+      name: 'Amethyst Glow',
+      gradientFromColor: '#faf5ff',
+      gradientToColor: '#f3e8ff',
+      gradientViaColor: '#e9d5ff'
+    },
+    {
+      name: 'Citrus Burst',
+      gradientFromColor: '#fefce8',
+      gradientToColor: '#ffedd5',
+      gradientViaColor: '#fed7aa'
+    },
+    {
+      name: 'Emerald Valley',
+      gradientFromColor: '#f0fdf4',
+      gradientToColor: '#dcfce7',
+      gradientViaColor: '#d1fae5'
+    },
+    {
+      name: 'Cotton Candy',
+      gradientFromColor: '#fdf4ff',
+      gradientToColor: '#fce7f3',
+      gradientViaColor: '#f9a8d4'
+    },
+    {
+      name: 'Tropical Breeze',
+      gradientFromColor: '#f0fdfa',
+      gradientToColor: '#e6fffa',
+      gradientViaColor: '#ccfbf1'
+    },
+    {
+      name: 'Warm Embrace',
+      gradientFromColor: '#fef7ed',
+      gradientToColor: '#fed7aa',
+      gradientViaColor: '#fdba74'
+    },
+    {
+      name: 'Starlight',
+      gradientFromColor: '#f8fafc',
+      gradientToColor: '#e2e8f0',
+      gradientViaColor: '#cbd5e1'
     }
   ];
   
@@ -93,6 +192,25 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
     setShowToast(false);
   };
 
+  // Random color scheme selector - picks a different color than current
+  const selectRandomColorScheme = () => {
+    // Get all indices except the current one
+    const availableIndices = Array.from({ length: colorSchemes.length }, (_, i) => i)
+      .filter(i => i !== currentColorScheme);
+    
+    // Pick a random index from available options
+    const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+    
+    setCurrentColorScheme(randomIndex);
+    
+    // Save to localStorage for persistence
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('carrot-color-scheme', randomIndex.toString());
+    }
+    
+    console.log('🎨 Auto-selected random color scheme:', colorSchemes[randomIndex].name);
+  };
+
   // Color wheel click handler
   const handleColorWheelClick = () => {
     const nextScheme = (currentColorScheme + 1) % colorSchemes.length;
@@ -104,6 +222,21 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
     }
     
     console.log('Color scheme changed to:', colorSchemes[nextScheme].name);
+  };
+
+  // GIF picker handlers
+  const handleGifButtonClick = () => {
+    setShowGifPicker(true);
+  };
+
+  const handleGifPickerClose = () => {
+    setShowGifPicker(false);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    setSelectedGifUrl(gifUrl);
+    setShowGifPicker(false);
+    console.log('GIF selected:', gifUrl);
   };
 
   // Refs
@@ -469,7 +602,27 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                     <div className="relative rounded-2xl bg-white shadow-lg border border-gray-100 mb-6 overflow-hidden">
                       {selectedFile ? (
                         <div className="relative w-full">
-                          {thumbnailsLoading ? (
+                          {isUploading ? (
+                            <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
+                              <div className="text-center">
+                                <div className="text-4xl mb-4">📤</div>
+                                <div className="text-lg text-gray-600 mb-4">Uploading video...</div>
+                                {/* Upload Progress Bar */}
+                                <div className="w-64 mx-auto">
+                                  <div className="flex justify-between text-sm text-gray-500 mb-2">
+                                    <span>Progress</span>
+                                    <span>{Math.round(uploadProgress)}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-3">
+                                    <div 
+                                      className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-300 ease-out"
+                                      style={{ width: `${uploadProgress}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : thumbnailsLoading ? (
                             <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
                               <div className="text-center">
                                 <div className="text-4xl mb-4">🎬</div>
@@ -588,141 +741,152 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 )}
               </div>
 
-              {/* Caption Input */}
-              <div className="mb-6">
-                <textarea
-                  className="w-full h-32 p-4 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white shadow-sm"
-                  placeholder="What's happening?"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                />
-              </div>
+            {/* Caption Input */}
+            <div className="mb-6">
+              <textarea
+                className="w-full h-32 p-4 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white shadow-sm"
+                placeholder="What's happening?"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+              />
+            </div>
 
-              {/* Modal Actions */}
-              <div className="flex gap-4 justify-end">
-                <button
-                  onClick={cancelUpload}
-                  className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!content.trim()) {
-                      showErrorToast('Please add a caption to your post');
-                      return;
+            {/* Modal Actions */}
+            <div className="flex gap-4 justify-end">
+              <button
+                onClick={cancelUpload}
+                className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!content.trim()) return;
+                  
+                  try {
+                    console.log('🚀 Starting post creation process...');
+                    console.log('📝 Content:', content);
+                    console.log('🎬 Media file:', selectedFile);
+                    console.log('🔗 Media preview:', mediaPreview);
+                    
+                    let finalMediaUrl = null;
+                    
+                    // Upload media if we have a file
+                    if (selectedFile) {
+                      console.log('📤 Uploading media file...');
+                      const uploadResult = await uploadFilesToFirebase([selectedFile], 'posts');
+                      console.log('✅ Upload result:', uploadResult);
+                      
+                      if (uploadResult && uploadResult.length > 0) {
+                        finalMediaUrl = uploadResult[0];
+                        console.log('🔗 Final media URL:', finalMediaUrl);
+                      }
                     }
                     
-                    try {
-                      let finalMediaUrl = uploadedMedia;
-                      
-                      // If background upload failed, try uploading now
-                      if (!finalMediaUrl && mediaFile) {
-                        console.log('Background upload not complete, uploading now...');
-                        const timestamp = Date.now();
-                        const uploadResult = await uploadFilesToFirebase([mediaFile], `users/temp/${timestamp}/`);
-                        finalMediaUrl = uploadResult[0];
-                      }
-                      
-                      console.log('Creating post with media:', finalMediaUrl);
-                      
-                      // Create complete post object for optimistic UI update
+                    // Create optimistic UI post if we have user data
+                    if (user && onPost) {
                       const newPost = {
-                        id: `temp-${Date.now()}`, // Temporary ID for optimistic update
+                        id: Date.now().toString(),
                         content: content,
-                        carrotText: '', // Will be filled by actual post creation
-                        stickText: '', // Will be filled by actual post creation
+                        timestamp: new Date().toISOString(),
                         author: {
-                          name: 'You', // Will be replaced with actual user data
-                          username: '@you',
-                          avatar: null,
+                          name: user.name || 'You',
+                          username: user.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : (user.name ? (user.name.startsWith('@') ? user.name.replace(/\s+/g, '').toLowerCase() : `@${user.name.replace(/\s+/g, '').toLowerCase()}`) : '@you'),
+                          avatar: user.profilePhoto || user.image || null,
                           flag: '🇺🇸'
                         },
                         location: {
-                          zip: '00000',
-                          city: 'Your City'
+                          city: 'San Francisco',
+                          state: 'CA'
                         },
-                        stats: {
-                          likes: 0,
-                          comments: 0,
-                          reposts: 0,
-                          views: 0
-                        },
-                        userVote: null,
-                        timestamp: new Date().toISOString(),
+                        likes: 0,
+                        comments: 0,
+                        shares: 0,
                         imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                        gifUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
+                        videoUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
+                        gifUrl: null,
                         audioUrl: null,
                         emoji: '🎯',
-                        innerBoxColor: '#ffffff',
+                        colorScheme: colorSchemes[currentColorScheme].name,
+                        // Add gradient color data for proper background display
+                        gradientDirection: 'to-br',
                         gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
                         gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
                         gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor
                       };
                       
-                      // Add to feed with optimistic UI update
-                      if (onPost) {
-                        onPost(newPost);
-                      }
-                      
-                      // Save to database in background
-                      try {
-                        console.log('🚀 Attempting to save post to database...');
-                        console.log('📝 Post data:', {
-                          content: content,
-                          finalMediaUrl,
-                          mediaType,
-                          imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                          gifUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
-                        });
-                        
-                        const response = await fetch('/api/posts', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                          body: JSON.stringify({
-                            content: content,
-                            gradientDirection: 'to-br',
-                            gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
-                            gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
-                            gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
-                            imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                            gifUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
-                            audioUrl: null,
-                            emoji: '🎯',
-                            carrotText: '',
-                            stickText: ''
-                          }),
-                        });
-                        
-                        console.log('📡 Response status:', response.status);
-                        const responseData = await response.json();
-                        console.log('📡 Response data:', responseData);
-                        
-                        if (!response.ok) {
-                          console.error('❌ Failed to save post to database:', responseData);
-                          console.error('❌ Error details:', responseData.details);
-                          console.error('❌ Error name:', responseData.name);
-                        } else {
-                          console.log('✅ Post saved to database successfully:', responseData);
-                        }
-                      } catch (error) {
-                        console.error('💥 Error saving post:', error);
-                      }
-                      
-                      // Smooth modal dismissal with animation
-                      setContent('');
-                      cancelUpload();
-                      
-                      // Show professional success toast
-                      showSuccessToast('Post shared successfully!');
-                      
-                    } catch (error) {
-                      console.error('Post creation failed:', error);
-                      // Show professional error toast
-                      showErrorToast('Failed to create post. Please try again.');
+                      // Add to UI immediately for responsive feel
+                      onPost(newPost);
                     }
+                  
+                    // Save to database in background
+                    try {
+                      console.log('🚀 Attempting to save post to database...');
+                      console.log('📝 Post data:', {
+                        content: content,
+                        finalMediaUrl,
+                        mediaType,
+                        imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
+                        gifUrl: null,
+                        audioUrl: null,
+                        emoji: '🎯',
+                        colorScheme: colorSchemes[currentColorScheme].name
+                      });
+                      
+                      const response = await fetch('/api/posts', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          content: content,
+                          gradientDirection: 'to-br',
+                          gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
+                          gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
+                          gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
+                          imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
+                          videoUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
+                          gifUrl: null,
+                          audioUrl: null,
+                          emoji: '🎯',
+                          carrotText: '',
+                          stickText: ''
+                        }),
+                      });
+                      
+                      console.log('📡 Response status:', response.status);
+                      const responseData = await response.json();
+                      console.log('📡 Response data:', responseData);
+                      
+                      if (!response.ok) {
+                        console.error('❌ Failed to save post to database:', responseData);
+                        console.error('❌ Error details:', responseData.details);
+                        console.error('❌ Error name:', responseData.name);
+                      } else {
+                        console.log('✅ Post saved to database successfully');
+                      }
+                    } catch (dbError) {
+                      console.error('❌ Database save error:', dbError);
+                    }
+                    
+                    // Clear form and close modal
+                    setContent('');
+                    setSelectedFile(null);
+                    setMediaPreview(null);
+                    setMediaType(null);
+                    cancelUpload();
+                    
+                    // Auto-select a random color scheme for next post
+                    selectRandomColorScheme();
+                    
+                    // Show professional success toast
+                    showSuccessToast('Post shared successfully!');
+                    
+                  } catch (error) {
+                    console.error('Post creation failed:', error);
+                    // Show professional error toast
+                    showErrorToast('Failed to create post. Please try again.');
+                  }
                   }}
                   disabled={!content.trim()}
                   className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
@@ -746,7 +910,7 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
       />
 
       {/* Main Composer */}
-      <div className="w-full mb-6">
+      <div className="w-full mb-6" style={{ width: '650px !important', maxWidth: '650px !important', paddingLeft: '16px', paddingRight: '16px' }}>
         <div className="relative w-full">
           {/* Composer gradient card */}
           <div 
@@ -758,9 +922,9 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
             
 
             
-            {/* Color wheel - positioned absolutely on right */}
+            {/* Color wheel - positioned to overlap gradient/white card and center with B/I/S */}
             <div 
-              className="absolute -top-4 sm:-top-6 right-4 sm:right-6 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform"
+              className="absolute -top-2 right-7 sm:right-9 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform z-10"
               onClick={handleColorWheelClick}
               title={`Current: ${colorSchemes[currentColorScheme].name}`}
             >
@@ -768,7 +932,7 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
             </div>
             
             {/* White input card */}
-            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 mb-4">
+            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 mb-4 relative">
               <textarea
                 ref={textareaRef}
                 className="w-full h-16 sm:h-20 text-base sm:text-lg border-none bg-transparent focus:outline-none resize-none placeholder-gray-500"
@@ -776,7 +940,76 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
+              
+              {/* B/I/S formatting tools - spaced evenly within white card */}
+              <div className="absolute top-8 right-4 sm:right-6 flex flex-col items-center gap-3">
+                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs font-bold transition-colors" title="Bold">
+                  B
+                </button>
+                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs font-italic transition-colors" title="Italic">
+                  I
+                </button>
+                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs underline transition-colors" title="Strikethrough">
+                  S
+                </button>
+              </div>
             </div>
+            
+            {/* GIF Preview */}
+            {selectedGifUrl && (
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+                <div className="flex items-start gap-3">
+                  {/* GIF Display */}
+                  <div className="flex-1">
+                    <div className="relative rounded-lg overflow-hidden bg-gray-50 max-w-xs">
+                      <img
+                        src={selectedGifUrl}
+                        alt="Selected GIF"
+                        className="w-full h-auto max-h-48 object-contain"
+                      />
+                      {/* Remove GIF button */}
+                      <button
+                        onClick={() => setSelectedGifUrl(null)}
+                        className="absolute top-2 right-2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-all duration-200"
+                        title="Remove GIF"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* GIF Info and Controls */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">GIF Selected</span>
+                      <button
+                        onClick={handleGifButtonClick}
+                        className="text-xs text-orange-500 hover:text-orange-600 font-medium transition-colors"
+                      >
+                        Change GIF
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Ready to post with your message
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedGifUrl(null)}
+                        className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                      >
+                        Remove
+                      </button>
+                      <button
+                        onClick={handleGifButtonClick}
+                        className="flex-1 px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-md transition-colors"
+                      >
+                        Replace
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Action row */}
             <div className="flex items-center justify-between">
@@ -791,7 +1024,7 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 <button 
                   className="p-2 hover:bg-white/50 rounded-full transition-colors" 
                   title="GIF" 
-                  onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}
+                  onClick={handleGifButtonClick}
                 >
                   <IconGif />
                 </button>
@@ -808,7 +1041,7 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 >
                   <IconCarrot />
                 </button>
-                <button className="p-2 hover:bg-white/50 rounded-full transition-colors" title="Lightning">
+                <button className="p-2 hover:bg-white/50 rounded-full transition-colors" title="Boost">
                   <IconLightning />
                 </button>
               </div>
@@ -820,44 +1053,58 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 onClick={async () => {
                   if (!content.trim()) return;
                   
-                  // Create complete post object for optimistic UI update
-                  const newPost = {
-                    id: `temp-${Date.now()}`,
-                    content: content,
-                    carrotText: '',
-                    stickText: '',
-                    author: {
-                      name: 'You',
-                      username: '@you',
-                      avatar: null,
-                      flag: '🇺🇸'
-                    },
-                    location: {
-                      zip: '00000',
-                      city: 'Your City'
-                    },
-                    stats: {
-                      likes: 0,
-                      comments: 0,
-                      reposts: 0,
-                      views: 0
-                    },
-                    userVote: null,
-                    timestamp: new Date().toISOString(),
-                    imageUrls: [],
-                    gifUrl: null,
-                    audioUrl: null,
-                    emoji: '🎯',
-                    innerBoxColor: '#ffffff',
-                    gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
-                    gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
-                    gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor
-                  };
+                  // Debug: Log user session data
+                  console.log('🔍 Session status:', status);
+                  console.log('🔍 Full session object:', session);
+                  console.log('🔍 User object:', user);
+                  console.log('🔍 User name:', user?.name);
+                  console.log('🔍 User username:', user?.username);
                   
-                  console.log('Post created:', newPost);
-                  if (onPost) onPost(newPost);
-                  setContent('');
+                  // Safety check: Ensure we have user data
+                  if (!user) {
+                    console.warn('⚠️ No user data available for optimistic UI update - skipping optimistic UI');
+                  }
+                  if (status !== 'authenticated') {
+                    console.warn('⚠️ Session status is not authenticated:', status);
+                  }
                   
+                  // Only do optimistic UI update if we have user data
+                  if (user && onPost) {
+                    // Create complete post object for optimistic UI update
+                    const newPost = {
+                      id: `temp-${Date.now()}`,
+                      content: content,
+                      carrotText: '',
+                      stickText: '',
+                      author: {
+                        name: user.name || 'You',
+                        username: user.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : (user.name ? (user.name.startsWith('@') ? user.name.replace(/\s+/g, '').toLowerCase() : `@${user.name.replace(/\s+/g, '').toLowerCase()}`) : '@you'),
+                        avatar: user.profilePhoto || user.image || null,
+                        flag: '🇺🇸'
+                      },
+                      location: {
+                        zip: '00000',
+                        city: 'Your City'
+                      },
+                      stats: {
+                        likes: 0,
+                        comments: 0,
+                        reposts: 0,
+                        views: 0
+                      },
+                      userVote: null,
+                      timestamp: new Date().toISOString(),
+                      imageUrls: [],
+                      gifUrl: selectedGifUrl,
+                      audioUrl: null,
+                      emoji: '🎯',
+                      colorScheme: colorSchemes[currentColorScheme].name
+                    };
+                    
+                    // Add to UI immediately for responsive feel
+                    onPost(newPost);
+                  }
+                
                   // Save to database in background
                   try {
                     const response = await fetch('/api/posts', {
@@ -869,10 +1116,10 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                         content: content,
                         gradientDirection: 'to-br',
                         gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
-                        gradientToColor: colorSchemes[currentColorScheme].gradientToColor, 
+                        gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
                         gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
                         imageUrls: [],
-                        gifUrl: null,
+                        gifUrl: selectedGifUrl,
                         audioUrl: null,
                         emoji: '🎯',
                         carrotText: '',
@@ -889,6 +1136,13 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                     console.error('Error saving post:', error);
                   }
                   
+                  // Clear content, selected GIF, and show success
+                  setContent('');
+                  setSelectedGifUrl(null);
+                  
+                  // Auto-select a random color scheme for next post
+                  selectRandomColorScheme();
+                  
                   showSuccessToast('Post shared successfully!');
                 }}
               >
@@ -898,6 +1152,13 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
           </div>
         </div>
       </div>
+
+      {/* GIF Picker Modal */}
+      <GifPicker
+        isOpen={showGifPicker}
+        onClose={handleGifPickerClose}
+        onSelectGif={handleGifSelect}
+      />
     </>
   );
 }

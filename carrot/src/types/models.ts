@@ -1,9 +1,11 @@
+import { Timestamp } from 'firebase/firestore';
+
 export interface UserDoc {
   email: string;
   username?: string;
   emailVerified: boolean;
-  createdAt: FirebaseFirestore.Timestamp;
-  updatedAt: FirebaseFirestore.Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
   onboardingStatus: 'none' | 'in_progress' | 'complete';
   onboardingSessionId?: string;
   profile?: {
@@ -43,9 +45,9 @@ export interface OnboardingSessionDoc {
     hasProfilePhoto?: boolean;
   };
   rev: number;
-  createdAt: FirebaseFirestore.Timestamp;
-  updatedAt: FirebaseFirestore.Timestamp;
-  expiresAt?: FirebaseFirestore.Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  expiresAt?: Timestamp;
   _v: number;
 }
 
@@ -59,6 +61,6 @@ export interface StagedAssetDoc {
   height?: number;
   uploadState: 'pending' | 'done' | 'failed';
   rev: number;
-  createdAt: FirebaseFirestore.Timestamp;
-  updatedAt: FirebaseFirestore.Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

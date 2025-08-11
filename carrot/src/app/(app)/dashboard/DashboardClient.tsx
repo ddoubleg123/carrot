@@ -40,10 +40,15 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
       )
     );
   };
-  
-  // Wrapper function to handle the vote event from CommitmentCard
-  const handleVoteWrapper = (id: string, vote: VoteType) => {
-    handleVote(id, vote);
+
+  const handleDeletePost = (id: string) => {
+    setCommitments(prev => prev.filter(commitment => commitment.id !== id));
+  };
+
+  const handleBlockPost = (id: string) => {
+    setCommitments(prev => prev.filter(commitment => commitment.id !== id));
+    console.log(`Post ${id} blocked`);
+    // TODO: Store blocked post IDs in user preferences/database
   };
 
   const handleCreateCommitment = (post: any) => {
@@ -51,15 +56,14 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
     setCommitments(prev => [post, ...prev]);
   };
 
-
   const handleToggleBookmark = (id: string) => {
     console.log(`Toggled bookmark on commitment ${id}`);
     // TODO: Implement bookmark logic
   };
 
   return (
-    <div className="dashboard-feed-root">
-      <div className="w-full max-w-[800px] mx-auto px-4 pt-[50px]">
+    <div className="dashboard-feed-root max-w-[450px] mx-auto">
+      <div className="w-full !max-w-[450px] mx-auto px-4 pt-[50px]">
         <CommitmentComposer onPost={handleCreateCommitment} />
         {/* Professional compact spacing for social media feed */}
         <div className="space-y-3 mt-6">
@@ -68,6 +72,8 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
               key={commitment.id}
               {...commitment}
               onVote={(vote) => handleVote(commitment.id, vote as VoteType)}
+              onDelete={handleDeletePost}
+              onBlock={handleBlockPost}
             />
           ))}
         </div>

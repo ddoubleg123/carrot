@@ -21,7 +21,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
     <ClientSessionProvider>
       <div className={`flex w-full max-w-[1400px] mx-auto px-4 sm:px-6 gap-6 ${inter.className}`}>
         {/* LEFT SIDEBAR */}
-        <aside className="hidden sm:flex w-[220px] max-lg:w-[80px] flex-shrink-0 z-10">
+        <aside className="hidden sm:flex w-[220px] max-lg:w-[80px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
           <Sidebar />
         </aside>
 
@@ -42,12 +42,12 @@ export default async function Layout({ children }: { children: React.ReactNode }
         `}} />
 
         {/* CENTER FEED */}
-        <main className="flex-1 w-full max-w-[680px] ml-0 sm:ml-[220px] max-lg:ml-[80px] z-0">
+        <main className="w-[650px] flex-shrink-0" style={{ width: '650px !important', maxWidth: '650px !important' }}>
           {children}
         </main>
 
         {/* RIGHT SIDEBAR - Hidden below 1200px */}
-        <aside className="hidden min-[1200px]:block w-[300px] flex-shrink-0 z-10">
+        <aside className="hidden min-[1200px]:block w-[300px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
           <Widgets />
         </aside>
       </div>

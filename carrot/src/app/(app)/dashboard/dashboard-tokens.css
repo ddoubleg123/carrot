@@ -3,7 +3,7 @@
   --gutter-left: clamp(16px,2vw,28px);
   --col-gap: clamp(20px,2.4vw,32px);
   --page-pad: clamp(12px,1.8vw,24px);
-  --icon: 20px;
+  --icon: 32px; /* Updated to match action row icon size (w-8 h-8 = 32px) */
   --row-h: 48px;
   --hit: 44px;
   --gap-s: 8px;

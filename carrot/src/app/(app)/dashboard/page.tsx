@@ -32,6 +32,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         username: post.user?.username || 'daniel', // Use actual handle
         avatar: post.user?.profilePhoto || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
         flag: '🇺🇸',
+        id: post.userId, // Add the author ID for ownership comparison
       },
       location: {
         zip: '10001',
@@ -48,6 +49,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       timestamp: post.createdAt,
       imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
       gifUrl: post.gifUrl || null,
+      videoUrl: post.videoUrl || null,
       thumbnailUrl: post.thumbnailUrl || null,
       audioUrl: post.audioUrl || null,
       emoji: post.emoji || '🎯',

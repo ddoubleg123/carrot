@@ -87,6 +87,8 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: stri
     <video
       controls
       muted
+      autoPlay
+      loop
       playsInline
       poster={thumbnailUrl || undefined}
       src={videoUrl}
@@ -95,7 +97,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: stri
         maxWidth: '550px', 
         minWidth: '320px',
         height: 'auto',
-        borderRadius: '8px'
+        maxHeight: 'min(70vh, 600px)',
+        borderRadius: '8px',
+        objectFit: 'contain'
       }}
       onError={handleError}
       onLoadedData={() => {}}

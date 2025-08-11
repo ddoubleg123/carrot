@@ -15,8 +15,6 @@ import { signIn } from 'next-auth/react';
 // Form validation schema
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  rememberMe: z.boolean().optional(),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -52,8 +50,6 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
-      password: '',
-      rememberMe: false,
     },
   });
 
@@ -87,34 +83,50 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
     try {
       setIsLoading(true);
       setError('');
-      const result = await signIn('credentials', {
-        redirect: false,
-        email: data.email,
-        password: data.password,
-        callbackUrl,
-      });
-
-      if (result?.error) {
-        setError('Invalid email or password');
-      } else if (result?.url) {
-        router.push(callbackUrl);
-      }
+      
+      // TODO: Implement email OTP authentication
+      // For now, show a message that OTP will be sent
+      setError('A one-time passcode will be sent to your email shortly.');
+      
+      // Placeholder for OTP authentication logic
+      console.log('Sending OTP to:', data.email);
+      
     } catch (error) {
       console.error('Login error:', error);
-      setError('An error occurred during sign in');
+      setError('An error occurred while sending the verification code');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Video Background */}
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0"
+        style={{ objectPosition: 'center top', transform: 'scale(1.05)' }}
+      >
+        <source src="/carrotfield.mp4" type="video/mp4" />
+        {/* Fallback for browsers that don't support video */}
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-blue-50" />
+      </video>
+      
+      {/* Dark overlay for better text readability */}
+      <div className="absolute inset-0 bg-black/30 z-10" />
+      
+      {/* Login content */}
+      <div className="w-full max-w-md relative z-20 p-4">
         {/* Logo */}
-        <div className="flex justify-center mb-10">
+        <div className="flex justify-center mb-6">
           <div className="flex items-center justify-center">
-            <div className="animate-bounce-slow">
-              <div className="h-24 w-24 flex items-center justify-center">
+            {/* Subtle backdrop for logo visibility */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-full p-3 shadow-lg">
+              <div className="animate-bounce-slow">
+                <div className="h-16 w-16 flex items-center justify-center">
                 {!isClient ? (
                   // Server-side placeholder
                   <div className="h-full w-full bg-[#F6F5FF] animate-pulse rounded-full" />
@@ -144,6 +156,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
                     }}
                   />
                 )}
+                </div>
               </div>
             </div>
           </div>
@@ -151,13 +164,13 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
 
         {/* Login Card */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <div className="p-8 sm:p-10">
-            <div className="text-center mb-8">
+          <div className="p-6 sm:p-8">
+            <div className="text-center mb-6">
               <h1 className="text-2xl font-bold text-gray-800 mb-2">
                 Welcome to Carrot
               </h1>
               <p className="text-gray-600">
-                Sign in to continue to your account
+                Enter your email to receive a verification code
               </p>
             </div>
 
@@ -167,7 +180,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   Email address
@@ -187,51 +200,15 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
                 )}
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                    Password
-                  </label>
-                  <Link href="/forgot-password" className="text-sm text-primary hover:text-primary-dark">
-                    Forgot password?
-                  </Link>
-                </div>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  disabled={isSubmitting || isLoading}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  placeholder="Enter your password"
-                  {...register('password')}
-                />
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-                )}
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                  {...register('rememberMe')}
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-                  Remember me
-                </label>
-              </div>
-
               <button
                 type="submit"
                 disabled={isSubmitting || isLoading}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {isLoading ? 'Sending code...' : 'Send verification code'}
               </button>
             </form>
-      <div className="mt-4 flex flex-col items-center">
+      <div className="mt-3 flex flex-col items-center">
         <Link
           href="/signup"
           className="w-full h-10 flex items-center justify-center rounded-xl font-bold border-2 border-orange-300 text-orange-400 bg-white hover:bg-[#F6F5FF] hover:text-orange-500 transition-colors duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
@@ -240,7 +217,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
         </Link>
       </div>
 
-            <div className="mt-8">
+            <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>

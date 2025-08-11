@@ -8,7 +8,9 @@ import {
   ChartBarIcon,
   MapPinIcon,
   HandThumbUpIcon,
-  HandThumbDownIcon
+  HandThumbDownIcon,
+  TrashIcon,
+  NoSymbolIcon
 } from '@heroicons/react/24/outline';
 import { 
   HeartIcon as HeartIconSolid,
@@ -18,9 +20,11 @@ import {
   HandThumbDownIcon as HandThumbDownIconSolid
 } from '@heroicons/react/24/solid';
 import { useState, useRef, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { SadFaceIcon, NeutralFaceIcon, HappyFaceIcon } from './FaceIcons';
+import Toast from './Toast';
 
 // Helper function to get relative time (e.g., "2m ago", "1h ago")
 function getRelativeTime(timestamp: string | Date): string {
@@ -69,6 +73,7 @@ export interface CommitmentCardProps {
     username: string;
     avatar?: string | null;
     flag?: string;
+    id?: string; // Add author ID for ownership comparison
   };
   location: {
     zip: string;
@@ -78,10 +83,13 @@ export interface CommitmentCardProps {
   stats: Stats;
   userVote?: VoteType;
   onVote?: (id: string, vote: VoteType) => void;
+  onDelete?: (id: string) => void; // Callback for post deletion
+  onBlock?: (id: string) => void; // Callback for post blocking
   timestamp?: string;
   innerBoxColor?: string;
   imageUrls?: string[];
   gifUrl?: string;
+  videoUrl?: string;
   thumbnailUrl?: string;
   audioUrl?: string;
   emoji?: string;
@@ -102,16 +110,20 @@ export default function CommitmentCard({
   stats,
   userVote = null,
   onVote,
+  onDelete,
+  onBlock,
   innerBoxColor,
   timestamp,
   imageUrls,
   gifUrl,
+  videoUrl,
   thumbnailUrl,
   audioUrl,
   emoji,
   gradientFromColor,
   gradientToColor,
   gradientViaColor,
+  gradientDirection,
 }: CommitmentCardProps) {
   const [selectedFace, setSelectedFace] = useState<null | 0 | 1 | 2>(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -121,6 +133,17 @@ export default function CommitmentCard({
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [showToast, setShowToast] = useState<boolean>(false);
+  
+  // Get current user session
+  const { data: session } = useSession();
+  const dropdownRef = useRef<HTMLDivElement>(null);
   // Initialize state with proper fallbacks
   const [currentVote, setCurrentVote] = useState<VoteType>(userVote || null);
   const [carrotCount, setCarrotCount] = useState(stats?.carrots || 0);
@@ -147,6 +170,26 @@ export default function CommitmentCard({
       ? `linear-gradient(to bottom right, ${gradientFromColor}, ${gradientViaColor}, ${gradientToColor})`
       : `linear-gradient(to bottom right, ${gradientFromColor}, ${gradientToColor})`
   } : {};
+
+  // Check if current user is the post owner
+  const isOwner = session?.user?.id === author.id;
+
+  // Handle click outside dropdown to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
   
   // Handle vote for carrot or stick
   const handleVote = (type: VoteType) => {
@@ -196,6 +239,52 @@ export default function CommitmentCard({
     setRepostCount(isReposted ? repostCount - 1 : repostCount + 1);
   };
 
+  const handleDeletePost = async () => {
+    try {
+      const response = await fetch(`/api/posts/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Call parent callback to remove from UI
+        if (onDelete) {
+          onDelete(id);
+        }
+        setShowDeleteConfirm(false);
+        setShowDropdown(false);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to delete post:', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    }
+  };
+
+  const handleBlockPost = () => {
+    // Show notification first
+    setToastMessage('Content blocked and hidden from your feed');
+    setToastType('info');
+    setShowToast(true);
+    
+    // Call parent callback to hide from UI after a brief delay
+    setTimeout(() => {
+      if (onBlock) {
+        onBlock(id);
+      }
+    }, 1000);
+    
+    setShowDropdown(false);
+  };
+
+  const hideToast = () => {
+    setShowToast(false);
+  };
+
+  const toggleDropdown = () => {
+    setShowDropdown(!showDropdown);
+  };
+
   const toggleOptions = () => {
     setShowOptions(!showOptions);
   };
@@ -214,12 +303,26 @@ export default function CommitmentCard({
   const flag = author.flag || '';
   const time = timestamp || formattedTimestamp;
 
+  // Create gradient style from props
+  const cardGradientStyle = gradientFromColor && gradientToColor ? {
+    background: `linear-gradient(${gradientDirection || 'to-br'}, ${gradientFromColor}${gradientViaColor ? `, ${gradientViaColor}` : ''}, ${gradientToColor})`
+  } : {};
+
   // Calculate text color for contrast
   const isLightBg = customInnerBoxColor.includes('yellow') || customInnerBoxColor.includes('lime') || customInnerBoxColor.includes('pink') || customInnerBoxColor.includes('gray-100') || customInnerBoxColor.includes('white');
   const textColor = isLightBg ? 'text-gray-900' : 'text-white';
 
   return (
-    <div className="bg-white rounded-2xl p-4 flex flex-col gap-3" style={{ boxShadow: 'none' }}>
+    <>
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        isVisible={showToast}
+        onClose={hideToast}
+      />
+      
+      <div className={`rounded-2xl p-4 flex flex-col gap-3 ${gradientFromColor && gradientToColor ? '' : 'bg-white'}`} style={{ boxShadow: 'none', ...cardGradientStyle }}>
       {/* Header Row */}
       <div className="flex items-center gap-3 text-black">
         {/* Avatar */}
@@ -242,7 +345,7 @@ export default function CommitmentCard({
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[15px] text-gray-900">@{author.username}</span>
+            <span className="font-bold text-[15px] text-gray-900">{author.username.startsWith('@') ? author.username : `@${author.username}`}</span>
             {flag && <span className="text-lg leading-none">{flag}</span>}
           </div>
           <div className="flex items-center gap-2">
@@ -254,19 +357,77 @@ export default function CommitmentCard({
             </Link>
           </div>
         </div>
-        {/* Follow/Following Button */}
-        <button
-          type="button"
-          className={`ml-auto px-3 py-1 text-xs font-semibold rounded-full border transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-orange-200 mr-2 ${isFollowing ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600' : 'bg-white text-orange-500 border-orange-400 hover:bg-orange-50'}`}
-          onClick={() => setIsFollowing(f => !f)}
-        >
-          {isFollowing ? 'Following' : 'Follow'}
-        </button>
+        {/* Follow/Following Button - Only show for other users' posts */}
+        {!isOwner && (
+          <button
+            type="button"
+            className={`ml-auto px-3 py-1 text-xs font-semibold rounded-full border transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-orange-200 mr-2 ${isFollowing ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600' : 'bg-white text-orange-500 border-orange-400 hover:bg-orange-50'}`}
+            onClick={() => setIsFollowing(f => !f)}
+          >
+            {isFollowing ? 'Following' : 'Follow'}
+          </button>
+        )}
         {/* Options */}
-        <button type="button" className="p-1 text-gray-400 hover:text-gray-600">
-          <EllipsisHorizontalIcon className="h-5 w-5" />
-        </button>
+        <div className="relative" ref={dropdownRef}>
+          <button 
+            type="button" 
+            className="p-1 text-gray-400 hover:text-gray-600"
+            onClick={toggleDropdown}
+          >
+            <EllipsisHorizontalIcon className="h-5 w-5" />
+          </button>
+          
+          {/* Dropdown Menu */}
+          {showDropdown && (
+            <div className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              {isOwner ? (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  Delete
+                </button>
+              ) : (
+                <button
+                  onClick={handleBlockPost}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <NoSymbolIcon className="h-4 w-4" />
+                  Block This Content
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Post</h3>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete this post? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePost}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content Box - colored background with white overlay box-in-box */}
       <div 
         className="relative rounded-xl px-5 py-4 transition-colors min-h-[56px] mb-1 overflow-visible"
@@ -288,32 +449,61 @@ export default function CommitmentCard({
               </div>
             )}
             {/* Emoji - Removed per user request */}
-            {/* Single Image - Centered with Smart Sizing */}
-            {Array.isArray(imageUrls) && imageUrls.length > 0 && (
+            {/* Images - Centered with Smart Sizing and Height Constraints */}
+            {imageUrls && imageUrls.length > 0 && (
               <div className="mt-4 flex justify-center">
                 <div className="w-full max-w-[550px] min-w-[320px] mx-4">
-                  <div className="relative w-full rounded-lg overflow-hidden bg-gray-100">
+                  <div className="relative w-full rounded-lg overflow-hidden bg-gray-100 flex justify-center items-center max-h-[600px] sm:max-h-[400px] md:max-h-[500px] lg:max-h-[600px]" style={{
+                    maxHeight: 'min(70vh, 600px)'
+                  }}>
                     <Image 
                       src={imageUrls[0]} 
                       alt="Post image" 
                       width={550}
                       height={400}
                       priority
-                      className="w-full h-auto object-contain" 
-                      style={{ width: 'auto', height: 'auto' }}
+                      className="max-w-full max-h-full object-contain" 
+                      style={{ 
+                        maxHeight: 'min(70vh, 600px)',
+                        width: 'auto',
+                        height: 'auto'
+                      }}
                       sizes="(max-width: 640px) calc(100vw - 32px), 550px"
                     />
                   </div>
                 </div>
               </div>
             )}
-            {/* Video/GIF - Centered with Smart Sizing */}
+            {/* GIF - Centered with Smart Sizing and Height Constraints */}
             {gifUrl && (
               <div className="mt-4 flex justify-center">
-                <VideoPlayer 
-                  videoUrl={gifUrl}
-                  thumbnailUrl={thumbnailUrl}
-                />
+                <div className="w-full max-w-[550px] min-w-[320px] mx-4">
+                  <div className="relative w-full rounded-lg overflow-hidden bg-gray-100 flex justify-center items-center max-h-[600px] sm:max-h-[400px] md:max-h-[500px] lg:max-h-[600px]" style={{
+                    maxHeight: 'min(70vh, 600px)'
+                  }}>
+                    <img 
+                      src={gifUrl} 
+                      alt="GIF" 
+                      className="max-w-full max-h-full object-contain rounded-lg" 
+                      style={{ 
+                        maxHeight: 'min(70vh, 600px)',
+                        width: 'auto',
+                        height: 'auto'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Video - Centered with Smart Sizing */}
+            {videoUrl && (
+              <div className="mt-4 flex justify-center">
+                <div className="w-full max-w-[550px] min-w-[320px] mx-4">
+                  <VideoPlayer 
+                    videoUrl={videoUrl}
+                    thumbnailUrl={thumbnailUrl}
+                  />
+                </div>
               </div>
             )}
             {/* Audio */}
@@ -348,5 +538,6 @@ export default function CommitmentCard({
         </div>
       </div>
     </div>
+    </>
   );
 }
