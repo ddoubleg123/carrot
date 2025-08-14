@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
+import AudioPlayer from '../../../../components/AudioPlayer';
 import { SadFaceIcon, NeutralFaceIcon, HappyFaceIcon } from './FaceIcons';
 import Toast from './Toast';
 
@@ -92,10 +93,15 @@ export interface CommitmentCardProps {
   videoUrl?: string;
   thumbnailUrl?: string;
   audioUrl?: string;
+  audioTranscription?: string;
+  transcriptionStatus?: string;
   emoji?: string;
   gradientFromColor?: string;
   gradientToColor?: string;
   gradientViaColor?: string;
+  gradientDirection?: string;
+  uploadStatus?: 'uploading' | 'uploaded' | 'processing' | 'ready' | null;
+  uploadProgress?: number;
 }
 
 
@@ -119,11 +125,15 @@ export default function CommitmentCard({
   videoUrl,
   thumbnailUrl,
   audioUrl,
+  audioTranscription,
+  transcriptionStatus,
   emoji,
   gradientFromColor,
   gradientToColor,
   gradientViaColor,
   gradientDirection,
+  uploadStatus,
+  uploadProgress,
 }: CommitmentCardProps) {
   const [selectedFace, setSelectedFace] = useState<null | 0 | 1 | 2>(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -172,7 +182,16 @@ export default function CommitmentCard({
   } : {};
 
   // Check if current user is the post owner
-  const isOwner = session?.user?.id === author.id;
+  const isCurrentUserPost = session?.user?.id === author.id;
+  
+  // Debug ownership detection
+  console.log('🔍 Post ownership check:', {
+    sessionUserId: session?.user?.id,
+    authorId: author.id,
+    isCurrentUserPost,
+    authorUsername: author.username,
+    sessionUsername: session?.user?.username
+  });
 
   // Handle click outside dropdown to close it
   useEffect(() => {
@@ -338,14 +357,14 @@ export default function CommitmentCard({
               />
             ) : (
               <span className="text-gray-500 text-base font-bold">
-                {author.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                {author.name ? author.name.split(' ').map(n => n[0]).join('').toUpperCase() : '?'}
               </span>
             )}
           </div>
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[15px] text-gray-900">{author.username.startsWith('@') ? author.username : `@${author.username}`}</span>
+            <span className="font-bold text-[15px] text-gray-900">{author.username ? (author.username.startsWith('@') ? author.username : `@${author.username}`) : '@unknown'}</span>
             {flag && <span className="text-lg leading-none">{flag}</span>}
           </div>
           <div className="flex items-center gap-2">
@@ -358,7 +377,7 @@ export default function CommitmentCard({
           </div>
         </div>
         {/* Follow/Following Button - Only show for other users' posts */}
-        {!isOwner && (
+        {!isCurrentUserPost && (
           <button
             type="button"
             className={`ml-auto px-3 py-1 text-xs font-semibold rounded-full border transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-orange-200 mr-2 ${isFollowing ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600' : 'bg-white text-orange-500 border-orange-400 hover:bg-orange-50'}`}
@@ -380,7 +399,7 @@ export default function CommitmentCard({
           {/* Dropdown Menu */}
           {showDropdown && (
             <div className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-              {isOwner ? (
+              {isCurrentUserPost ? (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -449,8 +468,8 @@ export default function CommitmentCard({
               </div>
             )}
             {/* Emoji - Removed per user request */}
-            {/* Images - Centered with Smart Sizing and Height Constraints */}
-            {imageUrls && imageUrls.length > 0 && (
+            {/* Image Display */}
+          {imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0 && typeof imageUrls[0] === 'string' && imageUrls[0].trim() && (
               <div className="mt-4 flex justify-center">
                 <div className="w-full max-w-[550px] min-w-[320px] mx-4">
                   <div className="relative w-full rounded-lg overflow-hidden bg-gray-100 flex justify-center items-center max-h-[600px] sm:max-h-[400px] md:max-h-[500px] lg:max-h-[600px]" style={{
@@ -502,14 +521,25 @@ export default function CommitmentCard({
                   <VideoPlayer 
                     videoUrl={videoUrl}
                     thumbnailUrl={thumbnailUrl}
+                    postId={id}
+                    initialTranscription={audioTranscription}
+                    transcriptionStatus={transcriptionStatus}
+                    uploadStatus={uploadStatus || null}
+                    uploadProgress={uploadProgress || 0}
                   />
                 </div>
               </div>
             )}
             {/* Audio */}
             {audioUrl && (
-              <div className="mt-4 flex justify-center">
-                <audio controls src={audioUrl} className="w-full max-w-xs" />
+              <div className="mt-4">
+                <AudioPlayer 
+                  audioUrl={audioUrl}
+                  postId={id}
+                  initialTranscription={audioTranscription}
+                  transcriptionStatus={transcriptionStatus}
+                  className="w-full"
+                />
               </div>
             )}
           </div>

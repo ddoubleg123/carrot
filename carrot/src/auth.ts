@@ -96,7 +96,8 @@ function logObjectSize(name: string, obj: any) {
 const adapter = patchAdapter(PrismaAdapter(prisma));
 
 export const authOptions = {
-  adapter,
+  // NOTE: Removed adapter when using JWT strategy to prevent OAuthAccountNotLinked errors
+  // adapter,
   cookies: {
     sessionToken: {
       name: "next-auth.session-token.carrot",
@@ -133,8 +134,79 @@ export const authOptions = {
     newUser: '/onboarding',
   },
   callbacks: {
+    async signIn({ user, account, profile }: { user: any; account: any; profile?: any }) {
+      console.log('[NextAuth][signIn] === SIGNIN CALLBACK DEBUG ===');
+      console.log('[NextAuth][signIn] user:', JSON.stringify(user, null, 2));
+      console.log('[NextAuth][signIn] account:', JSON.stringify(account, null, 2));
+      console.log('[NextAuth][signIn] profile:', JSON.stringify(profile, null, 2));
+
+      // Only handle OAuth providers (Google)
+      if (account?.provider === 'google' && user?.email) {
+        try {
+          // Check if user already exists
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email }
+          });
+
+          if (!existingUser) {
+            console.log('[NextAuth][signIn] Creating new user for:', user.email);
+            
+            // Create new user in database
+            const newUser = await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name || null,
+                image: user.image || null,
+                username: null, // Will be set during onboarding
+                profilePhoto: null,
+                isOnboarded: false,
+                emailVerified: new Date(), // Google OAuth users are email verified
+              }
+            });
+            
+            console.log('[NextAuth][signIn] Created user:', JSON.stringify(newUser, null, 2));
+          } else {
+            console.log('[NextAuth][signIn] User already exists:', existingUser.email);
+          }
+        } catch (error) {
+          console.error('[NextAuth][signIn] Error creating user:', error);
+          return false; // Prevent sign in on database error
+        }
+      }
+
+      console.log('[NextAuth][signIn] === END SIGNIN DEBUG ===');
+      return true; // Allow sign in
+    },
+
     async jwt({ token, user, account }: { token: any; user: any; account: any }) {
+      console.log('[NextAuth][jwt] === JWT CALLBACK DEBUG ===');
+      console.log('[NextAuth][jwt] account:', JSON.stringify(account, null, 2));
+      console.log('[NextAuth][jwt] user (from adapter):', JSON.stringify(user, null, 2));
+      console.log('[NextAuth][jwt] token (before update):', JSON.stringify(token, null, 2));
+
+      // CRITICAL SECURITY FIX: Detect account mixing and force fresh session
+      if (account && user) {
+        // This is a fresh login - check for email mismatch with existing token
+        if (token.email && token.email !== user.email) {
+          console.log('[NextAuth][jwt] 🚨 ACCOUNT MIXING DETECTED!');
+          console.log('[NextAuth][jwt] Token email:', token.email);
+          console.log('[NextAuth][jwt] New user email:', user.email);
+          console.log('[NextAuth][jwt] FORCING FRESH SESSION...');
+          
+          // Clear the existing token completely and start fresh
+          token = {
+            email: user.email,
+            sub: user.id,
+          };
+        }
+      }
+
       if (user) {
+        console.log('[NextAuth][jwt] Processing user login...');
+        console.log('[NextAuth][jwt] user.email:', user.email);
+        console.log('[NextAuth][jwt] user.id:', user.id);
+        console.log('[NextAuth][jwt] user.username:', user.username);
+
         if (account?.provider) {
           token.provider = account.provider;
         }
@@ -154,6 +226,9 @@ export const authOptions = {
           console.warn('[NextAuth][jwt callback] user.profilePhoto contains base64 data!');
         }
       }
+
+      console.log('[NextAuth][jwt] token (after update):', JSON.stringify(token, null, 2));
+      console.log('[NextAuth][jwt] === END JWT DEBUG ===');
       const size = JSON.stringify(token).length;
       if (size > 1000) {
         console.warn(`[NextAuth][jwt callback] token size is large: ${size} bytes`, token);
@@ -161,15 +236,60 @@ export const authOptions = {
       return token;
     },
     async session({ session, token }: { session: any; token: any }) {
-      session.user = {
-        id: token.id as string,
-        email: token.email as string,
-        username: token.username as string | undefined,
-        profilePhoto: token.profilePhoto as string | undefined,
-        image: token.image as string | undefined,
-        emailVerified: null as Date | null,
+      console.log('[NextAuth][session] === SESSION CALLBACK DEBUG ===');
+      console.log('[NextAuth][session] token.email:', token.email);
+      console.log('[NextAuth][session] token.id:', token.id);
+      console.log('[NextAuth][session] token.username:', token.username);
+      console.log('[NextAuth][session] session.user.email (before):', session.user?.email);
 
+      // CRITICAL SECURITY FIX: Ensure email consistency
+      if (!token.email) {
+        console.log('[NextAuth][session] SECURITY ERROR: No email in token');
+        throw new Error('Authentication error: No email in token');
+      }
+
+      // Fetch user data from database to get isOnboarded status and ALL user data
+      let userData = null;
+      try {
+        userData = await prisma.user.findUnique({
+          where: { email: token.email as string },
+          select: { 
+            id: true,
+            email: true, 
+            username: true,
+            profilePhoto: true,
+            image: true,
+            isOnboarded: true 
+          }
+        });
+        console.log('[NextAuth][session] Database query for email:', token.email);
+        console.log('[NextAuth][session] Database result:', JSON.stringify(userData, null, 2));
+
+        // CRITICAL SECURITY CHECK: Verify email consistency
+        if (userData && userData.email !== token.email) {
+          console.log('[NextAuth][session] SECURITY ERROR: Email mismatch!');
+          console.log('[NextAuth][session] Token email:', token.email);
+          console.log('[NextAuth][session] Database email:', userData.email);
+          throw new Error('Authentication error: Email mismatch detected');
+        }
+      } catch (error) {
+        console.log('[NextAuth][session] Database query failed:', error);
+        throw error;
+      }
+
+      // CRITICAL: Always use token email as source of truth, never database email
+      session.user = {
+        id: userData?.id || token.id as string,
+        email: token.email as string, // ALWAYS use token email for security
+        username: userData?.username || token.username as string | undefined,
+        profilePhoto: userData?.profilePhoto || token.profilePhoto as string | undefined,
+        image: userData?.image || token.image as string | undefined,
+        emailVerified: null as Date | null,
+        isOnboarded: userData?.isOnboarded || false,
       };
+
+      console.log('[NextAuth][session] Final session.user:', JSON.stringify(session.user, null, 2));
+      console.log('[NextAuth][session] === END SESSION DEBUG ===');
       const size = JSON.stringify(session).length;
       if (size > 1000) {
         console.warn(`[NextAuth][session callback] session size is large: ${size} bytes`, session);

@@ -29,8 +29,8 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       stickText: post.stickText || '',
       author: {
         name: '', // Remove name display per user request
-        username: post.user?.username || 'daniel', // Use actual handle
-        avatar: post.user?.profilePhoto || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
+        username: post.User?.username || 'daniel', // FIXED: Use actual username from database, not name
+        avatar: post.User?.image || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
         flag: '🇺🇸',
         id: post.userId, // Add the author ID for ownership comparison
       },
@@ -52,11 +52,13 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       videoUrl: post.videoUrl || null,
       thumbnailUrl: post.thumbnailUrl || null,
       audioUrl: post.audioUrl || null,
+      audioTranscription: post.audioTranscription || null,
+      transcriptionStatus: post.transcriptionStatus || null,
       emoji: post.emoji || '🎯',
-      gradientFromColor: post.gradientFromColor || '#e0eafe',
-      gradientToColor: post.gradientToColor || '#d1f7e6',
-      gradientViaColor: post.gradientViaColor || '#f6e6fa',
-      gradientDirection: post.gradientDirection || 'to-br',
+      gradientFromColor: post.gradientFromColor || null,
+      gradientToColor: post.gradientToColor || null,
+      gradientViaColor: post.gradientViaColor || null,
+      gradientDirection: post.gradientDirection || null,
     }));
   } catch (error) {
     console.error('Error fetching posts:', error);

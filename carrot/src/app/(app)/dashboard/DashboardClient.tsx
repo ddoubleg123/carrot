@@ -56,6 +56,65 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
     setCommitments(prev => [post, ...prev]);
   };
 
+  const handleUpdateCommitment = (tempId: string, updatedPost: any) => {
+    // Update post with real ID after database save
+    console.log('🔄 DashboardClient updating post:', tempId, '→', updatedPost.id);
+    setCommitments(prev => 
+      prev.map(commitment => {
+        if (commitment.id === tempId) {
+          // Preserve audio data from optimistic UI if database post doesn't have it
+          // IMPORTANT: Prioritize new Firebase URL over old blob URL
+          const preservedAudioData = {
+            audioUrl: updatedPost.audioUrl || commitment.audioUrl,
+            audioTranscription: updatedPost.audioTranscription || commitment.audioTranscription,
+            transcriptionStatus: updatedPost.transcriptionStatus || commitment.transcriptionStatus
+          };
+          
+          console.log('🎵 Audio URL update details:', {
+            tempId,
+            updatedPostAudioUrl: updatedPost.audioUrl,
+            commitmentAudioUrl: commitment.audioUrl,
+            finalAudioUrl: preservedAudioData.audioUrl,
+            isFirebaseUrl: updatedPost.audioUrl?.includes('firebasestorage.googleapis.com'),
+            isBlobUrl: commitment.audioUrl?.includes('blob:')
+          });
+          
+          return { ...commitment, ...updatedPost, ...preservedAudioData };
+        }
+        return commitment;
+      })
+    );
+  };
+
+  const updatePost = (tempId: string, updatedPost: any) => {
+    // Update post with real ID after database save
+    console.log('🔄 DashboardClient updating post:', tempId, '→', updatedPost.id);
+    setCommitments(prev => 
+      prev.map(commitment => {
+        if (commitment.id === tempId) {
+          return { ...commitment, ...updatedPost };
+        }
+        return commitment;
+      })
+    );
+  };
+
+  const updatePostAudioUrl = (postId: string, newAudioUrl: string) => {
+    console.log('🎵 DashboardClient updating audio URL for post:', postId, '→', newAudioUrl);
+    setCommitments(prev => 
+      prev.map(commitment => {
+        if (commitment.id === postId) {
+          console.log('🎵 Updating audio URL from blob to Firebase:', {
+            from: commitment.audioUrl,
+            to: newAudioUrl
+          });
+          return { ...commitment, audioUrl: newAudioUrl };
+        }
+        return commitment;
+      })
+    );
+  };
+
   const handleToggleBookmark = (id: string) => {
     console.log(`Toggled bookmark on commitment ${id}`);
     // TODO: Implement bookmark logic
@@ -64,7 +123,7 @@ export default function DashboardClient({ initialCommitments }: DashboardClientP
   return (
     <div className="dashboard-feed-root max-w-[450px] mx-auto">
       <div className="w-full !max-w-[450px] mx-auto px-4 pt-[50px]">
-        <CommitmentComposer onPost={handleCreateCommitment} />
+        <CommitmentComposer onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
         {/* Professional compact spacing for social media feed */}
         <div className="space-y-3 mt-6">
           {commitments.map((commitment) => (

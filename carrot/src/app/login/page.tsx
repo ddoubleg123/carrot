@@ -101,25 +101,35 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Video Background */}
-      <video
-        autoPlay
-        muted
-        loop
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover z-0"
-        style={{ objectPosition: 'center top', transform: 'scale(1.05)' }}
-      >
-        <source src="/carrotfield.mp4" type="video/mp4" />
-        {/* Fallback for browsers that don't support video */}
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-blue-50" />
-      </video>
+      {/* Animated Gradient Background */}
+      <div 
+        className="fixed inset-0 w-screen h-screen z-0 animate-gradient-x"
+        style={{
+          background: 'linear-gradient(-45deg, #ff6b35, #f7931e, #4caf50, #81c784, #ffffff, #f5f5f5)',
+          backgroundSize: '400% 400%',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0
+        }}
+      />
       
-      {/* Dark overlay for better text readability */}
-      <div className="absolute inset-0 bg-black/30 z-10" />
+      <style jsx global>{`
+        @keyframes gradient-x {
+          0%, 100% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+        }
+        .animate-gradient-x {
+          animation: gradient-x 15s ease infinite;
+        }
+      `}</style>
       
       {/* Login content */}
-      <div className="w-full max-w-md relative z-20 p-4">
+      <div className="w-full max-w-md relative z-20">
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <div className="flex items-center justify-center">
@@ -163,7 +173,7 @@ function LoginForm({ callbackUrl, denied }: { callbackUrl: string; denied: strin
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
           <div className="p-6 sm:p-8">
             <div className="text-center mb-6">
               <h1 className="text-2xl font-bold text-gray-800 mb-2">

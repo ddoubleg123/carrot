@@ -27,6 +27,7 @@ export default function CarrotLogo() {
       height={48}
       className="h-12 w-12 object-contain"
       priority
+      onError={() => setUseFallback(true)}
     />
   );
 }

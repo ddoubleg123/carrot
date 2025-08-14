@@ -2,9 +2,27 @@
 
 import React, { useState, useEffect } from 'react';
 
-export default function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: string; thumbnailUrl?: string | null }) {
+interface VideoPlayerProps {
+  videoUrl: string;
+  thumbnailUrl?: string | null;
+  postId?: string;
+  initialTranscription?: string | null;
+  transcriptionStatus?: string | null;
+  uploadStatus?: 'uploading' | 'uploaded' | 'processing' | 'ready' | null;
+  uploadProgress?: number;
+}
+
+export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTranscription, transcriptionStatus, uploadStatus, uploadProgress }: VideoPlayerProps) {
   const [hasError, setHasError] = useState(false);
   const [browserInfo, setBrowserInfo] = useState<{ isChromium: boolean; supportsH264: boolean } | null>(null);
+  
+  // Transcription state
+  const [realTranscriptionStatus, setRealTranscriptionStatus] = useState<string | null>(transcriptionStatus || null);
+  const [realTranscriptionText, setRealTranscriptionText] = useState<string | null>(initialTranscription || null);
+  
+  // Upload and video state
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -20,6 +38,63 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: stri
     
     setBrowserInfo({ isChromium, supportsH264 });
   }, []);
+
+  // Poll for transcription status if postId is provided
+  useEffect(() => {
+    if (!postId) {
+      return; // Skip polling if no postId
+    }
+    
+    // For temp IDs, show pending status immediately
+    if (postId.startsWith('temp-')) {
+      setRealTranscriptionStatus('pending');
+      return;
+    }
+
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    const pollTranscriptionStatus = async () => {
+      try {
+        const response = await fetch(`/api/transcribe?postId=${postId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setRealTranscriptionStatus(data.status);
+          if (data.transcription) {
+            setRealTranscriptionText(data.transcription);
+          }
+          
+          // Stop polling if transcription is completed or failed
+          if (data.status === 'completed' || data.status === 'failed') {
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
+            }
+          }
+        }
+      } catch (error) {
+        // Silently handle polling errors
+      }
+    };
+
+    // Start polling if transcription is pending or processing
+    if (realTranscriptionStatus === 'pending' || realTranscriptionStatus === 'processing') {
+      pollTranscriptionStatus(); // Initial check
+      pollInterval = setInterval(pollTranscriptionStatus, 3000); // Poll every 3 seconds
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [postId, realTranscriptionStatus]);
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
@@ -84,25 +159,115 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl }: { videoUrl: stri
   }
 
   return (
-    <video
-      controls
-      muted
-      autoPlay
-      loop
-      playsInline
-      poster={thumbnailUrl || undefined}
-      src={videoUrl}
-      style={{ 
-        width: '100%', 
-        maxWidth: '550px', 
-        minWidth: '320px',
-        height: 'auto',
-        maxHeight: 'min(70vh, 600px)',
-        borderRadius: '8px',
-        objectFit: 'contain'
-      }}
-      onError={handleError}
-      onLoadedData={() => {}}
-    />
+    <div className="w-full">
+      <div className="relative">
+        <video
+          controls={uploadStatus === 'ready' || videoLoaded}
+          muted
+          autoPlay={uploadStatus === 'ready' && videoLoaded}
+          loop
+          playsInline
+          poster={thumbnailUrl || undefined}
+          src={videoUrl}
+          style={{ 
+            width: '100%', 
+            maxWidth: '550px', 
+            minWidth: '320px',
+            height: 'auto',
+            maxHeight: 'min(70vh, 600px)',
+            borderRadius: '8px',
+            objectFit: 'contain',
+            opacity: showThumbnailOverlay ? 0.7 : 1
+          }}
+          onError={handleError}
+          onLoadedData={() => {
+            setVideoLoaded(true);
+            if (uploadStatus === 'ready') {
+              setShowThumbnailOverlay(false);
+            }
+          }}
+        />
+        
+        {/* Upload Progress Overlay */}
+        {showThumbnailOverlay && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
+            <div className="text-center text-white">
+              {uploadStatus === 'uploading' && (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <p className="text-sm font-medium">Uploading video...</p>
+                  {uploadProgress && (
+                    <div className="mt-2 w-32 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                  )}
+                </>
+              )}
+              {uploadStatus === 'uploaded' && (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <p className="text-sm font-medium">Processing video...</p>
+                </>
+              )}
+              {uploadStatus === 'processing' && (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <p className="text-sm font-medium">Preparing video...</p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Video Transcription Section */}
+      {postId && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM6 6v12h12V6H6z" />
+            </svg>
+            <h4 className="text-sm font-medium text-gray-700">Video Transcription</h4>
+          </div>
+          
+          {(realTranscriptionStatus === 'pending' || (!realTranscriptionStatus && postId)) && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
+              <span>
+                {uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing' 
+                  ? 'Preparing video transcription...' 
+                  : 'Processing video transcription...'
+                }
+              </span>
+            </div>
+          )}
+          
+          {realTranscriptionStatus === 'processing' && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
+              <span>AI is transcribing your video...</span>
+            </div>
+          )}
+          
+          {realTranscriptionText && realTranscriptionStatus === 'completed' && (
+            <div className="text-sm text-gray-800 leading-relaxed">
+              <p>{realTranscriptionText}</p>
+            </div>
+          )}
+          
+          {realTranscriptionStatus === 'failed' && (
+            <div className="text-sm text-red-600">
+              <p>Transcription failed. Please try uploading again.</p>
+              {realTranscriptionText && (
+                <p className="text-xs mt-1 text-gray-500">Error: {realTranscriptionText}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

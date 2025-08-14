@@ -8,8 +8,8 @@ interface StepperBarProps {
 export function StepperBar({ currentStep, totalSteps }: StepperBarProps) {
   const percent = Math.round((currentStep / totalSteps) * 100);
   return (
-    <div className="w-full flex flex-col items-center px-6 pt-4 pb-4" style={{ minHeight: 48 }}>
-      <div className="text-sm font-medium text-gray-600 mb-2">
+    <div className="w-full flex flex-col items-center px-6 pt-2 pb-3" style={{ minHeight: 36 }}>
+      <div className="text-sm font-medium text-gray-600 mb-1">
         Step {currentStep} of {totalSteps}
       </div>
       <div

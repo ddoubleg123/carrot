@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
-import { app } from '../../../../lib/firebase-admin';
-import * as admin from 'firebase-admin';
-const db = admin.firestore(app);
+import { prisma } from '../../../../lib/prisma';
 
 export async function POST(request: Request) {
   let session;
@@ -25,34 +23,48 @@ export async function POST(request: Request) {
 
     console.log('[onboard API] Finalizing onboarding for user:', session.user.id, 'sessionId:', sessionId);
 
-    // Reference to the user's document in Firestore using Firebase Admin SDK
-    const userRef = db.collection('users').doc(session.user.id);
-    
-    // Prepare user data, filtering out undefined values
-    const userData: any = {
-      id: session.user.id,
+    // Prepare user data for Prisma update, filtering out undefined values
+    const updateData: any = {
       isOnboarded: true,
-      onboardedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      // Track TOS and Privacy Policy acceptance with current timestamp
+      tosAcceptedAt: new Date(),
+      privacyAcceptedAt: new Date(),
+      // Version tracking for future policy updates
+      tosVersion: '1.0',
+      privacyVersion: '1.0',
     };
 
     // Only add fields that are not undefined
-    if (session.user.email !== undefined) userData.email = session.user.email;
-    if (session.user.username !== undefined) userData.username = session.user.username;
-    if (session.user.name !== undefined) userData.name = session.user.name;
-    if (session.user.profilePhoto !== undefined) userData.profilePhoto = session.user.profilePhoto;
+    if (session.user.username !== undefined) updateData.username = session.user.username;
+    if (session.user.name !== undefined) updateData.name = session.user.name;
+    if (session.user.profilePhoto !== undefined) updateData.profilePhoto = session.user.profilePhoto;
 
-    console.log('[onboard API] Saving user data:', userData);
+    console.log('[onboard API] Updating user data in Prisma:', updateData);
 
-    // Update or create the user document with onboarding status and user data
-    await userRef.set(userData, { merge: true });
+    // Update the user in Prisma database
+    const updatedUser = await prisma.user.update({
+      where: { id: session.user.id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        profilePhoto: true,
+        isOnboarded: true
+      }
+    });
 
     console.log('[onboard API] Successfully updated onboarding status for user:', session.user.id);
+    console.log('[onboard API] Updated user data:', updatedUser);
+    
     return NextResponse.json({ 
       success: true,
-      userId: session.user.id,
-      isOnboarded: true,
-      profilePhoto: session.user.profilePhoto
+      userId: updatedUser.id,
+      isOnboarded: updatedUser.isOnboarded,
+      profilePhoto: updatedUser.profilePhoto,
+      username: updatedUser.username,
+      name: updatedUser.name
     });
   } catch (error) {
     console.error('[onboard API] Error in onboarding API:', error);

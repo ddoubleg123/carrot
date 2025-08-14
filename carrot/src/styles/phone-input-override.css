@@ -1,13 +1,10 @@
 /* Global CSS override for react-international-phone library */
 /* This file specifically targets and removes inner input borders */
 
-/* Target the main container and all child elements */
+/* Target the main container and input elements, but preserve flag display */
 .react-international-phone-input-container,
-.react-international-phone-input-container *,
 .react-international-phone-country-selector,
-.react-international-phone-country-selector *,
 .react-international-phone-country-selector-button,
-.react-international-phone-country-selector-button *,
 .react-international-phone-input,
 input[type="tel"],
 input[class*="phone"],
@@ -33,6 +30,20 @@ input.react-international-phone-input {
   /* Remove any background that might create border effect */
   background-image: none !important;
   background-color: transparent !important;
+}
+
+/* Preserve flag emoji display */
+.react-international-phone-country-selector-button__flag-emoji,
+.react-international-phone-country-selector-button .flag-emoji,
+.react-international-phone-country-selector-button [class*="flag"],
+.react-international-phone-country-selector-button [class*="emoji"] {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+  width: auto !important;
+  height: auto !important;
 }
 
 /* Specifically target the country selector button which often has borders */

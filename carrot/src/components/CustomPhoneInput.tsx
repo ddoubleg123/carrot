@@ -28,8 +28,8 @@ export function CustomPhoneInput({
   return (
     <div 
       className={cn(
-        "overflow-hidden relative w-full",
-        // No border here since parent container provides it
+        "relative w-full",
+        // Removed overflow-hidden which was clipping the flag
       )}
       style={{
         // Ensure no child elements can have borders
@@ -37,20 +37,60 @@ export function CustomPhoneInput({
         '--phone-input-outline': 'none'
       } as React.CSSProperties}
     >
-      {/* Add a style tag to override any remaining borders */}
+      {/* Add a style tag to override borders but preserve flag display */}
       <style dangerouslySetInnerHTML={{
         __html: `
-          .react-international-phone-input-container * {
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-          }
           .react-international-phone-input {
             border: none !important;
             outline: none !important;
             box-shadow: none !important;
             -webkit-appearance: none !important;
             appearance: none !important;
+          }
+          .react-international-phone-country-selector-button {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            display: flex !important;
+            align-items: center !important;
+            padding: 4px 8px !important;
+            cursor: pointer !important;
+          }
+          .react-international-phone-country-selector-button__flag-emoji {
+            display: inline-block !important;
+            font-size: 24px !important;
+            margin-right: 8px !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 24px !important;
+            height: 24px !important;
+          }
+          /* Target the flag in both button states */
+          .react-international-phone-country-selector-button .react-international-phone-country-selector-button__flag-emoji,
+          .react-international-phone-country-selector .react-international-phone-country-selector-button__flag-emoji {
+            display: inline-block !important;
+            font-size: 24px !important;
+            margin-right: 8px !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 24px !important;
+            height: 24px !important;
+          }
+          /* Also target any flag emoji directly */
+          .react-international-phone-country-selector span[role="img"],
+          .react-international-phone-country-selector-button span[role="img"] {
+            font-size: 24px !important;
+            width: 24px !important;
+            height: 24px !important;
+            display: inline-block !important;
+            margin-right: 8px !important;
+          }
+          .react-international-phone-country-selector {
+            display: flex !important;
+            align-items: center !important;
+            visibility: visible !important;
+            opacity: 1 !important;
           }
         `
       }} />

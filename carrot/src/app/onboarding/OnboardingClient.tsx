@@ -74,12 +74,12 @@ export default function OnboardingClient({ session }: { session: any }) {
       {/* Carrot Logo Above Rectangle */}
       <div className="flex flex-col items-center mb-2">
         <div className="relative">
-          <div className="rounded-full blur-2xl bg-orange-200 opacity-60 animate-pulse w-16 h-16 absolute top-0 left-0 right-0 bottom-0 m-auto" style={{ zIndex: 0 }} />
-          <img src="/carrot-logo.png" alt="Carrot Logo" className="h-16 w-16 mx-auto mb-4" style={{ filter: 'drop-shadow(0 0 16px #f47c23cc)' }} />
+          <div className="rounded-full blur-2xl bg-orange-200 opacity-60 animate-pulse w-10 h-10 absolute top-0 left-0 right-0 bottom-0 m-auto" style={{ zIndex: 0 }} />
+          <img src="/carrot-logo.png" alt="Carrot Logo" className="h-10 w-10 mx-auto mb-2" style={{ filter: 'drop-shadow(0 0 16px #f47c23cc)' }} />
         </div>
       </div>
       <StepperBar currentStep={step} totalSteps={TOTAL_STEPS} />
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8" style={{ paddingTop: 24 }}>
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-4" style={{ paddingTop: 16 }}>
         {step === 1 && (
           <PersonalInfoStep
             email={session?.user?.email || ''}

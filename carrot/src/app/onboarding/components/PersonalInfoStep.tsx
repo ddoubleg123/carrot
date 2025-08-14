@@ -159,8 +159,8 @@ function PersonalInfoStep({
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={onSubmit} className="space-y-6">
-        <h2 className="text-2xl font-bold text-center text-gray-900 mb-2 pt-2">Welcome to Carrot!</h2>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <h2 className="text-xl font-bold text-center text-gray-900 mb-1">Welcome to Carrot!</h2>
         <ProfilePhotoRow
               avatar={profilePhoto}
               onAvatarChange={setProfilePhoto}
@@ -257,7 +257,7 @@ function PersonalInfoStep({
         </div>
 
         {/* Country / ZIP */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             {/* Country Picker */}
 <CountryCombobox
@@ -285,7 +285,7 @@ function PersonalInfoStep({
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4">
           <button
             type="submit"
             disabled={isSubmitting}

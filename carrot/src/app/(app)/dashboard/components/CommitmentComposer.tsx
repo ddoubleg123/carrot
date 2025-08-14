@@ -8,12 +8,15 @@ import { uploadFilesToFirebase } from '../../../../lib/uploadToFirebase';
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
 import Toast from './Toast';
 import GifPicker from './GifPicker';
+import AudioRecorder from '../../../../components/AudioRecorder';
+import AudioPlayer from '../../../../components/AudioPlayer';
 
 interface CommitmentComposerProps {
-  onPost?: (post: any) => void;
+  onPost: (post: any) => void;
+  onPostUpdate?: (tempId: string, updatedPost: any) => void;
 }
 
-export default function CommitmentComposer({ onPost }: CommitmentComposerProps) {
+export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentComposerProps) {
   const { data: session, status } = useSession();
   const user = session?.user;
   
@@ -34,6 +37,40 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
   // GIF picker state
   const [showGifPicker, setShowGifPicker] = React.useState<boolean>(false);
   const [selectedGifUrl, setSelectedGifUrl] = React.useState<string | null>(null);
+  
+  // Emoji picker state
+  const [showEmojiPicker, setShowEmojiPicker] = React.useState<boolean>(false);
+  
+  // Audio recording state
+  const [showAudioRecorder, setShowAudioRecorder] = React.useState<boolean>(false);
+  const [audioBlob, setAudioBlob] = React.useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = React.useState<string>('');
+  const [audioTranscription, setAudioTranscription] = React.useState<string>('');
+  const [isRecording, setIsRecording] = React.useState(false);
+  const [currentPostId, setCurrentPostId] = React.useState<string | null>(null);
+  
+  // Debug: Track component mount/unmount (GPT diagnostic)
+  React.useEffect(() => {
+    console.log('🏗️ CommitmentComposer mounted');
+    return () => console.log('💀 CommitmentComposer UNmounted'); // If this fires on submit, that's the smoking gun
+  }, []);
+
+  // Debug: Track currentPostId changes
+  React.useEffect(() => {
+    console.log('🔄 currentPostId state changed to:', currentPostId);
+  }, [currentPostId]);
+  
+  // Emoji categories and data
+  const emojiCategories = {
+    'Smileys': ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳'],
+    'Emotions': ['😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭'],
+    'Activities': ['⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛷', '⛸️', '🥌'],
+    'Objects': ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️'],
+    'Nature': ['🌱', '🌿', '☘️', '🍀', '🎋', '🍃', '🍂', '🍁', '🌾', '🌲', '🌳', '🌴', '🌵', '🌶️', '🍄', '🌰', '🎃', '🐚', '🌸', '🌺', '🌻', '🌹', '🥀', '🌷', '🌼', '🌙', '🌛', '🌜', '🌚', '🌕', '🌖'],
+    'Food': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠'],
+    'Travel': ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛹', '🛼', '🚁', '🛸', '✈️', '🛩️', '🛫', '🛬', '🪂', '💺', '🚀', '🛰️', '🚢'],
+    'Symbols': ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎']
+  };
   
   // Color wheel state with localStorage persistence
   const [currentColorScheme, setCurrentColorScheme] = React.useState<number>(() => {
@@ -211,6 +248,121 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
     console.log('🎨 Auto-selected random color scheme:', colorSchemes[randomIndex].name);
   };
 
+  // Audio recording handlers
+  const handleAudioRecorded = async (blob: Blob, url: string) => {
+    setAudioBlob(blob);
+    setAudioUrl(url);
+    setShowAudioRecorder(false);
+    
+    // Auto-transcribe the audio
+    try {
+      const formData = new FormData();
+      formData.append('audio', blob, 'recording.webm');
+      formData.append('language', 'auto');
+
+      const response = await fetch('/api/audio/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setAudioTranscription(result.transcription);
+        showSuccessToast('Audio transcribed successfully!');
+      }
+    } catch (error) {
+      console.error('Transcription error:', error);
+      showErrorToast('Failed to transcribe audio');
+    }
+  };
+
+  const handleAudioCancel = () => {
+    setShowAudioRecorder(false);
+  };
+
+  const removeAudio = () => {
+    setAudioBlob(null);
+    setAudioUrl('');
+    setAudioTranscription('');
+    setCurrentPostId(null);
+  };
+
+  // Emoji picker handlers
+  const handleEmojiButtonClick = () => {
+    setShowEmojiPicker(!showEmojiPicker);
+    // Close other pickers
+    setShowGifPicker(false);
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    // Insert emoji at cursor position or append to content
+    const textarea = document.querySelector('textarea[placeholder="What\'s happening?"]') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newContent = content.slice(0, start) + emoji + content.slice(end);
+      setContent(newContent);
+      
+      // Set cursor position after the emoji
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + emoji.length, start + emoji.length);
+      }, 0);
+    } else {
+      // Fallback: append to end
+      setContent(content + emoji);
+    }
+    
+    // Close emoji picker after selection
+    setShowEmojiPicker(false);
+  };
+
+  // Formatting button handlers
+  const handleFormatting = (formatType: 'bold' | 'italic' | 'strikethrough') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.slice(start, end);
+    
+    let formatChars = '';
+    switch (formatType) {
+      case 'bold':
+        formatChars = '**';
+        break;
+      case 'italic':
+        formatChars = '*';
+        break;
+      case 'strikethrough':
+        formatChars = '~~';
+        break;
+    }
+
+    let newContent = '';
+    let newCursorPos = start;
+
+    if (selectedText) {
+      // Text is selected - wrap it with formatting
+      const formattedText = `${formatChars}${selectedText}${formatChars}`;
+      newContent = content.slice(0, start) + formattedText + content.slice(end);
+      newCursorPos = start + formatChars.length + selectedText.length + formatChars.length;
+    } else {
+      // No text selected - insert formatting markers and place cursor between them
+      const formattedText = `${formatChars}${formatChars}`;
+      newContent = content.slice(0, start) + formattedText + content.slice(end);
+      newCursorPos = start + formatChars.length;
+    }
+
+    setContent(newContent);
+    
+    // Set cursor position and focus
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
   // Color wheel click handler
   const handleColorWheelClick = () => {
     const nextScheme = (currentColorScheme + 1) % colorSchemes.length;
@@ -237,6 +389,155 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
     setSelectedGifUrl(gifUrl);
     setShowGifPicker(false);
     console.log('GIF selected:', gifUrl);
+  };
+
+
+
+  // Convert WebM audio to MP3 for better Firebase Storage compatibility
+  const convertAudioToMp3 = async (webmBlob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create audio context for conversion
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const fileReader = new FileReader();
+        
+        fileReader.onload = async (e) => {
+          try {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // Create WAV blob (more compatible than WebM)
+            const wavBlob = audioBufferToWav(audioBuffer);
+            resolve(wavBlob);
+          } catch (error) {
+            console.warn('🎵 Audio conversion failed, using original:', error);
+            resolve(webmBlob); // Fallback to original
+          }
+        };
+        
+        fileReader.onerror = () => {
+          console.warn('🎵 FileReader failed, using original WebM');
+          resolve(webmBlob); // Fallback to original
+        };
+        
+        fileReader.readAsArrayBuffer(webmBlob);
+      } catch (error) {
+        console.warn('🎵 Audio conversion not supported, using original:', error);
+        resolve(webmBlob); // Fallback to original
+      }
+    });
+  };
+
+  // Convert AudioBuffer to WAV Blob
+  const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+    const length = buffer.length;
+    const numberOfChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const arrayBuffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
+    const view = new DataView(arrayBuffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length * numberOfChannels * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numberOfChannels * 2, true);
+    view.setUint16(32, numberOfChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, length * numberOfChannels * 2, true);
+    
+    // Convert audio data
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+    
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
+  // Audio recording handlers - CLEAN: Added after removing all duplicates
+  const onAudioRecorded = async (blob: Blob, audioUrl: string) => {
+    console.log('🎵 Audio recorded successfully:', { 
+      size: blob.size, 
+      type: blob.type,
+      audioUrl: audioUrl?.substring(0, 50) + '...'
+    });
+    
+    // Convert WebM to WAV for better compatibility
+    let finalBlob = blob;
+    if (blob.type.includes('webm')) {
+      console.log('🎵 Converting WebM to WAV for better compatibility...');
+      try {
+        finalBlob = await convertAudioToMp3(blob);
+        console.log('🎵 Audio conversion successful:', { 
+          originalSize: blob.size, 
+          convertedSize: finalBlob.size,
+          originalType: blob.type,
+          convertedType: finalBlob.type
+        });
+      } catch (error) {
+        console.warn('🎵 Audio conversion failed, using original:', error);
+        finalBlob = blob;
+      }
+    }
+    
+    // Create new blob URL for the converted audio to ensure proper metadata
+    let finalAudioUrl = audioUrl;
+    if (finalBlob !== blob) {
+      // If we converted the audio, create a new blob URL for the converted version
+      if (audioUrl && audioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(audioUrl); // Clean up original blob URL
+      }
+      finalAudioUrl = URL.createObjectURL(finalBlob);
+      console.log('🎵 Created new blob URL for converted audio:', finalAudioUrl);
+    }
+    
+    // Set audio blob and use blob URL for immediate playback
+    setAudioBlob(finalBlob);
+    setAudioUrl(finalAudioUrl);
+    
+    // Don't set transcription here - it will be generated server-side
+    setAudioTranscription('');
+    
+    // Close audio recorder modal
+    setShowAudioRecorder(false);
+    
+    console.log('✅ Audio state updated - ready for posting');
+  };
+
+  const onAudioCancel = () => {
+    console.log('🚫 Audio recording cancelled');
+    setShowAudioRecorder(false);
+  };
+
+  const clearAudio = () => {
+    console.log('🗑️ Removing audio');
+    
+    // Clean up blob URL to prevent memory leaks
+    if (audioUrl && audioUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    
+    // Reset all audio state
+    setAudioBlob(null);
+    setAudioUrl('');
+    setAudioTranscription('');
+    setCurrentPostId(null);
   };
 
   // Refs
@@ -769,30 +1070,20 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                     console.log('🎬 Media file:', selectedFile);
                     console.log('🔗 Media preview:', mediaPreview);
                     
-                    let finalMediaUrl = null;
+                    // Generate temporary ID for optimistic UI
+                    const tempId = `temp-${Date.now()}`;
                     
-                    // Upload media if we have a file
-                    if (selectedFile) {
-                      console.log('📤 Uploading media file...');
-                      const uploadResult = await uploadFilesToFirebase([selectedFile], 'posts');
-                      console.log('✅ Upload result:', uploadResult);
-                      
-                      if (uploadResult && uploadResult.length > 0) {
-                        finalMediaUrl = uploadResult[0];
-                        console.log('🔗 Final media URL:', finalMediaUrl);
-                      }
-                    }
-                    
-                    // Create optimistic UI post if we have user data
+                    // Create optimistic UI post IMMEDIATELY (no upload delay)
                     if (user && onPost) {
                       const newPost = {
-                        id: Date.now().toString(),
+                        id: tempId,
                         content: content,
                         timestamp: new Date().toISOString(),
                         author: {
-                          name: user.name || 'You',
-                          username: user.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : (user.name ? (user.name.startsWith('@') ? user.name.replace(/\s+/g, '').toLowerCase() : `@${user.name.replace(/\s+/g, '').toLowerCase()}`) : '@you'),
-                          avatar: user.profilePhoto || user.image || null,
+                          id: (user as any).id || 'temp-user',
+                          name: user.name || user.email?.split('@')[0] || 'You',
+                          username: (user as any).username ? `@${(user as any).username}` : '@daniel',
+                          avatar: user.image || null,
                           flag: '🇺🇸'
                         },
                         location: {
@@ -802,55 +1093,119 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                         likes: 0,
                         comments: 0,
                         shares: 0,
-                        imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                        videoUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
+                        imageUrls: mediaPreview && !mediaType?.startsWith('video/') && !mediaType?.startsWith('audio/') ? [mediaPreview] : [],
+                        videoUrl: mediaPreview && mediaType?.startsWith('video/') ? mediaPreview : null,
                         gifUrl: null,
-                        audioUrl: null,
+                        audioUrl: audioUrl || null,
                         emoji: '🎯',
                         colorScheme: colorSchemes[currentColorScheme].name,
                         // Add gradient color data for proper background display
                         gradientDirection: 'to-br',
                         gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
                         gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
-                        gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor
+                        gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
+                        // Add transcription fields for video/audio posts
+                        transcriptionStatus: (mediaType?.startsWith('video/') || audioUrl) ? 'pending' : null,
+                        audioTranscription: null,
+                        // Add upload status for video posts
+                        uploadStatus: mediaType?.startsWith('video/') ? 'uploading' : null,
+                        uploadProgress: 0
                       };
                       
                       // Add to UI immediately for responsive feel
                       onPost(newPost);
                     }
-                  
-                    // Save to database in background
-                    try {
+                    
+                    // Clear form and close modal IMMEDIATELY for responsive UI
+                    const contentToSave = content;
+                    const fileToUpload = selectedFile;
+                    const mediaTypeToSave = mediaType;
+                    const audioUrlToSave = audioUrl;
+                    const colorSchemeToSave = currentColorScheme;
+                    
+                    setContent('');
+                    setSelectedFile(null);
+                    setMediaPreview(null);
+                    setMediaType(null);
+                    cancelUpload();
+                    selectRandomColorScheme();
+                    // Show different toast based on media type
+                    if (mediaTypeToSave?.startsWith('video/')) {
+                      showSuccessToast('Video post created! Uploading in background...');
+                    } else {
+                      showSuccessToast('Post shared successfully!');
+                    }
+                    
+                    // Upload media and save to database in background (truly non-blocking)
+                    (async () => {
+                      let finalMediaUrl = null;
+                      
+                      // Upload media if we have a file
+                      if (fileToUpload) {
+                        console.log('📤 Uploading media file in background...');
+                        
+                        // Show upload progress toast for videos
+                        if (mediaTypeToSave?.startsWith('video/')) {
+                          showSuccessToast('Uploading video... This may take a moment.');
+                        }
+                        
+                        try {
+                          const uploadResult = await uploadFilesToFirebase([fileToUpload], 'posts');
+                          console.log('✅ Upload result:', uploadResult);
+                          
+                          if (uploadResult && uploadResult.length > 0) {
+                            finalMediaUrl = uploadResult[0];
+                            console.log('🔗 Final media URL:', finalMediaUrl);
+                            
+                            // Show upload complete toast for videos
+                            if (mediaTypeToSave?.startsWith('video/')) {
+                              showSuccessToast('Video uploaded! Processing transcription...');
+                            }
+                          }
+                        } catch (uploadError) {
+                          console.error('❌ Upload failed:', uploadError);
+                          if (mediaTypeToSave?.startsWith('video/')) {
+                            showErrorToast('Video upload failed. Please try again.');
+                          }
+                          return;
+                        }
+                      }
+                    
+                      // Save to database in background
+                      try {
                       console.log('🚀 Attempting to save post to database...');
-                      console.log('📝 Post data:', {
-                        content: content,
-                        finalMediaUrl,
-                        mediaType,
-                        imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                        gifUrl: null,
-                        audioUrl: null,
-                        emoji: '🎯',
-                        colorScheme: colorSchemes[currentColorScheme].name
-                      });
+                        console.log('📝 Post data:', {
+                          content: contentToSave,
+                          finalMediaUrl,
+                          mediaType: mediaTypeToSave,
+                          imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
+                          gifUrl: null,
+                          audioUrl: audioUrlToSave,
+                          emoji: '🎯',
+                          colorScheme: colorSchemes[colorSchemeToSave].name
+                        });
                       
                       const response = await fetch('/api/posts', {
                         method: 'POST',
+                        credentials: 'include',
                         headers: {
                           'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                          content: content,
+                          content: contentToSave,
                           gradientDirection: 'to-br',
-                          gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
-                          gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
-                          gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
-                          imageUrls: finalMediaUrl && !mediaType?.startsWith('video/') ? [finalMediaUrl] : [],
-                          videoUrl: finalMediaUrl && mediaType?.startsWith('video/') ? finalMediaUrl : null,
+                          gradientFromColor: colorSchemes[colorSchemeToSave].gradientFromColor,
+                          gradientToColor: colorSchemes[colorSchemeToSave].gradientToColor,
+                          gradientViaColor: colorSchemes[colorSchemeToSave].gradientViaColor,
+                          imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
+                          videoUrl: finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null,
                           gifUrl: null,
-                          audioUrl: null,
+                          audioUrl: audioUrlToSave || null,
                           emoji: '🎯',
                           carrotText: '',
-                          stickText: ''
+                          stickText: '',
+                          // Include temp ID for post update
+                          tempId: tempId
                         }),
                       });
                       
@@ -864,23 +1219,33 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                         console.error('❌ Error name:', responseData.name);
                       } else {
                         console.log('✅ Post saved to database successfully');
+                        
+                        // Start transcription for video/audio posts
+                        if (responseData.post && (responseData.post.videoUrl || responseData.post.audioUrl)) {
+                          console.log('🎵 Starting transcription for media post:', responseData.post.id);
+                          
+                          // Trigger transcription in background
+                          fetch('/api/transcribe', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              postId: responseData.post.id,
+                              audioUrl: responseData.post.audioUrl,
+                              videoUrl: responseData.post.videoUrl,
+                              mediaType: responseData.post.videoUrl ? 'video' : 'audio'
+                            })
+                          }).then(transcribeResponse => {
+                            console.log('🎵 Transcription started:', transcribeResponse.status);
+                          }).catch(transcribeError => {
+                            console.warn('🎵 Transcription start failed:', transcribeError);
+                          });
+                        }
                       }
                     } catch (dbError) {
-                      console.error('❌ Database save error:', dbError);
-                    }
-                    
-                    // Clear form and close modal
-                    setContent('');
-                    setSelectedFile(null);
-                    setMediaPreview(null);
-                    setMediaType(null);
-                    cancelUpload();
-                    
-                    // Auto-select a random color scheme for next post
-                    selectRandomColorScheme();
-                    
-                    // Show professional success toast
-                    showSuccessToast('Post shared successfully!');
+                        console.error('❌ Database save error:', dbError);
+                      }
+                    })(); // End of background async function
                     
                   } catch (error) {
                     console.error('Post creation failed:', error);
@@ -943,13 +1308,25 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
               
               {/* B/I/S formatting tools - spaced evenly within white card */}
               <div className="absolute top-8 right-4 sm:right-6 flex flex-col items-center gap-3">
-                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs font-bold transition-colors" title="Bold">
+                <button 
+                  onClick={() => handleFormatting('bold')}
+                  className="w-6 h-6 bg-gray-100 hover:bg-orange-200 rounded flex items-center justify-center text-xs font-bold transition-colors" 
+                  title="Bold (Markdown: **text**)"
+                >
                   B
                 </button>
-                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs font-italic transition-colors" title="Italic">
+                <button 
+                  onClick={() => handleFormatting('italic')}
+                  className="w-6 h-6 bg-gray-100 hover:bg-orange-200 rounded flex items-center justify-center text-xs italic transition-colors" 
+                  title="Italic (Markdown: *text*)"
+                >
                   I
                 </button>
-                <button className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded flex items-center justify-center text-xs underline transition-colors" title="Strikethrough">
+                <button 
+                  onClick={() => handleFormatting('strikethrough')}
+                  className="w-6 h-6 bg-gray-100 hover:bg-orange-200 rounded flex items-center justify-center text-xs line-through transition-colors" 
+                  title="Strikethrough (Markdown: ~~text~~)"
+                >
                   S
                 </button>
               </div>
@@ -1010,6 +1387,93 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 </div>
               </div>
             )}
+
+            {/* Audio Preview */}
+            {audioUrl && (
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+                <div className="flex items-start gap-3">
+                  {/* Audio Player - FIXED: Show immediately with blob URL */}
+                  <div className="flex-1">
+                    <AudioPlayer 
+                      key={audioUrl} // Use audioUrl as key for proper re-rendering
+                      audioUrl={audioUrl}
+                      postId={currentPostId || undefined} // No transcription for preview, only after posting
+                      transcriptionStatus={audioTranscription ? "completed" : "pending"}
+                      initialTranscription={audioTranscription || ''}
+                      className="w-full"
+                      hideTranscription={true} // Hide transcription in composer - only show after posting
+                    />
+                  </div>
+                  
+                  {/* Audio Info and Controls */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">Audio Recorded</span>
+                      <button
+                        onClick={() => {
+                          setShowAudioRecorder(true);
+                          setAudioTranscription(''); // Clear old transcription when re-recording
+                        }}
+                        className="text-xs text-orange-500 hover:text-orange-600 font-medium transition-colors"
+                      >
+                        Re-record
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mb-3">
+                      Ready to post with your message
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={clearAudio}
+                        className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                      >
+                        Remove
+                      </button>
+                      <button
+                        onClick={() => setShowAudioRecorder(true)}
+                        className="flex-1 px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-md transition-colors"
+                      >
+                        Replace
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Emoji Picker */}
+            {showEmojiPicker && (
+              <div className="mt-4 p-4 bg-white/90 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg">
+                <div className="max-h-64 overflow-y-auto">
+                  {Object.entries(emojiCategories).map(([category, emojis]) => (
+                    <div key={category} className="mb-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 px-2">{category}</h4>
+                      <div className="grid grid-cols-8 gap-1">
+                        {emojis.map((emoji, index) => (
+                          <button
+                            key={`${category}-${index}`}
+                            onClick={() => handleEmojiSelect(emoji)}
+                            className="p-2 text-xl hover:bg-gray-100 rounded-lg transition-colors duration-150 flex items-center justify-center"
+                            title={emoji}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => setShowEmojiPicker(false)}
+                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* Action row */}
             <div className="flex items-center justify-between">
@@ -1028,10 +1492,18 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 >
                   <IconGif />
                 </button>
-                <button className="p-2 hover:bg-white/50 rounded-full transition-colors" title="Emoji">
+                <button 
+                  className="p-2 hover:bg-white/50 rounded-full transition-colors" 
+                  title="Emoji"
+                  onClick={handleEmojiButtonClick}
+                >
                   <IconEmoji />
                 </button>
-                <button className="p-2 hover:bg-white/50 rounded-full transition-colors" title="Audio">
+                <button 
+                  className="p-2 hover:bg-white/50 rounded-full transition-colors" 
+                  title="Audio"
+                  onClick={() => setShowAudioRecorder(true)}
+                >
                   <IconAudio />
                 </button>
                 <button 
@@ -1051,14 +1523,33 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                 className="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded-full shadow disabled:opacity-50 transition-colors" 
                 disabled={!content.trim()}
                 onClick={async () => {
-                  if (!content.trim()) return;
-                  
-                  // Debug: Log user session data
-                  console.log('🔍 Session status:', status);
-                  console.log('🔍 Full session object:', session);
-                  console.log('🔍 User object:', user);
-                  console.log('🔍 User name:', user?.name);
-                  console.log('🔍 User username:', user?.username);
+                  try {
+                    console.log('🚀 POST BUTTON CLICKED - Starting post creation...');
+                    
+                    if (!content.trim()) {
+                      console.log('❌ No content, returning early');
+                      return;
+                    }
+                    
+                    // Debug: Log user session data
+                    console.log('🔍 Session status:', status);
+                    console.log('🔍 Full session object:', session);
+                    console.log('🔍 User object:', user);
+                    console.log('🔍 User name:', user?.name);
+                    console.log('🔍 User email:', user?.email);
+                    
+                    // Debug: Log audio state during post creation
+                    console.log('🎵 AUDIO STATE DEBUG:', {
+                      audioBlob: audioBlob ? `${audioBlob.size} bytes` : null,
+                      audioUrl: audioUrl,
+                      audioTranscription: audioTranscription,
+                      hasAudio: !!audioBlob
+                    });
+                  } catch (error) {
+                    console.error('💥 CRITICAL ERROR in post button click handler:', error);
+                    console.error('💥 Error stack:', (error as Error).stack);
+                    return;
+                  }
                   
                   // Safety check: Ensure we have user data
                   if (!user) {
@@ -1068,19 +1559,41 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                     console.warn('⚠️ Session status is not authenticated:', status);
                   }
                   
+                  // Start audio upload in background (non-blocking)
+                  let uploadedAudioUrl = null;
+                  let audioUploadPromise = null;
+                  if (audioBlob) {
+                    try {
+                      // Convert Blob to File for uploadFilesToFirebase
+                      const audioFile = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+                      
+                      // Start upload but don't wait for it
+                      audioUploadPromise = uploadFilesToFirebase([audioFile], 'audio/webm');
+                      console.log('🎵 Audio upload started in background...');
+                    } catch (error) {
+                      console.error('Audio upload initialization failed:', error);
+                      showErrorToast('Failed to start audio upload');
+                      return;
+                    }
+                  }
+
+                  // Generate temp ID for optimistic UI and post updates
+                  const tempPostId = `temp-${Date.now()}`;
+
                   // Only do optimistic UI update if we have user data
                   if (user && onPost) {
                     // Create complete post object for optimistic UI update
                     const newPost = {
-                      id: `temp-${Date.now()}`,
+                      id: tempPostId,
                       content: content,
                       carrotText: '',
                       stickText: '',
                       author: {
-                        name: user.name || 'You',
-                        username: user.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : (user.name ? (user.name.startsWith('@') ? user.name.replace(/\s+/g, '').toLowerCase() : `@${user.name.replace(/\s+/g, '').toLowerCase()}`) : '@you'),
-                        avatar: user.profilePhoto || user.image || null,
-                        flag: '🇺🇸'
+                        name: user?.name || user?.email?.split('@')[0] || 'You',
+                        username: user?.name || 'Anonymous',
+                        avatar: user?.image || null,
+                        flag: user?.name ? '🇺🇸' : undefined,
+                        id: (user as any)?.id || undefined
                       },
                       location: {
                         zip: '00000',
@@ -1096,9 +1609,15 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                       timestamp: new Date().toISOString(),
                       imageUrls: [],
                       gifUrl: selectedGifUrl,
-                      audioUrl: null,
+                      audioUrl: audioUrl || null, // FIXED: Use actual audio URL (blob URL for instant display)
+                      audioTranscription: audioTranscription,
+                      transcriptionStatus: audioBlob ? 'pending' : null,
                       emoji: '🎯',
-                      colorScheme: colorSchemes[currentColorScheme].name
+                      colorScheme: colorSchemes[currentColorScheme].name,
+                      gradientDirection: 'to-br',
+                      gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
+                      gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
+                      gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor
                     };
                     
                     // Add to UI immediately for responsive feel
@@ -1109,6 +1628,7 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                   try {
                     const response = await fetch('/api/posts', {
                       method: 'POST',
+                      credentials: 'include',
                       headers: {
                         'Content-Type': 'application/json',
                       },
@@ -1120,7 +1640,9 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                         gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
                         imageUrls: [],
                         gifUrl: selectedGifUrl,
-                        audioUrl: null,
+                        audioUrl: null, // Will be updated when upload completes
+                        audioTranscription: audioTranscription,
+                        transcriptionStatus: audioBlob ? 'pending' : null,
                         emoji: '🎯',
                         carrotText: '',
                         stickText: ''
@@ -1128,17 +1650,78 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
                     });
                     
                     if (!response.ok) {
-                      console.error('Failed to save post to database');
+                      const errorText = await response.text();
+                      console.error('Failed to save post to database:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorText
+                      });
                     } else {
+                      const savedPost = await response.json();
                       console.log('Post saved to database successfully');
+                      console.log('Real post ID:', savedPost.id);
+                      
+                      // Handle background audio upload completion
+                      if (audioUploadPromise && savedPost.id) {
+                        console.log('🎵 Waiting for background audio upload to complete...');
+                        audioUploadPromise.then(async (audioUploadResponse) => {
+                          console.log('🎵 Firebase upload response received:', { 
+                            response: audioUploadResponse, 
+                            isArray: Array.isArray(audioUploadResponse),
+                            length: audioUploadResponse?.length,
+                            firstItem: audioUploadResponse?.[0]
+                          });
+                          
+                          if (audioUploadResponse && audioUploadResponse.length > 0) {
+                            const finalAudioUrl = audioUploadResponse[0];
+                            console.log('🎵 Background audio upload completed:', finalAudioUrl);
+                            
+                            // Update post with final audio URL
+                            try {
+                              const updateResponse = await fetch(`/api/posts/${savedPost.id}`, {
+                                method: 'PATCH',
+                                credentials: 'include',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                  audioUrl: finalAudioUrl,
+                                  transcriptionStatus: 'processing' 
+                                })
+                              });
+                              
+                              if (updateResponse.ok) {
+                                console.log('🎵 Post updated with final audio URL');
+                                setCurrentPostId(savedPost.id); // Enable transcription polling
+                                
+                                // Update the UI with the new audio URL (use real post ID since temp ID was already replaced)
+                                if (onPostUpdate) {
+                                  console.log('🎵 Updating UI with Firebase Storage URL:', finalAudioUrl);
+                                  onPostUpdate(savedPost.id, { audioUrl: finalAudioUrl });
+                                }
+                              }
+                            } catch (updateError) {
+                              console.error('Failed to update post with audio URL:', updateError);
+                            }
+                          }
+                        }).catch((uploadError) => {
+                          console.error('Background audio upload failed:', uploadError);
+                        });
+                      }
+
+                      // Update dashboard feed post with real ID
+                      if (onPostUpdate && tempPostId && savedPost.id) {
+                        console.log('🔄 Updating dashboard post:', tempPostId, '→', savedPost.id);
+                        onPostUpdate(tempPostId, savedPost);
+                      }
                     }
                   } catch (error) {
                     console.error('Error saving post:', error);
                   }
                   
-                  // Clear content, selected GIF, and show success
+                  // Clear content, selected GIF, audio, and show success
                   setContent('');
                   setSelectedGifUrl(null);
+                  clearAudio();
+                  setCurrentPostId(null);
                   
                   // Auto-select a random color scheme for next post
                   selectRandomColorScheme();
@@ -1158,6 +1741,29 @@ export default function CommitmentComposer({ onPost }: CommitmentComposerProps) 
         isOpen={showGifPicker}
         onClose={handleGifPickerClose}
         onSelectGif={handleGifSelect}
+      />
+
+      {/* Audio Recorder Modal */}
+      {showAudioRecorder && createPortal(
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md">
+            <AudioRecorder
+              onAudioRecorded={onAudioRecorded}
+              onCancel={onAudioCancel}
+              maxDuration={300} // 5 minutes
+              className="w-full"
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        isVisible={showToast}
+        onClose={hideToast}
       />
     </>
   );
