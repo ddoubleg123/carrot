@@ -1,8 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { SessionProvider } from 'next-auth/react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
+import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
 
 const DashboardClient = dynamic(() => import('./DashboardClient'), {
   ssr: false,
@@ -16,9 +16,11 @@ const DashboardClient = dynamic(() => import('./DashboardClient'), {
 export default function DashboardClientWrapper({
   initialCommitments,
 }: {
-  initialCommitments?: CommitmentCardProps[];
+  initialCommitments: CommitmentCardProps[];
 }) {
   return (
-    <DashboardClient initialCommitments={initialCommitments || []} />
+    <ClientSessionProvider>
+      <DashboardClient initialCommitments={initialCommitments} />
+    </ClientSessionProvider>
   );
 }

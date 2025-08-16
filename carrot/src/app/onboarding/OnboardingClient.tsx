@@ -67,7 +67,7 @@ export default function OnboardingClient({ session }: { session: any }) {
       alert('Failed to save onboarding data: ' + err?.message || err);
       return;
     }
-    window.location.href = "/dashboard";
+    window.location.href = "/home";
   }
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-[#f7faff] p-4">

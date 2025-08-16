@@ -256,10 +256,10 @@ export default function ModernHeader() {
               >
                 {/* Avatar */}
                 <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden">
-                  {(user?.profilePhoto || user?.image) ? (
+                  {user?.image ? (
                     <img
-                      src={user.profilePhoto || user.image || ''}
-                      alt={user.username || user.name || 'Profile'}
+                      src={user.image}
+                      alt={user.name || 'Profile'}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -286,7 +286,7 @@ export default function ModernHeader() {
                          {user?.name || 'User'}
                        </p>
                        <p className="text-xs text-gray-500">
-                         @{user?.username ? user.username : (user?.name ? user.name.replace(/\s+/g, '').toLowerCase() : 'username')}
+                         @{user?.name ? user.name.replace(/\s+/g, '').toLowerCase() : 'user'}
                        </p>
                      </div>
                      

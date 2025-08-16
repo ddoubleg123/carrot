@@ -235,8 +235,9 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     const availableIndices = Array.from({ length: colorSchemes.length }, (_, i) => i)
       .filter(i => i !== currentColorScheme);
     
-    // Pick a random index from available options
-    const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+    // Pick a deterministic index to avoid hydration mismatch
+    const seed = Date.now();
+    const randomIndex = availableIndices[seed % availableIndices.length];
     
     setCurrentColorScheme(randomIndex);
     
@@ -783,7 +784,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       setUploadedMedia(publicURL);
       console.log('✅ Background upload complete:', publicURL);
       
-      // Show completion briefly
+      // Show completion briefly and notify user
+      showSuccessToast('Video uploaded successfully! Ready to post.');
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
@@ -904,30 +906,47 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       {selectedFile ? (
                         <div className="relative w-full">
                           {isUploading ? (
-                            <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
+                            <div className="w-full h-80 bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
                               <div className="text-center">
-                                <div className="text-4xl mb-4">📤</div>
-                                <div className="text-lg text-gray-600 mb-4">Uploading video...</div>
-                                {/* Upload Progress Bar */}
-                                <div className="w-64 mx-auto">
-                                  <div className="flex justify-between text-sm text-gray-500 mb-2">
-                                    <span>Progress</span>
-                                    <span>{Math.round(uploadProgress)}%</span>
+                                {/* Cute bouncing carrot animation */}
+                                <div className="text-6xl mb-6 animate-bounce" style={{ animationDuration: '1s' }}>🥕</div>
+                                <div className="text-xl font-semibold text-orange-700 mb-2">Carrot is uploading your video...</div>
+                                <div className="text-sm text-orange-600 mb-6">Hang tight, this won't take long! 🐰</div>
+                                {/* Cute progress bar with carrot theme */}
+                                <div className="w-72 mx-auto">
+                                  <div className="flex justify-between text-sm text-orange-600 font-medium mb-3">
+                                    <span className="flex items-center gap-1">
+                                      <span className="text-xs">🥕</span>
+                                      Progress
+                                    </span>
+                                    <span className="font-bold">{Math.round(uploadProgress)}%</span>
                                   </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-3">
+                                  <div className="w-full bg-orange-200 rounded-full h-4 shadow-inner">
                                     <div 
-                                      className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-300 ease-out"
+                                      className="bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 h-4 rounded-full transition-all duration-500 ease-out shadow-sm relative overflow-hidden"
                                       style={{ width: `${uploadProgress}%` }}
-                                    ></div>
+                                    >
+                                      {/* Subtle shimmer effect */}
+                                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                                    </div>
+                                  </div>
+                                  {/* Cute progress messages */}
+                                  <div className="text-xs text-orange-500 mt-2 font-medium">
+                                    {uploadProgress < 25 && "🐰 Starting upload..."}
+                                    {uploadProgress >= 25 && uploadProgress < 50 && "🥕 Making progress..."}
+                                    {uploadProgress >= 50 && uploadProgress < 75 && "🚀 Almost there..."}
+                                    {uploadProgress >= 75 && uploadProgress < 100 && "✨ Finishing up..."}
+                                    {uploadProgress >= 100 && "🎉 Upload complete!"}
                                   </div>
                                 </div>
                               </div>
                             </div>
                           ) : thumbnailsLoading ? (
-                            <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
+                            <div className="w-full h-80 bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
                               <div className="text-center">
-                                <div className="text-4xl mb-4">🎬</div>
-                                <div className="text-lg text-gray-600">Extracting thumbnails...</div>
+                                <div className="text-5xl mb-4 animate-pulse" style={{ animationDuration: '1.5s' }}>🐰</div>
+                                <div className="text-lg font-semibold text-purple-700 mb-2">Rabbit is preparing thumbnails...</div>
+                                <div className="text-sm text-purple-600">Creating beautiful previews for you! 🎬</div>
                               </div>
                             </div>
                           ) : videoThumbnails.length > 0 ? (
@@ -1157,6 +1176,16 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                             finalMediaUrl = uploadResult[0];
                             console.log('🔗 Final media URL:', finalMediaUrl);
                             
+                            // Update post status to 'uploaded' after successful upload
+                            if (mediaTypeToSave?.startsWith('video/') && onPostUpdate) {
+                              onPostUpdate(tempId, {
+                                id: tempId,
+                                videoUrl: finalMediaUrl,
+                                uploadStatus: 'uploaded',
+                                uploadProgress: 100
+                              });
+                            }
+                            
                             // Show upload complete toast for videos
                             if (mediaTypeToSave?.startsWith('video/')) {
                               showSuccessToast('Video uploaded! Processing transcription...');
@@ -1217,12 +1246,47 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         console.error('❌ Failed to save post to database:', responseData);
                         console.error('❌ Error details:', responseData.details);
                         console.error('❌ Error name:', responseData.name);
+                        
+                        // Update post status to show error
+                        if (mediaTypeToSave?.startsWith('video/') && onPostUpdate) {
+                          onPostUpdate(tempId, {
+                            id: tempId,
+                            uploadStatus: 'error',
+                            transcriptionStatus: 'error'
+                          });
+                        }
                       } else {
                         console.log('✅ Post saved to database successfully');
                         
+                        // Update post with real database data and mark as ready
+                        // FIX: API returns post data directly, not wrapped in responseData.post
+                        const postData = responseData.post || responseData; // Handle both formats
+                        if (onPostUpdate && postData && postData.id) {
+                          console.log('🔄 CRITICAL: Updating post with database data');
+                          console.log('🎯 TempId:', tempId);
+                          console.log('🎯 Database post ID:', postData.id);
+                          console.log('🎯 Upload status will be:', mediaTypeToSave?.startsWith('video/') ? 'ready' : null);
+                          console.log('🎯 Transcription status will be:', (postData.videoUrl || postData.audioUrl) ? 'processing' : null);
+                          
+                          onPostUpdate(tempId, {
+                            ...postData,
+                            uploadStatus: mediaTypeToSave?.startsWith('video/') ? 'ready' : null,
+                            transcriptionStatus: (postData.videoUrl || postData.audioUrl) ? 'processing' : null
+                          });
+                          
+                          console.log('✅ onPostUpdate called successfully');
+                        } else {
+                          console.error('❌ onPostUpdate failed - missing data');
+                          console.log('🔍 onPostUpdate exists:', !!onPostUpdate);
+                          console.log('🔍 responseData.post exists:', !!responseData.post);
+                          console.log('🔍 responseData exists:', !!responseData);
+                          console.log('🔍 responseData.id exists:', !!responseData.id);
+                        }
+                        
                         // Start transcription for video/audio posts
-                        if (responseData.post && (responseData.post.videoUrl || responseData.post.audioUrl)) {
-                          console.log('🎵 Starting transcription for media post:', responseData.post.id);
+                        const postForTranscription = responseData.post || responseData; // Handle both formats
+                        if (postForTranscription && (postForTranscription.videoUrl || postForTranscription.audioUrl)) {
+                          console.log('🎵 Starting transcription for media post:', postForTranscription.id);
                           
                           // Trigger transcription in background
                           fetch('/api/transcribe', {
@@ -1230,20 +1294,39 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                             credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              postId: responseData.post.id,
-                              audioUrl: responseData.post.audioUrl,
-                              videoUrl: responseData.post.videoUrl,
-                              mediaType: responseData.post.videoUrl ? 'video' : 'audio'
+                              postId: postForTranscription.id,
+                              audioUrl: postForTranscription.audioUrl,
+                              videoUrl: postForTranscription.videoUrl,
+                              mediaType: postForTranscription.videoUrl ? 'video' : 'audio'
                             })
                           }).then(transcribeResponse => {
                             console.log('🎵 Transcription started:', transcribeResponse.status);
                           }).catch(transcribeError => {
                             console.warn('🎵 Transcription start failed:', transcribeError);
+                            
+                            // Update transcription status to show it failed
+                            if (onPostUpdate) {
+                              onPostUpdate(postForTranscription.id, {
+                                id: postForTranscription.id,
+                                transcriptionStatus: 'failed'
+                              });
+                            }
                           });
                         }
                       }
                     } catch (dbError) {
                         console.error('❌ Database save error:', dbError);
+                        
+                        // Update post status to show error
+                        if (mediaTypeToSave?.startsWith('video/') && onPostUpdate) {
+                          onPostUpdate(tempId, {
+                            id: tempId,
+                            uploadStatus: 'error',
+                            transcriptionStatus: 'error'
+                          });
+                        }
+                        
+                        showErrorToast('Failed to save post. Please try again.');
                       }
                     })(); // End of background async function
                     
@@ -1397,11 +1480,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     <AudioPlayer 
                       key={audioUrl} // Use audioUrl as key for proper re-rendering
                       audioUrl={audioUrl}
-                      postId={currentPostId || undefined} // No transcription for preview, only after posting
-                      transcriptionStatus={audioTranscription ? "completed" : "pending"}
-                      initialTranscription={audioTranscription || ''}
+                      postId={currentPostId || undefined} // Playback-only in composer
                       className="w-full"
-                      hideTranscription={true} // Hide transcription in composer - only show after posting
                     />
                   </div>
                   
@@ -1425,7 +1505,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={clearAudio}
+                        onClick={removeAudio}
                         className="flex-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
                       >
                         Remove
@@ -1559,9 +1639,13 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     console.warn('⚠️ Session status is not authenticated:', status);
                   }
                   
-                  // Start audio upload in background (non-blocking)
+                  // Start media uploads in background (non-blocking)
                   let uploadedAudioUrl = null;
+                  let uploadedVideoUrl = null;
                   let audioUploadPromise = null;
+                  let videoUploadPromise = null;
+                  
+                  // Handle audio upload
                   if (audioBlob) {
                     try {
                       // Convert Blob to File for uploadFilesToFirebase
@@ -1573,6 +1657,27 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     } catch (error) {
                       console.error('Audio upload initialization failed:', error);
                       showErrorToast('Failed to start audio upload');
+                      return;
+                    }
+                  }
+                  
+                  // Handle video upload
+                  if (mediaFile && mediaType?.startsWith('video/')) {
+                    try {
+                      // Use the already uploaded video URL if available
+                      if (uploadedMedia) {
+                        uploadedVideoUrl = uploadedMedia;
+                        console.log('🎬 Using already uploaded video URL:', uploadedVideoUrl);
+                        showSuccessToast('Video uploaded! Processing transcription...');
+                      } else {
+                        // Video upload not complete yet
+                        console.log('🎬 Video upload not complete, showing error...');
+                        showErrorToast('Please wait for video upload to complete before posting.');
+                        return; // Don't post until video is uploaded
+                      }
+                    } catch (error) {
+                      console.error('Video upload initialization failed:', error);
+                      showErrorToast('Failed to start video upload');
                       return;
                     }
                   }
@@ -1612,6 +1717,10 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       audioUrl: audioUrl || null, // FIXED: Use actual audio URL (blob URL for instant display)
                       audioTranscription: audioTranscription,
                       transcriptionStatus: audioBlob ? 'pending' : null,
+                      // Video support with instant thumbnail display
+                      videoUrl: uploadedVideoUrl || null,
+                      videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
+                      videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
                       emoji: '🎯',
                       colorScheme: colorSchemes[currentColorScheme].name,
                       gradientDirection: 'to-br',
@@ -1643,6 +1752,10 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         audioUrl: null, // Will be updated when upload completes
                         audioTranscription: audioTranscription,
                         transcriptionStatus: audioBlob ? 'pending' : null,
+                        // Video support
+                        videoUrl: uploadedVideoUrl || null,
+                        videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
+                        videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
                         emoji: '🎯',
                         carrotText: '',
                         stickText: ''
@@ -1717,10 +1830,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     console.error('Error saving post:', error);
                   }
                   
-                  // Clear content, selected GIF, audio, and show success
+                  // Clear content, selected GIF, audio, video, and show success
                   setContent('');
                   setSelectedGifUrl(null);
-                  clearAudio();
+                  removeAudio();
+                  cancelUpload(); // Clear video state
                   setCurrentPostId(null);
                   
                   // Auto-select a random color scheme for next post

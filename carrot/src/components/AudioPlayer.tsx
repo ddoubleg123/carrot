@@ -1,29 +1,16 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Languages, Download } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Download } from 'lucide-react';
 
 interface AudioPlayerProps {
   audioUrl: string;
   postId?: string;
-  initialTranscription?: string;
-  transcriptionStatus?: string;
-  onTranscriptionChange?: (transcription: { text: string; language: string; duration: number } | null) => void;
   className?: string;
-  hideTranscription?: boolean; // Hide transcription display (for composer use)
-}
-
-interface TranscriptionData {
-  text: string;
-  language: string;
-  duration: number;
-}
-
-interface TranslationData {
-  translation: string;
-  sourceLanguage: string;
-  targetLanguage: string;
-  originalText: string;
+  initialDurationSeconds?: number; // Optional duration hint to display immediately
+  onPlayStateChange?: (isPlaying: boolean) => void;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
+  showWaveform?: boolean; // toggle the decorative waveform box
 }
 
 // Utility function to check if duration is valid
@@ -31,29 +18,14 @@ const isValidDuration = (duration: number): boolean => {
   return Boolean(duration) && isFinite(duration) && duration > 0 && duration !== Infinity;
 };
 
-const SUPPORTED_LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-];
-
 export default function AudioPlayer({ 
   audioUrl, 
   postId,
-  initialTranscription,
-  transcriptionStatus,
-  onTranscriptionChange,
   className = "",
-  hideTranscription = false
+  initialDurationSeconds,
+  onPlayStateChange,
+  onTimeUpdate,
+  showWaveform = true,
 }: AudioPlayerProps) {
   console.log('🎵 AudioPlayer rendered with:', { 
     postId, 
@@ -70,38 +42,81 @@ export default function AudioPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Transcription and translation states
-  const [transcription, setTranscription] = useState<TranscriptionData | null>(
-    initialTranscription ? { text: initialTranscription, language: 'auto', duration: 0 } : null
-  );
-  const [translation, setTranslation] = useState<TranslationData | null>(null);
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [showTranslationOptions, setShowTranslationOptions] = useState(false);
-  const [isTranscriptionMinimized, setIsTranscriptionMinimized] = useState(false);
-  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState('en');
-  const [realTranscriptionStatus, setRealTranscriptionStatus] = useState<string | null>(null);
-  const [realTranscriptionText, setRealTranscriptionText] = useState<string | null>(null);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  // Client-side only waveform heights to prevent hydration mismatch
+  const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Fallback: decode audio via Web Audio API to get reliable duration when metadata isn't ready
+  const decodeDurationWithAudioContext = async (url: string): Promise<number | null> => {
+    try {
+      if (!url) return null;
+
+      console.log('🎵 Attempting AudioContext duration decode...', url);
+      const res = await fetch(url, { mode: 'cors' as RequestMode });
+      if (!res.ok) {
+        console.log('🎵 AudioContext decode fetch not ok:', res.status, res.statusText);
+        return null;
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      // Use a lightweight AudioContext for duration detection
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return null;
+      const audioCtx = new AudioCtx();
+      try {
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        const d = decoded.duration;
+        if (isValidDuration(d)) {
+          return d;
+        }
+      } finally {
+        // Close if supported to free resources
+        if (typeof (audioCtx as any).close === 'function') {
+          try { await (audioCtx as any).close(); } catch {}
+        }
+      }
+    } catch (e: any) {
+      // Most likely CORS or decoding unsupported. Non-fatal.
+      console.log('🎵 AudioContext duration decode failed (non-fatal):', e?.message || e);
+    }
+    return null;
+  };
+
+  // Apply duration hint immediately if valid
+  useEffect(() => {
+    if (typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds)) {
+      setDuration(initialDurationSeconds);
+      setDisplayDuration(formatTime(initialDurationSeconds));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDurationSeconds]);
+
+  // Generate deterministic waveform heights on client-side only
+  useEffect(() => {
+    setIsMounted(true);
+    // Generate deterministic heights based on audioUrl to ensure consistency
+    const seed = audioUrl ? audioUrl.length : 42;
+    const heights: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      // Use a simple deterministic function instead of Math.random()
+      const pseudoRandom = (seed + i * 7) % 100 / 100;
+      heights.push(pseudoRandom * 40 + 10);
+    }
+    setWaveformHeights(heights);
+  }, [audioUrl, initialDurationSeconds]);
 
   // Audio event handlers
   useEffect(() => {
-    // Suppress all audio-related console errors
-    const originalConsoleError = console.error;
-    console.error = (...args) => {
-      const message = args.join(' ');
-      if (message.includes('🎵 Audio element error') || message.includes('Audio element error')) {
-        // Suppress audio element errors
-        return;
-      }
-      originalConsoleError.apply(console, args);
-    };
-
     if (!audioRef.current || !audioUrl) return;
     const audio = audioRef.current;
     
     const updateTime = () => {
       if (audio.currentTime !== undefined && isFinite(audio.currentTime)) {
         setCurrentTime(audio.currentTime);
+        try {
+          if (typeof onTimeUpdate === 'function') {
+            onTimeUpdate(audio.currentTime, isFinite(audio.duration) ? audio.duration : 0);
+          }
+        } catch {}
       }
     };
     
@@ -122,7 +137,10 @@ export default function AudioPlayer({
       }
     };
     
-    const handleEnded = () => setIsPlaying(false);
+    const handleEnded = () => {
+      setIsPlaying(false);
+      try { onPlayStateChange && onPlayStateChange(false); } catch {}
+    };
     const handleLoadStart = () => setIsLoading(true);
     
     const handleCanPlay = () => {
@@ -288,7 +306,8 @@ export default function AudioPlayer({
             });
           })
           .catch(error => {
-            console.error('🎵 Firebase Storage URL not accessible:', error);
+            // Use warn to avoid Next.js / next-auth error interception noise
+            console.warn('🎵 Firebase Storage URL not accessible (non-fatal):', error);
           });
       }
       
@@ -297,100 +316,40 @@ export default function AudioPlayer({
       setIsLoading(true);
       setDuration(0);
       setCurrentTime(0);
-      setDisplayDuration('0:00');
+      // If we have a duration hint, keep showing it; otherwise reset
+      if (!(typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds))) {
+        setDisplayDuration('0:00');
+      } else {
+        setDuration(initialDurationSeconds);
+        setDisplayDuration(formatTime(initialDurationSeconds));
+        setIsLoading(false);
+      }
+
+      // If metadata-based detection fails (common for freshly created blobs),
+      // fall back to decoding with Web Audio API after a brief delay.
+      const tryAudioContextFallback = async () => {
+        // Skip if duration already detected by normal events
+        if (audio.duration && isValidDuration(audio.duration)) return;
+        const decoded = await decodeDurationWithAudioContext(audioUrl);
+        if (decoded && isFinite(decoded) && decoded > 0) {
+          console.log('🎵 Duration detected via AudioContext:', decoded);
+          setDuration(decoded);
+          setDisplayDuration(formatTime(decoded));
+          setIsLoading(false);
+        }
+      };
+      // Schedule fallback attempts
+      const t1 = setTimeout(tryAudioContextFallback, 600);
+      const t2 = setTimeout(tryAudioContextFallback, 1500);
+      const t3 = setTimeout(tryAudioContextFallback, 3000);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
   }, [audioUrl]);
-
-  // Poll for transcription status if postId is provided (but skip temp IDs)
-  useEffect(() => {
-    console.log('🔄 AudioPlayer polling effect triggered with postId:', postId);
-    
-    if (!postId) {
-      console.log('🔄 No postId provided, skipping transcription polling');
-      return;
-    }
-    
-    // Skip polling for temporary IDs (optimistic UI)
-    if (postId.startsWith('temp-')) {
-      console.log('🔄 Skipping transcription polling for temp ID:', postId);
-      return;
-    }
-    
-    console.log('🎵 Starting transcription polling for real post ID:', postId);
-
-    let retryCount = 0;
-    const maxRetries = 3;
-    let pollInterval: NodeJS.Timeout | null = null;
-
-    const pollTranscriptionStatus = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        const response = await fetch(`/api/transcribe?postId=${postId}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-        retryCount = 0; // Reset retry count on successful request
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('🎵 Transcription API response:', data);
-          setRealTranscriptionStatus(data.status);
-          if (data.transcription) {
-            setRealTranscriptionText(data.transcription);
-          }
-          
-          // Stop polling if transcription is completed or failed
-          if (data.status === 'completed' || data.status === 'failed') {
-            if (pollInterval) {
-              clearInterval(pollInterval);
-              pollInterval = null;
-            }
-          }
-        } else if (response.status === 404) {
-          console.log('📝 Post not found yet, will retry...', postId);
-        } else {
-          console.warn(`📝 Transcription polling failed: ${response.status} ${response.statusText}`);
-        }
-      } catch (error) {
-        retryCount++;
-        
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log('📝 Transcription polling timeout - will retry...');
-        } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-          console.log('📝 Network error polling transcription - will retry...');
-        } else {
-          console.error('📝 Error polling transcription status:', error);
-        }
-        
-        // Stop polling after max retries
-        if (retryCount >= maxRetries) {
-          console.warn(`📝 Max retries (${maxRetries}) reached for transcription polling. Stopping.`);
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
-        }
-      }
-    };
-
-    // Poll immediately and then every 10 seconds (reduced frequency to avoid spam)
-    pollTranscriptionStatus();
-    pollInterval = setInterval(pollTranscriptionStatus, 10000);
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [postId]);
 
   const togglePlayPause = async () => {
     const audio = audioRef.current;
@@ -399,6 +358,7 @@ export default function AudioPlayer({
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
+      try { onPlayStateChange && onPlayStateChange(false); } catch {}
     } else {
       try {
         console.log('🎵 Attempting to play audio:', {
@@ -411,6 +371,7 @@ export default function AudioPlayer({
         
         await audio.play();
         setIsPlaying(true);
+        try { onPlayStateChange && onPlayStateChange(true); } catch {}
       } catch (error) {
         // Use console.log instead of console.error to avoid triggering Next.js error handling
         console.log('🎵 Audio play attempt failed (this is normal):', {
@@ -421,6 +382,7 @@ export default function AudioPlayer({
           networkState: audio.networkState
         });
         setIsPlaying(false);
+        try { onPlayStateChange && onPlayStateChange(false); } catch {}
         
         // If the source is invalid, try to reload it
         if (error instanceof Error && error.name === 'NotSupportedError') {
@@ -478,97 +440,8 @@ export default function AudioPlayer({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // Check for automated transcription status
-  useEffect(() => {
-    if (postId && transcriptionStatus) {
-      if (transcriptionStatus === 'completed' && initialTranscription) {
-        setTranscription({
-          text: initialTranscription,
-          language: 'en',
-          duration: audioRef.current?.duration || 0,
-        });
-      }
-    }
-  }, [postId, transcriptionStatus, initialTranscription]);
-
-  // Helper function to resample audio
-  const resampleAudio = (audioData: Float32Array, originalSampleRate: number, targetSampleRate: number): Float32Array => {
-    if (originalSampleRate === targetSampleRate) {
-      return audioData;
-    }
-    
-    const ratio = originalSampleRate / targetSampleRate;
-    const newLength = Math.round(audioData.length / ratio);
-    const result = new Float32Array(newLength);
-    
-    for (let i = 0; i < newLength; i++) {
-      const index = i * ratio;
-      const indexFloor = Math.floor(index);
-      const indexCeil = Math.min(indexFloor + 1, audioData.length - 1);
-      const fraction = index - indexFloor;
-      
-      result[i] = audioData[indexFloor] * (1 - fraction) + audioData[indexCeil] * fraction;
-    }
-    
-    return result;
-  };
-
-  // Translation functionality
-  const handleTranslate = async (targetLanguage: string) => {
-    // Get transcription text from either real or legacy transcription
-    const textToTranslate = realTranscriptionText || transcription?.text;
-    const sourceLanguage = transcription?.language || 'auto';
-    
-    if (!textToTranslate || isTranslating) return;
-
-    setIsTranslating(true);
-    try {
-      console.log(`🌍 Starting translation to ${targetLanguage}...`);
-      
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: textToTranslate,
-          targetLanguage,
-          sourceLanguage,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Translation API returned ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Translation completed:', result);
-      
-      setTranslation({
-        translation: result.translation,
-        sourceLanguage: result.sourceLanguage,
-        targetLanguage: result.targetLanguage,
-        originalText: result.originalText
-      });
-      setShowTranslationOptions(false);
-
-    } catch (error) {
-      console.error('Translation error:', error);
-      // Set a user-friendly error state instead of throwing
-      setTranslation({
-        translation: 'Translation failed. Please try again.',
-        sourceLanguage: sourceLanguage,
-        targetLanguage,
-        originalText: textToTranslate
-      });
-      setShowTranslationOptions(false);
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
   return (
-    <div className={`bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
+    <div className={`w-full max-w-full min-w-0 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
       <audio 
         ref={audioRef} 
         src={audioUrl} 
@@ -577,24 +450,35 @@ export default function AudioPlayer({
         onCanPlay={() => console.log('🎵 Audio can play:', audioUrl)}
         onLoadedMetadata={() => console.log('🎵 Audio metadata loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
         onLoadedData={() => console.log('🎵 Audio data loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
-        onError={(e) => console.error('🎵 Audio element error:', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState })}
+        // Use log to avoid Next.js / next-auth error interception for harmless media errors
+        onError={(e) => console.log('🎵 Audio element error (non-fatal):', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState })}
       />
       
-      {/* Waveform Visualization Placeholder */}
-      <div className="h-16 bg-gradient-to-r from-orange-200 to-green-200 rounded-lg mb-4 flex items-center justify-center">
-        <div className="flex items-center space-x-1">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <div
-              key={i}
-              className="w-1 bg-orange-500 rounded-full animate-pulse"
-              style={{
-                height: `${Math.random() * 40 + 10}px`,
-                animationDelay: `${i * 0.1}s`,
-              }}
-            />
-          ))}
+      {/* Waveform Visualization Placeholder (optional) */}
+      {showWaveform && (
+        <div className="h-16 bg-gradient-to-r from-orange-200 to-green-200 rounded-lg mb-4 flex items-center justify-center">
+          {isMounted ? (
+            <div className="flex items-center space-x-1">
+              {waveformHeights.map((height, i) => (
+                <div
+                  key={i}
+                  className="w-1 bg-orange-500 rounded-full animate-pulse"
+                  style={{
+                    height: `${height}px`,
+                    animationDelay: `${i * 0.1}s`,
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            // SSR placeholder - simple loading state
+            <div className="flex items-center space-x-2 text-orange-600">
+              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm font-medium">Loading audio...</span>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Audio Controls */}
       <div className="flex items-center space-x-4 mb-4">
@@ -659,324 +543,7 @@ export default function AudioPlayer({
           <Download size={20} />
         </a>
       </div>
-
-      {/* Enhanced Transcription Section */}
-      {!hideTranscription && (realTranscriptionStatus || transcriptionStatus || transcription) && (
-        <div className="mt-4 border border-gray-200 rounded-lg bg-white shadow-sm">
-          {/* Transcription Header with Status and Minimize Button */}
-          <div 
-            className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-100"
-            onClick={() => setIsTranscriptionMinimized(!isTranscriptionMinimized)}
-          >
-            <div className="flex items-center gap-3">
-              <h4 className="font-medium text-gray-800">📝 Transcription</h4>
-              
-              {/* Status Indicator */}
-              {realTranscriptionStatus === 'pending' && (
-                <div className="flex items-center gap-2 text-yellow-600">
-                  <div className="w-3 h-3 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs font-medium">Queued</span>
-                </div>
-              )}
-              
-              {realTranscriptionStatus === 'processing' && (
-                <div className="flex items-center gap-2 text-blue-600">
-                  <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs font-medium">Processing</span>
-                </div>
-              )}
-              
-              {realTranscriptionStatus === 'completed' && (
-                <div className="flex items-center gap-2 text-green-600">
-                  <span className="text-xs">✅</span>
-                  <span className="text-xs font-medium">Complete</span>
-                </div>
-              )}
-              
-              {realTranscriptionStatus === 'failed' && (
-                <div className="flex items-center gap-2 text-red-600">
-                  <span className="text-xs">❌</span>
-                  <span className="text-xs font-medium">Failed</span>
-                </div>
-              )}
-              
-              {/* Fallback status indicators */}
-              {!realTranscriptionStatus && transcriptionStatus === 'pending' && (
-                <div className="flex items-center gap-2 text-yellow-600">
-                  <div className="w-3 h-3 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs font-medium">Queued</span>
-                </div>
-              )}
-              
-              {!realTranscriptionStatus && transcriptionStatus === 'failed' && (
-                <div className="flex items-center gap-2 text-red-600">
-                  <span className="text-xs">❌</span>
-                  <span className="text-xs font-medium">Failed</span>
-                </div>
-              )}
-              
-              {!realTranscriptionStatus && transcription && transcriptionStatus === 'completed' && (
-                <div className="flex items-center gap-2 text-green-600">
-                  <span className="text-xs">✅</span>
-                  <span className="text-xs font-medium">Complete</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Minimize/Expand Button */}
-            <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              {isTranscriptionMinimized ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-              )}
-            </button>
-          </div>
-          
-          {/* Transcription Content (Collapsible) */}
-          {!isTranscriptionMinimized && (
-            <div className="p-3">
-              {/* Processing States */}
-              {(realTranscriptionStatus === 'pending' || (!realTranscriptionStatus && transcriptionStatus === 'pending')) && (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
-                  <div className="flex items-center justify-center gap-2 text-yellow-700 mb-2">
-                    <div className="w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="font-medium">Transcription Queued</span>
-                  </div>
-                  <p className="text-sm text-yellow-600">AI will process your speech shortly</p>
-                </div>
-              )}
-              
-              {realTranscriptionStatus === 'processing' && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-                  <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
-                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="font-medium">Transcribing Audio</span>
-                  </div>
-                  <p className="text-sm text-blue-600">AI is processing your speech and cleaning up grammar</p>
-                </div>
-              )}
-              
-              {/* Failed States */}
-              {(realTranscriptionStatus === 'failed' || (!realTranscriptionStatus && transcriptionStatus === 'failed')) && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-                  <div className="flex items-center justify-center gap-2 text-red-700 mb-2">
-                    <span className="text-lg">⚠️</span>
-                    <span className="font-medium">Transcription Failed</span>
-                  </div>
-                  <p className="text-sm text-red-600">Unable to transcribe this audio. Please try again.</p>
-                </div>
-              )}
-              
-              {/* Completed Transcription */}
-              {realTranscriptionStatus === 'completed' && realTranscriptionText && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full font-medium">
-                      ✨ AI Enhanced with Grammar Cleanup
-                    </span>
-                  </div>
-                  
-                  {/* Scrollable Transcription Text */}
-                  <div 
-                    className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed max-h-40 overflow-y-auto border border-gray-200"
-                    style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d5db #f9fafb' }}
-                  >
-                    <p className="whitespace-pre-wrap">{realTranscriptionText}</p>
-                  </div>
-                  
-                  {/* Translation Section */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                        <Languages size={16} />
-                        Translate
-                      </h5>
-                      
-                      {!showTranslationOptions && (
-                        <button
-                          onClick={() => setShowTranslationOptions(true)}
-                          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
-                        >
-                          Choose Language
-                        </button>
-                      )}
-                    </div>
-                    
-                    {/* Language Selection */}
-                    {showTranslationOptions && (
-                      <div className="mb-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <select
-                            value={selectedTargetLanguage}
-                            onChange={(e) => setSelectedTargetLanguage(e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {SUPPORTED_LANGUAGES.map((lang) => (
-                              <option key={lang.code} value={lang.code}>
-                                {lang.name}
-                              </option>
-                            ))}
-                          </select>
-                          
-                          <button
-                            onClick={() => handleTranslate(selectedTargetLanguage)}
-                            disabled={isTranslating}
-                            className="text-xs bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-3 py-1 rounded transition-colors"
-                          >
-                            {isTranslating ? 'Translating...' : 'Translate'}
-                          </button>
-                          
-                          <button
-                            onClick={() => setShowTranslationOptions(false)}
-                            className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Translation Result */}
-                    {translation && (
-                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-blue-600 font-medium">
-                            🌍 {SUPPORTED_LANGUAGES.find(l => l.code === translation.targetLanguage)?.name || translation.targetLanguage}
-                          </span>
-                          <button
-                            onClick={() => setTranslation(null)}
-                            className="text-xs text-blue-500 hover:text-blue-700"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div 
-                          className="text-sm text-blue-800 leading-relaxed max-h-32 overflow-y-auto"
-                          style={{ scrollbarWidth: 'thin', scrollbarColor: '#3b82f6 #dbeafe' }}
-                        >
-                          <p className="whitespace-pre-wrap">{translation.translation}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Fallback: Legacy transcription */}
-              {!realTranscriptionStatus && transcription && transcriptionStatus === 'completed' && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                      Language: {transcription.language}
-                    </span>
-                  </div>
-                  
-                  {/* Scrollable Transcription Text */}
-                  <div 
-                    className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed max-h-40 overflow-y-auto border border-gray-200"
-                    style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d5db #f9fafb' }}
-                  >
-                    <p className="whitespace-pre-wrap">{transcription.text}</p>
-                  </div>
-                  
-                  {/* Translation Section */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                        <Languages size={16} />
-                        Translate
-                      </h5>
-                      
-                      {!showTranslationOptions && (
-                        <button
-                          onClick={() => setShowTranslationOptions(true)}
-                          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
-                        >
-                          Choose Language
-                        </button>
-                      )}
-                    </div>
-                    
-                    {/* Language Selection */}
-                    {showTranslationOptions && (
-                      <div className="mb-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <select
-                            value={selectedTargetLanguage}
-                            onChange={(e) => setSelectedTargetLanguage(e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {SUPPORTED_LANGUAGES.map((lang) => (
-                              <option key={lang.code} value={lang.code}>
-                                {lang.name}
-                              </option>
-                            ))}
-                          </select>
-                          
-                          <button
-                            onClick={() => handleTranslate(selectedTargetLanguage)}
-                            disabled={isTranslating}
-                            className="text-xs bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-3 py-1 rounded transition-colors"
-                          >
-                            {isTranslating ? 'Translating...' : 'Translate'}
-                          </button>
-                          
-                          <button
-                            onClick={() => setShowTranslationOptions(false)}
-                            className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Translation Result */}
-                    {translation && (
-                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-blue-600 font-medium">
-                            🌍 {SUPPORTED_LANGUAGES.find(l => l.code === translation.targetLanguage)?.name || translation.targetLanguage}
-                          </span>
-                          <button
-                            onClick={() => setTranslation(null)}
-                            className="text-xs text-blue-500 hover:text-blue-700"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div 
-                          className="text-sm text-blue-800 leading-relaxed max-h-32 overflow-y-auto"
-                          style={{ scrollbarWidth: 'thin', scrollbarColor: '#3b82f6 #dbeafe' }}
-                        >
-                          <p className="whitespace-pre-wrap">{translation.translation}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Hidden Audio Element for Playback */}
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        preload="metadata"
-        onError={(e) => {
-          // Silent error handling - don't use console.error to avoid stack traces
-          console.log('🎵 Audio element encountered an error (this is normal for some audio formats)');
-        }}
-        style={{ display: 'none' }}
-      />
     </div>
   );
-}
+};
+

@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Slider } from '@/components/ui/slider';
+import { Slider } from './ui/slider';
 
 export function MinimalImageUploader() {
   const [imgSrc, setImgSrc] = useState<string>(
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&auto=format&fit=crop&q=80'
+    '/placeholder-upload.jpg'
   );
   const [scale, setScale] = useState(1);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -39,7 +39,7 @@ export function MinimalImageUploader() {
               max={2}
               step={0.05}
               value={[scale]}
-              onValueChange={(value) => setScale(value[0])}
+              onValueChange={(value: number[]) => setScale(value[0])}
               className="w-full"
             />
           </div>

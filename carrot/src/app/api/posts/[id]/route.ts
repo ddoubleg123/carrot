@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Use a long-lived Prisma client across requests to avoid 'client is disconnected' errors
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
+if (!globalForPrisma.prisma) globalForPrisma.prisma = prisma;
 
 // PATCH /api/posts/[id] - update a post (for audio URL updates)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await auth();
@@ -16,8 +23,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const resolvedParams = await params;
-    const postId = resolvedParams.id;
+    const postId = params.id;
     const body = await request.json();
     
     // First, check if the post exists and if the user is the owner
@@ -99,14 +105,12 @@ export async function PATCH(
       { error: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await auth();
@@ -115,8 +119,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const resolvedParams = await params;
-    const postId = resolvedParams.id;
+    const postId = params.id;
     
     // First, check if the post exists and if the user is the owner
     const post = await prisma.post.findUnique({
@@ -125,7 +128,8 @@ export async function DELETE(
     });
 
     if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      // Gracefully handle optimistic deletes where the post was never persisted or already removed
+      return NextResponse.json({ success: true, message: 'Post already deleted or never existed' });
     }
 
     // Check if the current user is the owner of the post
@@ -140,13 +144,11 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Post deleted successfully' });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting post:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error?.message || 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

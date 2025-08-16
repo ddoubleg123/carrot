@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -22,7 +22,12 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   
   // Upload and video state
   const [videoLoaded, setVideoLoaded] = useState(false);
-  const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded');
+  const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing');
+  
+  // Autoplay state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -96,6 +101,62 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     };
   }, [postId, realTranscriptionStatus]);
 
+  // IntersectionObserver for autoplay on scroll
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsInView(entry.isIntersecting);
+          
+          if (entry.isIntersecting && videoRef.current && videoLoaded) {
+            // Auto-play when video comes into view (muted)
+            videoRef.current.play().catch((error) => {
+              // Ignore normal play interruption errors
+              if (error.name !== 'AbortError') {
+                console.warn('Autoplay failed:', error);
+              }
+            });
+            setIsPlaying(true);
+          } else if (!entry.isIntersecting && videoRef.current && !videoRef.current.paused) {
+            // Pause when video goes out of view
+            videoRef.current.pause();
+            setIsPlaying(false);
+          }
+        });
+      },
+      {
+        threshold: 0.5, // Trigger when 50% of video is visible
+        rootMargin: '0px 0px -10% 0px' // Start slightly before fully in view
+      }
+    );
+
+    observer.observe(videoRef.current);
+
+    return () => {
+      if (videoRef.current) {
+        observer.unobserve(videoRef.current);
+      }
+    };
+  }, [videoLoaded]);
+
+  // Ensure autoplay when in view and video is ready; pause when out of view
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (isInView && videoLoaded) {
+      el.play().then(() => setIsPlaying(true)).catch(() => {
+        // Ignore autoplay rejections (browser policies)
+      });
+    } else {
+      if (!el.paused) {
+        el.pause();
+        setIsPlaying(false);
+      }
+    }
+  }, [isInView, videoLoaded]);
+
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
     
@@ -162,17 +223,17 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     <div className="w-full">
       <div className="relative">
         <video
-          controls={uploadStatus === 'ready' || videoLoaded}
+          ref={videoRef}
+          controls
           muted
-          autoPlay={uploadStatus === 'ready' && videoLoaded}
           loop
           playsInline
+          autoPlay
           poster={thumbnailUrl || undefined}
           src={videoUrl}
           style={{ 
-            width: '100%', 
-            maxWidth: '550px', 
-            minWidth: '320px',
+            width: '100%',
+            maxWidth: '100%',
             height: 'auto',
             maxHeight: 'min(70vh, 600px)',
             borderRadius: '8px',
@@ -182,19 +243,22 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           onError={handleError}
           onLoadedData={() => {
             setVideoLoaded(true);
-            if (uploadStatus === 'ready') {
+            // Hide overlay when video is ready to play (upload complete)
+            if (uploadStatus === 'ready' || !uploadStatus) {
               setShowThumbnailOverlay(false);
             }
           }}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
         />
         
-        {/* Upload Progress Overlay */}
-        {showThumbnailOverlay && (
+        {/* Upload Progress Overlay - Only show during actual upload, not after completion */}
+        {showThumbnailOverlay && uploadStatus !== 'ready' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
             <div className="text-center text-white">
               {uploadStatus === 'uploading' && (
                 <>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <div className="animate-bounce text-4xl mb-2">🥕</div>
                   <p className="text-sm font-medium">Uploading video...</p>
                   {uploadProgress && (
                     <div className="mt-2 w-32 bg-gray-700 rounded-full h-2">
@@ -208,14 +272,14 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
               )}
               {uploadStatus === 'uploaded' && (
                 <>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                  <p className="text-sm font-medium">Processing video...</p>
+                  <div className="animate-pulse text-4xl mb-2">🐰</div>
+                  <p className="text-sm font-medium">Saving to database...</p>
                 </>
               )}
               {uploadStatus === 'processing' && (
                 <>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                  <p className="text-sm font-medium">Preparing video...</p>
+                  <div className="animate-spin text-4xl mb-2">🥕</div>
+                  <p className="text-sm font-medium">Finalizing video...</p>
                 </>
               )}
             </div>
@@ -223,51 +287,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         )}
       </div>
       
-      {/* Video Transcription Section */}
-      {postId && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM6 6v12h12V6H6z" />
-            </svg>
-            <h4 className="text-sm font-medium text-gray-700">Video Transcription</h4>
-          </div>
-          
-          {(realTranscriptionStatus === 'pending' || (!realTranscriptionStatus && postId)) && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
-              <span>
-                {uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing' 
-                  ? 'Preparing video transcription...' 
-                  : 'Processing video transcription...'
-                }
-              </span>
-            </div>
-          )}
-          
-          {realTranscriptionStatus === 'processing' && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
-              <span>AI is transcribing your video...</span>
-            </div>
-          )}
-          
-          {realTranscriptionText && realTranscriptionStatus === 'completed' && (
-            <div className="text-sm text-gray-800 leading-relaxed">
-              <p>{realTranscriptionText}</p>
-            </div>
-          )}
-          
-          {realTranscriptionStatus === 'failed' && (
-            <div className="text-sm text-red-600">
-              <p>Transcription failed. Please try uploading again.</p>
-              {realTranscriptionText && (
-                <p className="text-xs mt-1 text-gray-500">Error: {realTranscriptionText}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Inline transcription UI removed; handled by parent panel */}
     </div>
   );
 }

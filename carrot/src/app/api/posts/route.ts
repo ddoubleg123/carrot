@@ -14,6 +14,11 @@ export async function POST(req: NextRequest) {
   
   console.log('🚨 POST /api/posts - SESSION VALID');
   const body = await req.json();
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      console.debug('POST /api/posts payload keys:', Object.keys(body));
+    } catch {}
+  }
   const {
     content,
     gradientDirection,
@@ -29,11 +34,16 @@ export async function POST(req: NextRequest) {
     emoji,
     carrotText,
     stickText,
+    externalUrl,
   } = body;
   try {
     console.log(`🔍 POST /api/posts - Creating post with audioUrl: ${audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - User ID: ${session.user.id}`);
     
+    // If an externalUrl is provided and no explicit media URLs exist, default it to videoUrl
+    const effectiveVideoUrl = videoUrl || (externalUrl && !audioUrl ? externalUrl : null);
+    const effectiveAudioUrl = audioUrl || null;
+
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
@@ -47,12 +57,12 @@ export async function POST(req: NextRequest) {
           : typeof imageUrls === 'string'
             ? JSON.stringify([imageUrls])
             : '[]',
-        videoUrl,
+        videoUrl: effectiveVideoUrl,
         thumbnailUrl,
         gifUrl,
-        audioUrl,
+        audioUrl: effectiveAudioUrl,
         audioTranscription,
-        transcriptionStatus: (audioUrl || videoUrl) ? 'pending' : null,
+        transcriptionStatus: (effectiveAudioUrl || effectiveVideoUrl) ? 'pending' : null,
         emoji,
         carrotText,
         stickText,
@@ -63,7 +73,9 @@ export async function POST(req: NextRequest) {
             id: true,
             name: true,
             email: true,
-            image: true
+            image: true,
+            profilePhoto: true,
+            username: true,
           }
         }
       },
@@ -74,10 +86,13 @@ export async function POST(req: NextRequest) {
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
 
     // Trigger background transcription for audio and video posts
-    if (audioUrl || videoUrl) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('Derived media URLs:', { effectiveAudioUrl, effectiveVideoUrl });
+    }
+    if (effectiveAudioUrl || effectiveVideoUrl) {
       try {
-        const mediaUrl = audioUrl || videoUrl;
-        const mediaType = audioUrl ? 'audio' : 'video';
+        const mediaUrl = effectiveAudioUrl || effectiveVideoUrl;
+        const mediaType = effectiveAudioUrl ? 'audio' : 'video';
         console.log(`🎵 Triggering transcription for post ${post.id} with ${mediaType} URL: ${mediaUrl.substring(0, 80)}...`);
         
         // Use fire-and-forget approach - don't wait for response
@@ -88,8 +103,8 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             postId: post.id,
-            audioUrl: audioUrl || null,
-            videoUrl: videoUrl || null,
+            audioUrl: effectiveAudioUrl || null,
+            videoUrl: effectiveVideoUrl || null,
           }),
         }).then(async (transcriptionResponse) => {
           if (transcriptionResponse.ok) {
@@ -137,11 +152,16 @@ export async function GET() {
             id: true,
             name: true,
             email: true,
-            image: true
+            image: true,
+            profilePhoto: true,
+            username: true,
           }
         }
       },
     });
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('GET /api/posts fetched posts:', posts.length);
+    }
     return NextResponse.json(posts);
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);

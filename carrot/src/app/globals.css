@@ -1,5 +1,49 @@
 @tailwind base;
 @tailwind components;
+@tailwind utilities;
+
+/* Carrot logo animations */
+@keyframes carrotFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(2px); }
+}
+
+@keyframes carrotPlayPulse {
+  0% { transform: rotate(-4deg); filter: drop-shadow(0 0 0 rgba(255,122,89,0)); }
+  50% { transform: rotate(4deg); filter: drop-shadow(0 0 6px rgba(255,122,89,0.35)); }
+  100% { transform: rotate(-4deg); filter: drop-shadow(0 0 0 rgba(255,122,89,0)); }
+}
+
+.carrot-idle { animation: carrotFloat 4s ease-in-out infinite; }
+.carrot-playing { animation: carrotPlayPulse 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .carrot-idle, .carrot-playing { animation: none !important; }
+}
+
+@layer utilities {
+  .animate-wave {
+    animation: wave 12s ease-in-out infinite;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes wave {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
 body {
   background-color: #f8fafc; /* Tailwind's slate-50, a very light gray */
 }

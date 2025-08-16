@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Square, Play, Pause, Upload, X } from 'lucide-react';
 
 interface AudioRecorderProps {
-  onAudioRecorded: (audioBlob: Blob, audioUrl: string) => void;
+  onAudioRecorded: (audioBlob: Blob, audioUrl: string, durationSeconds: number) => void;
   onCancel: () => void;
   maxDuration?: number; // in seconds
   className?: string;
@@ -24,6 +24,7 @@ export default function AudioRecorder({
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveMessage, setLiveMessage] = useState<string>("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -31,13 +32,52 @@ export default function AudioRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Refs for focus management
+  const startBtnRef = useRef<HTMLButtonElement>(null);
+  const pauseBtnRef = useRef<HTMLButtonElement>(null);
+  const useRecordingBtnRef = useRef<HTMLButtonElement>(null);
+
   // Request microphone permission on mount
   useEffect(() => {
     requestMicrophonePermission();
+    // Keyboard shortcuts: R = start/stop, Space = pause/resume during recording
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        if (isRecording) {
+          stopRecording();
+        } else if (!audioUrl) {
+          startRecording();
+        }
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (isRecording) {
+          e.preventDefault();
+          pauseRecording();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
     return () => {
       cleanup();
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, []);
+
+  // Move focus to the relevant primary control when state changes
+  useEffect(() => {
+    if (!audioUrl && !isRecording) {
+      startBtnRef.current?.focus();
+      return;
+    }
+    if (isRecording) {
+      pauseBtnRef.current?.focus();
+      return;
+    }
+    if (audioUrl) {
+      useRecordingBtnRef.current?.focus();
+    }
+  }, [isRecording, audioUrl]);
 
   const requestMicrophonePermission = async () => {
     try {
@@ -76,6 +116,7 @@ export default function AudioRecorder({
   const startRecording = async () => {
     try {
       setError(null);
+      setLiveMessage('Recording started');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -104,6 +145,7 @@ export default function AudioRecorder({
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
         setAudioUrl(url);
+        setLiveMessage('Recording stopped');
         
         // Clean up stream
         if (streamRef.current) {
@@ -150,6 +192,7 @@ export default function AudioRecorder({
     if (mediaRecorderRef.current && isRecording) {
       if (isPaused) {
         mediaRecorderRef.current.resume();
+        setLiveMessage('Recording resumed');
         // Resume timer
         timerRef.current = setInterval(() => {
           setRecordingTime(prev => {
@@ -162,6 +205,7 @@ export default function AudioRecorder({
         }, 1000);
       } else {
         mediaRecorderRef.current.pause();
+        setLiveMessage('Recording paused');
         // Pause timer
         if (timerRef.current) {
           clearInterval(timerRef.current);
@@ -190,7 +234,7 @@ export default function AudioRecorder({
 
   const handleUpload = () => {
     if (audioBlob && audioUrl) {
-      onAudioRecorded(audioBlob, audioUrl);
+      onAudioRecorded(audioBlob, audioUrl, recordingTime);
     }
   };
 
@@ -238,41 +282,43 @@ export default function AudioRecorder({
   }
 
   return (
-    <div className={`bg-white rounded-xl p-6 shadow-lg ${className}`}>
+    <div
+      className={`bg-white rounded-2xl p-6 shadow-xl border border-gray-200 ${className}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="record-audio-title"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-800">Record Audio</h3>
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 id="record-audio-title" className="text-base font-semibold text-gray-900">Record audio</h3>
+          <p className="text-sm text-gray-600 mt-1">Up to {formatTime(maxDuration)}. Press <span className="font-medium">R</span> to start/stop, <span className="font-medium">Space</span> to pause.</p>
+        </div>
         <button
           onClick={handleCancel}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="text-gray-500 hover:text-gray-700 transition-colors rounded-full p-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          aria-label="Close recorder"
         >
-          <X size={20} />
+          <X size={18} />
         </button>
       </div>
 
       {/* Recording Visualization */}
-      <div className="text-center mb-6">
-        <div className="relative w-32 h-32 mx-auto mb-4">
-          {/* Outer ring with progress */}
-          <div className="absolute inset-0 rounded-full border-4 border-gray-200">
-            <div 
-              className="absolute inset-0 rounded-full border-4 border-orange-500 transition-all duration-300"
-              style={{
-                clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.cos((getRecordingProgress() * 3.6 - 90) * Math.PI / 180)}% ${50 + 50 * Math.sin((getRecordingProgress() * 3.6 - 90) * Math.PI / 180)}%, 50% 50%)`
-              }}
-            />
-          </div>
-          
-          {/* Center button */}
+      <div className="text-center mb-5">
+        <div className="relative w-32 h-32 mx-auto mb-3">
+          {/* Outer conic progress ring */}
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: `conic-gradient(#f97316 ${getRecordingProgress()}%, #e5e7eb ${getRecordingProgress()}%)`
+            }}
+            aria-hidden="true"
+          />
+          <div className="absolute inset-[6px] bg-white rounded-full shadow-inner" />
+          {/* Center indicator */}
           <div className="absolute inset-4 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg">
             {isRecording ? (
-              <div className="flex items-center justify-center">
-                {isPaused ? (
-                  <Mic className="w-8 h-8 text-white opacity-50" />
-                ) : (
-                  <div className="w-6 h-6 bg-white rounded-full animate-pulse" />
-                )}
-              </div>
+              isPaused ? <Mic className="w-8 h-8 text-white opacity-70" /> : <div className="w-6 h-6 bg-white rounded-full animate-pulse" />
             ) : audioUrl ? (
               <Play className="w-8 h-8 text-white" />
             ) : (
@@ -280,22 +326,24 @@ export default function AudioRecorder({
             )}
           </div>
         </div>
-
+        
         {/* Timer */}
-        <div className="text-2xl font-mono font-bold text-gray-800 mb-2">
+        <div className="text-xl font-mono tabular-nums font-semibold text-gray-900 mb-1">
           {formatTime(recordingTime)}
         </div>
-        <div className="text-sm text-gray-500">
-          Max: {formatTime(maxDuration)}
+        <div className="text-xs text-gray-600">
+          Max {formatTime(maxDuration)}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center space-x-4 mb-6">
+      <div className="flex justify-center gap-3 mb-6">
         {!isRecording && !audioUrl && (
           <button
             onClick={startRecording}
-            className="flex items-center space-x-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+            ref={startBtnRef}
+            className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            aria-label="Start recording"
           >
             <Mic size={20} />
             <span>Start Recording</span>
@@ -306,14 +354,17 @@ export default function AudioRecorder({
           <>
             <button
               onClick={pauseRecording}
-              className="flex items-center space-x-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors"
+              ref={pauseBtnRef}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label={isPaused ? 'Resume recording' : 'Pause recording'}
             >
               {isPaused ? <Mic size={16} /> : <Pause size={16} />}
               <span>{isPaused ? 'Resume' : 'Pause'}</span>
             </button>
             <button
               onClick={stopRecording}
-              className="flex items-center space-x-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+              aria-label="Stop recording"
             >
               <Square size={16} />
               <span>Stop</span>
@@ -324,7 +375,7 @@ export default function AudioRecorder({
         {audioUrl && (
           <button
             onClick={playRecording}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300"
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
             <span>{isPlaying ? 'Pause' : 'Play'}</span>
@@ -334,10 +385,12 @@ export default function AudioRecorder({
 
       {/* Action Buttons */}
       {audioUrl && (
-        <div className="flex space-x-3 justify-center">
+        <div className="flex gap-3 justify-center">
           <button
             onClick={handleUpload}
-            className="flex items-center space-x-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+            ref={useRecordingBtnRef}
+            className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            aria-label="Use recording"
           >
             <Upload size={20} />
             <span>Use Recording</span>
@@ -349,7 +402,8 @@ export default function AudioRecorder({
               setRecordingTime(0);
               setIsPlaying(false);
             }}
-            className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg transition-colors"
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300"
+            aria-label="Record again"
           >
             Record Again
           </button>
@@ -372,6 +426,9 @@ export default function AudioRecorder({
           <p className="text-red-700 text-sm">{error}</p>
         </div>
       )}
+
+      {/* Live region for announcements */}
+      <div className="sr-only" aria-live="polite">{liveMessage}</div>
     </div>
   );
 }

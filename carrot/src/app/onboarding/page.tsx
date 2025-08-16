@@ -20,8 +20,8 @@ export default async function OnboardingPage() {
     return <OnboardingClient session={session} />;
   }
 
-  // If already onboarded, redirect to dashboard
-  if (isOnboarded) redirect('/dashboard');
+  // If already onboarded, redirect to home
+  if (isOnboarded) redirect('/home');
 
   // Allow admins to bypass onboarding for /portal only (middleware handles this)
   // For all other users, require onboarding

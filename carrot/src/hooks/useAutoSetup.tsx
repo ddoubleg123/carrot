@@ -42,10 +42,10 @@ export function useAutoSetup() {
         
         if (result.success && !result.requiresOnboarding) {
           setIsAutoSetupComplete(true);
-          console.log('[useAutoSetup] User auto-setup completed, redirecting to dashboard');
+          console.log('[useAutoSetup] User auto-setup completed, redirecting to home');
           
-          // Redirect to dashboard since onboarding is not needed
-          router.push('/dashboard');
+          // Redirect to home since onboarding is not needed
+          router.push('/home');
         } else {
           console.log('[useAutoSetup] User requires onboarding');
         }

@@ -5,7 +5,13 @@ import { auth } from '../../../auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
-import DashboardClientWrapper from './DashboardClientWrapper';
+import DashboardClient from './DashboardClient';
+import ClientSessionProvider from './components/ClientSessionProvider';
+import MinimalNav from '../../../components/MinimalNav';
+import Widgets from './components/Widgets';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'] });
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
@@ -30,7 +36,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       author: {
         name: '', // Remove name display per user request
         username: post.User?.username || 'daniel', // FIXED: Use actual username from database, not name
-        avatar: post.User?.image || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
+        avatar: post.User?.profilePhoto || post.User?.image || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/users%2Fcmdm0m8pl00004sbcjr0i6vjg%2Fstaged%2Fe137a64b-9b76-4127-a4c0-5fb2cd4c3176%2F9e257b08-4682-4ab1-839a-5ab2298e3084.png?alt=media&token=a06d95fc-1656-42af-a36f-b9a3349d4239',
         flag: '🇺🇸',
         id: post.userId, // Add the author ID for ownership comparison
       },
@@ -81,11 +87,27 @@ export default async function DashboardPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     }>
-      <div className="min-h-screen bg-white" style={{ marginTop: -20, paddingTop: 0 }}>
+      <div className={`min-h-screen flex ${inter.className}`} style={{ marginTop: -20, paddingTop: 0 }}>
+        {/* Left nav: fixed width, stays in-flow */}
+        <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+          <MinimalNav />
+        </aside>
 
-        <FirebaseClientInit />
-        <FirebaseClientInit />
-        <DashboardClientWrapper initialCommitments={commitments} />
+        {/* Main content area with feed and right rail */}
+        <main className="flex-1 min-w-0 flex">
+          {/* Feed column - positioned close to nav */}
+          <div className="w-full min-w-[320px] max-w-[720px] px-6">
+            <FirebaseClientInit />
+            <ClientSessionProvider>
+              <DashboardClient initialCommitments={commitments} isModalComposer={true} />
+            </ClientSessionProvider>
+          </div>
+          
+          {/* Right rail / Third column (hidden on small screens) */}
+          <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
+            <Widgets />
+          </aside>
+        </main>
       </div>
     </Suspense>
   );

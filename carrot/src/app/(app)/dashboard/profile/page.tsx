@@ -33,7 +33,7 @@ export default function ProfilePage() {
       try {
         // In a real app, this would be an API call to fetch the user's profile
         const profileData: UserProfile = {
-          id: session.user.id ?? 'unknown',
+          id: session.user.email ?? 'unknown', // Use email as fallback ID since session.user.id doesn't exist in standard NextAuth
           name: session.user.name || 'Anonymous User',
           username: session.user.email?.split('@')[0] || 'anonymous',
           email: session.user.email || '',

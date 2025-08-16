@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "node scripts/copy-flags.mjs"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,8 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@types/react": "19.1.9",
+    "country-flag-icons": "^1.5.19",
     "typescript": "^5.9.2"
   }
 }
