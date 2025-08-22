@@ -12,6 +12,12 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
       - uses: google-github-actions/setup-gcloud@v2
+      - name: Debug gcloud/gsutil
+        run: |
+          gcloud --version || true
+          gsutil --version || true
+          gcloud auth list || true
+          gcloud config list || true
       - name: Apply CORS
         run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.appspot.com
       - name: Verify CORS
