@@ -19,6 +19,6 @@ jobs:
           gcloud auth list || true
           gcloud config list || true
       - name: Apply CORS
-        run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.appspot.com
+        run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.firebasestorage.app
       - name: Verify CORS
-        run: gsutil cors get gs://involuted-river-466315-p0.appspot.com
+        run: gsutil cors get gs://involuted-river-466315-p0.firebasestorage.app
