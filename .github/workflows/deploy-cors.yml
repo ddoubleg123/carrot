@@ -1,32 +1,18 @@
 name: Deploy GCS CORS
 
 on:
-  workflow_dispatch:
-
-env:
-  BUCKET: involuted-river-466315-p0.appspot.com
-  CORS_FILE: firebase-cors.json
+  workflow_dispatch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
-
-      - name: Set up gcloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
+      - uses: google-github-actions/setup-gcloud@v2
       - name: Apply CORS
-        run: |
-          echo "Applying CORS from '${{ env.CORS_FILE }}' to 'gs://${{ env.BUCKET }}'"
-          gsutil cors set "${{ env.CORS_FILE }}" gs://${{ env.BUCKET }}
-
+        run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.appspot.com
       - name: Verify CORS
-        run: |
-          gsutil cors get gs://${{ env.BUCKET }}
+        run: gsutil cors get gs://involuted-river-466315-p0.appspot.com
