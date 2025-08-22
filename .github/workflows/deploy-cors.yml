@@ -1,0 +1,66 @@
+name: Deploy GCS CORS
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket:
+        description: "GCS bucket (e.g., involuted-river-466315-p0.appspot.com)"
+        required: true
+        type: string
+      corsFile:
+        description: "Path to CORS json inside repo"
+        required: false
+        default: "firebase-cors.json"
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (JSON key)
+        if: ${{ secrets.GCP_SA_KEY_JSON != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Authenticate to Google Cloud (WIF)
+        if: ${{ secrets.GCP_SA_KEY_JSON == '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDP }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Show gcloud info
+        run: |
+          gcloud --version
+          gcloud config list
+
+      - name: Apply CORS
+        env:
+          BUCKET: ${{ inputs.bucket }}
+          CORS_FILE: ${{ inputs.corsFile }}
+        run: |
+          echo "Applying CORS from ${CORS_FILE} to gs://${BUCKET}"
+          gsutil cors set "${CORS_FILE}" gs://${BUCKET}
+
+      - name: Verify CORS
+        env:
+          BUCKET: ${{ inputs.bucket }}
+        run: |
+          echo "Verifying CORS on gs://${BUCKET}"
+          gsutil cors get gs://${BUCKET}
