@@ -3,6 +3,7 @@ import FirebaseClientInit from './components/FirebaseClientInit';
 import '../../../lib/firebase';
 import { auth } from '../../../auth';
 import { Suspense } from 'react';
+import { headers } from 'next/headers';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
@@ -16,7 +17,13 @@ const inter = Inter({ subsets: ['latin'] });
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/posts`, {
+    // Build a base URL from the current request to avoid env mismatch in dev
+    const hdrs = headers();
+    const host = hdrs.get('host') || 'localhost:3005';
+    const isVercel = !!process.env.VERCEL;
+    const protocol = isVercel ? 'https' : 'http';
+    const baseUrl = `${protocol}://${host}`;
+    const response = await fetch(`${baseUrl}/api/posts`, {
       cache: 'no-store', // Always fetch fresh data
     });
     
@@ -53,10 +60,26 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       },
       userVote: null,
       timestamp: post.createdAt,
-      imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
+      imageUrls: (() => {
+        if (!post.imageUrls) return [];
+        if (Array.isArray(post.imageUrls)) return post.imageUrls;
+        if (typeof post.imageUrls === 'string') {
+          try {
+            const parsed = JSON.parse(post.imageUrls);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      })(),
       gifUrl: post.gifUrl || null,
       videoUrl: post.videoUrl || null,
       thumbnailUrl: post.thumbnailUrl || null,
+      // Cloudflare Stream
+      cfUid: post.cfUid || post.cf_uid || null,
+      cfPlaybackUrlHls: post.cfPlaybackUrlHls || post.cf_playback_url_hls || null,
+      captionVttUrl: post.captionVttUrl || post.caption_vtt_url || null,
       audioUrl: post.audioUrl || null,
       audioTranscription: post.audioTranscription || null,
       transcriptionStatus: post.transcriptionStatus || null,

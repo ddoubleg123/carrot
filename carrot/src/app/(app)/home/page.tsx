@@ -9,16 +9,27 @@ import ClientSessionProvider from '../dashboard/components/ClientSessionProvider
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
 import { Inter } from 'next/font/google';
+import { headers as nextHeaders } from 'next/headers';
 
 const inter = Inter({ subsets: ['latin'] });
 
 // Server-side data fetching from database (same mapping as dashboard)
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/posts`, {
+    // Forward cookies to preserve session auth when calling API from a server component
+    const hdrs = await nextHeaders();
+    const cookie = hdrs.get('cookie') ?? '';
+    const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+    const url = `${base}/api/posts`;
+    const response = await fetch(url, {
       cache: 'no-store',
+      headers: cookie ? { cookie } : {},
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error('Error fetching /api/posts:', response.status, text);
+      return [];
+    }
     const posts = await response.json();
     return posts.map((post: any) => ({
       id: post.id,

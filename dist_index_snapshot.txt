@@ -1,0 +1,138 @@
+﻿import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { runIngest } from './ingest.js';
+const app = express();
+app.use(express.json({ limit: '1mb' }));
+// Also accept application/x-www-form-urlencoded for easier CLI testing
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// Directory to serve completed media when no bucket is configured
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const MEDIA_DIR = path.join(DATA_DIR, 'ingest');
+fs.mkdirSync(MEDIA_DIR, { recursive: true });
+// Lightweight CORS for media so the browser can use it for previews/thumbnails
+app.use('/media', (_req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+});
+app.use('/media', express.static(DATA_DIR));
+app.get('/healthz', (_req, res) => {
+    res.status(200).send('ok');
+});
+const pExecFile = promisify(execFile);
+app.get('/debug', async (_req, res) => {
+    const tools = {};
+    const result = {
+        env: {
+            INGEST_CALLBACK_URL: process.env.INGEST_CALLBACK_URL,
+            WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL,
+            HAS_CALLBACK_SECRET: Boolean(process.env.INGEST_CALLBACK_SECRET),
+            GCS_BUCKET: process.env.GCS_BUCKET,
+            HAS_GOOGLE_APPLICATION_CREDENTIALS: Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS),
+            PORT: process.env.PORT || 8080,
+            YT_DLP_PATH: process.env.YT_DLP_PATH,
+        },
+        tools,
+    };
+    try {
+        const { stdout } = await pExecFile('ffmpeg', ['-version']);
+        tools.ffmpeg = stdout.split('\n')[0];
+    }
+    catch (e) {
+        tools.ffmpeg = `NOT FOUND: ${e?.message || e}`;
+    }
+    // Try multiple yt-dlp candidates similar to ingest logic
+    const ytCandidates = [
+        process.env.YT_DLP_PATH,
+        'yt-dlp',
+        process.platform === 'win32' ? 'yt-dlp.exe' : undefined,
+        process.platform === 'win32' ? 'C\\\\Tools\\\\yt-dlp\\\\yt-dlp.exe' : undefined,
+    ].filter(Boolean);
+    let ytErr;
+    for (const bin of ytCandidates) {
+        try {
+            const { stdout } = await pExecFile(bin, ['--version']);
+            tools.yt_dlp = stdout.trim();
+            ytErr = undefined;
+            break;
+        }
+        catch (e) {
+            ytErr = e;
+        }
+    }
+    if (ytErr) {
+        tools.yt_dlp = `NOT FOUND: ${ytErr?.message || ytErr}`;
+    }
+    // Bundled binaries info
+    tools.ffmpeg_static_path = 'NOT_INSTALLED';
+    // We no longer depend on yt-dlp-exec; rely on system yt-dlp if present
+    res.status(200).json(result);
+});
+app.post('/ingest', async (req, res) => {
+    let body = req.body;
+    // If a raw JSON string was posted with incorrect headers, try to parse it
+    if (typeof body === 'string') {
+        try {
+            body = JSON.parse(body);
+        }
+        catch {
+            return res.status(400).json({ error: 'Invalid JSON body' });
+        }
+    }
+    if (!body?.id || !body?.url || !body?.type) {
+        return res.status(400).json({ error: 'Missing id, url, or type' });
+    }
+    // Kick off ingestion asynchronously
+    console.log('Ingest request received', { id: body.id, type: body.type, url: body.url });
+    runIngest(body).catch((e) => {
+        console.error('Failed to start ingest', { id: body.id, error: e?.message });
+    });
+    return res.status(202).json({ accepted: true, jobId: body.id });
+});
+// Simple test endpoint to trigger ingest without JSON body
+// Usage: GET /ingest/test?url=<video_url>&id=<optional_id>&type=youtube
+app.get('/ingest/test', async (req, res) => {
+    const url = req.query.url || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const id = req.query.id || `job-${Date.now()}`;
+    const type = req.query.type || 'youtube';
+    console.log('Ingest test request received', { id, url, type });
+    runIngest({ id, url, type }).catch((e) => {
+        console.error('Failed to start ingest (test)', { id, error: e?.message });
+    });
+    return res.status(202).json({ accepted: true, jobId: id });
+});
+// Basic process error logging for easier troubleshooting
+process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT_EXCEPTION', err?.stack || err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('UNHANDLED_REJECTION', reason);
+});
+const port = Number(process.env.PORT || 8080);
+const host = '127.0.0.1';
+const server = app.listen(port, host, () => {
+    console.log(`Ingest worker listening on :${port}`);
+    console.log('Env summary', {
+        WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL,
+        INGEST_CALLBACK_URL: process.env.INGEST_CALLBACK_URL,
+        HAS_CALLBACK_SECRET: Boolean(process.env.INGEST_CALLBACK_SECRET),
+        GCS_BUCKET: process.env.GCS_BUCKET,
+        HAS_GOOGLE_APPLICATION_CREDENTIALS: Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS),
+        YT_DLP_PATH: process.env.YT_DLP_PATH,
+    });
+});
+server.on('listening', () => {
+    try {
+        const addr = server.address();
+        console.log('Server bound address', addr);
+    }
+    catch (e) {
+        console.log('Server bound address (unavailable)');
+    }
+});
+server.on('error', (err) => {
+    console.error('SERVER_LISTEN_ERROR', err?.stack || err);
+});
+

@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "error": null,
+  "items": [
+    {
+      "id": "cmehpn7ev00034sgg4sf5nb5u",
+      "createdAt": "2025-08-18T22:52:40.903Z",
+      "hasVideo": true,
+      "hasAudio": false,
+      "hasTranscription": false
+    },
+    {
+      "id": "cmehpkytd00014sgg1lc6z2e6",
+      "createdAt": "2025-08-18T22:50:56.447Z",
+      "hasVideo": true,
+      "hasAudio": false,
+      "hasTranscription": false
+    }
+  ]
+}

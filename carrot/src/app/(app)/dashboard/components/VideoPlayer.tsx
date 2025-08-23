@@ -29,6 +29,30 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const [isInView, setIsInView] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Safely attempt play, skipping when no source is available
+  const safePlay = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    // 3 = NETWORK_NO_SOURCE
+    if (el.networkState === 3) return;
+    // Skip if no selected source yet
+    if (!el.currentSrc) return;
+    // Wait until metadata is available (HAVE_METADATA = 1) or better
+    if (el.readyState < 1) return;
+    // Ensure muted for autoplay policy
+    el.muted = true;
+    el.play().catch(() => {});
+  };
+
+  // Derive a best-guess MIME type from the URL/extension to help browsers choose the decoder
+  const getMimeType = (url: string): string | undefined => {
+    const lower = url.split('?')[0].toLowerCase();
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.webm')) return 'video/webm';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    return undefined; // Let the browser infer if unknown
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -105,19 +129,31 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   useEffect(() => {
     if (!videoRef.current) return;
 
+    // Find nearest scrollable ancestor to observe within scroll containers
+    const findScrollParent = (el: HTMLElement | null): Element | null => {
+      let node: HTMLElement | null = el;
+      while (node && node.parentElement) {
+        const style = window.getComputedStyle(node.parentElement);
+        const overflowY = style.getPropertyValue('overflow-y');
+        const overflow = style.getPropertyValue('overflow');
+        if (/(auto|scroll)/.test(overflowY) || /(auto|scroll)/.test(overflow)) {
+          return node.parentElement;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    };
+
+    const rootEl = findScrollParent(videoRef.current) as Element | null;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           setIsInView(entry.isIntersecting);
           
-          if (entry.isIntersecting && videoRef.current && videoLoaded) {
+          if (entry.isIntersecting && videoRef.current) {
             // Auto-play when video comes into view (muted)
-            videoRef.current.play().catch((error) => {
-              // Ignore normal play interruption errors
-              if (error.name !== 'AbortError') {
-                console.warn('Autoplay failed:', error);
-              }
-            });
+            safePlay();
             setIsPlaying(true);
           } else if (!entry.isIntersecting && videoRef.current && !videoRef.current.paused) {
             // Pause when video goes out of view
@@ -127,8 +163,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         });
       },
       {
-        threshold: 0.5, // Trigger when 50% of video is visible
-        rootMargin: '0px 0px -10% 0px' // Start slightly before fully in view
+        threshold: 0.15, // Trigger when 15% of video is visible
+        rootMargin: '0px',
+        root: rootEl || null
       }
     );
 
@@ -139,23 +176,53 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         observer.unobserve(videoRef.current);
       }
     };
-  }, [videoLoaded]);
+  }, []);
 
   // Ensure autoplay when in view and video is ready; pause when out of view
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (isInView && videoLoaded) {
-      el.play().then(() => setIsPlaying(true)).catch(() => {
-        // Ignore autoplay rejections (browser policies)
-      });
+    if (isInView) {
+      safePlay();
+      setIsPlaying(true);
+      // Fallback: retry play shortly after visibility in case metadata just arrived
+      const t = setTimeout(() => {
+        safePlay();
+      }, 300);
+      return () => clearTimeout(t);
     } else {
       if (!el.paused) {
         el.pause();
         setIsPlaying(false);
       }
     }
-  }, [isInView, videoLoaded]);
+  }, [isInView]);
+
+  // On mount, if the element is already visible, attempt to play
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    // Ensure muted is set ASAP to satisfy autoplay policies
+    el.muted = true;
+    const rect = el.getBoundingClientRect();
+    const inViewport = rect.top < window.innerHeight && rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
+    if (inViewport) {
+      safePlay();
+    }
+  }, []);
+
+  // Reload the media element when the source URL changes to avoid stale networkState
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    setHasError(false);
+    setVideoLoaded(false);
+    try {
+      // Ensure muted stays true across source swaps for autoplay compliance
+      el.muted = true;
+      el.load();
+    } catch {}
+  }, [videoUrl]);
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
@@ -223,12 +290,15 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     <div className="w-full">
       <div className="relative">
         <video
+          key={videoUrl}
           ref={videoRef}
           controls
           muted
           loop
           playsInline
           autoPlay
+          preload="auto"
+          crossOrigin="anonymous"
           poster={thumbnailUrl || undefined}
           src={videoUrl}
           style={{ 
@@ -238,6 +308,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
             maxHeight: 'min(70vh, 600px)',
             borderRadius: '8px',
             objectFit: 'contain',
+            objectPosition: 'center',
+            display: 'block',
+            margin: '0 auto',
             opacity: showThumbnailOverlay ? 0.7 : 1
           }}
           onError={handleError}
@@ -248,9 +321,25 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
               setShowThumbnailOverlay(false);
             }
           }}
+          onLoadedMetadata={() => {
+            // Attempt to begin playback as soon as metadata is available and element is in view
+            if (videoRef.current && isInView) {
+              safePlay();
+            }
+          }}
+          onCanPlay={() => {
+            if (videoRef.current && isInView) {
+              safePlay();
+            }
+          }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
-        />
+        >
+          {/* Provide explicit source with MIME type hint to improve decoding compatibility */}
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          {/* Omit explicit type so the browser can infer; Firebase URLs may carry codecs */}
+          <source src={videoUrl} />
+        </video>
         
         {/* Upload Progress Overlay - Only show during actual upload, not after completion */}
         {showThumbnailOverlay && uploadStatus !== 'ready' && (

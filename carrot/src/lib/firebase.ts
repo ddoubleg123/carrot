@@ -26,6 +26,18 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Resolve/normalize the storage bucket to the preferred suffix at runtime
+const resolvedBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET &&
+  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.includes('.firebasestorage.app'))
+  ? process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!
+  : `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebasestorage.app`;
+
+// Ensure the config uses the resolved bucket
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: allow reassignment of property for runtime normalization
+firebaseConfig.storageBucket = resolvedBucket;
+console.log('[firebase.ts] normalized storageBucket:', resolvedBucket);
+
 // Initialize Firebase
 let firebaseApp: FirebaseApp;
 import type { Auth } from 'firebase/auth';
@@ -51,14 +63,19 @@ const initializeFirebase = () => {
     
     // Initialize other services
     auth = getAuth(firebaseApp);
-    storage = getStorage(firebaseApp);
+    const bucket = resolvedBucket;
+    // Force the SDK to use the configured bucket (avoids stale defaults)
+    storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
+    console.log('[firebase.ts] getStorage bucket:', bucket);
     googleProvider = new GoogleAuthProvider();
   } else {
     firebaseApp = getApp();
     console.log("After getApp");
     db = getFirestore(firebaseApp);
     auth = getAuth(firebaseApp);
-    storage = getStorage(firebaseApp);
+    const bucket = resolvedBucket;
+    storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
+    console.log('[firebase.ts] getStorage bucket (existing app):', bucket);
     googleProvider = new GoogleAuthProvider();
     console.log("After getFirestore/getAuth/getStorage/GoogleAuthProvider");
   }

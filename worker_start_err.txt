@@ -1,0 +1,61 @@
+ffmpeg version 7.1.1-essentials_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers
+  built with gcc 14.2.0 (Rev1, Built by MSYS2 project)
+  configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-fontconfig --enable-iconv --enable-gnutls --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-zlib --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-sdl2 --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxvid --enable-libaom --enable-libopenjpeg --enable-libvpx --enable-mediafoundation --enable-libass --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-libgme --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libtheora --enable-libvo-amrwbenc --enable-libgsm --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-librubberband
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.101 / 61. 19.101
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+  libpostproc    58.  3.100 / 58.  3.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:\Users\danie\CascadeProjects\windsurf-project\worker\tmp\ingest-ing_mejzinot_8x9lz5\raw.mp4':
+  Metadata:
+    major_brand     : dash
+    minor_version   : 0
+    compatible_brands: iso6mp41
+    creation_time   : 2025-08-20T13:04:42.000000Z
+  Duration: 00:41:28.50, start: 0.000000, bitrate: 845 kb/s
+  Stream #0:0[0x1](und): Video: vp9 (Profile 0) (vp09 / 0x39307076), yuv420p(tv, bt709), 1920x1080, 842 kb/s, 30 fps, 30 tbr, 1k tbn (default)
+      Metadata:
+        creation_time   : 2025-08-20T13:04:42.000000Z
+        handler_name    : ISO Media file produced by Google Inc. Created on: 08/20/2025.
+        vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:0 -> #0:0 (vp9 (native) -> h264 (libx264))
+Press [q] to stop, [?] for help
+[libx264 @ 000002380bb56a00] frame MB size (120x68) > level limit (3600)
+[libx264 @ 000002380bb56a00] MB rate (244800) > level limit (108000)
+[libx264 @ 000002380bb56a00] using cpu capabilities: MMX2 SSE2Fast SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2 AVX512
+[libx264 @ 000002380bb56a00] profile Constrained Baseline, level 3.1, 4:2:0, 8-bit
+[libx264 @ 000002380bb56a00] 264 - core 164 r3204 373697b - H.264/MPEG-4 AVC codec - Copyleft 2003-2025 - http://www.videolan.org/x264.html - options: cabac=0 ref=1 deblock=1:0:0 analyse=0x1:0x111 me=hex subme=2 psy=1 psy_rd=1.00:0.00 mixed_ref=0 me_range=16 chroma_me=1 trellis=0 8x8dct=0 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=0 threads=24 lookahead_threads=8 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=0 weightp=0 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=10 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+Output #0, mp4, to 'C:\Users\danie\CascadeProjects\windsurf-project\worker\data\ingest\ing_mejzinot_8x9lz5.mp4':
+  Metadata:
+    major_brand     : dash
+    minor_version   : 0
+    compatible_brands: iso6mp41
+    encoder         : Lavf61.7.100
+  Stream #0:0(und): Video: h264 (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 1920x1080, q=2-31, 30 fps, 15360 tbn (default)
+      Metadata:
+        creation_time   : 2025-08-20T13:04:42.000000Z
+        handler_name    : ISO Media file produced by Google Inc. Created on: 08/20/2025.
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.101 libx264
+      Side data:
+        cpb: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+frame=  119 fps=0.0 q=29.0 size=     512KiB time=00:00:03.96 bitrate=1057.5kbits/s speed=7.63x    
+frame=  308 fps=297 q=29.0 size=    1280KiB time=00:00:10.26 bitrate=1021.4kbits/s speed=9.89x    
+frame=  473 fps=306 q=29.0 size=    2048KiB time=00:00:15.76 bitrate=1064.1kbits/s speed=10.2x    
+frame=  650 fps=314 q=29.0 size=    2816KiB time=00:00:21.66 bitrate=1064.7kbits/s speed=10.5x    
+frame=  825 fps=318 q=29.0 size=    3584KiB time=00:00:27.50 bitrate=1067.7kbits/s speed=10.6x    
+frame= 1027 fps=330 q=29.0 size=    4608KiB time=00:00:34.23 bitrate=1102.7kbits/s speed=  11x    
+frame= 1239 fps=341 q=29.0 size=    5632KiB time=00:00:41.26 bitrate=1118.0kbits/s speed=11.4x    
+frame= 1448 fps=348 q=29.0 size=    6400KiB time=00:00:48.26 bitrate=1086.2kbits/s speed=11.6x    
+frame= 1621 fps=345 q=29.0 size=    7168KiB time=00:00:54.00 bitrate=1087.4kbits/s speed=11.5x    
+frame= 1796 fps=344 q=29.0 size=    8192KiB time=00:00:59.86 bitrate=1121.0kbits/s speed=11.5x    
+frame= 1983 fps=346 q=29.0 size=    8960KiB time=00:01:06.10 bitrate=1110.4kbits/s speed=11.5x    
+frame= 2171 fps=347 q=29.0 size=    9728KiB time=00:01:12.33 bitrate=1101.7kbits/s speed=11.6x    
+frame= 2357 fps=348 q=29.0 size=   10496KiB time=00:01:18.56 bitrate=1094.4kbits/s speed=11.6x    
+frame= 2555 fps=351 q=29.0 size=   11520KiB time=00:01:25.16 bitrate=1108.1kbits/s speed=11.7x    
+frame= 2771 fps=355 q=29.0 size=   12544KiB time=00:01:32.36 bitrate=1112.5kbits/s speed=11.8x    
+

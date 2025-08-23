@@ -14,7 +14,13 @@ export function useSyncFirebaseAuth() {
         if (!res.ok) throw new Error('Failed to fetch Firebase custom token');
         return res.json();
       })
-      .then(({ token }) => signInWithCustomToken(auth, token))
+      .then(({ token }) => {
+        if (!token) {
+          // No token available (e.g., missing admin creds or signed-out) — skip silently
+          return;
+        }
+        return signInWithCustomToken(auth, token);
+      })
       .catch(err => {
         // Only log if not already signed in (avoid noise on logout)
         if (!auth.currentUser) {

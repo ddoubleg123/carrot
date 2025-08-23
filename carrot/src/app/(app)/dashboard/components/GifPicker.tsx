@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
+// Branded GIF picker modal consistent with Composer
+
 interface GifPickerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -50,10 +52,12 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
   const [gifs, setGifs] = useState<GifData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const inputId = 'gif-search-input';
 
   // API keys - In production, these should be in environment variables
   const GIPHY_API_KEY = 'GlVGYHkr3WSBnllca54iNt0yFbjz7L65'; // Public demo key
-  const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Public demo key
+  const TENOR_API_KEY = 'AIzaSyAyimkuYQYQF_FXVALexPuGQctUWRURdCYQ'; // Public demo key
 
   // Fetch trending GIFs on component mount
   useEffect(() => {
@@ -61,6 +65,24 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
       fetchTrendingGifs();
     }
   }, [isOpen]);
+
+  // Mount flag for portals and focus management
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Focus the search input when opening, and support Escape to close
+  useEffect(() => {
+    if (!isOpen) return;
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (input) input.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   const fetchTrendingGifs = async () => {
     setLoading(true);
@@ -203,18 +225,19 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Choose a GIF</h2>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+        {/* Branded Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Choose a GIF</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Close GIF picker"
+              className="text-gray-400 hover:text-gray-600 transition-colors rounded-lg p-1 focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -223,17 +246,18 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
           </div>
 
           {/* Search Form */}
-          <form onSubmit={handleSearch} className="flex gap-2">
+          <form onSubmit={handleSearch} className="mt-4 flex gap-2">
             <input
+              id={inputId}
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search for GIFs..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm"
             />
             <button
               type="submit"
-              className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
+              className="px-6 py-2 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 active:bg-orange-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               Search
             </button>
@@ -300,12 +324,12 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 text-center">
-          <p className="text-xs text-gray-500">
+          <p className="text-[11px] text-gray-500">
             Powered by{' '}
             <a href="https://giphy.com" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-600">
               GIPHY
             </a>
-            {' & '}
+            {' '}&
             <a href="https://tenor.com" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-600">
               Tenor
             </a>

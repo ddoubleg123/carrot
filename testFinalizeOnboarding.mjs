@@ -7,7 +7,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBhgqlFzLnTJJ6WrR7X4Z1bYFpXmeidANo",
   authDomain: "involuted-river-466315-p0.firebaseapp.com",
   projectId: "involuted-river-466315-p0",
-  storageBucket: "involuted-river-466315-p0.appspot.com",
+  storageBucket: "involuted-river-466315-p0.firebasestorage.app",
   messagingSenderId: "591459094147",
   appId: "1:591459094147:web:f915348d807c772c54d5b6",
   measurementId: "G-PLJVZ74RXN"

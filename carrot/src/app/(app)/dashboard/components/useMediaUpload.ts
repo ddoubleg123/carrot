@@ -48,9 +48,13 @@ export function useMediaUpload() {
 
       // 3️⃣ get presigned URL from our API
       // Requesting presigned URL
+      const maxBytes = toUpload.type.startsWith("image/")
+        ? 10 * 1024 * 1024 // 10 MB for images
+        : 100 * 1024 * 1024; // 100 MB default for videos/others
       const presignedResp = await fetch("/api/getPresignedURL", {
         method: "POST",
-        body: JSON.stringify({ type: toUpload.type }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: toUpload.type, maxBytes }),
       });
       if (!presignedResp.ok) throw new Error("Failed to get presigned URL");
       const { uploadURL, publicURL } = await presignedResp.json();

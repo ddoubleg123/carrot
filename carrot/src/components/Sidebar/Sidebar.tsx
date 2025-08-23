@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import './avatar-glow.css';
 import '../../app/(app)/dashboard/dashboard-tokens.css';
-import { signOutAction } from '../../actions/auth-actions';
 import { useSession } from 'next-auth/react';
 import CarrotLogo from '../CarrotLogo';
 import { SidebarIcons } from '../icons/SidebarIcons';
+import { useState } from 'react';
+import { logoutClient } from '../../lib/logoutClient';
 
 const MENU = [
   {
@@ -51,6 +52,7 @@ export default function Sidebar() {
   const hasNotifications = false;
   const { data: session, status } = useSession();
   const user = session?.user;
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Prevent rendering if not authenticated
   if (status !== 'authenticated' || !user) {
@@ -58,10 +60,14 @@ export default function Sidebar() {
   }
 
   const handleLogout = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
     try {
-      await signOutAction();
+      await logoutClient();
     } catch (error) {
       window.location.href = '/login';
+    } finally {
+      // Keep disabled state until redirect happens to avoid double clicks
     }
   };
 
@@ -217,15 +223,23 @@ export default function Sidebar() {
           
           {/* Logout Button - Icon only in collapsed mode, full button in expanded mode */}
           <button 
-            className="group text-white/90 hover:text-white text-xs rounded-xl py-2 px-3 flex items-center justify-center gap-3 font-semibold w-full transition-all duration-200 transform hover:scale-105 hover:bg-white/10 max-lg:w-10 max-lg:h-10 max-lg:p-0" 
+            className={`group text-white/90 hover:text-white text-xs rounded-xl py-2 px-3 flex items-center justify-center gap-3 font-semibold w-full transition-all duration-200 transform hover:scale-105 hover:bg-white/10 max-lg:w-10 max-lg:h-10 max-lg:p-0 ${isSigningOut ? 'opacity-60 cursor-not-allowed' : ''}`} 
             style={{ border: 'none' }} 
             onClick={handleLogout}
+            disabled={isSigningOut}
             title="Logout"
           >
             <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-              <SidebarIcons.Logout />
+              {isSigningOut ? (
+                <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+              ) : (
+                <SidebarIcons.Logout />
+              )}
             </span>
-            <span className="max-lg:hidden">Logout</span>
+            <span className="max-lg:hidden">{isSigningOut ? 'Signing out…' : 'Logout'}</span>
           </button>
         </div>
       </div>

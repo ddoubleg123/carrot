@@ -17,12 +17,27 @@ export async function ensureFirebaseSignedIn() {
       throw new Error(`Failed to fetch Firebase custom token: ${res.status} ${errorText}`);
     }
     
-    const { token } = await res.json();
+    const data = await res.json().catch(() => ({ token: null as string | null }));
+    const token = (data as any)?.token as string | null | undefined;
+    if (!token) {
+      console.warn('[ensureFirebaseSignedIn] No custom token returned (likely missing admin creds or no session). Skipping Firebase sign-in.');
+      return; // avoid calling signInWithCustomToken with undefined and causing auth/internal-error
+    }
     console.log('[ensureFirebaseSignedIn] Got custom token, signing in to Firebase...');
     
     // Sign in with custom token
-    const userCredential = await signInWithCustomToken(auth as Auth, token);
-    console.log('[ensureFirebaseSignedIn] signInWithCustomToken completed, user:', userCredential.user.uid);
+    try {
+      const userCredential = await signInWithCustomToken(auth as Auth, token);
+      console.log('[ensureFirebaseSignedIn] signInWithCustomToken completed, user:', userCredential.user.uid);
+    } catch (e: any) {
+      console.error('[ensureFirebaseSignedIn] signInWithCustomToken failed:', {
+        name: e?.name,
+        code: e?.code,
+        message: e?.message,
+      });
+      // Do not throw to avoid breaking UI flows; let caller continue unauthenticated
+      return;
+    }
     
     // Wait for auth state to propagate to Firestore client
     console.log('[ensureFirebaseSignedIn] Waiting for auth state to propagate...');

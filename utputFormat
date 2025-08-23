@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 438
+ETag: W/"1b6-SGbp2igyGmeB8dpbLf3Ws2B3IZ8"
+Date: Sun, 17 Aug 2025 23:34:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"env":{"INGEST_CALLBACK_URL":"http://localhost:3005/api/ingest/callback ","WORKER_PUBLIC_URL":"http://127.0.0.1:8080 ","HAS_CALLBACK_SECRET":true,"GCS_BUCKET":"carrot-ingest-dev ","HAS_GOOGLE_APPLICATION_CREDENTIALS":true,"PORT":"8080 "},"tools":{"ffmpeg":"ffmpeg version 7.1.1-essentials_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers\r","yt_dlp":"NOT FOUND: spawn yt-dlp ENOENT","ffmpeg_static_path":"NOT_INSTALLED"}}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
@@ -8,6 +8,7 @@ import CommitmentComposer from './components/CommitmentComposer';
 import ComposerTrigger from '../../../components/ComposerTrigger';
 import ComposerModal from '../../../components/ComposerModal';
 import { useState as useModalState } from 'react';
+import Toast from './components/Toast';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -29,12 +30,29 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   const { data: session } = useSession();
   const router = useRouter();
 
+  // Toast state (reuse same UX as ComposerModal)
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  const [showToast, setShowToast] = useState(false);
+  const showSuccessToast = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
+  const showErrorToast = (msg: string) => { setToastMessage(msg); setToastType('error'); setShowToast(true); };
+
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
-    const imageUrls = post.imageUrls
-      ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls)
-      : [];
-    return {
+    const imageUrls = (() => {
+      if (!post?.imageUrls) return [];
+      if (Array.isArray(post.imageUrls)) return post.imageUrls;
+      if (typeof post.imageUrls === 'string') {
+        try {
+          const parsed = JSON.parse(post.imageUrls);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    })();
+    const mapped = {
       id: post.id,
       content: post.content || '',
       carrotText: post.carrotText || '',
@@ -59,6 +77,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       gifUrl: post.gifUrl || null,
       videoUrl: post.videoUrl || null,
       thumbnailUrl: post.thumbnailUrl || null,
+      // Cloudflare Stream
+      cfUid: post.cfUid || post.cf_uid || null,
+      cfPlaybackUrlHls: post.cfPlaybackUrlHls || post.cf_playback_url_hls || null,
+      captionVttUrl: post.captionVttUrl || post.caption_vtt_url || null,
       audioUrl: post.audioUrl || null,
       audioTranscription: post.audioTranscription || null,
       transcriptionStatus: post.transcriptionStatus || null,
@@ -67,8 +89,183 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       gradientToColor: post.gradientToColor || null,
       gradientViaColor: post.gradientViaColor || null,
       gradientDirection: post.gradientDirection || null,
+      // transient job state (client-side only)
+      ...(post.status ? ({ status: post.status } as any) : {}),
+      ...(post.trimJobId ? ({ trimJobId: post.trimJobId } as any) : {}),
     } as DashboardCommitmentCardProps;
+    try {
+      console.debug('[DashboardClient] map post', post.id, {
+        cfUid: mapped.cfUid,
+        cfPlaybackUrlHls: mapped.cfPlaybackUrlHls,
+        videoUrl: mapped.videoUrl,
+      });
+    } catch {}
+    return mapped;
   };
+
+  // Keep a ref to the latest commitments for polling
+  const commitmentsRef = useRef(commitments);
+  useEffect(() => { commitmentsRef.current = commitments; }, [commitments]);
+
+  // Poll background trim jobs and update posts when they complete (with simple backoff)
+  useEffect(() => {
+    let cancelled = false;
+    let delayMs = 3000;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const current = commitmentsRef.current as any[];
+      const jobs = current.filter((c) => c && (c as any).trimJobId);
+      if (jobs.length === 0) {
+        // Back off when there are no jobs (max 15s)
+        delayMs = Math.min(delayMs + 2000, 15000);
+      } else {
+        delayMs = 3000; // active jobs: poll faster
+        for (const c of jobs) {
+          const jobId = (c as any).trimJobId as string;
+          if (!jobId) continue;
+          try {
+            const res = await fetch(`/api/ingest/${jobId}`);
+            if (!res.ok) continue;
+            const data = await res.json().catch(() => null);
+            const job = data?.job;
+            if (!job) continue;
+            // While processing/queued, update progress if available
+            if (job.status === 'queued' || job.status === 'processing') {
+              if (typeof job.progress === 'number') {
+                setCommitments(prev => prev.map(p => p.id === c.id ? ({ ...(p as any), processingProgress: job.progress }) as any : p));
+              }
+            }
+            if (job.status === 'completed') {
+              setCommitments(prev => prev.map(p => {
+                if (p.id !== c.id) return p;
+                const next: any = { ...p };
+                if (job.mediaUrl) next.videoUrl = job.mediaUrl;
+                if (typeof job.cfUid !== 'undefined') next.cfUid = job.cfUid;
+                if (typeof job.cfStatus !== 'undefined') next.cfStatus = job.cfStatus;
+                next.status = undefined;
+                next.trimJobId = undefined;
+                next.processingProgress = undefined;
+                return next;
+              }));
+              try { showSuccessToast('Trim complete. Your post has been updated.'); } catch {}
+            } else if (job.status === 'failed') {
+              setCommitments(prev => prev.map(p => p.id === c.id ? ({ ...(p as any), status: 'failed', processingProgress: undefined, lastError: job.error }) as any : p));
+              try { showErrorToast(`Trim failed${job?.error ? `: ${String(job.error).slice(0,160)}` : ''}`); } catch {}
+            }
+          } catch {
+            // ignore transient errors
+          }
+        }
+      }
+      if (!cancelled) setTimeout(tick, delayMs);
+    };
+
+    const starter = setTimeout(tick, delayMs);
+    return () => { cancelled = true; clearTimeout(starter); };
+  }, []);
+
+  // On mount, fetch latest posts and reconcile to avoid any SSR/env mismatch issues
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/posts', { cache: 'no-store' });
+        if (!res.ok) return;
+        const posts = await res.json();
+        const mapped = posts.map(mapServerPostToCard);
+        if (cancelled) return;
+        setCommitments((prev) => {
+          const byId = new Map(prev.map((p) => [p.id, p]));
+          for (const m of mapped) {
+            const existing = byId.get(m.id) as any;
+            if (!existing) {
+              byId.set(m.id, m);
+            } else {
+              // Merge while preserving existing non-null CF fields if server has null/undefined
+              const merged: any = {
+                ...existing,
+                ...m,
+              };
+              // Preserve CF identifiers/playback when server lacks them
+              if (!m.cfUid && existing.cfUid) merged.cfUid = existing.cfUid;
+              if (!m.cfPlaybackUrlHls && existing.cfPlaybackUrlHls) merged.cfPlaybackUrlHls = existing.cfPlaybackUrlHls;
+              if (!m.thumbnailUrl && existing.thumbnailUrl) merged.thumbnailUrl = existing.thumbnailUrl;
+              // Preserve optimistic upload/transcription states
+              merged.uploadStatus = existing.uploadStatus ?? m.uploadStatus ?? null;
+              merged.transcriptionStatus = existing.transcriptionStatus ?? m.transcriptionStatus ?? null;
+              byId.set(m.id, merged);
+            }
+          }
+          // Return newest-first order by timestamp if available
+          const arr = Array.from(byId.values());
+          arr.sort((a: any, b: any) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime());
+          return arr as any;
+        });
+      } catch {}
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Poll posts that have Cloudflare UID but are missing playback URL, so they update when webhook fills metadata
+  useEffect(() => {
+    let cancelled = false;
+    let timer: any;
+
+    const pollMissingCfPlayback = async () => {
+      if (cancelled) return;
+      const current = commitmentsRef.current as any[];
+      const pending = current.filter(
+        (c) => c && c.cfUid && !c.cfPlaybackUrlHls
+      );
+      if (pending.length === 0) {
+        // nothing to do; back off to slower interval
+        timer = setTimeout(pollMissingCfPlayback, 12000);
+        return;
+      }
+      try {
+        const res = await fetch('/api/posts');
+        if (!res.ok) throw new Error('Failed to fetch posts');
+        const posts = await res.json();
+        // index by cfUid for quick lookup
+        const byUid = new Map<string, any>();
+        for (const p of posts) {
+          const uid = p?.cfUid || p?.cf_uid;
+          if (uid) byUid.set(uid, p);
+        }
+        setCommitments((prev) =>
+          prev.map((c: any) => {
+            if (!c?.cfUid || c?.cfPlaybackUrlHls) return c;
+            const server = byUid.get(c.cfUid);
+            if (!server) return c;
+            // merge only relevant CF fields to avoid clobbering optimistic UI
+            const next = { ...c } as any;
+            if (server.cfPlaybackUrlHls || server.cf_playback_url_hls) {
+              next.cfPlaybackUrlHls = server.cfPlaybackUrlHls || server.cf_playback_url_hls;
+            }
+            if (typeof server.cfStatus !== 'undefined' || typeof server.cf_status !== 'undefined') {
+              next.cfStatus = server.cfStatus || server.cf_status || next.cfStatus || null;
+            }
+            if ((server.thumbnailUrl ?? server.thumbnail_url) && !next.thumbnailUrl) {
+              next.thumbnailUrl = server.thumbnailUrl || server.thumbnail_url;
+            }
+            return next;
+          })
+        );
+      } catch {
+        // ignore transient failures
+      } finally {
+        if (!cancelled) timer = setTimeout(pollMissingCfPlayback, 5000);
+      }
+    };
+
+    timer = setTimeout(pollMissingCfPlayback, 4000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const handlePost = async (serverPost: any) => {
     const mapped = mapServerPostToCard(serverPost);
@@ -217,6 +414,16 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           onPostUpdate={handleUpdateCommitment}
         />
       )}
+
+      {/* Toast notifications for job completion/failure */}
+      {showToast && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          isVisible={showToast}
+          onClose={() => setShowToast(false)}
+        />)
+      }
     </>
   );
 }

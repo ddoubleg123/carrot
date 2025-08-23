@@ -1,6 +1,8 @@
+"use client";
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+// NOTE: Avoid static ESM imports from '@ffmpeg/ffmpeg' to prevent Next from
+// bundling it into a server-executed chunk. We'll load the UMD build at runtime.
+import { fetchFile } from '@ffmpeg/util';
 
 interface UniversalVideoFrameExtractorProps {
   file: File;
@@ -15,7 +17,7 @@ const UniversalVideoFrameExtractor: React.FC<UniversalVideoFrameExtractorProps> 
   onVideoReady, 
   onFrameExtracted 
 }) => {
-  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const ffmpegRef = useRef<any>(null);
   const [isFFmpegReady, setIsFFmpegReady] = useState(false);
   const [currentFrame, setCurrentFrame] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +28,53 @@ const UniversalVideoFrameExtractor: React.FC<UniversalVideoFrameExtractorProps> 
     height: number;
   } | null>(null);
 
-  // Initialize FFmpeg WebAssembly
+  // Load UMD script once
+  const loadScriptOnce = (src: string) => new Promise<void>((resolve, reject) => {
+    if (typeof document === 'undefined') return reject(new Error('No document'));
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(s);
+  });
+
+  // Initialize FFmpeg WebAssembly via UMD
   const initializeFFmpeg = useCallback(async () => {
     try {
       setLoadingMessage('Loading video processor...');
       console.log('UniversalVideoFrameExtractor: Initializing FFmpeg WebAssembly');
+      // Load UMD shim from our same-origin proxy to avoid CORS/CSP issues
+      await loadScriptOnce('/api/ffmpeg/ffmpeg.min.js');
+      const w: any = window as any;
+      const createFFmpeg =
+        w?.FFmpeg?.createFFmpeg ||
+        w?.FFmpegWASM?.createFFmpeg ||
+        w?.FFmpegWASM?.FFmpeg?.createFFmpeg;
 
-      const ffmpeg = new FFmpeg();
-      ffmpegRef.current = ffmpeg;
-
-      // Load FFmpeg WebAssembly files
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
+      if (createFFmpeg) {
+        const ff = createFFmpeg({
+          log: false,
+          corePath: '/api/ffmpeg/ffmpeg-core.js',
+        });
+        await ff.load();
+        ffmpegRef.current = ff;
+      } else {
+        const FFmpegClass = w?.FFmpegWASM?.FFmpeg || w?.FFmpeg?.FFmpeg;
+        if (!FFmpegClass) throw new Error('FFmpeg UMD not available');
+        const inst = new FFmpegClass();
+        await inst.load({ corePath: '/api/ffmpeg/ffmpeg-core.js' });
+        // Adapter to approximate the createFFmpeg API used elsewhere
+        ffmpegRef.current = {
+          loaded: true,
+          isLoaded() { return true; },
+          async load() {},
+          async exec(args: string[]) { return inst.exec(args); },
+          async writeFile(p: string, data: Uint8Array) { return inst.writeFile(p, data); },
+          async readFile(p: string) { return inst.readFile(p); },
+        } as any;
+      }
 
       console.log('UniversalVideoFrameExtractor: FFmpeg loaded successfully');
       setIsFFmpegReady(true);

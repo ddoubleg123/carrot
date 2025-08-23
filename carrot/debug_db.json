@@ -1,0 +1,112 @@
+{
+  "ok": true,
+  "env": {
+    "cwd": "C:\\Users\\danie\\CascadeProjects\\windsurf-project\\carrot",
+    "DATABASE_URL": "file:./dev.db"
+  },
+  "counts": {
+    "users": 3,
+    "posts": 15
+  },
+  "latest": [
+    {
+      "id": "cmeixa56800024s94wt4vg6bc",
+      "content": "Test post from seed-post.mjs",
+      "userId": "cmeixa55x00004s94gvz0rqo7",
+      "gradientDirection": "to-r",
+      "gradientFromColor": "#ff7e5f",
+      "gradientViaColor": null,
+      "gradientToColor": "#feb47b",
+      "imageUrls": null,
+      "gifUrl": null,
+      "audioUrl": null,
+      "audioTranscription": null,
+      "transcriptionStatus": null,
+      "emoji": null,
+      "carrotText": null,
+      "stickText": null,
+      "createdAt": "2025-08-19T19:14:14.577Z",
+      "updatedAt": "2025-08-19T19:14:14.577Z",
+      "thumbnailUrl": null,
+      "videoUrl": null,
+      "cfUid": null,
+      "cfStatus": null,
+      "cfDurationSec": null,
+      "cfWidth": null,
+      "cfHeight": null,
+      "cfPlaybackUrlHls": null,
+      "captionVttUrl": null,
+      "User": {
+        "id": "cmeixa55x00004s94gvz0rqo7",
+        "email": "dev@example.com",
+        "name": "Dev User"
+      }
+    },
+    {
+      "id": "cmehv0lg700034s8w3cyo6u61",
+      "content": "Yup.",
+      "userId": "cme8sy36300084sho2yqw4dc5",
+      "gradientDirection": null,
+      "gradientFromColor": "#ecfdf5",
+      "gradientViaColor": "#a7f3d0",
+      "gradientToColor": "#d1fae5",
+      "imageUrls": "[]",
+      "gifUrl": null,
+      "audioUrl": null,
+      "audioTranscription": "Transcription failed: fetch failed",
+      "transcriptionStatus": "failed",
+      "emoji": null,
+      "carrotText": null,
+      "stickText": null,
+      "createdAt": "2025-08-19T01:23:03.700Z",
+      "updatedAt": "2025-08-19T01:23:03.788Z",
+      "thumbnailUrl": "https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/thumbnails1755566582704_0_thumbnail.jpg?alt=media&token=0737814d-9b20-457c-9676-05825168f544",
+      "videoUrl": "http://localhost:3005/media/ingest/ing_mehuztzi_7s3rnn.mp4",
+      "cfUid": null,
+      "cfStatus": null,
+      "cfDurationSec": null,
+      "cfWidth": null,
+      "cfHeight": null,
+      "cfPlaybackUrlHls": null,
+      "captionVttUrl": null,
+      "User": {
+        "id": "cme8sy36300084sho2yqw4dc5",
+        "email": "danielgouldman@gmail.com",
+        "name": "Daniel Gouldman"
+      }
+    },
+    {
+      "id": "cmehut79m00014s8w0tclgcdj",
+      "content": "The spiritual nature of Israel is definitely on a downward spiral.",
+      "userId": "cme8sy36300084sho2yqw4dc5",
+      "gradientDirection": null,
+      "gradientFromColor": "#ecfdf5",
+      "gradientViaColor": "#a7f3d0",
+      "gradientToColor": "#d1fae5",
+      "imageUrls": "[]",
+      "gifUrl": null,
+      "audioUrl": null,
+      "audioTranscription": "Transcription failed: fetch failed",
+      "transcriptionStatus": "failed",
+      "emoji": null,
+      "carrotText": null,
+      "stickText": null,
+      "createdAt": "2025-08-19T01:17:18.728Z",
+      "updatedAt": "2025-08-19T01:17:18.799Z",
+      "thumbnailUrl": "https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/thumbnails1755566237657_0_thumbnail.jpg?alt=media&token=2b263313-746a-47bb-b2d1-8a88c2b0aa9f",
+      "videoUrl": "http://localhost:3005/media/ingest/ing_mehuqnyx_xjnf3l.mp4",
+      "cfUid": null,
+      "cfStatus": null,
+      "cfDurationSec": null,
+      "cfWidth": null,
+      "cfHeight": null,
+      "cfPlaybackUrlHls": null,
+      "captionVttUrl": null,
+      "User": {
+        "id": "cme8sy36300084sho2yqw4dc5",
+        "email": "danielgouldman@gmail.com",
+        "name": "Daniel Gouldman"
+      }
+    }
+  ]
+}

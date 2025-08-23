@@ -18,7 +18,12 @@ jobs:
           gsutil --version || true
           gcloud auth list || true
           gcloud config list || true
+      - name: Show CORS file
+        run: |
+          echo "firebase-cors.json contents:" && cat firebase-cors.json
       - name: Apply CORS
-        run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.appspot.com
+        run: |
+          echo "Applying CORS to gs://involuted-river-466315-p0.firebasestorage.app"
+          gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.firebasestorage.app
       - name: Verify CORS
-        run: gsutil cors get gs://involuted-river-466315-p0.appspot.com
+        run: gsutil cors get gs://involuted-river-466315-p0.firebasestorage.app

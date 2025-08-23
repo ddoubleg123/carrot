@@ -88,6 +88,14 @@ model Post {
   updatedAt           DateTime @updatedAt
   thumbnailUrl        String?
   videoUrl            String?
+  /// Cloudflare Stream fields
+  cfUid               String?  @map("cf_uid")
+  cfStatus            String?  @map("cf_status")
+  cfDurationSec       Float?   @map("cf_duration_sec")
+  cfWidth             Int?     @map("cf_width")
+  cfHeight            Int?     @map("cf_height")
+  cfPlaybackUrlHls    String?  @map("cf_playback_url_hls")
+  captionVttUrl       String?  @map("caption_vtt_url")
   User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("posts")
@@ -121,3 +129,27 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
+model IngestJob {
+  id           String   @id
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  userId       String?  @map("user_id")
+  postId       String?  @map("post_id")
+  sourceUrl    String   @map("source_url")
+  sourceType   String   @map("source_type")
+  status       String
+  progress     Int?
+  error        String?
+  mediaUrl     String?  @map("media_url")
+  cfUid        String?  @map("cf_uid")
+  cfStatus     String?  @map("cf_status")
+  durationSec  Float?   @map("duration_sec")
+  width        Int?
+  height       Int?
+  title        String?
+  channel      String?
+
+  @@map("ingest_jobs")
+}
+

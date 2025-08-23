@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { signOutAction } from '../actions/auth-actions';
 import { SidebarIcons } from './icons/SidebarIcons';
+import { logoutClient } from '../lib/logoutClient';
 
 // Minimalist icon components unified with currentColor
 const NavIcons = {
@@ -209,18 +210,41 @@ export default function MinimalNav() {
       <div className="flex-1" />
 
       {/* Logout at bottom */}
-      <button
-        onClick={() => {
-          // call the server action
-          void signOutAction();
-        }}
-        title="Logout"
-        className="mt-auto mb-2 block w-12 h-12 rounded-xl bg-white text-gray-700 border border-gray-200 hover:text-orange-600 hover:bg-orange-50 hover:shadow-lg hover:scale-[1.03] hover:border-orange-200 transition-all duration-200 transform flex items-center justify-center"
-      >
-        <span className="w-5 h-5 text-current">
-          <SidebarIcons.Logout />
-        </span>
-      </button>
+      <LogoutButton />
     </nav>
+  );
+}
+
+function LogoutButton() {
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const onClick = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await logoutClient();
+    } catch (e) {
+      window.location.href = '/login';
+    } finally {
+      // keep disabled until redirect
+    }
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={isSigningOut}
+      title="Logout"
+      className={`mt-auto mb-2 block w-12 h-12 rounded-xl border transition-all duration-200 transform flex items-center justify-center ${isSigningOut ? 'bg-white text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-200 hover:text-orange-600 hover:bg-orange-50 hover:shadow-lg hover:scale-[1.03] hover:border-orange-200'}`}
+    >
+      <span className="w-5 h-5 text-current">
+        {isSigningOut ? (
+          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+        ) : (
+          <SidebarIcons.Logout />
+        )}
+      </span>
+    </button>
   );
 }

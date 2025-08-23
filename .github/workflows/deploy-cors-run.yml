@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       bucket:
-        description: GCS bucket (e.g., involuted-river-466315-p0.appspot.com)
+        description: GCS bucket (e.g., involuted-river-466315-p0.firebasestorage.app)
         required: true
       corsFile:
         description: Path to CORS JSON inside repo

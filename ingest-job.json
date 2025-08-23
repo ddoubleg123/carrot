@@ -1,0 +1,1 @@
+﻿{"job":{"id":"ing_meg5j016_goz3j8","createdAt":1755463306218,"updatedAt":1755463334515,"status":"failed","sourceUrl":"https://www.youtube.com/watch?v=GXZoKG_PrRc","sourceType":"youtube","userId":null,"postId":null,"progress":0,"error":"Worker ingest failed: ffmpeg exited with code 4294967294. Ensure yt-dlp and ffmpeg are installed and available in PATH."}}

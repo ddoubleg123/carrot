@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import prisma from '../../../lib/prisma';
 import { auth } from '../../../auth';
 
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
     carrotText,
     stickText,
     externalUrl,
+    // Cloudflare Stream fields (optional on create)
+    cfUid,
+    cfStatus,
   } = body;
   try {
     console.log(`🔍 POST /api/posts - Creating post with audioUrl: ${audioUrl ? 'Present' : 'Missing'}`);
@@ -63,6 +67,9 @@ export async function POST(req: NextRequest) {
         audioUrl: effectiveAudioUrl,
         audioTranscription,
         transcriptionStatus: (effectiveAudioUrl || effectiveVideoUrl) ? 'pending' : null,
+        // Persist Cloudflare Stream identifiers if present
+        cfUid: cfUid || null,
+        cfStatus: cfUid ? (cfStatus || 'queued') : null,
         emoji,
         carrotText,
         stickText,

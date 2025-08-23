@@ -1,0 +1,1 @@
+{"env":{"INGEST_CALLBACK_URL":"http://localhost:3005/api/ingest/callback","WORKER_PUBLIC_URL":"http://localhost:3005","HAS_CALLBACK_SECRET":true},"tools":{"ffmpeg":"ffmpeg version 7.1.1-essentials_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers\r","yt_dlp":"2025.08.11"}}

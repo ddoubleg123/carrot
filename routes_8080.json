@@ -1,0 +1,1 @@
+{"routes":[{"path":"/healthz","methods":["get"]},{"path":"/","methods":["get"]},{"path":"/livez","methods":["get"]},{"path":"/readyz","methods":["get"]},{"path":"/routes","methods":["get"]},{"path":"/debug","methods":["get"]},{"path":"/ingest","methods":["post"]},{"path":"/trim","methods":["post"]},{"path":"/ingest/test","methods":["get"]}]}

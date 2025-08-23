@@ -1,0 +1,39 @@
+﻿2025-08-23T15:29:04.7161007-04:00 [1] GET /api/ingest/callback
+2025-08-23T15:29:04.7679690-04:00 {
+    "ok":  true,
+    "hasSecret":  true,
+    "secretLength":  17
+}
+2025-08-23T15:29:04.8559997-04:00 [2] POST bump 10%
+2025-08-23T15:29:04.8998705-04:00 {
+    "ok":  true,
+    "job":  {
+                "id":  "ing_meomft21_v97ez2",
+                "createdAt":  1755975440089,
+                "updatedAt":  1755977344898,
+                "status":  "downloading",
+                "sourceUrl":  "https://www.youtube.com/watch?v=ZNBWlT2zvW4",
+                "sourceType":  "youtube",
+                "userId":  null,
+                "postId":  null,
+                "progress":  10
+            }
+}
+2025-08-23T15:29:04.9501753-04:00 [3] GET job
+2025-08-23T15:29:05.0038322-04:00 {
+    "job":  {
+                "id":  "ing_meomft21_v97ez2",
+                "createdAt":  1755975440089,
+                "updatedAt":  1755977344898,
+                "status":  "downloading",
+                "sourceUrl":  "https://www.youtube.com/watch?v=ZNBWlT2zvW4",
+                "sourceType":  "youtube",
+                "userId":  null,
+                "postId":  null,
+                "progress":  10
+            }
+}
+2025-08-23T15:29:05.1192672-04:00 [4] POST worker no-secret
+2025-08-23T15:34:31.4979675-04:00 worker no-secret err: The remote server returned an error: (408) Request Timeout.
+2025-08-23T15:34:31.5349715-04:00 [4b] POST worker with-secret
+2025-08-23T15:39:43.5267630-04:00 worker with-secret err: The remote server returned an error: (408) Request Timeout.

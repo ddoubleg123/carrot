@@ -37,6 +37,20 @@ const nextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      // Proxy worker media through Next so the browser only talks to port 3005
+      {
+        source: '/media/:path*',
+        destination: 'http://127.0.0.1:8080/media/:path*',
+      },
+      // Proxy worker API
+      {
+        source: '/api/worker/:path*',
+        destination: 'http://127.0.0.1:8080/:path*',
+      },
+    ];
+  },
   async headers() {
     return [
       {

@@ -1,0 +1,22 @@
+{
+  "$schema": "vscode://schemas/settings/folder",
+  "css.lint.unknownAtRules": "ignore",
+  "css.validate": false,
+  "less.validate": false,
+  "scss.validate": false,
+
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+
+  "tailwindCSS.includeLanguages": {
+    "plaintext": "html",
+    "javascript": "javascript",
+    "typescript": "typescript",
+    "typescriptreact": "typescriptreact",
+    "javascriptreact": "javascriptreact"
+  },
+
+  "tailwindCSS.emmetCompletions": true,
+  "tailwindCSS.validate": true
+}

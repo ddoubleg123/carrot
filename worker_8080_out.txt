@@ -1,0 +1,120 @@
+Ingest worker listening on :8080
+Env summary {
+  WORKER_PUBLIC_URL: 'http://127.0.0.1:8080 ',
+  INGEST_CALLBACK_URL: 'http://localhost:3005/api/ingest/callback ',
+  HAS_CALLBACK_SECRET: true,
+  GCS_BUCKET: 'carrot-ingest-dev ',
+  HAS_GOOGLE_APPLICATION_CREDENTIALS: true,
+  YT_DLP_PATH: 'C:\\Tools\\yt-dlp\\yt-dlp.exe '
+}
+Server bound address { address: '127.0.0.1', family: 'IPv4', port: 8080 }
+Ingest worker listening on :8080
+Env summary {
+  HOST: '0.0.0.0',
+  WORKER_PUBLIC_URL: 'http://127.0.0.1:8080',
+  INGEST_CALLBACK_URL: 'http://localhost:3005/api/ingest/callback',
+  HAS_CALLBACK_SECRET: false,
+  GCS_BUCKET: undefined,
+  HAS_GOOGLE_APPLICATION_CREDENTIALS: false,
+  YT_DLP_PATH: undefined
+}
+Server bound address { address: '0.0.0.0', family: 'IPv4', port: 8080 }
+Ingest request received {
+  id: 'ing_mek3lckk_2l1egz',
+  type: 'youtube',
+  url: 'https://www.youtube.com/watch?v=ZNBWlT2zvW4'
+}
+[worker] Ingest start {
+  jobId: 'ing_mek3lckk_2l1egz',
+  url: 'https://www.youtube.com/watch?v=ZNBWlT2zvW4',
+  type: 'youtube',
+  workdir: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\tmp\\ingest-ing_mek3lckk_2l1egz'
+}
+[worker] yt-dlp config {
+  jobId: 'ing_mek3lckk_2l1egz',
+  yt: {
+    f: 'mp4/bv*+ba/b',
+    o: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\tmp\\ingest-ing_mek3lckk_2l1egz\\raw.%(ext)s',
+    ua: 'set',
+    extractorArgs: 'youtube:player_client=android',
+    geoBypass: true,
+    geoCountry: 'US',
+    cookies: 'none'
+  }
+}
+Ingest worker listening on :8080
+Env summary {
+  HOST: '0.0.0.0',
+  WORKER_PUBLIC_URL: 'http://127.0.0.1:8080',
+  INGEST_CALLBACK_URL: 'http://localhost:3005/api/ingest/callback',
+  HAS_CALLBACK_SECRET: true,
+  GCS_BUCKET: undefined,
+  HAS_GOOGLE_APPLICATION_CREDENTIALS: false,
+  YT_DLP_PATH: undefined
+}
+Cookie mode: file { YT_DLP_COOKIES: 'C:\\Users\\danie\\Downloads\\yt-cookies.txt' }
+Server bound address { address: '0.0.0.0', family: 'IPv4', port: 8080 }
+Ingest worker listening on :8080
+Env summary {
+  HOST: '0.0.0.0',
+  WORKER_PUBLIC_URL: 'http://127.0.0.1:8080',
+  INGEST_CALLBACK_URL: 'http://localhost:3005/api/ingest/callback',
+  HAS_CALLBACK_SECRET: true,
+  GCS_BUCKET: undefined,
+  HAS_GOOGLE_APPLICATION_CREDENTIALS: false,
+  YT_DLP_PATH: 'C:\\Tools\\yt-dlp\\yt-dlp.exe'
+}
+Cookie mode: file { YT_DLP_COOKIES: 'C:\\Users\\danie\\Downloads\\yt-cookies.txt' }
+Server bound address { address: '0.0.0.0', family: 'IPv4', port: 8080 }
+REQ { method: 'POST', url: '/ingest', ip: '127.0.0.1' }
+REQ { method: 'POST', url: '/ingest', ip: '127.0.0.1' }
+Ingest request received {
+  id: 'ing_meomft21_v97ez2',
+  type: 'youtube',
+  url: 'https://www.youtube.com/watch?v=ZNBWlT2zvW4'
+}
+[worker] Ingest start {
+  jobId: 'ing_meomft21_v97ez2',
+  url: 'https://www.youtube.com/watch?v=ZNBWlT2zvW4',
+  type: 'youtube',
+  workdir: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\tmp\\ingest-ing_meomft21_v97ez2'
+}
+[worker] yt-dlp config {
+  jobId: 'ing_meomft21_v97ez2',
+  yt: {
+    f: 'mp4/bv*+ba/b',
+    o: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\tmp\\ingest-ing_meomft21_v97ez2\\raw.%(ext)s',
+    ua: 'set',
+    extractorArgs: 'youtube:player_client=android',
+    geoBypass: true,
+    geoCountry: 'US',
+    cookies: 'file'
+  }
+}
+[worker] Download complete { jobId: 'ing_meomft21_v97ez2' }
+[worker] Discovered input {
+  jobId: 'ing_meomft21_v97ez2',
+  rawCandidate: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\tmp\\ingest-ing_meomft21_v97ez2\\raw.mp4'
+}
+[worker] Transcoding start { jobId: 'ing_meomft21_v97ez2', ffmpeg: 'ffmpeg' }
+[worker] Transcoding complete {
+  jobId: 'ing_meomft21_v97ez2',
+  outPath: 'C:\\Users\\danie\\CascadeProjects\\windsurf-project\\worker\\data\\ingest\\ing_meomft21_v97ez2.mp4'
+}
+[worker] Upload/serve ready {
+  jobId: 'ing_meomft21_v97ez2',
+  mediaUrl: 'http://127.0.0.1:8080/media/ingest/ing_meomft21_v97ez2.mp4'
+}
+[worker] Ingest completed { jobId: 'ing_meomft21_v97ez2' }
+Ingest worker listening on :8080
+Env summary {
+  HOST: '0.0.0.0',
+  WORKER_PUBLIC_URL: 'http://127.0.0.1:8080',
+  INGEST_CALLBACK_URL: 'http://localhost:3005/api/ingest/callback',
+  HAS_CALLBACK_SECRET: true,
+  GCS_BUCKET: undefined,
+  HAS_GOOGLE_APPLICATION_CREDENTIALS: false,
+  YT_DLP_PATH: 'C:\\Tools\\yt-dlp\\yt-dlp.exe'
+}
+Cookie mode: file { YT_DLP_COOKIES: 'C:\\Users\\danie\\Downloads\\yt-cookies.txt' }
+Server bound address { address: '0.0.0.0', family: 'IPv4', port: 8080 }

@@ -6,8 +6,8 @@
       "https://gotcarrot.com",
       "https://www.gotcarrot.com"
     ],
-    "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "method": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Authorization", "x-goog-meta-*"]
+    "responseHeader": ["*"]
   }
 ]

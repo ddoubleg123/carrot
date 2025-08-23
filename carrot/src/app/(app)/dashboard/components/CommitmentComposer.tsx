@@ -10,6 +10,7 @@ import Toast from './Toast';
 import GifPicker from './GifPicker';
 import AudioRecorder from '../../../../components/AudioRecorder';
 import AudioPlayer from '../../../../components/AudioPlayer';
+import { uploadToCloudflareStream } from '../../../../lib/cfStreamUpload';
 
 interface CommitmentComposerProps {
   onPost: (post: any) => void;
@@ -33,6 +34,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
   const [videoThumbnails, setVideoThumbnails] = React.useState<string[]>([]);
   const [thumbnailsLoading, setThumbnailsLoading] = React.useState<boolean>(false);
   const [currentThumbnailIndex, setCurrentThumbnailIndex] = React.useState<number>(0);
+  // Cloudflare Stream tracking
+  const [cfUid, setCfUid] = React.useState<string | null>(null);
+  const [cfStatus, setCfStatus] = React.useState<string | null>(null);
+  // Promise that resolves when CF direct-upload returns a uid
+  const [cfUploadPromise, setCfUploadPromise] = React.useState<Promise<string> | null>(null);
   
   // GIF picker state
   const [showGifPicker, setShowGifPicker] = React.useState<boolean>(false);
@@ -740,61 +746,47 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     }
   };
 
-  // Background upload function - FIXED: Use presigned URL upload instead of Firebase SDK
-  const uploadFileInBackground = async (file: File) => {
-    if (!file) return;
+  // Background upload function - Cloudflare Stream direct upload via tus
+  const uploadFileInBackground = async (file: File): Promise<string> => {
+    if (!file) return Promise.reject(new Error('No file'));
     
-    console.log('🚀 Starting background upload for:', file.name);
+    console.log('🚀 Starting Cloudflare Stream upload for:', file.name);
     setIsUploading(true);
     setUploadProgress(0);
     
     try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 300);
-      
-      // FIXED: Use presigned URL upload (same as useMediaUpload.ts)
-      console.log("Requesting presigned URL with type:", file.type);
-      const presignedResp = await fetch("/api/getPresignedURL", {
-        method: "POST",
-        body: JSON.stringify({ type: file.type }),
+      // Request a Cloudflare Stream direct upload URL
+      const duResp = await fetch('/api/cf/stream/direct-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
-      if (!presignedResp.ok) throw new Error("Failed to get presigned URL");
-      const { uploadURL, publicURL } = await presignedResp.json();
+      if (!duResp.ok) {
+        const err = await duResp.text().catch(() => 'Unknown error');
+        throw new Error(`Failed to create CF direct upload: ${duResp.status} ${err}`);
+      }
+      const { uploadURL, uid } = await duResp.json();
+      if (!uploadURL || !uid) throw new Error('Invalid CF direct upload response');
+      setCfUid(uid);
+      setCfStatus('queued');
 
-      // Upload directly to storage with correct headers
-      console.log("Uploading with type:", file.type);
-      const uploadResp = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
+      // Start tus upload to Cloudflare Stream with progress updates
+      await uploadToCloudflareStream(file, uploadURL, ({ progress }) => {
+        setUploadProgress(Math.max(1, Math.round((progress || 0) * 100)));
+        setIsUploading(true);
       });
-      if (!uploadResp.ok) throw new Error("Upload failed");
-      
-      clearInterval(progressInterval);
+
+      setCfStatus('uploaded');
       setUploadProgress(100);
-      
-      setUploadedMedia(publicURL);
-      console.log('✅ Background upload complete:', publicURL);
-      
-      // Show completion briefly and notify user
-      showSuccessToast('Video uploaded successfully! Ready to post.');
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1500);
-      
+      console.log('✅ Cloudflare Stream upload complete. uid:', uid);
+      showSuccessToast('Upload complete. Processing video…');
+      setIsUploading(false);
+      return uid as string;
     } catch (error) {
       console.error('Background upload failed:', error);
       setIsUploading(false);
       setUploadProgress(0);
+      throw error;
     }
   };
 
@@ -844,8 +836,9 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       return;
     }
 
-    // Start background upload
-    uploadFileInBackground(file);
+    // Start background upload and remember the promise so we can await uid on save
+    const p = uploadFileInBackground(file);
+    setCfUploadPromise(p);
   };
 
   const cancelUpload = () => {
@@ -1163,32 +1156,23 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       if (fileToUpload) {
                         console.log('📤 Uploading media file in background...');
                         
-                        // Show upload progress toast for videos
-                        if (mediaTypeToSave?.startsWith('video/')) {
-                          showSuccessToast('Uploading video... This may take a moment.');
-                        }
-                        
                         try {
-                          const uploadResult = await uploadFilesToFirebase([fileToUpload], 'posts');
-                          console.log('✅ Upload result:', uploadResult);
-                          
-                          if (uploadResult && uploadResult.length > 0) {
-                            finalMediaUrl = uploadResult[0];
-                            console.log('🔗 Final media URL:', finalMediaUrl);
-                            
-                            // Update post status to 'uploaded' after successful upload
-                            if (mediaTypeToSave?.startsWith('video/') && onPostUpdate) {
-                              onPostUpdate(tempId, {
-                                id: tempId,
-                                videoUrl: finalMediaUrl,
-                                uploadStatus: 'uploaded',
-                                uploadProgress: 100
-                              });
+                          if (mediaTypeToSave?.startsWith('video/')) {
+                            // Cloudflare Stream path: if not started, start now
+                            if (!cfUid) {
+                              showSuccessToast('Uploading video to Cloudflare…');
+                              await uploadFileInBackground(fileToUpload);
+                            } else {
+                              console.log('▶️ CF upload already started. uid:', cfUid);
                             }
-                            
-                            // Show upload complete toast for videos
-                            if (mediaTypeToSave?.startsWith('video/')) {
-                              showSuccessToast('Video uploaded! Processing transcription...');
+                            // No finalMediaUrl for CF videos; playback via cfUid
+                          } else {
+                            // Images (and other non-video) still use Firebase or existing flow
+                            const uploadResult = await uploadFilesToFirebase([fileToUpload], 'posts');
+                            console.log('✅ Upload result:', uploadResult);
+                            if (uploadResult && uploadResult.length > 0) {
+                              finalMediaUrl = uploadResult[0];
+                              console.log('🔗 Final media URL:', finalMediaUrl);
                             }
                           }
                         } catch (uploadError) {
@@ -1214,28 +1198,49 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           colorScheme: colorSchemes[colorSchemeToSave].name
                         });
                       
+                      // Ensure CF uid is available for video before creating the post
+                      let cfUidToSend = cfUid;
+                      if (mediaTypeToSave?.startsWith('video/') && !cfUidToSend && cfUploadPromise) {
+                        try {
+                          cfUidToSend = await Promise.race<string>([
+                            cfUploadPromise,
+                            new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for CF uid')), 10000))
+                          ]);
+                          setCfUid(cfUidToSend);
+                        } catch (e) {
+                          console.warn('⚠️ CF uid not ready before POST, proceeding without it');
+                        }
+                      }
+
+                      const postBody1 = {
+                        content: contentToSave,
+                        gradientDirection: 'to-br',
+                        gradientFromColor: colorSchemes[colorSchemeToSave].gradientFromColor,
+                        gradientToColor: colorSchemes[colorSchemeToSave].gradientToColor,
+                        gradientViaColor: colorSchemes[colorSchemeToSave].gradientViaColor,
+                        imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
+                        // If using Cloudflare Stream, do not send videoUrl
+                        videoUrl: cfUidToSend ? null : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null),
+                        gifUrl: null,
+                        audioUrl: audioUrlToSave || null,
+                        emoji: '🎯',
+                        carrotText: '',
+                        stickText: '',
+                        // Cloudflare Stream identifiers
+                        cfUid: cfUidToSend || null,
+                        cfStatus: cfUidToSend ? (cfStatus || 'queued') : null,
+                        // Include temp ID for post update
+                        tempId: tempId
+                      };
+                      console.log('🛰️ About to POST /api/posts with body (primary flow):', postBody1);
+
                       const response = await fetch('/api/posts', {
                         method: 'POST',
                         credentials: 'include',
                         headers: {
                           'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                          content: contentToSave,
-                          gradientDirection: 'to-br',
-                          gradientFromColor: colorSchemes[colorSchemeToSave].gradientFromColor,
-                          gradientToColor: colorSchemes[colorSchemeToSave].gradientToColor,
-                          gradientViaColor: colorSchemes[colorSchemeToSave].gradientViaColor,
-                          imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
-                          videoUrl: finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null,
-                          gifUrl: null,
-                          audioUrl: audioUrlToSave || null,
-                          emoji: '🎯',
-                          carrotText: '',
-                          stickText: '',
-                          // Include temp ID for post update
-                          tempId: tempId
-                        }),
+                        body: JSON.stringify(postBody1)
                       });
                       
                       console.log('📡 Response status:', response.status);
@@ -1265,13 +1270,16 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           console.log('🔄 CRITICAL: Updating post with database data');
                           console.log('🎯 TempId:', tempId);
                           console.log('🎯 Database post ID:', postData.id);
-                          console.log('🎯 Upload status will be:', mediaTypeToSave?.startsWith('video/') ? 'ready' : null);
-                          console.log('🎯 Transcription status will be:', (postData.videoUrl || postData.audioUrl) ? 'processing' : null);
+                          console.log('🎯 Upload status will be:', mediaTypeToSave?.startsWith('video/') ? (cfUid ? 'processing' : 'ready') : null);
+                          console.log('🎯 Transcription status will be:', (postData.videoUrl || postData.audioUrl || cfUid) ? 'processing' : null);
                           
                           onPostUpdate(tempId, {
                             ...postData,
-                            uploadStatus: mediaTypeToSave?.startsWith('video/') ? 'ready' : null,
-                            transcriptionStatus: (postData.videoUrl || postData.audioUrl) ? 'processing' : null
+                            // Include CF fields for immediate playback
+                            cfUid: cfUid || postData.cfUid || null,
+                            cfStatus: cfUid ? (cfStatus || 'queued') : (postData.cfStatus || null),
+                            uploadStatus: mediaTypeToSave?.startsWith('video/') ? (cfUid ? 'processing' : 'ready') : null,
+                            transcriptionStatus: (postData.videoUrl || postData.audioUrl || cfUid) ? 'processing' : null
                           });
                           
                           console.log('✅ onPostUpdate called successfully');
@@ -1664,16 +1672,14 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                   // Handle video upload
                   if (mediaFile && mediaType?.startsWith('video/')) {
                     try {
-                      // Use the already uploaded video URL if available
-                      if (uploadedMedia) {
-                        uploadedVideoUrl = uploadedMedia;
-                        console.log('🎬 Using already uploaded video URL:', uploadedVideoUrl);
-                        showSuccessToast('Video uploaded! Processing transcription...');
+                      // With Cloudflare Stream, allow posting once we have a cfUid (upload may still be processing)
+                      if (cfUid) {
+                        console.log('🎬 Using Cloudflare Stream UID:', cfUid);
+                        // Do not set uploadedVideoUrl; playback will use cfUid
                       } else {
-                        // Video upload not complete yet
-                        console.log('🎬 Video upload not complete, showing error...');
-                        showErrorToast('Please wait for video upload to complete before posting.');
-                        return; // Don't post until video is uploaded
+                        console.log('🎬 No Cloudflare Stream UID yet');
+                        showErrorToast('Please start the video upload before posting.');
+                        return;
                       }
                     } catch (error) {
                       console.error('Video upload initialization failed:', error);
@@ -1735,31 +1741,51 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                 
                   // Save to database in background
                   try {
+                    // Ensure CF uid is available for video before creating the post
+                    let cfUidToSend2 = cfUid;
+                    if (!!uploadedVideoUrl && !cfUidToSend2 && cfUploadPromise) {
+                      try {
+                        cfUidToSend2 = await Promise.race<string>([
+                          cfUploadPromise,
+                          new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for CF uid')), 10000))
+                        ]);
+                        setCfUid(cfUidToSend2);
+                      } catch (e) {
+                        console.warn('⚠️ CF uid not ready before POST (secondary flow), proceeding without it');
+                      }
+                    }
+
+                    const postBody2 = {
+                      content: content,
+                      gradientDirection: 'to-br',
+                      gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
+                      gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
+                      gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
+                      imageUrls: [],
+                      gifUrl: selectedGifUrl,
+                      audioUrl: null, // Will be updated when upload completes
+                      audioTranscription: audioTranscription,
+                      transcriptionStatus: audioBlob ? 'pending' : null,
+                      // Video support: if using Cloudflare Stream, do not send videoUrl
+                      videoUrl: cfUidToSend2 ? null : (uploadedVideoUrl || null),
+                      videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
+                      videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
+                      emoji: '🎯',
+                      carrotText: '',
+                      stickText: '',
+                      // Cloudflare Stream identifiers
+                      cfUid: cfUidToSend2 || null,
+                      cfStatus: cfUidToSend2 ? (cfStatus || 'queued') : null
+                    };
+                    console.log('🛰️ About to POST /api/posts with body (secondary flow):', postBody2);
+
                     const response = await fetch('/api/posts', {
                       method: 'POST',
                       credentials: 'include',
                       headers: {
                         'Content-Type': 'application/json',
                       },
-                      body: JSON.stringify({
-                        content: content,
-                        gradientDirection: 'to-br',
-                        gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
-                        gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
-                        gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
-                        imageUrls: [],
-                        gifUrl: selectedGifUrl,
-                        audioUrl: null, // Will be updated when upload completes
-                        audioTranscription: audioTranscription,
-                        transcriptionStatus: audioBlob ? 'pending' : null,
-                        // Video support
-                        videoUrl: uploadedVideoUrl || null,
-                        videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
-                        videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
-                        emoji: '🎯',
-                        carrotText: '',
-                        stickText: ''
-                      }),
+                      body: JSON.stringify(postBody2),
                     });
                     
                     if (!response.ok) {
@@ -1769,6 +1795,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         statusText: response.statusText,
                         error: errorText
                       });
+                      try { showErrorToast('Failed to save. Please retry.'); } catch {}
+                      return;
                     } else {
                       const savedPost = await response.json();
                       console.log('Post saved to database successfully');
@@ -1828,6 +1856,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     }
                   } catch (error) {
                     console.error('Error saving post:', error);
+                    try { showErrorToast('Failed to save. Please retry.'); } catch {}
+                    return;
                   }
                   
                   // Clear content, selected GIF, audio, video, and show success
@@ -1836,10 +1866,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                   removeAudio();
                   cancelUpload(); // Clear video state
                   setCurrentPostId(null);
-                  
                   // Auto-select a random color scheme for next post
                   selectRandomColorScheme();
-                  
                   showSuccessToast('Post shared successfully!');
                 }}
               >
@@ -1850,7 +1878,6 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
         </div>
       </div>
 
-      {/* GIF Picker Modal */}
       <GifPicker
         isOpen={showGifPicker}
         onClose={handleGifPickerClose}

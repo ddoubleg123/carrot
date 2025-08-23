@@ -31,6 +31,7 @@ import AudioPlayer from '../../../../components/AudioPlayer';
 import { SadFaceIcon, NeutralFaceIcon, HappyFaceIcon } from './FaceIcons';
 import Toast from './Toast';
 import VideoPlayer from './VideoPlayer';
+import CFVideoPlayer from '../../../../components/CFVideoPlayer';
 import QRWaveVisualizer from '../../../../components/QRWaveVisualizer';
 
 // Helper function to get relative time (e.g., "2m ago", "1h ago")
@@ -131,7 +132,11 @@ function SmartMediaDisplay({ src, alt, index, isGrid = false, gridHeight, isGif 
       <img 
         src={src} 
         alt={alt}
-        className={`w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 ${
+        className={`w-full ${
+          isCropped 
+            ? 'h-full object-cover' 
+            : 'h-auto max-h-full object-contain'
+        } transition-transform duration-200 group-hover:scale-105 ${
           isCropped ? 'object-center' : ''
         }`}
         onLoad={handleImageLoad}
@@ -219,6 +224,10 @@ export interface CommitmentCardProps {
   gifUrl?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
+  // Cloudflare Stream fields
+  cfUid?: string | null;
+  cfPlaybackUrlHls?: string | null;
+  captionVttUrl?: string | null;
   videoThumbnail?: string; // Support for video thumbnail from CommitmentComposer
   videoTranscriptionStatus?: string; // Support for video transcription status
   audioUrl?: string;
@@ -234,6 +243,11 @@ export interface CommitmentCardProps {
   uploadProgress?: number;
   // ID of the currently logged-in user (used to determine ownership of the post)
   currentUserId?: string;
+  // transient trim job state (client-only)
+  status?: 'processing' | 'failed' | string | null;
+  trimJobId?: string | null;
+  processingProgress?: number; // 0-100
+  lastError?: string | null;
 }
 
 
@@ -256,6 +270,10 @@ export default function CommitmentCard({
   gifUrl,
   videoUrl,
   thumbnailUrl,
+  // Cloudflare Stream props
+  cfUid,
+  cfPlaybackUrlHls,
+  captionVttUrl,
   videoThumbnail,
   videoTranscriptionStatus,
   audioUrl,
@@ -270,7 +288,18 @@ export default function CommitmentCard({
   uploadStatus,
   uploadProgress,
   currentUserId,
+  // transient trim job state
+  status,
+  trimJobId,
+  processingProgress,
+  lastError,
 }: CommitmentCardProps) {
+  // Normalize imageUrls in case API returns a JSON string
+  const normalizedImageUrls: string[] = Array.isArray(imageUrls)
+    ? imageUrls
+    : (typeof imageUrls === 'string'
+        ? (() => { try { const parsed = JSON.parse(imageUrls as unknown as string); return Array.isArray(parsed) ? parsed : []; } catch { return []; } })()
+        : []);
   // Convert ISO country code (e.g., 'US') to flag emoji. If already emoji, return as-is.
   const getFlagEmoji = (code?: string) => {
     if (!code) return '';
@@ -600,7 +629,13 @@ export default function CommitmentCard({
   // Calculate text color for contrast
   const isLightBg = customInnerBoxColor.includes('yellow') || customInnerBoxColor.includes('lime') || customInnerBoxColor.includes('pink') || customInnerBoxColor.includes('gray-100') || customInnerBoxColor.includes('white');
   const textColor = isLightBg ? 'text-gray-900' : 'text-white';
-  const hasMedia = Boolean((imageUrls && imageUrls.length > 0) || gifUrl || videoUrl);
+  const hasMedia = Boolean(
+    (normalizedImageUrls && normalizedImageUrls.length > 0) ||
+    gifUrl ||
+    videoUrl ||
+    cfUid ||
+    cfPlaybackUrlHls
+  );
   // Show transcript/translate tools if any relevant media or transcription exists
   const canShowMediaTools = Boolean(
     videoUrl ||
@@ -710,6 +745,18 @@ export default function CommitmentCard({
                   <Link href={`/post/${id}`} className="hover:text-gray-700 hover:underline">
                     <TimeAgo timestamp={timestamp || new Date().toISOString()} />
                   </Link>
+                  {status === 'processing' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200">
+                      <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                      Processing{typeof processingProgress === 'number' ? ` ${Math.max(0, Math.min(100, Math.round(processingProgress)))}%` : ''}
+                    </span>
+                  )}
+                  {status === 'failed' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11V5H9v2h2zm0 2H9v6h2v-6z" clipRule="evenodd"/></svg>
+                      Failed
+                    </span>
+                  )}
                   {!author?.flag && (location?.city || location?.state || location?.zip) && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                       <MapPinIcon className="w-3.5 h-3.5" />
@@ -829,10 +876,10 @@ export default function CommitmentCard({
       )}
 
       {/* Media outside white overlay, full gradient width with 1px gutter */}
-      {imageUrls && imageUrls.length > 0 && (
+      {normalizedImageUrls && normalizedImageUrls.length > 0 && (
         <div className="-mt-[6px] mx-0 px-0 sm:-mx-6 sm:px-[1px] overflow-hidden rounded-b-2xl max-w-full min-w-0">
           <SmartMediaDisplay
-            src={imageUrls[0]}
+            src={normalizedImageUrls[0]}
             alt="Post image"
             index={0}
             onExpand={() => {
@@ -899,18 +946,32 @@ export default function CommitmentCard({
         </div>
       )}
 
-      {videoUrl && (
-        <div className="-mt-[6px] mx-0 px-0 sm:-mx-6 sm:px-[1px] overflow-hidden rounded-b-2xl flex justify-center max-w-full min-w-0">
+      {(cfUid || cfPlaybackUrlHls || videoUrl) && (
+        <div className="my-2 mx-3 sm:mx-5 flex justify-center max-w-full min-w-0">
           <div className="relative rounded-xl overflow-hidden shadow-lg ring-1 ring-black/5 bg-transparent w-full max-w-full sm:max-w-[550px] mx-auto min-w-0">
-            <VideoPlayer
-              videoUrl={videoUrl}
-              thumbnailUrl={thumbnailUrl || videoThumbnail}
-              postId={id}
-              initialTranscription={audioTranscription}
-              transcriptionStatus={videoTranscriptionStatus || transcriptionStatus}
-              uploadStatus={uploadStatus || null}
-              uploadProgress={uploadProgress || 0}
-            />
+            {(cfUid || cfPlaybackUrlHls) ? (
+              (() => { try { console.debug('[CommitmentCard] render CF', { id, cfUid, cfPlaybackUrlHls, videoUrl }); } catch {} return null; })(),
+              <CFVideoPlayer
+                uid={cfUid || undefined}
+                playbackUrlHls={cfPlaybackUrlHls || undefined}
+                poster={thumbnailUrl || videoThumbnail || undefined}
+                autoPlay
+                muted
+                loop
+                controls
+                trackSrc={captionVttUrl || undefined}
+              />
+            ) : (
+              <VideoPlayer
+                videoUrl={videoUrl || ''}
+                thumbnailUrl={thumbnailUrl || videoThumbnail}
+                postId={id}
+                initialTranscription={audioTranscription}
+                transcriptionStatus={videoTranscriptionStatus || transcriptionStatus}
+                uploadStatus={uploadStatus || null}
+                uploadProgress={uploadProgress || 0}
+              />
+            )}
           </div>
         </div>
       )}
@@ -1102,7 +1163,7 @@ export default function CommitmentCard({
       
     
       {/* Media Modal */}
-      {showMediaModal && (imageUrls || gifUrl) && (
+      {showMediaModal && (normalizedImageUrls.length > 0 || gifUrl) && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4">
         <div className="relative max-w-4xl max-h-full w-full h-full flex items-center justify-center">
           {/* Close button */}
@@ -1117,16 +1178,16 @@ export default function CommitmentCard({
           
           {/* Image/GIF */}
           <img 
-            src={gifUrl || imageUrls?.[selectedMediaIndex] || ''} 
+            src={gifUrl || normalizedImageUrls?.[selectedMediaIndex] || ''} 
             alt={gifUrl ? 'GIF' : `Post image ${selectedMediaIndex + 1}`}
             className="max-w-full max-h-full object-contain rounded-lg"
           />
           
           {/* Navigation arrows for multiple images */}
-          {(imageUrls?.length ?? 0) > 1 && (
+          {(normalizedImageUrls?.length ?? 0) > 1 && (
             <div>
               <button
-                onClick={() => setSelectedMediaIndex(prev => prev > 0 ? prev - 1 : (imageUrls?.length || 1) - 1)}
+                onClick={() => setSelectedMediaIndex(prev => prev > 0 ? prev - 1 : (normalizedImageUrls?.length || 1) - 1)}
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 bg-black/50 rounded-full p-2"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1134,7 +1195,7 @@ export default function CommitmentCard({
                 </svg>
               </button>
               <button
-                onClick={() => setSelectedMediaIndex(prev => prev < (imageUrls?.length || 1) - 1 ? prev + 1 : 0)}
+                onClick={() => setSelectedMediaIndex(prev => prev < (normalizedImageUrls?.length || 1) - 1 ? prev + 1 : 0)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 bg-black/50 rounded-full p-2"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1144,7 +1205,7 @@ export default function CommitmentCard({
               
               {/* Image counter */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black/50 px-3 py-1 rounded-full text-sm">
-                {selectedMediaIndex + 1} / {imageUrls?.length || 0}
+                {selectedMediaIndex + 1} / {normalizedImageUrls?.length || 0}
               </div>
             </div>
           )}

@@ -1,9 +1,9 @@
-import { auth } from '@/auth';
+import { auth } from '../../auth';
 import { redirect } from 'next/navigation';
 
 import OnboardingClient from './OnboardingClient';
 
-import { TEST_USERS, ADMIN_USERS } from '@/config/auth';
+import { TEST_USERS, ADMIN_USERS } from '../../config/auth';
 
 export default async function OnboardingPage() {
   const session = await auth();

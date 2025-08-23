@@ -10,8 +10,13 @@ import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
 import requests
-from google.cloud import firestore
-from google.cloud import storage
+try:
+    from google.cloud import firestore  # type: ignore
+    from google.cloud import storage  # type: ignore
+except Exception as e:  # pragma: no cover
+    firestore = None  # type: ignore
+    storage = None  # type: ignore
+    logger.warning(f"Google Cloud libraries unavailable: {e}")
 import re
 
 # Configure logging
@@ -24,9 +29,16 @@ app = Flask(__name__)
 MODEL_PATH = os.environ.get('MODEL_PATH', '/app/models/vosk-model-small-en-us-0.15')
 model = vosk.Model(MODEL_PATH)
 
-# Initialize Google Cloud clients
-db = firestore.Client()
-storage_client = storage.Client()
+# Initialize Google Cloud clients (optional)
+db = None
+storage_client = None
+try:
+    if firestore is not None:
+        db = firestore.Client()
+    if storage is not None:
+        storage_client = storage.Client()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"Google Cloud clients not initialized (continuing without GCP): {e}")
 
 def download_audio_from_firebase(audio_url):
     """Download audio file from Firebase Storage"""
@@ -416,13 +428,16 @@ def update_post_transcription(post_id, transcription, status='completed'):
         logger.error(f"❌ Failed to update post {post_id} via Next.js API: {e}")
         # Fallback: still try Firestore for backup
         try:
-            post_ref = db.collection('posts').document(post_id)
-            post_ref.update({
-                'transcription': transcription,
-                'transcriptionStatus': status,
-                'transcriptionProcessedAt': firestore.SERVER_TIMESTAMP
-            })
-            logger.info(f"📝 Fallback: Updated post {post_id} in Firestore")
+            if db is not None and firestore is not None:
+                post_ref = db.collection('posts').document(post_id)
+                post_ref.update({
+                    'transcription': transcription,
+                    'transcriptionStatus': status,
+                    'transcriptionProcessedAt': firestore.SERVER_TIMESTAMP
+                })
+                logger.info(f"📝 Fallback: Updated post {post_id} in Firestore")
+            else:
+                logger.warning("Firestore fallback unavailable; skipping Firestore update.")
         except Exception as fallback_error:
             logger.error(f"❌ Both Prisma and Firestore updates failed for post {post_id}: {fallback_error}")
             raise

@@ -75,6 +75,10 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Local environment overrides (do not commit secrets)
+.env.local
+carrot/.env.local
+
 # dataconnect generated files
 .dataconnect
 
@@ -83,3 +87,11 @@ carrot/.next/
 carrot/tailwindcss-*.exe
 carrot/temp/
 carrot/prisma/dev.db
+
+# Local media and temp data (do not push large binaries)
+data/
+worker/data/
+worker/tmp/
+tmp/
+*.mp4
+*.webm

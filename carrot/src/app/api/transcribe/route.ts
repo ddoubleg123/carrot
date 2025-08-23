@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { cleanupGrammar, basicGrammarCleanup } from '@/lib/languageTool';
 
-const prisma = new PrismaClient();
+export const runtime = 'nodejs';
 
 // Transcription service URL (will be Cloud Run URL when deployed)
 const TRANSCRIPTION_SERVICE_URL = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8080';
@@ -161,8 +161,6 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

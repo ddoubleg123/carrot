@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-// Use a long-lived Prisma client across requests to avoid 'client is disconnected' errors
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
-if (!globalForPrisma.prisma) globalForPrisma.prisma = prisma;
+// Uses shared Prisma singleton from '@/lib/prisma'
 
 // PATCH /api/posts/[id] - update a post (for audio URL updates)
 export async function PATCH(
@@ -113,7 +108,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const t0 = Date.now();
+    console.log('🗑️ DELETE /api/posts/[id] start', { id: params?.id });
     const session = await auth();
+    const tAuth = Date.now();
+    console.log('🗑️ auth() completed in ms:', tAuth - t0);
     
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -126,9 +125,12 @@ export async function DELETE(
       where: { id: postId },
       select: { userId: true }
     });
+    const tFind = Date.now();
+    console.log('🗑️ findUnique() completed in ms:', tFind - tAuth);
 
     if (!post) {
       // Gracefully handle optimistic deletes where the post was never persisted or already removed
+      console.log('🗑️ Post not found; returning success');
       return NextResponse.json({ success: true, message: 'Post already deleted or never existed' });
     }
 
@@ -137,12 +139,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden: You can only delete your own posts' }, { status: 403 });
     }
 
-    // Delete the post
-    await prisma.post.delete({
-      where: { id: postId }
-    });
+    // Kick off delete without blocking the response to improve UX in dev
+    // Any error will be logged server-side
+    prisma.post.delete({ where: { id: postId } })
+      .then(() => {
+        console.log('🗑️ prisma.delete() completed in ms:', Date.now() - tFind, { id: postId });
+      })
+      .catch((e) => {
+        console.error('🗑️ prisma.delete() failed', e);
+      });
 
-    return NextResponse.json({ success: true, message: 'Post deleted successfully' });
+    // Return immediately; client UI can optimistically remove the post
+    return NextResponse.json({ success: true, message: 'Post deletion scheduled' }, { status: 202 });
 
   } catch (error: any) {
     console.error('Error deleting post:', error);
