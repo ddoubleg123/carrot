@@ -1,0 +1,9 @@
+[variables]
+NIXPACKS_BUILD_CMD = "cd railway-video-ingestion && pip install -r requirements.txt"
+NIXPACKS_START_CMD = "cd railway-video-ingestion && uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+[phases.build]
+cmds = ["cd railway-video-ingestion && pip install -r requirements.txt"]
+
+[phases.start]
+cmd = "cd railway-video-ingestion && uvicorn main:app --host 0.0.0.0 --port $PORT"
