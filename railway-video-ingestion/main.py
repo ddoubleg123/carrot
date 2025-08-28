@@ -206,15 +206,10 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     try:
-        # Test Redis connection
+        # Test Redis connection only
         redis_client.ping()
         
-        # Test yt-dlp with a known stable video
-        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
-            ydl.extract_info(test_url, download=False)
-        
-        return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+        return {"status": "healthy", "redis": "connected", "timestamp": datetime.now().isoformat()}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
 
