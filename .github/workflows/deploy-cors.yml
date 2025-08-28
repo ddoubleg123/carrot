@@ -1,7 +1,7 @@
 name: Deploy GCS CORS
 
 on:
-  workflow_dispatch
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -12,6 +12,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
       - uses: google-github-actions/setup-gcloud@v2
+<<<<<<< HEAD
       - name: Debug gcloud/gsutil
         run: |
           gcloud --version || true
@@ -25,5 +26,9 @@ jobs:
         run: |
           echo "Applying CORS to gs://involuted-river-466315-p0.firebasestorage.app"
           gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.firebasestorage.app
+=======
+      - name: Apply CORS
+        run: gsutil cors set firebase-cors.json gs://involuted-river-466315-p0.firebasestorage.app
+>>>>>>> beb325cb000df74e11f3aa7c725cc5db18185f8d
       - name: Verify CORS
         run: gsutil cors get gs://involuted-river-466315-p0.firebasestorage.app
