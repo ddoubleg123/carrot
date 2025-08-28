@@ -78,6 +78,8 @@ node_modules/
 # Local environment overrides (do not commit secrets)
 .env.local
 carrot/.env.local
+.env.local.bak
+*.env.bak
 
 # dataconnect generated files
 .dataconnect
