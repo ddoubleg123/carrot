@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -7,7 +7,9 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-export async function POST(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     console.log('🎬 Video thumbnail extraction API called');
     

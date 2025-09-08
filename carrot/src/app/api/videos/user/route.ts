@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { videoIngestService } from '@/lib/ingestService';
 
-export async function GET(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {

@@ -1,11 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import prisma from '../../../../../lib/prisma';
 
 // Cloudflare Stream webhook receiver (stub)
 // Configure webhook in Cloudflare Dashboard → Stream → Webhooks → this endpoint URL
 // Events: video.created, video.ready, video.error, download.ready, etc.
 // Docs: https://developers.cloudflare.com/stream/viewing-videos/webhooks/
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const payloadText = await req.text();
     // Optionally verify with a shared secret header if configured

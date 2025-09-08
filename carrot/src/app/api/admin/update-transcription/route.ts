@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Admin endpoint to update transcription status - no auth required for development
-export async function POST(request: NextRequest) {
+export async function POST(request: any, context: any) {
   try {
     const { postId, transcriptionStatus, audioTranscription } = await request.json();
     

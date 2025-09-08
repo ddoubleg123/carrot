@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { Storage } from '@google-cloud/storage';
 import { auth } from '@/auth';
 
@@ -12,7 +12,9 @@ const storage = new Storage({
 
 const BUCKET = process.env.FIREBASE_STORAGE_BUCKET;
 
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     // Require authenticated user (NextAuth)
     const session = await auth();

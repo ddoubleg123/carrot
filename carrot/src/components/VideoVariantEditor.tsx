@@ -9,20 +9,44 @@ interface VideoVariantEditorProps {
   userVideo: any;
 }
 
+type OutputFormat = 'mp4' | 'webm' | 'mov';
+type Quality = 'low' | 'medium' | 'high';
+
+interface TextOverlay {
+  text: string;
+  x: number;
+  y: number;
+  startSec: number;
+  endSec: number;
+  fontSize: number;
+  color: string;
+}
+
+interface EditManifest {
+  cuts: Array<{ startSec: number; endSec: number }>;
+  audioVolume: number;
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  textOverlays: TextOverlay[];
+  outputFormat: OutputFormat;
+  quality: Quality;
+}
+
 export function VideoVariantEditor({ isOpen, onClose, userVideo }: VideoVariantEditorProps) {
   const { createVariant, isLoading, error } = useVideoVariants(userVideo?.id);
-  const [editManifest, setEditManifest] = useState({
+  const [editManifest, setEditManifest] = useState<EditManifest>({
     cuts: [{ startSec: 0, endSec: userVideo?.asset?.durationSec || 60 }],
     audioVolume: 1.0,
     brightness: 0,
     contrast: 0,
     saturation: 0,
     textOverlays: [],
-    outputFormat: 'mp4' as const,
-    quality: 'medium' as const
+    outputFormat: 'mp4',
+    quality: 'medium'
   });
 
-  const [newOverlay, setNewOverlay] = useState({
+  const [newOverlay, setNewOverlay] = useState<TextOverlay>({
     text: '',
     x: 50,
     y: 50,

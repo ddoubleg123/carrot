@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(req.url);
     const username = searchParams.get("u");

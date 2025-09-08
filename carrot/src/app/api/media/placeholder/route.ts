@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
   // Return a 404 to indicate no video available
   // This will trigger the video error handler which can handle it gracefully
   return new NextResponse('Placeholder video not available', {

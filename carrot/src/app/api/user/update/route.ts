@@ -1,11 +1,11 @@
-import { NextRequest } from "next/server";
+export const runtime = 'nodejs';
 
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 
 const prisma = new PrismaClient();
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   const log = (...args: any[]) => console.log(`[${new Date().toISOString()}] [user/update]`, ...args);
   try {
     log('Request received');

@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createJob, updateJob } from '@/lib/ingestJobs';
 
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const body = await req.json();
     const { sourceUrl, startSec, endSec, userId, postId } = body as {

@@ -109,9 +109,51 @@ function TestDashboardClientInner() {
                 posts.map((post) => (
                   <CommitmentCard
                     key={post.id}
-                    post={post}
-                    currentUser={session.user}
-                    onUpdate={handleUpdateCommitment}
+                    id={(post as any).id}
+                    content={(post as any).content ?? ''}
+                    carrotText={(post as any).carrotText ?? ''}
+                    stickText={(post as any).stickText ?? ''}
+                    author={{
+                      name: (post as any).User?.name ?? (post as any).author?.name ?? 'Unknown',
+                      username: (post as any).User?.username ?? (post as any).author?.username ?? 'unknown',
+                      avatar: (post as any).User?.image ?? (post as any).author?.avatar ?? null,
+                      id: (post as any).userId ?? (post as any).author?.id,
+                      flag: (post as any).author?.flag ?? undefined,
+                    }}
+                    location={{
+                      zip: (post as any).zip ?? '',
+                      city: (post as any).city,
+                      state: (post as any).state,
+                    }}
+                    stats={{
+                      likes: (post as any).likes ?? 0,
+                      comments: (post as any).comments ?? 0,
+                      reposts: (post as any).reposts ?? 0,
+                      views: (post as any).views ?? 0,
+                      carrots: (post as any).carrots,
+                      sticks: (post as any).sticks,
+                    }}
+                    imageUrls={(post as any).imageUrls ?? undefined}
+                    gifUrl={(post as any).gifUrl ?? undefined}
+                    videoUrl={(post as any).videoUrl ?? undefined}
+                    thumbnailUrl={(post as any).thumbnailUrl ?? undefined}
+                    cfUid={(post as any).cfUid ?? null}
+                    cfPlaybackUrlHls={(post as any).cfPlaybackUrlHls ?? null}
+                    captionVttUrl={(post as any).captionVttUrl ?? null}
+                    videoThumbnail={(post as any).videoThumbnail ?? undefined}
+                    videoTranscriptionStatus={(post as any).videoTranscriptionStatus ?? undefined}
+                    audioUrl={(post as any).audioUrl ?? undefined}
+                    audioDurationSeconds={(post as any).audioDurationSeconds ?? undefined}
+                    audioTranscription={(post as any).audioTranscription ?? undefined}
+                    transcriptionStatus={(post as any).transcriptionStatus ?? undefined}
+                    emoji={(post as any).emoji ?? undefined}
+                    gradientFromColor={(post as any).gradientFromColor ?? undefined}
+                    gradientToColor={(post as any).gradientToColor ?? undefined}
+                    gradientViaColor={(post as any).gradientViaColor ?? undefined}
+                    gradientDirection={(post as any).gradientDirection ?? undefined}
+                    uploadStatus={(post as any).uploadStatus ?? null}
+                    uploadProgress={(post as any).uploadProgress ?? undefined}
+                    currentUserId={(session?.user as any)?.id}
                     onDelete={handleDeletePost}
                     onBlock={handleBlockPost}
                   />

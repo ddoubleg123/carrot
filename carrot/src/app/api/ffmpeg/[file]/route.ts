@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import path from 'path';
 import { promises as fs } from 'fs';
 
@@ -21,7 +21,7 @@ const SOURCES = [
 
 export const runtime = 'nodejs';
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ file: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ file: string }> }) {
   const { file: raw } = await ctx.params;
   // Explicitly ignore hashed and generic names to avoid accidental execution in SSR or worker contexts.
   // e.g. 814.ffmpeg.js, ffmpeg.js, and any *.map -> 204 No Content (silence dev noise)
@@ -43,7 +43,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ file: strin
   if (localPath) {
     try {
       const buf = await fs.readFile(localPath);
-      return new NextResponse(buf, {
+      const body = new Uint8Array(buf);
+      return new NextResponse(body, {
         status: 200,
         headers: {
           'Content-Type': TYPES[name],

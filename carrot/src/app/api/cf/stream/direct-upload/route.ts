@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // POST /api/cf/stream/direct-upload
 // Creates a one-time Direct Upload URL for Cloudflare Stream (tus-compatible)
 // Env required: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 

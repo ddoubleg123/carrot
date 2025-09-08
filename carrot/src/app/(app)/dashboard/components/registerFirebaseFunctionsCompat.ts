@@ -1,7 +1,7 @@
 "use client";
 declare global {
   interface Window {
-    carrotFunctions: any;
+    carrotFunctions?: { httpsCallable: (name: string) => any };
   }
 }
 import firebase from "firebase/compat/app";

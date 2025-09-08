@@ -1,11 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../../../auth';
 
 const prisma = new PrismaClient();
 
 // GET /api/onboarding-answers (for current user)
-export async function GET(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
   const answers = await prisma.onboardingAnswer.findMany({
@@ -15,7 +17,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/onboarding-answers (submit answers for current user)
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const data = await req.json();

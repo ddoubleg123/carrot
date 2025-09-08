@@ -1,15 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { videoVariantsService } from '@/lib/variantsService';
 
-export async function GET(req: NextRequest, { params }: { params: { variantId: string } }) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, context: { params: Promise<{ variantId: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { variantId } = await params;
+    const { variantId } = await context.params;
 
     // Get variant with ownership check
     const variant = await videoVariantsService.getVariant(variantId);
@@ -38,14 +40,14 @@ export async function GET(req: NextRequest, { params }: { params: { variantId: s
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { variantId: string } }) {
+export async function DELETE(req: Request, context: { params: Promise<{ variantId: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { variantId } = await params;
+    const { variantId } = await context.params;
 
     // Get variant with ownership check
     const variant = await videoVariantsService.getVariant(variantId);

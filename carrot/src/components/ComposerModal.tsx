@@ -10,6 +10,17 @@ import AudioPlayer from './AudioPlayer';
 import CFVideoPlayer from './CFVideoPlayer';
 import Toast from '../app/(app)/dashboard/components/Toast';
 import GifPicker from '../app/(app)/dashboard/components/GifPicker';
+import ComposeHeader from './composer/ComposeHeader';
+import ComposeTextArea from './composer/ComposeTextArea';
+import FooterActions from './composer/FooterActions';
+import AudioPreview from './composer/AudioPreview';
+import ExternalIngestControls from './composer/ExternalIngestControls';
+import AudioRecorderModal from './composer/AudioRecorderModal';
+import ToastPortal from './composer/ToastPortal';
+import VideoTrimControls from './composer/VideoTrimControls';
+import VideoPreview from './composer/VideoPreview';
+import VideoThumbnails from './composer/VideoThumbnails';
+import { ComposerProvider } from './composer/ComposerContext';
 // Inline trim UX; modal editor removed per request
 
 interface ComposerModalProps {
@@ -950,6 +961,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           textareaRef.current.focus();
         }
       }, 0);
+    }
     setShowEmojiPicker(false);
   };
 
@@ -1103,68 +1115,10 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-white rounded-2xl p-0 w-full max-w-2xl shadow-xl overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b">
-            <h3 className="text-lg font-semibold">Compose</h3>
-            <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Content */}
+          <ComposeHeader onClose={onClose} />
           <div className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto">
             <form onSubmit={handleSubmit}>
-              {/* User Info */}
-              <div className="flex items-center gap-3 mb-4">
-                {/* User Avatar */}
-                {(session?.user as any)?.profilePhoto || (session?.user as any)?.image ? (
-                  <Image
-                    src={(session?.user as any)?.profilePhoto || (session?.user as any)?.image}
-                    alt="Your avatar"
-                    width={48}
-                    height={48}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center">
-                    <span className="text-white font-medium">
-                      {((session?.user as any)?.username || (session?.user as any)?.name || 'U')
-                        .split(/[\s@._-]+/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((s: string) => s[0]?.toUpperCase() || '')
-                        .join('') || 'U'}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <div className="font-medium text-gray-900">
-                    {(session?.user as any)?.username || (session?.user as any)?.name || 'Anonymous'}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Public post
-                  </div>
-                </div>
-              </div>
-
-              {/* Current Color Scheme label only (removed preview box) */}
-              <div className="mb-2">
-                <div className="text-sm text-gray-700">Current Color Scheme: {colorSchemes[currentColorScheme]?.name}</div>
-              </div>
-
-              {/* Text Area */}
-              <div className="mb-4">
-                <textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="What's happening?"
-                  className="w-full h-32 p-4 text-lg bg-white/50 border border-white/30 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-gray-600"
-                  autoFocus
-                />
-              </div>
-
-              {/* Cloudflare Stream Preview (when cfUid available) */}
+              <ComposeTextArea value={content} onChange={setContent} textareaRef={textareaRef} />
               {cfUidPreview && (
                 <div className="mb-4 relative">
                   <CFVideoPlayer uid={cfUidPreview} autoPlay muted loop controls />
@@ -1181,8 +1135,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                   </button>
                 </div>
               )}
-
-              {/* Media Preview */}
               {mediaPreview && mediaType === 'image' && (
                 <div className="mb-4 relative">
                   <img src={mediaPreview} alt="Preview" className="w-full max-h-64 object-cover rounded-xl" />
@@ -1199,183 +1151,48 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                   </button>
                 </div>
               )}
-
-              {/* Video Preview */}
               {mediaType === 'video' && (
                 <div className="mb-4 relative">
-                  {mediaPreview ? (
-                    <div className="relative">
-                      <video
-                        ref={previewVideoRef}
-                        src={mediaPreview}
-                        className="w-full max-h-96 rounded-xl object-cover"
-                        controls
-                        onLoadedMetadata={(e) => {
-                          const v = e.currentTarget;
-                          if (v && v.duration && !isNaN(v.duration) && v.duration > 0) {
-                            setVideoDuration(v.duration);
-                            setVideoTrimEnd(v.duration);
-                            videoLoadRetryRef.current = 0;
-                          }
-                        }}
-                        onError={(e) => {
-                          try {
-                            const v = e.currentTarget as HTMLVideoElement;
-                            const err = (v as any)?.error as MediaError | undefined;
-                            console.error('Video failed to load', {
-                              src: v?.currentSrc || (mediaPreview ?? ''),
-                              readyState: v?.readyState,
-                              networkState: v?.networkState,
-                              errorCode: err?.code,
-                              errorMsg:
-                                err?.code === 1 ? 'ABORTED' :
-                                err?.code === 2 ? 'NETWORK' :
-                                err?.code === 3 ? 'DECODE' :
-                                err?.code === 4 ? 'SRC_NOT_SUPPORTED' : undefined,
-                            });
+                  <VideoPreview
+                    src={mediaPreview || ''}
+                    videoRef={previewVideoRef}
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget;
+                      if (v && v.duration && !isNaN(v.duration) && v.duration > 0) {
+                        setVideoDuration(v.duration);
+                        setVideoTrimEnd(v.duration);
+                        videoLoadRetryRef.current = 0;
+                      }
+                    }}
+                    onError={(e) => {
+                      try {
+                        const v = e.currentTarget as HTMLVideoElement;
+                        const err = (v as any)?.error as MediaError | undefined;
+                        console.error('Video failed to load', {
+                          src: v?.currentSrc || (mediaPreview ?? ''),
+                          readyState: v?.readyState,
+                          networkState: v?.networkState,
+                          errorCode: err?.code,
+                          errorMsg:
+                            err?.code === 1 ? 'ABORTED' :
+                            err?.code === 2 ? 'NETWORK' :
+                            err?.code === 3 ? 'DECODE' :
+                            err?.code === 4 ? 'SRC_NOT_SUPPORTED' : undefined,
+                        });
 
-                            // One-time retry: toggle cache-buster or strip it
-                            if (videoLoadRetryRef.current < 1) {
-                              videoLoadRetryRef.current += 1;
-                              const base = mediaBaseUrlRef.current || (mediaPreview ?? '');
-                              const toggle = base.includes('?') ? `${base}&t=${Date.now()}` : `${base}?t=${Date.now()}`;
-                              // Attempt retry without setState to avoid re-render loops
-                              v.src = toggle;
-                              try { v.load(); } catch {}
-                              return;
-                            }
-                            // Persistent failure: surface to user
-                            try { showErrorToast('Could not load video preview.'); } catch {}
-                          } catch {}
-                        }}
-                      />
-                      
-                      {/* Helper text */}
-                      <div className="mt-2 text-xs text-gray-700">
-                        Drag the crop handles below to trim the video start and end.
-                      </div>
-                      {/* Inline trim controls */}
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between text-xs text-gray-700 mb-1">
-                          <span>Start: {videoTrimStart.toFixed(2)}s</span>
-                          <span>End: {videoTrimEnd.toFixed(2)}s</span>
-                          <span>Duration: {videoDuration.toFixed(2)}s</span>
-                        </div>
-                        {/* Single visual track with truncation shading and draggable handles */}
-                        <div ref={trimTrackRef} className="relative w-full h-3 mb-4 rounded bg-gray-200 overflow-hidden select-none touch-none">
-                          {/* Shaded left (cropped) */}
-                          <div
-                            className="absolute top-0 left-0 h-full bg-gray-400/60"
-                            style={{ width: `${videoDuration ? (Math.min(videoTrimStart, videoTrimEnd) / videoDuration) * 100 : 0}%` }}
-                          />
-                          {/* Shaded right (cropped) */}
-                          <div
-                            className="absolute top-0 right-0 h-full bg-gray-400/60"
-                            style={{ width: `${videoDuration ? ((videoDuration - Math.max(videoTrimEnd, videoTrimStart)) / videoDuration) * 100 : 0}%` }}
-                          />
-                          {/* Selected region highlight */}
-                          <div
-                            className="absolute top-0 h-full bg-orange-500/50"
-                            style={{
-                              left: `${videoDuration ? (Math.min(videoTrimStart, videoTrimEnd) / videoDuration) * 100 : 0}%`,
-                              width: `${videoDuration ? ((Math.max(videoTrimEnd, videoTrimStart) - Math.min(videoTrimStart, videoTrimEnd)) / videoDuration) * 100 : 0}%`
-                            }}
-                          />
-                          {/* Crop handles */}
-                          {/* Start handle (full-hit area) */}
-                          <button
-                            type="button"
-                            aria-label="Trim start"
-                            onMouseDown={() => setDraggingHandle('start')}
-                            onTouchStart={() => setDraggingHandle('start')}
-                            className="absolute -top-4 w-10 h-10 z-10 bg-transparent cursor-ew-resize transform -translate-x-1/2 touch-none"
-                            style={{ left: `${videoDuration ? (Math.min(videoTrimStart, videoTrimEnd) / videoDuration) * 100 : 0}%` }}
-                          >
-                            <span className="pointer-events-none absolute inset-0 m-auto w-4 h-6 bg-white border-2 border-orange-500 rounded-md shadow-lg ring-2 ring-orange-300 ring-offset-2 ring-offset-white" />
-                          </button>
-                          {/* End handle (full-hit area) */}
-                          <button
-                            type="button"
-                            aria-label="Trim end"
-                            onMouseDown={() => setDraggingHandle('end')}
-                            onTouchStart={() => setDraggingHandle('end')}
-                            className="absolute -top-4 w-10 h-10 z-10 bg-transparent cursor-ew-resize transform -translate-x-1/2 touch-none"
-                            style={{ left: `${videoDuration ? (Math.max(videoTrimEnd, videoTrimStart) / videoDuration) * 100 : 0}%` }}
-                          >
-                            <span className="pointer-events-none absolute inset-0 m-auto w-4 h-6 bg-white border-2 border-red-500 rounded-md shadow-lg ring-2 ring-red-300 ring-offset-2 ring-offset-white" />
-                          </button>
-                          {/* Truncation symbols above handles */}
-                          <div className="absolute -top-5 text-orange-600 text-lg select-none" style={{ left: `calc(${videoDuration ? (Math.min(videoTrimStart, videoTrimEnd) / videoDuration) * 100 : 0}% - 6px)` }}>⟪</div>
-                          <div className="absolute -top-5 text-red-600 text-lg select-none" style={{ left: `calc(${videoDuration ? (Math.max(videoTrimEnd, videoTrimStart) / videoDuration) * 100 : 0}% - 6px)` }}>⟫</div>
-                        </div>
-                        <div className="mt-1 text-xs text-gray-600">Selected clip: {(Math.max(0, videoTrimEnd - videoTrimStart)).toFixed(2)}s</div>
-                      </div>
-                      {videoThumbnails.length > 0 && (
-                        <div className="mt-2">
-                          <div className="text-sm text-gray-700 mb-2">Choose thumbnail:</div>
-                          <div className="flex gap-2 overflow-x-auto">
-                            {videoThumbnails.map((thumb, index) => (
-                              <img
-                                key={index}
-                                src={thumb}
-                                alt={`Thumbnail ${index + 1}`}
-                                className={`w-20 h-12 object-cover rounded cursor-pointer border-2 ${
-                                  currentThumbnailIndex === index ? 'border-orange-500' : 'border-transparent'
-                                }`}
-                                onClick={() => setCurrentThumbnailIndex(index)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="w-full h-64 rounded-xl bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 flex flex-col items-center justify-center p-6">
-                      <div className="text-center max-w-sm">
-                        {/* Progress Circle */}
-                        <div className="relative w-20 h-20 mx-auto mb-4">
-                          <div className="absolute inset-0 rounded-full border-4 border-orange-100"></div>
-                          <div 
-                            className="absolute inset-0 rounded-full border-4 border-orange-500 transition-all duration-300"
-                            style={{
-                              clipPath: `conic-gradient(from 0deg, transparent ${360 - (ingestProgress || 0) * 3.6}deg, orange ${360 - (ingestProgress || 0) * 3.6}deg)`
-                            }}
-                          ></div>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z"/>
-                            </svg>
-                          </div>
-                        </div>
-                        
-                        {/* Status Text */}
-                        <div className="font-medium text-gray-900 mb-2">
-                          {ingestStatus === 'downloading' && 'Downloading Video...'}
-                          {ingestStatus === 'transcoding' && 'Processing Video...'}
-                          {ingestStatus === 'uploading' && 'Uploading to Storage...'}
-                          {ingestStatus === 'finalizing' && 'Finalizing...'}
-                          {ingestStatus === 'completed' && 'Video Ready'}
-                          {(!ingestStatus || ingestStatus === 'queued') && 'Preparing Video...'}
-                        </div>
-                        
-                        {/* Progress Bar */}
-                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                          <div 
-                            className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${ingestProgress || 0}%` }}
-                          />
-                        </div>
-                        
-                        {/* Progress Percentage */}
-                        <div className="text-sm text-gray-600">
-                          {ingestProgress ? `${Math.round(ingestProgress)}%` : '0%'} complete
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
+                        if (videoLoadRetryRef.current < 1) {
+                          videoLoadRetryRef.current += 1;
+                          const base = mediaBaseUrlRef.current || (mediaPreview ?? '');
+                          const toggle = base.includes('?') ? `${base}&t=${Date.now()}` : `${base}?t=${Date.now()}`;
+                          const vEl = e.currentTarget as HTMLVideoElement;
+                          vEl.src = toggle;
+                          try { vEl.load(); } catch {}
+                          return;
+                        }
+                        try { showErrorToast('Could not load video preview.'); } catch {}
+                      } catch {}
+                    }}
+                    onRemove={() => {
                       setMediaPreview(null);
                       setMediaFile(null);
                       setMediaType(null);
@@ -1388,139 +1205,124 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                       setExternalUrl('');
                       mediaBaseUrlRef.current = null;
                     }}
-                    className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black/70"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  />
+                  <VideoThumbnails
+                    thumbnails={videoThumbnails}
+                    currentIndex={currentThumbnailIndex}
+                    onSelect={(i) => setCurrentThumbnailIndex(i)}
+                  />
+                  <VideoTrimControls
+                    videoDuration={videoDuration}
+                    videoTrimStart={videoTrimStart}
+                    videoTrimEnd={videoTrimEnd}
+                    trimTrackRef={trimTrackRef}
+                    setDraggingHandle={(h) => setDraggingHandle(h)}
+                  />
                 </div>
               )}
-
-            {/* Audio Preview */}
-            {audioUrl && (
-              <div className="mb-4">
-                <AudioPlayer
+              {audioUrl && (
+                <AudioPreview
                   audioUrl={audioUrl}
                   postId={currentPostId || 'temp'}
                   initialDurationSeconds={audioDurationSeconds ?? undefined}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
+                  onRemove={() => {
                     setAudioBlob(null);
                     setAudioUrl('');
                     setAudioTranscription('');
                     setAudioDurationSeconds(null);
                   }}
-                  className="mt-2 text-sm text-red-600 hover:text-red-800"
-                >
-                  Remove audio
-                </button>
-              </div>
-            )}
-
-            {/* Upload Progress */}
-            {isUploading && (
-              <div className="mb-4">
-                <div className="text-sm text-gray-700 mb-1" role="status" aria-live="polite">Uploading and transcribing... {Math.round(uploadProgress)}%</div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Hidden file input for 'Upload from your computer' */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              onChange={(e) => {
-                console.log("[DEBUG] File input onChange triggered");
-                if (e.target.files && e.target.files[0]) {
-                  const file = e.target.files[0];
-                  console.log("[DEBUG] Raw file from input:", {
-                    name: file.name,
-                    size: file.size,
-                    type: file.type,
-                    lastModified: file.lastModified
-                  });
-                }
-                setShowMediaPicker(false);
-                handleImageUpload(e);
-              }}
-              className="hidden"
-            />
-
-            {/* External ingest controls */}
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  value={externalUrl}
-                  onChange={(e) => setExternalUrl(e.target.value)}
-                  placeholder="Paste a video URL (YouTube, X, Reddit, etc.)"
-                  className="flex-1 border rounded-md px-3 py-2"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && canAttachExternal) {
-                      e.preventDefault();
-                      startExternalIngestion();
-                    }
-                  }}
                 />
-                <button
-                  type="button"
-                  disabled={!canAttachExternal}
-                  onClick={startExternalIngestion}
-                  className="px-4 py-2 rounded-md bg-blue-600 text-white disabled:opacity-50"
-                >
-                  {isIngestActive ? 'Processing…' : 'Attach'}
-                </button>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={externalTosAccepted} onChange={(e) => setExternalTosAccepted(e.target.checked)} />
-                I have rights to ingest and repost this content.
-              </label>
-              {isIngestActive && (
-                <div className="text-xs text-gray-600">{ingestStatus || 'processing'}{typeof ingestProgress === 'number' ? ` • ${Math.round(ingestProgress)}%` : ''}</div>
               )}
+              {isUploading && (
+                <div className="mb-4">
+                  <div className="text-sm text-gray-700 mb-1" role="status" aria-live="polite">Uploading and transcribing... {Math.round(uploadProgress)}%</div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => {
+                  console.log("[DEBUG] File input onChange triggered");
+                  if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    console.log("[DEBUG] Raw file from input:", {
+                      name: file.name,
+                      size: file.size,
+                      type: file.type,
+                      lastModified: file.lastModified
+                    });
+                  }
+                  setShowMediaPicker(false);
+                  handleImageUpload(e);
+                }}
+                className="hidden"
+              />
+              <ExternalIngestControls
+                value={externalUrl}
+                onChange={setExternalUrl}
+                tosAccepted={externalTosAccepted}
+                onTosChange={setExternalTosAccepted}
+                canAttach={canAttachExternal}
+                isActive={isIngestActive}
+                statusLabel={ingestStatus || undefined}
+                progress={ingestProgress}
+                onAttach={startExternalIngestion}
+              />
               {ingestError && <div className="text-sm text-red-600">{ingestError}</div>}
-            </div>
-
-            {/* Upload input (optional) */}
-            <div className="flex items-center gap-3">
-              <button type="button" className="px-3 py-2 rounded-md border" onClick={() => fileInputRef.current?.click()}>
-                Upload image/video
-              </button>
-            </div>
-
-            {/* Footer actions */}
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-sm text-gray-700">{content.length}/1000 characters</div>
-              <div className="flex gap-3">
-                <button type="button" onClick={onClose} className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-full">Cancel</button>
-                <button
-                  type="submit"
-                  onClick={() => setSubmitRequested(true)}
-                  disabled={(() => {
-                    const hasExt = !mediaFile && mediaType === 'video' && !!mediaBaseUrlRef.current;
-                    return ((!content.trim() && !mediaFile && !audioBlob && !selectedGifUrl && !externalUrl.trim() && !hasExt) || isPosting || isUploading);
-                  })()}
-                  className="px-6 py-2 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-full font-medium hover:from-orange-500 hover:to-red-600 disabled:opacity-50"
-                >
-                  {isPosting ? 'Posting…' : 'Post'}
+              <div className="flex items-center gap-3">
+                <button type="button" className="px-3 py-2 rounded-md border" onClick={() => fileInputRef.current?.click()}>
+                  Upload image/video
                 </button>
               </div>
-            </div>
-          </form>
+              <FooterActions
+                count={content.length}
+                onCancel={onClose}
+                onSubmitClick={() => setSubmitRequested(true)}
+                isPosting={isPosting}
+                disabled={(() => {
+                  const hasExt = !mediaFile && mediaType === 'video' && !!mediaBaseUrlRef.current;
+                  return ((!content.trim() && !mediaFile && !audioBlob && !selectedGifUrl && !externalUrl.trim() && !hasExt) || isPosting || isUploading);
+                })()}
+              />
+            </form>
+          </div>
         </div>
       </div>
     );
   };
 
   return (
-    <div>
-      {renderComposeModal()}
-    </div>
+    <ComposerProvider
+      value={{
+        showToast,
+        toastMessage,
+        toastType,
+        setShowToast,
+        showAudioRecorder,
+        setShowAudioRecorder,
+      }}
+    >
+      <div>
+        {renderComposeModal()}
+        <AudioRecorderModal
+          open={showAudioRecorder}
+          onRecorded={handleAudioRecorded}
+          onCancel={() => setShowAudioRecorder(false)}
+        />
+        <ToastPortal
+          isVisible={showToast}
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
+        />
+      </div>
+    </ComposerProvider>
   );
 }

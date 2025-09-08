@@ -1,15 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { videoIngestService } from '@/lib/ingestService';
 
-export async function GET(req: NextRequest, { params }: { params: { assetId: string } }) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, context: { params: Promise<{ assetId: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { assetId } = await params;
+    const { assetId } = await context.params;
 
     // Get asset with user access check
     const asset = await videoIngestService.getAsset(assetId);

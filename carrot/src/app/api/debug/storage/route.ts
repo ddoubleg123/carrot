@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 // Use the shared admin app initialization
@@ -8,7 +8,7 @@ import { app as adminApp } from '../../../../lib/firebase-admin';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const admin = require('firebase-admin');
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(req.url);
     const prefix = searchParams.get('prefix') || undefined;

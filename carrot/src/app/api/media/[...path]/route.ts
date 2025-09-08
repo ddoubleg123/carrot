@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -14,12 +14,15 @@ if (!getApps().length) {
   });
 }
 
+export const runtime = 'nodejs';
+
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
+  request: Request,
+  context: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const filePath = params.path.join('/');
+    const { path } = await context.params;
+    const filePath = (path || []).join('/');
     console.log('[media] Serving file:', filePath);
     
     const bucket = getStorage().bucket();

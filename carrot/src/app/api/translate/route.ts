@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Free translation service using LibreTranslate or Google Translate API
 const TRANSLATION_SERVICE_URL = process.env.TRANSLATION_SERVICE_URL || 'https://libretranslate.de/translate';
 
-export async function POST(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   let text: string | undefined;
   let targetLanguage: string | undefined;
   let sourceLanguage: string = 'auto';

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '../../../auth';
 import * as admin from 'firebase-admin';
 
@@ -24,7 +24,9 @@ if (hasAdminCreds && !admin.apps.length) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   // If admin credentials are not configured, return a safe no-op so client can skip
   if (!hasAdminCreds) {
     if (process.env.NODE_ENV !== 'production') {

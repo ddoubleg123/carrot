@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId');

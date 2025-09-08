@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cleanupGrammar, basicGrammarCleanup } from '@/lib/languageTool';
 
@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 // Transcription service URL (will be Cloud Run URL when deployed)
 const TRANSCRIPTION_SERVICE_URL = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8081';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   let postId: string | undefined;
   
   try {
@@ -135,19 +135,20 @@ export async function POST(request: NextRequest) {
 
     } catch (voskError) {
       console.error('❌ Vosk transcription service failed:', voskError);
+      const errMsg = voskError instanceof Error ? voskError.message : String(voskError);
       
       // Update post status to failed
       await prisma.post.update({
         where: { id: postId },
         data: { 
           transcriptionStatus: 'failed',
-          audioTranscription: `Transcription failed: ${voskError.message}`
+          audioTranscription: `Transcription failed: ${errMsg}`
         }
       });
 
       return NextResponse.json({ 
         success: false, 
-        error: `Transcription service failed: ${voskError.message}`,
+        error: `Transcription service failed: ${errMsg}`,
         status: 'failed'
       }, { status: 500 });
     }
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId');

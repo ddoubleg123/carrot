@@ -4,7 +4,7 @@ import prisma from '../../../../lib/prisma';
 import path from 'path';
 import fs from 'fs';
 
-export async function GET() {
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   try {
     // Mirror prisma SQLite resolution to report actual DB file being used
     const raw = process.env.DATABASE_URL;

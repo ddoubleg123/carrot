@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 export const runtime = 'nodejs';
@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 
 // PATCH /api/posts/[id] - update a post (for audio URL updates)
 export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -18,7 +18,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const postId = params.id;
+    const { id: postId } = await context.params;
     const body = await request.json();
     
     // First, check if the post exists and if the user is the owner
@@ -104,12 +104,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const t0 = Date.now();
-    console.log('🗑️ DELETE /api/posts/[id] start', { id: params?.id });
+    const { id } = await context.params;
+    console.log('🗑️ DELETE /api/posts/[id] start', { id });
     const session = await auth();
     const tAuth = Date.now();
     console.log('🗑️ auth() completed in ms:', tAuth - t0);
@@ -118,7 +119,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const postId = params.id;
+    const postId = id as string;
     
     // First, check if the post exists and if the user is the owner
     const post = await prisma.post.findUnique({

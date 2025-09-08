@@ -40,13 +40,19 @@ export interface IngestJob {
 // Initialize Prisma client with better error handling
 let prisma: PrismaClient;
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
+}
+
 try {
-  prisma = globalThis.__prisma || new PrismaClient({
+  const g = globalThis as typeof globalThis & { __prisma?: PrismaClient };
+  prisma = g.__prisma || new PrismaClient({
     log: ['error', 'warn'],
   });
   
   if (process.env.NODE_ENV !== 'production') {
-    globalThis.__prisma = prisma;
+    g.__prisma = prisma;
   }
 } catch (error) {
   console.error('Failed to initialize Prisma client:', error);

@@ -1,6 +1,6 @@
 "use client";
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getFunctions } from "@firebase/functions";
+import { getFunctions, httpsCallable, type Functions } from "firebase/functions";
 import { firebaseApp as app } from '../../../../lib/firebase';
 
 // Defensive: ensure app is initialized (workaround for Next.js/Firebase 12+ bug)
@@ -18,7 +18,10 @@ const clientApp: FirebaseApp = getApps().length ? app : initializeApp(firebaseCo
 
 if (typeof window !== "undefined" && clientApp) {
   try {
-    window.carrotFunctions = getFunctions(clientApp, "us-central1");
+    const functions = getFunctions(clientApp, "us-central1");
+    // Attach a convenient httpsCallable helper to match expected shape
+    (functions as any).httpsCallable = (name: string) => httpsCallable(functions, name);
+    window.carrotFunctions = functions as any;
     console.log("[registerFirebaseFunctionsClient] Functions registered!", window.carrotFunctions);
   } catch (e) {
     console.error("[registerFirebaseFunctionsClient] Functions registration error:", e);
@@ -27,6 +30,7 @@ if (typeof window !== "undefined" && clientApp) {
 
 declare global {
   interface Window {
-    carrotFunctions: ReturnType<typeof getFunctions>;
+    // Optional to match existing ambient declaration
+    carrotFunctions?: { httpsCallable: (name: string) => any };
   }
 }

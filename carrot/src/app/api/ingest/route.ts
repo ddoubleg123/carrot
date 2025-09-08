@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const RAILWAY_SERVICE_URL = process.env.INGEST_WORKER_URL || 'http://localhost:8000';
 const INGEST_WORKER_SECRET = process.env.INGEST_WORKER_SECRET || 'dev_ingest_secret';
@@ -41,7 +41,9 @@ interface RailwayJobStatus {
   };
 }
 
-export async function POST(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const body: IngestRequest = await request.json();
     const { url } = body;
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
@@ -185,7 +187,7 @@ export async function GET(request: NextRequest) {
 }
 
 // PATCH handler to link ingest job to post
-export async function PATCH(request: NextRequest) {
+export async function PATCH(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');

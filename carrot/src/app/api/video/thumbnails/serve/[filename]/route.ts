@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
+export const runtime = 'nodejs';
+
 export async function GET(
-  request: NextRequest,
+  request: Request,
   context: { params: Promise<{ filename: string }> }
 ) {
   try {

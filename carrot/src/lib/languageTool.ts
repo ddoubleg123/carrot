@@ -74,7 +74,9 @@ function applyEnhancedSpeechRules(text: string): { processed: string; rulesAppli
   // Apply each rule and track changes
   for (const fix of speechFixes) {
     const before = processed;
-    processed = processed.replace(fix.from, fix.to);
+    processed = typeof fix.to === 'function'
+      ? processed.replace(fix.from, fix.to)
+      : processed.replace(fix.from, fix.to);
     if (before !== processed) {
       rulesApplied++;
     }

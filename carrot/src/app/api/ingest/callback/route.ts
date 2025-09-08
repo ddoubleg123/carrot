@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { updateJob } from '@/lib/ingestJobs';
 
 const WORKER_SECRET = process.env.INGEST_WORKER_SECRET ?? 'dev_ingest_secret';
 
-export async function POST(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const body = await request.json();
     const { 

@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 // GET /api/onboarding-questions
-export async function GET() {
+export const runtime = 'nodejs';
+
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   const questions = await prisma.onboardingQuestion.findMany({
     orderBy: { id: 'asc' }
   });
@@ -12,7 +14,7 @@ export async function GET() {
 }
 
 // POST /api/onboarding-questions (admin only)
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   // TODO: Add admin auth check
   const data = await req.json();
   const question = await prisma.onboardingQuestion.create({

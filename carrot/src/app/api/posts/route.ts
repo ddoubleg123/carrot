@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import prisma from '../../../lib/prisma';
 import { auth } from '../../../auth';
 
 // POST /api/posts - create a new post
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   console.log('🚨 POST /api/posts - ROUTE ENTERED');
   
   const session = await auth();
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/posts - get all posts (latest first)
-export async function GET() {
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const posts = await prisma.post.findMany({
       orderBy: { createdAt: 'desc' },

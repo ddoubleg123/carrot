@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function GET(request: Request, _ctx: { params: Promise<{ path: string[] }> }) {
   // This endpoint handles /media/placeholder/* requests
   // Return a minimal valid MP4 response for any video requests
   const minimalMp4 = Buffer.from([

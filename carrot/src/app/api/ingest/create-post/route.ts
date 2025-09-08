@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const provided = (req.headers.get('x-worker-secret') || '').trim();
     const expected = process.env.INGEST_WORKER_SECRET || 'dev_ingest_secret';

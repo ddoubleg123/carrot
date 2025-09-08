@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { videoIngestService } from '@/lib/ingestService';
 import { isSupportedVideoUrl } from '@/lib/urlNormalizer';
 
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs';
+
+export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {

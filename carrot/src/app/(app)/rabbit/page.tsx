@@ -2,9 +2,8 @@
 
 import { useState, useRef } from 'react';
 import { Upload, Play, Pause, Download, Sparkles, Users, Plus, Search, Filter } from 'lucide-react';
-import { FEATURED_AGENTS, Agent, searchAgents, getAgentsByDomain } from '@/lib/agents';
-import MediaUploadCard from '@/components/rabbit/MediaUploadCard';
-import CreationTools from '@/components/rabbit/CreationTools';
+import MediaUploadCard from '../../../components/rabbit/MediaUploadCard';
+import CreationTools from '../../../components/rabbit/CreationTools';
 
 const FEATURED_AGENTS = [
   {
@@ -87,10 +86,11 @@ type Agent = typeof FEATURED_AGENTS[0];
 
 export default function RabbitAIPage() {
   // State management
-  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: MediaType } | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'video' | 'image' } | null>(null);
   const [creationMode, setCreationMode] = useState<CreationMode>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [agentQuery, setAgentQuery] = useState('');
+  const [agentSearch, setAgentSearch] = useState('');
   const [transcript, setTranscript] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -156,7 +156,7 @@ export default function RabbitAIPage() {
             <div className="space-y-6">
               {/* Media Upload */}
               <MediaUploadCard
-                onMediaSelect={(media) => {
+                onMediaSelect={(media: { url: string; type: 'video' | 'image' }) => {
                   setSelectedMedia(media);
                   // Auto-transcribe if video
                   if (media.type === 'video') {
