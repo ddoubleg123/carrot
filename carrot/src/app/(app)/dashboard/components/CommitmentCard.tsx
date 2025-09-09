@@ -603,6 +603,7 @@ export default function CommitmentCard(props: CommitmentCardProps) {
   );
 }
  
+/* Legacy stray block (ignored)
   HandThumbDownIcon,
   TrashIcon,
   NoSymbolIcon,
@@ -906,3 +907,14 @@ import AudioPlayerCard from '../../../../components/AudioPlayerCard';
   </>
 );
 }
+/*
+              </div>
+            </div>
+          )}
+        </div>
+        </div>
+      )}
+  </>
+);
+}
+*/
