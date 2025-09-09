@@ -28,26 +28,59 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
           credential: admin.credential.cert({
             projectId: PROJECT_ID,
             clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\n/g, '\n'),
+            // Normalize private key where \n are stored as literal backslash+n in env
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
           }),
           storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
         });
       }
       const bucket = admin.storage().bucket(bucketName);
       const file = bucket.file(objectPath);
-      const [buf] = await file.download();
       const [meta] = await file.getMetadata().catch(() => [{ contentType: 'image/jpeg', cacheControl: 'public,max-age=300' }]);
-      const resp = new NextResponse(buf, {
+
+      // Support HTTP Range for streaming (videos)
+      const range = req.headers.get('range');
+      const size = Number(meta?.size || 0);
+      const contentType = meta?.contentType || 'application/octet-stream';
+      const cacheControl = meta?.cacheControl || 'public, max-age=86400, stale-while-revalidate=604800';
+
+      if (range && size > 0) {
+        // Example: bytes=start-end
+        const m = /bytes=(\d+)-(\d*)/.exec(range);
+        const start = m ? parseInt(m[1], 10) : 0;
+        const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1); // 1MB default chunk
+        if (isNaN(start) || isNaN(end) || start > end) {
+          return new NextResponse('Malformed Range', { status: 416 });
+        }
+        const stream = file.createReadStream({ start, end });
+        return new NextResponse(stream as any, {
+          status: 206,
+          headers: {
+            'content-type': contentType,
+            'cache-control': cacheControl,
+            'content-length': String(end - start + 1),
+            'content-range': `bytes ${start}-${end}/${size}`,
+            'accept-ranges': 'bytes',
+            'x-img-bucket': bucketName,
+            'x-img-path': objectPath,
+            'x-img-mode': 'admin-range',
+          },
+        });
+      }
+
+      // No Range: stream entire object without buffering in memory
+      const stream = file.createReadStream();
+      return new NextResponse(stream as any, {
         status: 200,
         headers: {
-          'content-type': meta?.contentType || 'image/jpeg',
-          'cache-control': meta?.cacheControl || 'public, max-age=86400, stale-while-revalidate=604800',
+          'content-type': contentType,
+          'cache-control': cacheControl,
+          'accept-ranges': 'bytes',
           'x-img-bucket': bucketName,
           'x-img-path': objectPath,
-          'x-img-mode': 'admin',
+          'x-img-mode': 'admin-stream',
         },
       });
-      return resp;
     };
 
     let target: string | null = null;
@@ -150,22 +183,34 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     // Validate
     try { new URL(target); } catch { return NextResponse.json({ error: 'Invalid target URL' }, { status: 400 }); }
 
-    // Fetch and forward bytes
-    const upstream = await fetch(target, { redirect: 'follow' });
+    // Fetch and forward bytes. Forward Range for streaming.
+    const upstream = await fetch(target, {
+      redirect: 'follow',
+      headers: {
+        ...(req.headers.get('range') ? { range: req.headers.get('range') as string } : {}),
+      },
+    });
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '');
       return NextResponse.json({ error: 'Upstream error', status: upstream.status, body: text.slice(0, 2048) }, { status: 502 });
     }
-    const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
     const cache = upstream.headers.get('cache-control') || 'public, max-age=300';
-    const buf = await upstream.arrayBuffer();
-    return new NextResponse(buf, {
-      status: 200,
-      headers: {
-        'content-type': contentType,
-        'cache-control': cache,
-        'x-img-mode': 'fallback',
-      },
+    const status = upstream.status; // could be 200 or 206
+    const headers: Record<string, string> = {
+      'content-type': contentType,
+      'cache-control': cache,
+      'x-img-mode': 'fallback-stream',
+    };
+    const contentRange = upstream.headers.get('content-range');
+    const acceptRanges = upstream.headers.get('accept-ranges') || 'bytes';
+    if (contentRange) headers['content-range'] = contentRange;
+    if (acceptRanges) headers['accept-ranges'] = acceptRanges;
+    const contentLength = upstream.headers.get('content-length');
+    if (contentLength) headers['content-length'] = contentLength;
+    return new NextResponse(upstream.body as any, {
+      status,
+      headers,
     });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
