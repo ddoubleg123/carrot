@@ -11,10 +11,11 @@ import CFVideoPlayer from './CFVideoPlayer';
 import Toast from '../app/(app)/dashboard/components/Toast';
 import GifPicker from '../app/(app)/dashboard/components/GifPicker';
 import ComposeHeader from './composer/ComposeHeader';
+import ColorPickerModal from './composer/ColorPickerModal';
+import MediaPickerModal from './MediaPickerModal';
 import ComposeTextArea from './composer/ComposeTextArea';
 import FooterActions from './composer/FooterActions';
 import AudioPreview from './composer/AudioPreview';
-import ExternalIngestControls from './composer/ExternalIngestControls';
 import AudioRecorderModal from './composer/AudioRecorderModal';
 import ToastPortal from './composer/ToastPortal';
 import VideoTrimControls from './composer/VideoTrimControls';
@@ -1115,10 +1116,46 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-white rounded-2xl p-0 w-full max-w-2xl shadow-xl overflow-hidden">
-          <ComposeHeader onClose={onClose} />
+          <ComposeHeader
+            onClose={onClose}
+            onOpenColorPicker={() => setShowColorPicker(true)}
+            onRandomizeScheme={selectRandomColorScheme}
+            currentSchemeName={colorSchemes[currentColorScheme]?.name}
+          />
           <div className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               <ComposeTextArea value={content} onChange={setContent} textareaRef={textareaRef} />
+              {/* Action Row */}
+              <div className="mt-4 mb-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
+                  onClick={() => { setMediaTab('gallery'); setShowMediaPicker(true); }}
+                >
+                  Photo/Video
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
+                  onClick={() => setShowAudioRecorder(true)}
+                >
+                  Audio
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
+                  onClick={() => setShowGifPicker(true)}
+                >
+                  GIF
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
+                  onClick={() => setShowEmojiPicker(true)}
+                >
+                  Emoji
+                </button>
+              </div>
               {cfUidPreview && (
                 <div className="mb-4 relative">
                   <CFVideoPlayer uid={cfUidPreview} autoPlay muted loop controls />
@@ -1264,23 +1301,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                 }}
                 className="hidden"
               />
-              <ExternalIngestControls
-                value={externalUrl}
-                onChange={setExternalUrl}
-                tosAccepted={externalTosAccepted}
-                onTosChange={setExternalTosAccepted}
-                canAttach={canAttachExternal}
-                isActive={isIngestActive}
-                statusLabel={ingestStatus || undefined}
-                progress={ingestProgress}
-                onAttach={startExternalIngestion}
-              />
-              {ingestError && <div className="text-sm text-red-600">{ingestError}</div>}
-              <div className="flex items-center gap-3">
-                <button type="button" className="px-3 py-2 rounded-md border" onClick={() => fileInputRef.current?.click()}>
-                  Upload image/video
-                </button>
-              </div>
+              {/* Media picker is now in its own modal triggered by Photo/Video */}
               <FooterActions
                 count={content.length}
                 onCancel={onClose}
@@ -1311,6 +1332,47 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     >
       <div>
         {renderComposeModal()}
+        {/* Color Picker Modal */}
+        <ColorPickerModal
+          open={!!showColorPicker}
+          schemes={colorSchemes}
+          currentIndex={currentColorScheme}
+          onSelect={(i) => { setCurrentColorScheme(i); setShowColorPicker(false); }}
+          onClose={() => setShowColorPicker(false)}
+        />
+        {/* Media Picker Modal with Gallery/Upload/External tabs */}
+        <MediaPickerModal
+          isOpen={!!showMediaPicker}
+          onClose={() => setShowMediaPicker(false)}
+          activeTab={mediaTab}
+          onTabChange={(t) => setMediaTab(t)}
+          gradientFromColor={colorSchemes[currentColorScheme]?.gradientFromColor}
+          gradientToColor={colorSchemes[currentColorScheme]?.gradientToColor}
+          onRequestSystemFilePicker={() => fileInputRef.current?.click()}
+          externalUrl={externalUrl}
+          setExternalUrl={setExternalUrl}
+          externalTosAccepted={externalTosAccepted}
+          setExternalTosAccepted={setExternalTosAccepted}
+          startExternalIngestion={startExternalIngestion}
+          ingestError={ingestError}
+          ingestStatus={ingestStatus}
+          ingestProgress={ingestProgress}
+          canAttachExternal={canAttachExternal}
+          isIngestActive={isIngestActive}
+          onSelectFromGallery={(item) => {
+            // Minimal integration: set preview and type, close picker
+            const proxiedUrl = item.url ? `/api/img?url=${encodeURIComponent(item.url)}` : (item.thumbUrl ? `/api/img?url=${encodeURIComponent(item.thumbUrl)}` : undefined);
+            if (item.type === 'video') {
+              setMediaType('video');
+              setMediaPreview(proxiedUrl || null);
+              setExternalUrl(item.url || '');
+            } else if (item.type === 'image' || item.type === 'gif') {
+              setMediaType('image');
+              setMediaPreview(proxiedUrl || null);
+            }
+            setShowMediaPicker(false);
+          }}
+        />
         <AudioRecorderModal
           open={showAudioRecorder}
           onRecorded={handleAudioRecorded}
