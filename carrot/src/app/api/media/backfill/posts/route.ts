@@ -16,19 +16,24 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
 
   let limit = 50;
   let hours = 720; // 30 days by default
+  let all = false;
   try {
     const { searchParams } = new URL(request.url);
     const l = searchParams.get('limit');
     if (l) limit = Math.max(1, Math.min(500, parseInt(l, 10)));
     const h = searchParams.get('hours');
     if (h) hours = Math.max(1, Math.min(24 * 180, parseInt(h, 10))); // up to ~6 months
+    const a = searchParams.get('all');
+    if (a === '1' || a === 'true') all = true;
   } catch {}
 
   try {
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     // Fetch posts from ANY user to harvest media URLs, then attach assets to CURRENT user.
+    const where: any = { OR: [ { videoUrl: { not: null } }, { gifUrl: { not: null } }, { imageUrls: { not: null } } ] };
+    if (!all) where.updatedAt = { gte: since };
     const posts = await prisma.post.findMany({
-      where: { OR: [ { videoUrl: { not: null } }, { gifUrl: { not: null } }, { imageUrls: { not: null } } ], updatedAt: { gte: since } },
+      where,
       orderBy: { updatedAt: 'desc' },
       take: limit,
     });
@@ -57,7 +62,8 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       created += 1;
     }
 
-    return NextResponse.json({ created, examined: posts.length, hours });
+    const total = await prisma.post.count({ where });
+    return NextResponse.json({ created, examined: posts.length, total, hours, all });
   } catch (e: any) {
     const msg = e?.message || String(e);
     console.error('[api/media/backfill/posts] failed:', msg);
