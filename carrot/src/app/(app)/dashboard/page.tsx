@@ -18,7 +18,7 @@ const inter = Inter({ subsets: ['latin'] });
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
     // Build a base URL from the current request to avoid env mismatch in dev
-    const hdrs = headers();
+    const hdrs = await headers();
     const host = hdrs.get('host') || 'localhost:3005';
     const isVercel = !!process.env.VERCEL;
     const protocol = isVercel ? 'https' : 'http';
