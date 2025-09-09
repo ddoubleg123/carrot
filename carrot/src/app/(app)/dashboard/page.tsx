@@ -16,6 +16,17 @@ const inter = Inter({ subsets: ['latin'] });
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
+  const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
+  const proxArr = (arr?: string[] | string | null) => {
+    if (!arr) return [] as string[];
+    if (Array.isArray(arr)) return arr.map((u) => prox(u)!).filter(Boolean) as string[];
+    try {
+      const parsed = JSON.parse(arr);
+      return Array.isArray(parsed) ? parsed.map((u) => prox(String(u))!).filter(Boolean) as string[] : [];
+    } catch {
+      return [] as string[];
+    }
+  };
   try {
     // Build a base URL from the current request to avoid env mismatch in dev
     const hdrs = await headers();
@@ -63,22 +74,10 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       },
       userVote: null,
       timestamp: post.createdAt,
-      imageUrls: (() => {
-        if (!post.imageUrls) return [];
-        if (Array.isArray(post.imageUrls)) return post.imageUrls;
-        if (typeof post.imageUrls === 'string') {
-          try {
-            const parsed = JSON.parse(post.imageUrls);
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        }
-        return [];
-      })(),
-      gifUrl: post.gifUrl || null,
-      videoUrl: post.videoUrl || null,
-      thumbnailUrl: post.thumbnailUrl || null,
+      imageUrls: proxArr(post.imageUrls),
+      gifUrl: prox(post.gifUrl) || null,
+      videoUrl: prox(post.videoUrl) || null,
+      thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
       cfPlaybackUrlHls: post.cfPlaybackUrlHls || post.cf_playback_url_hls || null,
