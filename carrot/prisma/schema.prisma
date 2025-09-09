@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -43,6 +43,7 @@ model User {
   emailVerified     DateTime?          @map("email_verified")
   image             String?
   profilePhoto      String?
+  profilePhotoPath  String?            @map("profile_photo_path")
   isOnboarded       Boolean            @default(false)
   username          String?            @unique
   firstName         String?
@@ -67,6 +68,10 @@ model User {
   posts             Post[]
   sessions          Session[]
   userVideos        UserVideo[]
+  // Media Library relations
+  mediaAssets       MediaAsset[]
+  mediaLabels       MediaLabel[]
+  mediaCollections  MediaCollection[]
 }
 
 model Post {
@@ -158,29 +163,29 @@ model IngestJob {
 
 // Video deduplication system tables
 model SourceAsset {
-  id                    String   @id @default(cuid())
-  platform              String   // 'youtube', 'x', 'reddit', 'other'
-  sourceUrlRaw          String   @map("source_url_raw")
-  sourceUrlNormalized   String   @unique @map("source_url_normalized")
-  externalId            String?  @map("external_id")
-  storageUri            String?  @map("storage_uri")
-  contentHash           String?  @map("content_hash")
-  durationSec           Int?     @map("duration_sec")
-  width                 Int?
-  height                Int?
-  fps                   Float?
-  title                 String?
-  authorHandle          String?  @map("author_handle")
-  publishedAt           DateTime? @map("published_at")
-  status                String   @default("pending") // pending | ready | failed | removed
-  version               Int      @default(1)
-  refcount              Int      @default(0)
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                  String    @id @default(cuid())
+  platform            String // 'youtube', 'x', 'reddit', 'other'
+  sourceUrlRaw        String    @map("source_url_raw")
+  sourceUrlNormalized String    @unique @map("source_url_normalized")
+  externalId          String?   @map("external_id")
+  storageUri          String?   @map("storage_uri")
+  contentHash         String?   @map("content_hash")
+  durationSec         Int?      @map("duration_sec")
+  width               Int?
+  height              Int?
+  fps                 Float?
+  title               String?
+  authorHandle        String?   @map("author_handle")
+  publishedAt         DateTime? @map("published_at")
+  status              String    @default("pending") // pending | ready | failed | removed
+  version             Int       @default(1)
+  refcount            Int       @default(0)
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  userVideos            UserVideo[]
-  videoVariants         VideoVariant[]
-  ingestionJobs         IngestionJob[]
+  userVideos    UserVideo[]
+  videoVariants VideoVariant[]
+  ingestionJobs IngestionJob[]
 
   @@unique([platform, externalId], name: "platform_external_id")
   @@index([contentHash])
@@ -188,63 +193,145 @@ model SourceAsset {
 }
 
 model UserVideo {
-  id              String   @id @default(cuid())
-  userId          String   @map("user_id")
-  assetId         String   @map("asset_id")
-  role            String   @default("original_ref") @map("role") // original_ref
-  status          String   @default("draft") // draft | published | archived
-  titleOverride   String?  @map("title_override")
-  notes           String?
-  posterUri       String?  @map("poster_uri")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  assetId       String   @map("asset_id")
+  role          String   @default("original_ref") @map("role") // original_ref
+  status        String   @default("draft") // draft | published | archived
+  titleOverride String?  @map("title_override")
+  notes         String?
+  posterUri     String?  @map("poster_uri")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asset           SourceAsset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  variants        VideoVariant[]
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset    SourceAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  variants VideoVariant[]
 
   @@unique([userId, assetId], name: "user_asset")
   @@map("user_videos")
 }
 
 model VideoVariant {
-  id                  String   @id @default(cuid())
-  userVideoId         String   @map("user_video_id")
-  derivedFromAssetId  String   @map("derived_from_asset_id")
-  variantKind         String   @default("edit") @map("variant_kind") // edit | captioned | clipped
-  storageUri          String   @map("storage_uri")
-  contentHash         String?  @map("content_hash")
-  durationSec         Int?     @map("duration_sec")
-  width               Int?
-  height              Int?
-  fps                 Float?
-  editManifest        Json     @map("edit_manifest") // timeline cuts, overlays, subtitles, filters
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(cuid())
+  userVideoId        String   @map("user_video_id")
+  derivedFromAssetId String   @map("derived_from_asset_id")
+  variantKind        String   @default("edit") @map("variant_kind") // edit | captioned | clipped
+  storageUri         String   @map("storage_uri")
+  contentHash        String?  @map("content_hash")
+  durationSec        Int?     @map("duration_sec")
+  width              Int?
+  height             Int?
+  fps                Float?
+  editManifest       Json     @map("edit_manifest") // timeline cuts, overlays, subtitles, filters
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  userVideo           UserVideo   @relation(fields: [userVideoId], references: [id], onDelete: Cascade)
-  derivedFromAsset    SourceAsset @relation(fields: [derivedFromAssetId], references: [id])
+  userVideo        UserVideo   @relation(fields: [userVideoId], references: [id], onDelete: Cascade)
+  derivedFromAsset SourceAsset @relation(fields: [derivedFromAssetId], references: [id])
 
   @@index([derivedFromAssetId])
   @@map("video_variants")
 }
 
 model IngestionJob {
-  id                    String   @id @default(cuid())
-  userId                String   @map("user_id")
-  sourceUrlRaw          String   @map("source_url_raw")
-  sourceUrlNormalized   String   @map("source_url_normalized")
-  platform              String
-  externalId            String?  @map("external_id")
-  assetId               String?  @map("asset_id")
-  idempotencyKey        String   @unique @map("idempotency_key") // sha256(normalized_url)
-  state                 String   @default("queued") // queued | running | succeeded | failed
-  error                 String?
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  sourceUrlRaw        String   @map("source_url_raw")
+  sourceUrlNormalized String   @map("source_url_normalized")
+  platform            String
+  externalId          String?  @map("external_id")
+  assetId             String?  @map("asset_id")
+  idempotencyKey      String   @unique @map("idempotency_key") // sha256(normalized_url)
+  state               String   @default("queued") // queued | running | succeeded | failed
+  error               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  asset                 SourceAsset? @relation(fields: [assetId], references: [id])
+  asset SourceAsset? @relation(fields: [assetId], references: [id])
 
   @@map("ingestion_jobs")
 }
 
+/// MEDIA LIBRARY MODELS
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  type        String
+  url         String
+  storagePath String?  @map("storage_path")
+  thumbUrl    String?  @map("thumb_url")
+  thumbPath   String?  @map("thumb_path")
+  title       String?
+  hidden      Boolean  @default(false)
+  source      String?
+  durationSec Float?   @map("duration_sec")
+  width       Int?
+  height      Int?
+  inUseCount  Int      @default(0) @map("in_use_count")
+  cfUid       String?  @map("cf_uid")
+  cfStatus    String?  @map("cf_status")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labels      MediaAssetLabel[]
+  collections MediaAssetCollection[]
+
+  @@unique([userId, url], name: "user_url_unique")
+  @@index([userId])
+  @@map("media_assets")
+}
+
+model MediaLabel {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  name   String
+
+  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets MediaAssetLabel[]
+
+  @@unique([userId, name], name: "user_label_unique")
+  @@index([userId])
+  @@map("media_labels")
+}
+
+model MediaAssetLabel {
+  id      String     @id @default(cuid())
+  assetId String     @map("asset_id")
+  labelId String     @map("label_id")
+  asset   MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  label   MediaLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, labelId], name: "asset_label_unique")
+  @@index([labelId])
+  @@map("media_asset_labels")
+}
+
+model MediaCollection {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets MediaAssetCollection[]
+
+  @@unique([userId, name], name: "user_collection_unique")
+  @@index([userId])
+  @@map("media_collections")
+}
+
+model MediaAssetCollection {
+  id           String          @id @default(cuid())
+  assetId      String          @map("asset_id")
+  collectionId String          @map("collection_id")
+  asset        MediaAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  collection   MediaCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, collectionId], name: "asset_collection_unique")
+  @@index([collectionId])
+  @@map("media_asset_collections")
+}
