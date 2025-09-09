@@ -77,9 +77,16 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Railway service error:', errorText);
+      console.error('Ingest worker error (POST /ingest):', {
+        status: response.status,
+        body: errorText
+      });
       return NextResponse.json(
-        { error: 'Ingestion service unavailable' },
+        {
+          error: 'Ingestion service unavailable',
+          upstreamStatus: response.status,
+          upstreamBody: (errorText || '').slice(0, 4000)
+        },
         { status: 503 }
       );
     }
@@ -128,9 +135,16 @@ export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
         );
       }
       const errorText = await response.text();
-      console.error('Railway service error:', errorText);
+      console.error('Ingest worker error (GET /jobs/:id):', {
+        status: response.status,
+        body: errorText
+      });
       return NextResponse.json(
-        { error: 'Ingestion service unavailable' },
+        {
+          error: 'Ingestion service unavailable',
+          upstreamStatus: response.status,
+          upstreamBody: (errorText || '').slice(0, 4000)
+        },
         { status: 503 }
       );
     }

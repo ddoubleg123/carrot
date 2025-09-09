@@ -67,6 +67,7 @@ export interface CommitmentCardProps {
   gradientToColor?: string | null;
   gradientViaColor?: string | null;
   gradientDirection?: string | null;
+  innerBoxColor?: string | null;
 }
 
 export default function CommitmentCard(props: CommitmentCardProps) {
