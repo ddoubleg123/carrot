@@ -15,12 +15,20 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     // Use a reliable asset host to avoid blocked/unstable endpoints
     const publicTest = 'https://github.githubassets.com/favicon.ico';
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 3000);
-    const urlProbe = await fetch(`${origin}/api/img?url=${encodeURIComponent(publicTest)}`, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 599, error: String(e?.message || e) } as any));
-    clearTimeout(timeout);
+    const timeout = setTimeout(() => ctrl.abort(), 6000);
+    // Prefer relative path to avoid self-DNS issues in some hosts
+    let urlProbe: any = await fetch(`/api/img?url=${encodeURIComponent(publicTest)}`, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 599, error: String(e?.message || e) }));
     if (!urlProbe || !urlProbe.ok) {
-      return NextResponse.json({ ok: false, error: 'proxy_url_failed', status: (urlProbe as any)?.status ?? 'no_response' }, { status: 503 });
+      // Fallback to absolute and then direct external fetch to distinguish issues
+      urlProbe = await fetch(`${origin}/api/img?url=${encodeURIComponent(publicTest)}`, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 599, error: String(e?.message || e) }));
+      if (!urlProbe || !urlProbe.ok) {
+        // As a last check, verify outbound internet is fine by fetching the external URL directly
+        const direct = await fetch(publicTest, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 598, error: String(e?.message || e) } as any));
+        clearTimeout(timeout);
+        return NextResponse.json({ ok: false, error: 'proxy_url_failed', status: (urlProbe as any)?.status ?? 'no_response', directStatus: (direct as any)?.status }, { status: 503 });
+      }
     }
+    clearTimeout(timeout);
 
     // 2) Optional path test (requires Firebase Admin configured and readable object)
     if (testPath) {
