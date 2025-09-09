@@ -120,7 +120,7 @@ export const authOptions = {
       name: "next-auth.session-token.carrot",
       options: {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: 'lax' as const,
         path: "/",
         secure: process.env.NODE_ENV === "production",
       },
