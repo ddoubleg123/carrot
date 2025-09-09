@@ -101,9 +101,8 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
               return { bucket: bucketFromHost, object: objectPath } as const;
             }
             if (parts.length >= 2 && parts[0].endsWith('.appspot.com')) {
-              const bucketFromHost = parts[0].replace(/\.appspot\.com$/i, '');
               const objectPath = parts.slice(1).join('/');
-              return { bucket: bucketFromHost, object: objectPath } as const;
+              return { object: objectPath } as const;
             }
           }
           // Case 3: Host ends with firebasestorage.googleapis.com with v0 path already handled by regex above
@@ -112,35 +111,27 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
       })();
       const pathOnly = urlParam.match(/\/o\/([^?]+)(?:\?|$)/);
       if (m && m[1] && m[2]) {
-        const bucketFromUrl = decodeURIComponent(m[1]);
         const safePath = decodeURIComponent(decodeURIComponent(m[2])).replace(/^\/+/, '');
         try {
-          return await adminDownload(bucketFromUrl, safePath);
+          const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+          if (!bucketName) throw new Error('Missing FIREBASE_STORAGE_BUCKET');
+          return await adminDownload(bucketName, safePath);
         } catch (e) {
-          // Try configured bucket as a fallback
-          try {
-            const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-            if (fallbackBucket) return await adminDownload(fallbackBucket, safePath);
-          } catch {}
-          // If Admin attempts fail
           if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', bucketTried: bucketFromUrl, path: safePath }, { status: 502 });
+            return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
           }
           target = urlParam; // temporary fallback during cutover
         }
-      } else if (gcsAlt && gcsAlt.bucket && gcsAlt.object) {
+      } else if (gcsAlt && gcsAlt.object) {
         // storage.googleapis.com/<bucket>.firebasestorage.app/<object>
-        const bucketFromUrl = decodeURIComponent(gcsAlt.bucket);
         const safePath = decodeURIComponent(decodeURIComponent(gcsAlt.object)).replace(/^\/+/, '');
         try {
-          return await adminDownload(bucketFromUrl, safePath);
+          const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+          if (!bucketName) throw new Error('Missing FIREBASE_STORAGE_BUCKET');
+          return await adminDownload(bucketName, safePath);
         } catch (e) {
-          try {
-            const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-            if (fallbackBucket) return await adminDownload(fallbackBucket, safePath);
-          } catch {}
           if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', bucketTried: bucketFromUrl, path: safePath }, { status: 502 });
+            return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
           }
           target = urlParam; // temporary fallback during cutover
         }
@@ -153,7 +144,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
           return await adminDownload(fallbackBucket, safePath);
         } catch (e) {
           if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', bucketTried: process.env.FIREBASE_STORAGE_BUCKET, path: safePath }, { status: 502 });
+            return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
           }
           target = urlParam; // temporary fallback during cutover
         }

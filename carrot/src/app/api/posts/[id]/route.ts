@@ -6,6 +6,38 @@ export const dynamic = 'force-dynamic';
 
 // Uses shared Prisma singleton from '@/lib/prisma'
 
+// GET /api/posts/[id] - fetch a single post (with user)
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const post = await prisma.post.findUnique({
+      where: { id },
+      include: {
+        User: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            profilePhoto: true,
+            username: true,
+          },
+        },
+      },
+    });
+    if (!post) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    }
+    return NextResponse.json(post);
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 // PATCH /api/posts/[id] - update a post (for audio URL updates)
 export async function PATCH(
   request: Request,
