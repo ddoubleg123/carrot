@@ -1,4 +1,4 @@
-import { Inter } from 'next/font/google';
+
 import { redirect } from 'next/navigation';
 import { auth } from '../../../auth';
 import ClientSessionProvider from './components/ClientSessionProvider';
@@ -9,7 +9,6 @@ import CreateCommitmentButton from './components/CreateCommitmentButton';
 import { cookies, headers as nextHeaders } from 'next/headers';
 import './dashboard-layout.css';
 
-const inter = Inter({ subsets: ['latin'] });
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -19,7 +18,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
   return (
     <ClientSessionProvider>
-      <div className={`flex w-full max-w-[1400px] mx-auto px-4 sm:px-6 gap-6 ${inter.className}`}>
+      <div className={`flex w-full max-w-[1400px] mx-auto px-4 sm:px-6 gap-6 font-sans`}>
         {/* LEFT SIDEBAR */}
         <aside className="hidden sm:flex w-[220px] max-lg:w-[80px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
           <Sidebar />

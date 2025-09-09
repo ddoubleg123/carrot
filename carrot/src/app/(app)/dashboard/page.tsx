@@ -9,9 +9,8 @@ import DashboardClient from './DashboardClient';
 import ClientSessionProvider from './components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from './components/Widgets';
-import { Inter } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin'] });
+
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
@@ -87,7 +86,7 @@ export default async function DashboardPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     }>
-      <div className={`min-h-screen flex ${inter.className}`} style={{ marginTop: -20, paddingTop: 0 }}>
+      <div className={`min-h-screen flex font-sans`} style={{ marginTop: -20, paddingTop: 0 }}>
         {/* Left nav: fixed width, stays in-flow */}
         <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
           <MinimalNav />

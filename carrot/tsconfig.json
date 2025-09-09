@@ -25,7 +25,7 @@
         "./src/*"
       ]
     },
-    "types": ["node", "jest", "@types/react"],
+    "types": ["node", "jest", "@types/jest", "@types/react"],
     "plugins": [
       {
         "name": "next"
