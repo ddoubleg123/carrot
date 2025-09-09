@@ -354,7 +354,7 @@ logger: {
 },
 };
 
-import { getServerSession } from "next-auth";
+import { getServerSession } from "next-auth/next";
 
 export async function auth() {
   return getServerSession(authOptions);
