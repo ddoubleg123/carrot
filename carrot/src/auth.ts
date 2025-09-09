@@ -354,10 +354,5 @@ logger: {
 },
 };
 
-import { getServerSession } from "next-auth/next";
-
-export async function auth() {
-  return getServerSession(authOptions);
-}
-
-export { signOut } from "next-auth/react";
+// Use NextAuth helpers (provides typed handlers, auth(), signIn(), signOut())
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
