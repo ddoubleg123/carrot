@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, forwardRef } from "react";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
 import CFVideoPlayer from "../../../../components/CFVideoPlayer";
@@ -18,7 +18,7 @@ export type Stats = {
   sticks?: number;
 };
 
-export interface CommitmentCardProps {
+type CustomProps = {
   id: string;
   content: string;
   author: {
@@ -68,9 +68,34 @@ export interface CommitmentCardProps {
   gradientViaColor?: string | null;
   gradientDirection?: string | null;
   innerBoxColor?: string | null;
+  // New API controls
+  asChild?: boolean;
+  debugUnknownPropsToConsole?: boolean;
+  debugDataPrefix?: string;
+  enableDataAttributes?: boolean;
+};
+
+export type CommitmentCardProps = CustomProps & React.ComponentPropsWithoutRef<'div'>;
+
+const isDev = process.env.NODE_ENV !== 'production';
+
+const ALLOWED_DIV_KEYS = new Set([
+  'id','className','style','role','tabIndex','title','draggable','hidden','dir','lang'
+]);
+
+function isDomEventKey(k: string) {
+  return /^on[A-Z]/.test(k);
 }
 
-export default function CommitmentCard(props: CommitmentCardProps) {
+function isAriaOrData(k: string) {
+  return k.startsWith('aria-') || k.startsWith('data-');
+}
+
+const CUSTOM_PROP_KEYS = new Set<keyof CustomProps>([
+  'id','content','author','location','stats','userVote','onVote','onDelete','onBlock','timestamp','imageUrls','gifUrl','videoUrl','thumbnailUrl','cfUid','cfPlaybackUrlHls','captionVttUrl','audioUrl','audioTranscription','transcriptionStatus','uploadStatus','uploadProgress','currentUserId','editedAt','editCount','carrotText','stickText','videoThumbnail','videoTranscriptionStatus','audioDurationSeconds','emoji','gradientFromColor','gradientToColor','gradientViaColor','gradientDirection','innerBoxColor','asChild','debugUnknownPropsToConsole','debugDataPrefix','enableDataAttributes'
+]);
+
+const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function CommitmentCard(props, ref) {
   const {
     id,
     author,
@@ -89,6 +114,17 @@ export default function CommitmentCard(props: CommitmentCardProps) {
     uploadStatus,
     uploadProgress,
     currentUserId,
+    // new props
+    carrotText,
+    innerBoxColor,
+    debugUnknownPropsToConsole,
+    debugDataPrefix = 'cc',
+    enableDataAttributes,
+    className,
+    children,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    asChild,
+    ...rest
   } = props;
 
   // Local content and edit state (kept minimal to avoid bloating the card)
@@ -107,9 +143,40 @@ export default function CommitmentCard(props: CommitmentCardProps) {
     return `${Math.floor(diff / 86400)}d`;
   }, [timestamp]);
 
+  // Dev-only unknown prop guard
+  if (isDev && debugUnknownPropsToConsole) {
+    try {
+      const suspicious: string[] = [];
+      for (const k of Object.keys(props)) {
+        if (CUSTOM_PROP_KEYS.has(k as keyof CustomProps)) continue;
+        if (isAriaOrData(k) || isDomEventKey(k) || ALLOWED_DIV_KEYS.has(k)) continue;
+        // exclude React internals
+        if (k === 'key' || k === 'ref') continue;
+        suspicious.push(k);
+      }
+      if (suspicious.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn('[CommitmentCard] Unknown props passed', suspicious, 'Hint: convert to data-* or add a documented custom prop');
+      }
+    } catch {}
+  }
+
+  // Optional data attributes (safe, minimal)
+  const dataAttrs: Record<string, any> = {};
+  if (enableDataAttributes) {
+    const prefix = (debugDataPrefix || 'cc').trim();
+    const trunc = (v?: string | null, n = 80) => (typeof v === 'string' ? (v.length > n ? v.slice(0, n) : v) : undefined);
+    const safeColor = (v?: string | null) => (typeof v === 'string' ? v : undefined);
+    if (carrotText) dataAttrs[`data-${prefix}-carrot-text`] = trunc(carrotText);
+    if (innerBoxColor) dataAttrs[`data-${prefix}-inner-box-color`] = safeColor(innerBoxColor);
+  }
+
   return (
-    <div className="bg-transparent">
-      <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4">
+    <div ref={ref} className={['bg-transparent', className].filter(Boolean).join(' ')} {...dataAttrs} {...rest}>
+      <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4" style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}>
+        {carrotText ? (
+          <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
+        ) : null}
         {/* Header */}
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
@@ -155,6 +222,11 @@ export default function CommitmentCard(props: CommitmentCardProps) {
         {/* Content */}
         {content ? (
           <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words">{content}</div>
+        ) : null}
+
+        {/* Children passthrough (optional) */}
+        {children ? (
+          <div className="mt-2">{children}</div>
         ) : null}
 
         {/* Images / GIF */}
@@ -236,4 +308,6 @@ export default function CommitmentCard(props: CommitmentCardProps) {
       />
     </div>
   );
-}
+});
+
+export default CommitmentCard;
