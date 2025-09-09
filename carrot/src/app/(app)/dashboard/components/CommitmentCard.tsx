@@ -55,6 +55,18 @@ export interface CommitmentCardProps {
   // Edit metadata (optional if fetched from server)
   editedAt?: string | null;
   editCount?: number | null;
+  // Extras used by TestDashboardClient and legacy props (optional)
+  carrotText?: string;
+  stickText?: string;
+  videoThumbnail?: string | null;
+  videoTranscriptionStatus?: string | null;
+  audioDurationSeconds?: number | null;
+  emoji?: string | null;
+  // Gradient styling (optional)
+  gradientFromColor?: string | null;
+  gradientToColor?: string | null;
+  gradientViaColor?: string | null;
+  gradientDirection?: string | null;
 }
 
 export default function CommitmentCard(props: CommitmentCardProps) {
