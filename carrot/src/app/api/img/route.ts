@@ -53,7 +53,30 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     let target: string | null = null;
     if (urlParam) {
       // If urlParam is a Firebase Storage URL, try to extract the bucket and object path and use Admin SDK
+      // Case 1: Standard Firebase URL: https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<object>
       const m = urlParam.match(/\/b\/([^/]+)\/o\/([^?]+)(?:\?|$)/);
+      // Case 2: Google Storage proxy form: https://storage.googleapis.com/<bucket>.firebasestorage.app/<object>
+      const gcsAlt = (() => {
+        try {
+          const u = new URL(urlParam);
+          if (u.hostname === 'storage.googleapis.com') {
+            // pathname like: /<bucket>.firebasestorage.app/<object>
+            const parts = u.pathname.replace(/^\/+/, '').split('/');
+            if (parts.length >= 2 && parts[0].endsWith('.firebasestorage.app')) {
+              const bucketFromHost = parts[0].replace(/\.firebasestorage\.app$/i, '');
+              const objectPath = parts.slice(1).join('/');
+              return { bucket: bucketFromHost, object: objectPath } as const;
+            }
+            if (parts.length >= 2 && parts[0].endsWith('.appspot.com')) {
+              const bucketFromHost = parts[0].replace(/\.appspot\.com$/i, '');
+              const objectPath = parts.slice(1).join('/');
+              return { bucket: bucketFromHost, object: objectPath } as const;
+            }
+          }
+          // Case 3: Host ends with firebasestorage.googleapis.com with v0 path already handled by regex above
+        } catch {}
+        return null;
+      })();
       const pathOnly = urlParam.match(/\/o\/([^?]+)(?:\?|$)/);
       if (m && m[1] && m[2]) {
         const bucketFromUrl = decodeURIComponent(m[1]);
@@ -67,6 +90,22 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
             if (fallbackBucket) return await adminDownload(fallbackBucket, safePath);
           } catch {}
           // If Admin attempts fail
+          if (!allowUrlFallback) {
+            return NextResponse.json({ error: 'Admin download failed', bucketTried: bucketFromUrl, path: safePath }, { status: 502 });
+          }
+          target = urlParam; // temporary fallback during cutover
+        }
+      } else if (gcsAlt && gcsAlt.bucket && gcsAlt.object) {
+        // storage.googleapis.com/<bucket>.firebasestorage.app/<object>
+        const bucketFromUrl = decodeURIComponent(gcsAlt.bucket);
+        const safePath = decodeURIComponent(decodeURIComponent(gcsAlt.object)).replace(/^\/+/, '');
+        try {
+          return await adminDownload(bucketFromUrl, safePath);
+        } catch (e) {
+          try {
+            const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+            if (fallbackBucket) return await adminDownload(fallbackBucket, safePath);
+          } catch {}
           if (!allowUrlFallback) {
             return NextResponse.json({ error: 'Admin download failed', bucketTried: bucketFromUrl, path: safePath }, { status: 502 });
           }
