@@ -69,22 +69,39 @@ export async function PATCH(
     }
 
     // Update the post with provided fields
+    // Prepare content update (optional)
+    const contentUpdate: any = {};
+    if (typeof body?.content === 'string') {
+      const next = String(body.content).trim();
+      // Enforce 0..1000 chars (align with Composer)
+      if (next.length > 1000) {
+        return NextResponse.json({ error: 'Content too long (max 1000)' }, { status: 400 });
+      }
+      contentUpdate.content = next;
+      contentUpdate.editedAt = new Date();
+      contentUpdate.editCount = { increment: 1 } as any;
+      contentUpdate.lastEditedBy = session.user.id;
+    }
+
     const updatedPost = await prisma.post.update({
       where: { id: postId },
       data: {
         ...(body.audioUrl && { audioUrl: body.audioUrl }),
         ...(body.transcriptionStatus && { transcriptionStatus: body.transcriptionStatus }),
         ...(body.audioTranscription && { audioTranscription: body.audioTranscription }),
+        ...contentUpdate,
       },
-      include: { 
+      include: {
         User: {
           select: {
             id: true,
             name: true,
             email: true,
-            image: true
-          }
-        }
+            image: true,
+            profilePhoto: true,
+            username: true,
+          },
+        },
       },
     });
 

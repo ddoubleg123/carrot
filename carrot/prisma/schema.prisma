@@ -92,6 +92,10 @@ model Post {
   stickText           String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+  /// Edit metadata
+  editedAt            DateTime?
+  editCount           Int       @default(0)
+  lastEditedBy        String?
   thumbnailUrl        String?
   videoUrl            String?
   /// Cloudflare Stream fields

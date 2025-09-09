@@ -11,6 +11,8 @@ interface AudioPlayerProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   showWaveform?: boolean; // toggle the decorative waveform box
+  promoJingleUrl?: string; // optional 5s end bookend
+  onEnded?: () => void; // fires after main (and jingle if provided) fully ends
 }
 
 // Utility function to check if duration is valid
@@ -26,6 +28,8 @@ export default function AudioPlayer({
   onPlayStateChange,
   onTimeUpdate,
   showWaveform = true,
+  promoJingleUrl,
+  onEnded,
 }: AudioPlayerProps) {
   console.log('🎵 AudioPlayer rendered with:', { 
     postId, 
@@ -34,7 +38,9 @@ export default function AudioPlayer({
     isFirebaseUrl: audioUrl?.includes('firebasestorage.googleapis.com')
   });
   const audioRef = useRef<HTMLAudioElement>(null);
+  const jingleRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlayingJingle, setIsPlayingJingle] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [displayDuration, setDisplayDuration] = useState<string>('0:00');
@@ -137,9 +143,21 @@ export default function AudioPlayer({
       }
     };
     
-    const handleEnded = () => {
+    const handleEnded = async () => {
+      // When main track ends, optionally play promo jingle
+      if (promoJingleUrl && jingleRef.current) {
+        try {
+          setIsPlaying(false);
+          setIsPlayingJingle(true);
+          await jingleRef.current.play();
+          return; // onEnded will be fired when jingle finishes
+        } catch (e) {
+          // If autoplay blocked or error, just finish normally
+        }
+      }
       setIsPlaying(false);
       try { onPlayStateChange && onPlayStateChange(false); } catch {}
+      try { onEnded && onEnded(); } catch {}
     };
     const handleLoadStart = () => setIsLoading(true);
     
@@ -388,6 +406,11 @@ export default function AudioPlayer({
           src: audio.src
         });
         
+        // If jingle is playing, stop it and restart main audio
+        if (isPlayingJingle && jingleRef.current) {
+          try { jingleRef.current.pause(); jingleRef.current.currentTime = 0; } catch {}
+          setIsPlayingJingle(false);
+        }
         await audio.play();
         setIsPlaying(true);
         try { onPlayStateChange && onPlayStateChange(true); } catch {}
@@ -482,6 +505,17 @@ export default function AudioPlayer({
           }
         }}
       />
+      {promoJingleUrl ? (
+        <audio
+          ref={jingleRef}
+          src={promoJingleUrl}
+          preload="auto"
+          onEnded={() => {
+            setIsPlayingJingle(false);
+            try { onEnded && onEnded(); } catch {}
+          }}
+        />
+      ) : null}
       
       {/* Waveform Visualization Placeholder (optional) */}
       {showWaveform && (
@@ -519,7 +553,7 @@ export default function AudioPlayer({
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : isPlaying ? (
+          ) : (isPlaying || isPlayingJingle) ? (
             <Pause size={20} />
           ) : (
             <Play size={20} />
