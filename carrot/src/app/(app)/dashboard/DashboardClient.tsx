@@ -39,18 +39,19 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
+    const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
     const imageUrls = (() => {
-      if (!post?.imageUrls) return [];
-      if (Array.isArray(post.imageUrls)) return post.imageUrls;
+      if (!post?.imageUrls) return [] as string[];
+      if (Array.isArray(post.imageUrls)) return post.imageUrls.map((u: string) => prox(u)!).filter(Boolean) as string[];
       if (typeof post.imageUrls === 'string') {
         try {
           const parsed = JSON.parse(post.imageUrls);
-          return Array.isArray(parsed) ? parsed : [];
+          return Array.isArray(parsed) ? parsed.map((u: string) => prox(String(u))!).filter(Boolean) as string[] : [];
         } catch {
-          return [];
+          return [] as string[];
         }
       }
-      return [];
+      return [] as string[];
     })();
     const mapped = {
       id: post.id,
@@ -74,9 +75,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       userVote: null,
       timestamp: post.createdAt,
       imageUrls,
-      gifUrl: post.gifUrl || null,
-      videoUrl: post.videoUrl || null,
-      thumbnailUrl: post.thumbnailUrl || null,
+      gifUrl: prox(post.gifUrl) || null,
+      videoUrl: prox(post.videoUrl) || null,
+      thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
       cfPlaybackUrlHls: post.cfPlaybackUrlHls || post.cf_playback_url_hls || null,
