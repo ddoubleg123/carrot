@@ -166,7 +166,7 @@ export const authOptions = {
       }
       return `${baseUrl}/home`;
     },
-    async signIn({ user, account, profile }: { user: any; account: any; profile?: any }) {
+    async signIn({ user, account, profile }: { user: any; account?: any; profile?: any }) {
       console.log('[NextAuth][signIn] === SIGNIN CALLBACK DEBUG ===');
       console.log('[NextAuth][signIn] user:', JSON.stringify(user, null, 2));
       console.log('[NextAuth][signIn] account:', JSON.stringify(account, null, 2));
@@ -179,7 +179,7 @@ export const authOptions = {
       return true; // Allow sign in
     },
 
-    async jwt({ token, user, account }: { token: any; user: any; account: any }) {
+    async jwt({ token, user, account }: { token: any; user?: any; account?: any }) {
       console.log('[NextAuth][jwt] === JWT CALLBACK DEBUG ===');
       console.log('[NextAuth][jwt] account:', JSON.stringify(account, null, 2));
       console.log('[NextAuth][jwt] user (from adapter):', JSON.stringify(user, null, 2));
