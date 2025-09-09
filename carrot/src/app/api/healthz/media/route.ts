@@ -12,10 +12,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     const origin = new URL(req.url).origin;
 
     // 1) Test generic URL fetch through proxy (should be publicly available)
-    const publicTest = 'https://httpbin.org/image/png';
-    const urlProbe = await fetch(`${origin}/api/img?url=${encodeURIComponent(publicTest)}`, { cache: 'no-store' }).catch(() => null);
+    // Use a reliable asset host to avoid blocked/unstable endpoints
+    const publicTest = 'https://github.githubassets.com/favicon.ico';
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 3000);
+    const urlProbe = await fetch(`${origin}/api/img?url=${encodeURIComponent(publicTest)}`, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 599, error: String(e?.message || e) } as any));
+    clearTimeout(timeout);
     if (!urlProbe || !urlProbe.ok) {
-      return NextResponse.json({ ok: false, error: 'proxy_url_failed', status: urlProbe?.status ?? 'no_response' }, { status: 503 });
+      return NextResponse.json({ ok: false, error: 'proxy_url_failed', status: (urlProbe as any)?.status ?? 'no_response' }, { status: 503 });
     }
 
     // 2) Optional path test (requires Firebase Admin configured and readable object)
