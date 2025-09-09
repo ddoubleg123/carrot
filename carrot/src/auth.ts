@@ -253,13 +253,8 @@ export const authOptions = {
       let userData: any = null;
       try {
         const { PrismaClient } = await import('@prisma/client');
-        const prisma = new PrismaClient({
-          datasources: {
-            db: {
-              url: resolvedDbUrl || "file:./prisma/dev.db"
-            }
-          }
-        });
+        // Use default env-based datasource (Postgres in production). Do not force SQLite fallback.
+        const prisma = new PrismaClient();
         userData = await prisma.user.findUnique({
           where: { email: token.email as string },
           select: { 
