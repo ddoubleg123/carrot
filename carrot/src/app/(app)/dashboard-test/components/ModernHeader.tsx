@@ -167,6 +167,7 @@ export default function ModernHeader() {
 
   // Get current path to determine active nav item
   const currentPath = pathname;
+  const safePath = currentPath || '';
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
@@ -203,7 +204,7 @@ export default function ModernHeader() {
             {/* Primary Navigation Icons - Left of Notifications */}
             <nav className="hidden md:flex items-center space-x-1">
               {PRIMARY_NAV.map((item) => {
-                const isActive = currentPath === item.href || currentPath.startsWith(item.href + '/');
+                const isActive = safePath === item.href || safePath.startsWith(item.href + '/');
                 const IconComponent = item.icon;
                 
                 return (
@@ -230,7 +231,7 @@ export default function ModernHeader() {
               href="/dashboard-test/notifications"
               className={`
                 p-2 rounded-lg transition-all duration-200
-                ${currentPath === '/dashboard-test/notifications' || currentPath.startsWith('/dashboard-test/notifications/')
+                ${safePath === '/dashboard-test/notifications' || safePath.startsWith('/dashboard-test/notifications/')
                   ? 'bg-orange-50 text-orange-600 shadow-sm' 
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }
@@ -238,7 +239,7 @@ export default function ModernHeader() {
               title="Notifications"
             >
               <HeaderIcons.Notifications 
-                active={currentPath === '/dashboard-test/notifications' || currentPath.startsWith('/dashboard-test/notifications/')}
+                active={safePath === '/dashboard-test/notifications' || safePath.startsWith('/dashboard-test/notifications/')}
                 hasNotifications={hasNotifications}
               />
             </Link>
@@ -305,7 +306,7 @@ export default function ModernHeader() {
                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
                        onClick={() => setUserMenuOpen(false)}
                      >
-                       <HeaderIcons.Funds active={currentPath === '/dashboard-test/funds' || currentPath.startsWith('/dashboard-test/funds/')} />
+                       <HeaderIcons.Funds active={safePath === '/dashboard-test/funds' || safePath.startsWith('/dashboard-test/funds/')} />
                        <span>Funds</span>
                      </Link>
                      
@@ -315,7 +316,7 @@ export default function ModernHeader() {
                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
                        onClick={() => setUserMenuOpen(false)}
                      >
-                       <HeaderIcons.Settings active={currentPath === '/dashboard-test/settings' || currentPath.startsWith('/dashboard-test/settings/')} />
+                       <HeaderIcons.Settings active={safePath === '/dashboard-test/settings' || safePath.startsWith('/dashboard-test/settings/')} />
                        <span>Settings</span>
                      </Link>
                      
