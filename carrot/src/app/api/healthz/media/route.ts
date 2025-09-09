@@ -25,6 +25,10 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
         // As a last check, verify outbound internet is fine by fetching the external URL directly
         const direct = await fetch(publicTest, { cache: 'no-store', signal: ctrl.signal }).catch((e) => ({ ok: false, status: 598, error: String(e?.message || e) } as any));
         clearTimeout(timeout);
+        // If direct outbound works, consider media health OK but report proxy as degraded
+        if ((direct as any)?.ok || (direct as any)?.status === 200) {
+          return NextResponse.json({ ok: true, status: 'degraded', tested: { url: true, path: Boolean(testPath) }, details: { proxy: (urlProbe as any)?.status ?? 'no_response', direct: (direct as any)?.status } });
+        }
         return NextResponse.json({ ok: false, error: 'proxy_url_failed', status: (urlProbe as any)?.status ?? 'no_response', directStatus: (direct as any)?.status }, { status: 503 });
       }
     }
