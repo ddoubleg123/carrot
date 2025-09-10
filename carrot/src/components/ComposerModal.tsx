@@ -1179,7 +1179,13 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             onRandomizeScheme={selectRandomColorScheme}
             currentSchemeName={colorSchemes[currentColorScheme]?.name}
           />
-          <div className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto">
+          <div
+            className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto"
+            style={{
+              background: `linear-gradient(135deg, ${colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientViaColor || colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientToColor})`,
+              backgroundAttachment: 'local',
+            }}
+          >
             <form onSubmit={handleSubmit}>
               <ComposeTextArea value={content} onChange={setContent} textareaRef={textareaRef} />
               {/* Action Row */}

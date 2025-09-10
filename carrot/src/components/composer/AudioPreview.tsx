@@ -15,6 +15,7 @@ export default function AudioPreview({ audioUrl, postId, initialDurationSeconds,
         audioUrl={audioUrl}
         postId={postId}
         initialDurationSeconds={initialDurationSeconds}
+        allowBlob={true}
       />
       <button
         type="button"

@@ -13,6 +13,7 @@ interface AudioPlayerProps {
   showWaveform?: boolean; // toggle the decorative waveform box
   promoJingleUrl?: string; // optional 5s end bookend
   onEnded?: () => void; // fires after main (and jingle if provided) fully ends
+  allowBlob?: boolean; // allow playing blob: URLs (safe inside composer session)
 }
 
 // Utility function to check if duration is valid
@@ -30,6 +31,7 @@ export default function AudioPlayer({
   showWaveform = true,
   promoJingleUrl,
   onEnded,
+  allowBlob = false,
 }: AudioPlayerProps): JSX.Element {
   console.log('🎵 AudioPlayer rendered with:', { 
     postId, 
@@ -38,6 +40,15 @@ export default function AudioPlayer({
     isFirebaseUrl: audioUrl?.includes('firebasestorage.googleapis.com')
   });
   const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:');
+  // Resolve Firebase Storage URLs once to a stable, playable URL
+  const resolvedSrc = React.useMemo(() => {
+    if (!audioUrl) return '';
+    if (isBlobUrl) return allowBlob ? audioUrl : '';
+    if (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media')) {
+      return `${audioUrl}?alt=media`;
+    }
+    return audioUrl;
+  }, [audioUrl, isBlobUrl, allowBlob]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const jingleRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -308,99 +319,29 @@ export default function AudioPlayer({
   }, []);
 
 
-// Force audio reload when audioUrl changes to ensure proper metadata loading
+// Force audio reload when source changes to ensure proper metadata loading
 useEffect(() => {
-  if (audioUrl && audioRef.current) {
-    console.log('🎵 Audio URL changed, reloading:', audioUrl);
-
-    // If this is a blob: URL coming from a prior session, it cannot be fetched in this context.
-    // We avoid setting src to prevent repeated NotSupportedError loops.
-    if (isBlobUrl) {
-      console.log('🎵 Blob URL detected; skipping reload as it may be stale and unresolvable in this session.');
-      // Reset state and show disabled UI
-      setIsLoading(false);
-      setDuration(0);
-      setCurrentTime(0);
-      setDisplayDuration('0:00');
-      return;
-    }
-
-    // Test if Firebase Storage URL is accessible and add auth token if needed
-    if (audioUrl.includes('firebasestorage.googleapis.com')) {
-      console.log('🎵 Testing Firebase Storage URL accessibility...');
-      
-      // Try to add auth token for Firebase Storage access
-      const testUrl = audioUrl.includes('?') ? audioUrl : `${audioUrl}?alt=media`;
-      
-      fetch(testUrl, { method: 'HEAD' })
-        .then(response => {
-          console.log('🎵 Firebase Storage URL test:', {
-            status: response.status,
-            contentType: response.headers.get('content-type'),
-            contentLength: response.headers.get('content-length'),
-            accessible: response.ok
-          });
-          
-          // If URL is not accessible, try with auth token
-          if (!response.ok && response.status === 403) {
-            console.log('🎵 Firebase Storage 403, trying with auth token...');
-            // Update the audio src with proper auth parameters
-            if (audioRef.current) {
-              audioRef.current.src = testUrl;
-              audioRef.current.load();
-            }
-          }
-        })
-        .catch(error => {
-          console.warn('🎵 Firebase Storage URL not accessible, trying fallback:', error);
-          // Try with auth token as fallback
-          if (audioRef.current && !audioUrl.includes('alt=media')) {
-            const fallbackUrl = `${audioUrl}?alt=media`;
-            audioRef.current.src = fallbackUrl;
-            audioRef.current.load();
-          }
-        });
-    }
-    
-    const audio = audioRef.current;
-    audio.load(); // Reload the audio element with new URL
-    setIsLoading(true);
+  if (!audioRef.current) return;
+  if (!resolvedSrc) {
+    setIsLoading(false);
     setDuration(0);
     setCurrentTime(0);
-    // If we have a duration hint, keep showing it; otherwise reset
-    if (!(typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds))) {
-      setDisplayDuration('0:00');
-    } else {
-      setDuration(initialDurationSeconds);
-      setDisplayDuration(formatTime(initialDurationSeconds));
-      setIsLoading(false);
-    }
-
-    // If metadata-based detection fails (common for freshly created blobs),
-    // fall back to decoding with Web Audio API after a brief delay.
-    const tryAudioContextFallback = async () => {
-      // Skip if duration already detected by normal events
-      if (audio.duration && isValidDuration(audio.duration)) return;
-      const decoded = await decodeDurationWithAudioContext(audioUrl);
-      if (decoded && isFinite(decoded) && decoded > 0) {
-        console.log('🎵 Duration detected via AudioContext:', decoded);
-        setDuration(decoded);
-        setDisplayDuration(formatTime(decoded));
-        setIsLoading(false);
-      }
-    };
-    // Schedule fallback attempts
-    const t1 = setTimeout(tryAudioContextFallback, 600);
-    const t2 = setTimeout(tryAudioContextFallback, 1500);
-    const t3 = setTimeout(tryAudioContextFallback, 3000);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
+    setDisplayDuration('0:00');
+    return;
   }
-}, [audioUrl]);
+  console.log('🎵 Audio source resolved:', { src: resolvedSrc, allowBlob, isBlobUrl });
+  const audio = audioRef.current;
+  audio.src = resolvedSrc;
+  audio.load();
+  setIsLoading(true);
+  setDuration(0);
+  setCurrentTime(0);
+  if (typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds)) {
+    setDuration(initialDurationSeconds);
+    setDisplayDuration(formatTime(initialDurationSeconds));
+    setIsLoading(false);
+  }
+}, [resolvedSrc, allowBlob, isBlobUrl, initialDurationSeconds]);
 
 const togglePlayPause = async () => {
   const audio = audioRef.current;
@@ -562,12 +503,12 @@ return (
       {/* Play/Pause Button */}
       <button
         onClick={togglePlayPause}
-        disabled={isLoading || isBlobUrl}
+        disabled={isLoading || (isBlobUrl && !allowBlob)}
         className="flex items-center justify-center w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors disabled:opacity-50"
       >
         {isLoading ? (
           <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        ) : isBlobUrl ? (
+        ) : (isBlobUrl && !allowBlob) ? (
           <Play size={20} />
         ) : (isPlaying || isPlayingJingle) ? (
           <Pause size={20} />
@@ -584,7 +525,7 @@ return (
           max={duration || 100}
           value={duration > 0 ? currentTime : 0}
           onChange={handleSeek}
-          disabled={!duration || duration <= 0 || isBlobUrl}
+          disabled={!duration || duration <= 0 || (isBlobUrl && !allowBlob)}
           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider disabled:opacity-50"
           style={{
             background: duration > 0 ? `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)` : '#e5e7eb'
@@ -623,7 +564,7 @@ return (
       </a>
     </div>
 
-    {isBlobUrl && (
+    {isBlobUrl && !allowBlob && (
       <div className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
         Audio is not available yet. If this post was saved with a temporary blob URL, it cannot be replayed after reload. Please re-upload or wait for processing.
       </div>
