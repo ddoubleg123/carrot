@@ -5,6 +5,8 @@ import OnboardingClient from './OnboardingClient';
 
 import { TEST_USERS, ADMIN_USERS } from '../../config/auth';
 
+export const dynamic = 'force-dynamic';
+
 export default async function OnboardingPage() {
   const session = await auth();
   if (!session) redirect('/login?callbackUrl=/onboarding');
