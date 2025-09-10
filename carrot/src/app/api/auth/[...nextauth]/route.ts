@@ -1,8 +1,8 @@
-import NextAuth from "next-auth";
-import { authOptions } from "@/auth";
+import { handlers } from "@/auth";
 
-// Next 15: export typed request handlers by initializing here
-export const { GET, POST } = NextAuth(authOptions);
+// Next 15: export typed request handlers from initialized handlers
+export const GET = handlers.GET;
+export const POST = handlers.POST;
 
 // Optional (keep if you need Node runtime or dynamic):
 export const runtime = "nodejs";
