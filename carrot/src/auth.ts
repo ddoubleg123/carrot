@@ -351,5 +351,3 @@ logger: {
 
 // Use NextAuth helpers (provides typed handlers, auth(), signIn(), signOut())
 export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
-// Re-export route handlers for App Router
-export const { GET, POST } = handlers;

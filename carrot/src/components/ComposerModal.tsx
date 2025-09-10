@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { X, Camera, Mic, Image as ImageIcon, Smile, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { uploadFilesToFirebase } from '../lib/uploadToFirebase';
+import { uploadFileToFirebase } from '../lib/uploadToFirebase';
+
 import AudioRecorder from './AudioRecorder';
 import AudioPlayer from './AudioPlayer';
 import CFVideoPlayer from './CFVideoPlayer';
@@ -560,6 +562,16 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     };
     
     if (isOpen) {
+      // Randomize color on open if flagged or no saved scheme yet; otherwise keep persistent selection
+      try {
+        const saved = localStorage.getItem('carrot-color-scheme');
+        const nextRandom = localStorage.getItem('carrot-color-scheme-next-random');
+        const shouldRandomize = !saved || nextRandom === 'true';
+        if (shouldRandomize) {
+          selectRandomColorScheme();
+          localStorage.setItem('carrot-color-scheme-next-random', 'false');
+        }
+      } catch {}
       // Ensure external URL field is clean on open
       setExternalUrl('');
       setExternalTosAccepted(false);
@@ -920,21 +932,29 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   // Audio handlers
   const handleAudioRecorded = async (blob: Blob, url: string, durationSeconds: number) => {
     setAudioBlob(blob);
-    setAudioUrl(url);
+    setAudioUrl(url); // set immediate preview (blob) so user can see a player instantly
     setAudioDurationSeconds(durationSeconds || null);
     setShowAudioRecorder(false);
-    
+
+    // Kick off immediate background upload so preview becomes a permanent HTTPS URL (no stale blob)
+    try {
+      const file = new File([blob], `recording_${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+      const path = `posts/audio/${Date.now()}_${Math.random().toString(36).slice(2)}.webm`;
+      const downloadURL = await uploadFileToFirebase(file, path);
+      // Swap blob URL with permanent Firebase URL so the preview can play reliably
+      setAudioUrl(downloadURL);
+      showSuccessToast('Audio uploaded');
+    } catch (e) {
+      console.warn('[ComposerModal] Background audio upload failed; will upload on Post()', e);
+      // Non-fatal: handleSubmit() also uploads audioBlob if still a blob/data URL
+    }
+
     // Auto-transcribe
     try {
       const formData = new FormData();
       formData.append('audio', blob, 'recording.webm');
       formData.append('language', 'auto');
-
-      const response = await fetch('/api/audio/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const response = await fetch('/api/audio/transcribe', { method: 'POST', body: formData });
       if (response.ok) {
         const result = await response.json();
         setAudioTranscription(result.transcription);
@@ -1000,7 +1020,20 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
       const derivedVideoUrl = !mediaFile && mediaType === 'video' ? (mediaBaseUrlRef.current || null) : null;
       const selectedGif = selectedGifUrl || null;
-      const audioClipUrl = audioUrl || null;
+      // If we have a recorded audio blob, upload it to Firebase so it persists beyond the session
+      let audioClipUrl: string | null = audioUrl || null;
+      if (audioBlob && (!audioClipUrl || audioClipUrl.startsWith('blob:') || audioClipUrl.startsWith('data:'))) {
+        try {
+          const audioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
+          const uploaded = await uploadFilesToFirebase([audioFile], 'posts/audio/');
+          const uploadedAudioUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
+          if (uploadedAudioUrl) {
+            audioClipUrl = uploadedAudioUrl;
+          }
+        } catch (e) {
+          console.error('Audio upload failed; proceeding without persistent audio URL', e);
+        }
+      }
 
       // 2) Decide if we should request background trim for externally ingested video
       const shouldBackgroundTrim = !!(
@@ -1016,12 +1049,27 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       const mediaKind = mediaUrlToUse ? (mediaType || (selectedGif ? 'gif' : (audioClipUrl ? 'audio' : null))) : null;
       const newPost: any = {
         id: tempId,
-        content: content.trim(),
+        content: content || '',
+        imageUrls: mediaKind === 'image' ? (mediaUrlToUse ? [mediaUrlToUse] : []) : [],
+        videoUrl: mediaKind === 'video' ? mediaUrlToUse : null,
+        gifUrl: selectedGif || null,
+        audioUrl: audioClipUrl,
+        uploadStatus: isUploading ? 'uploading' : 'uploaded',
+        uploadProgress,
+        transcriptionStatus: audioClipUrl || mediaKind === 'video' ? 'pending' : null,
+        status: shouldBackgroundTrim ? 'processing' : null,
+        // fields consumed by DashboardClient.mapServerPostToCard
+        userId: user?.id,
+        User: {
+          id: user?.id,
+          username: (user as any)?.username || (user as any)?.name || (user as any)?.email?.split('@')?.[0] || 'me',
+          profilePhoto: (user as any)?.profilePhoto || null,
+          image: (user as any)?.image || null,
+        },
+        // convenience fields for any other optimistic consumers
         mediaUrl: mediaUrlToUse,
         mediaType: mediaKind,
-        audioUrl: audioClipUrl,
         createdAt: new Date().toISOString(),
-        user,
       };
 
       // 4) Persist post via API (best-effort; keep optimistic update)
@@ -1093,8 +1141,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         }
       }
 
-      // 8) Success UX
-      selectRandomColorScheme();
+      // 8) Success UX: flag randomize-on-next-open instead of changing immediately
+      try { localStorage.setItem('carrot-color-scheme-next-random', 'true'); } catch {}
       showSuccessToast('Posted!');
       setSubmitRequested(false);
       setShowMediaPicker(false);
@@ -1104,6 +1152,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       setAudioBlob(null);
       setAudioUrl('');
       setContent('');
+      // Close the composer so user returns to feed and sees their new post
+      onClose();
     } finally {
       setIsPosting(false);
     }
@@ -1116,6 +1166,13 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-white rounded-2xl p-0 w-full max-w-2xl shadow-xl overflow-hidden">
+          {/* Top gradient strip to reflect current color scheme */}
+          <div
+            className="h-1 w-full"
+            style={{
+              background: `linear-gradient(90deg, ${colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientViaColor || colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientToColor})`,
+            }}
+          />
           <ComposeHeader
             onClose={onClose}
             onOpenColorPicker={() => setShowColorPicker(true)}
