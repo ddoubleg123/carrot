@@ -30,13 +30,14 @@ export default function AudioPlayer({
   showWaveform = true,
   promoJingleUrl,
   onEnded,
-}: AudioPlayerProps) {
+}: AudioPlayerProps): JSX.Element {
   console.log('🎵 AudioPlayer rendered with:', { 
     postId, 
     audioUrl: audioUrl?.substring(0, 50) + '...', 
     isBlobUrl: audioUrl?.includes('blob:'),
     isFirebaseUrl: audioUrl?.includes('firebasestorage.googleapis.com')
   });
+  const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:');
   const audioRef = useRef<HTMLAudioElement>(null);
   const jingleRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -302,263 +303,313 @@ export default function AudioPlayer({
       audio.removeEventListener('durationchange', updateDuration);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('loadstart', handleLoadStart);
-      audio.removeEventListener('error', handleError);
+    audio.removeEventListener('error', handleError);
     };
   }, []);
 
-  // Force audio reload when audioUrl changes to ensure proper metadata loading
-  useEffect(() => {
-    if (audioUrl && audioRef.current) {
-      console.log('🎵 Audio URL changed, reloading:', audioUrl);
-      
-      // Test if Firebase Storage URL is accessible and add auth token if needed
-      if (audioUrl.includes('firebasestorage.googleapis.com')) {
-        console.log('🎵 Testing Firebase Storage URL accessibility...');
-        
-        // Try to add auth token for Firebase Storage access
-        const testUrl = audioUrl.includes('?') ? audioUrl : `${audioUrl}?alt=media`;
-        
-        fetch(testUrl, { method: 'HEAD' })
-          .then(response => {
-            console.log('🎵 Firebase Storage URL test:', {
-              status: response.status,
-              contentType: response.headers.get('content-type'),
-              contentLength: response.headers.get('content-length'),
-              accessible: response.ok
-            });
-            
-            // If URL is not accessible, try with auth token
-            if (!response.ok && response.status === 403) {
-              console.log('🎵 Firebase Storage 403, trying with auth token...');
-              // Update the audio src with proper auth parameters
-              if (audioRef.current) {
-                audioRef.current.src = testUrl;
-                audioRef.current.load();
-              }
-            }
-          })
-          .catch(error => {
-            console.warn('🎵 Firebase Storage URL not accessible, trying fallback:', error);
-            // Try with auth token as fallback
-            if (audioRef.current && !audioUrl.includes('alt=media')) {
-              const fallbackUrl = `${audioUrl}?alt=media`;
-              audioRef.current.src = fallbackUrl;
-              audioRef.current.load();
-            }
-          });
-      }
-      
-      const audio = audioRef.current;
-      audio.load(); // Reload the audio element with new URL
-      setIsLoading(true);
+
+// Force audio reload when audioUrl changes to ensure proper metadata loading
+useEffect(() => {
+  if (audioUrl && audioRef.current) {
+    console.log('🎵 Audio URL changed, reloading:', audioUrl);
+
+    // If this is a blob: URL coming from a prior session, it cannot be fetched in this context.
+    // We avoid setting src to prevent repeated NotSupportedError loops.
+    if (isBlobUrl) {
+      console.log('🎵 Blob URL detected; skipping reload as it may be stale and unresolvable in this session.');
+      // Reset state and show disabled UI
+      setIsLoading(false);
       setDuration(0);
       setCurrentTime(0);
-      // If we have a duration hint, keep showing it; otherwise reset
-      if (!(typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds))) {
-        setDisplayDuration('0:00');
-      } else {
-        setDuration(initialDurationSeconds);
-        setDisplayDuration(formatTime(initialDurationSeconds));
+      setDisplayDuration('0:00');
+      return;
+    }
+
+    // Test if Firebase Storage URL is accessible and add auth token if needed
+    if (audioUrl.includes('firebasestorage.googleapis.com')) {
+      console.log('🎵 Testing Firebase Storage URL accessibility...');
+      
+      // Try to add auth token for Firebase Storage access
+      const testUrl = audioUrl.includes('?') ? audioUrl : `${audioUrl}?alt=media`;
+      
+      fetch(testUrl, { method: 'HEAD' })
+        .then(response => {
+          console.log('🎵 Firebase Storage URL test:', {
+            status: response.status,
+            contentType: response.headers.get('content-type'),
+            contentLength: response.headers.get('content-length'),
+            accessible: response.ok
+          });
+          
+          // If URL is not accessible, try with auth token
+          if (!response.ok && response.status === 403) {
+            console.log('🎵 Firebase Storage 403, trying with auth token...');
+            // Update the audio src with proper auth parameters
+            if (audioRef.current) {
+              audioRef.current.src = testUrl;
+              audioRef.current.load();
+            }
+          }
+        })
+        .catch(error => {
+          console.warn('🎵 Firebase Storage URL not accessible, trying fallback:', error);
+          // Try with auth token as fallback
+          if (audioRef.current && !audioUrl.includes('alt=media')) {
+            const fallbackUrl = `${audioUrl}?alt=media`;
+            audioRef.current.src = fallbackUrl;
+            audioRef.current.load();
+          }
+        });
+    }
+    
+    const audio = audioRef.current;
+    audio.load(); // Reload the audio element with new URL
+    setIsLoading(true);
+    setDuration(0);
+    setCurrentTime(0);
+    // If we have a duration hint, keep showing it; otherwise reset
+    if (!(typeof initialDurationSeconds === 'number' && isValidDuration(initialDurationSeconds))) {
+      setDisplayDuration('0:00');
+    } else {
+      setDuration(initialDurationSeconds);
+      setDisplayDuration(formatTime(initialDurationSeconds));
+      setIsLoading(false);
+    }
+
+    // If metadata-based detection fails (common for freshly created blobs),
+    // fall back to decoding with Web Audio API after a brief delay.
+    const tryAudioContextFallback = async () => {
+      // Skip if duration already detected by normal events
+      if (audio.duration && isValidDuration(audio.duration)) return;
+      const decoded = await decodeDurationWithAudioContext(audioUrl);
+      if (decoded && isFinite(decoded) && decoded > 0) {
+        console.log('🎵 Duration detected via AudioContext:', decoded);
+        setDuration(decoded);
+        setDisplayDuration(formatTime(decoded));
         setIsLoading(false);
       }
+    };
+    // Schedule fallback attempts
+    const t1 = setTimeout(tryAudioContextFallback, 600);
+    const t2 = setTimeout(tryAudioContextFallback, 1500);
+    const t3 = setTimeout(tryAudioContextFallback, 3000);
 
-      // If metadata-based detection fails (common for freshly created blobs),
-      // fall back to decoding with Web Audio API after a brief delay.
-      const tryAudioContextFallback = async () => {
-        // Skip if duration already detected by normal events
-        if (audio.duration && isValidDuration(audio.duration)) return;
-        const decoded = await decodeDurationWithAudioContext(audioUrl);
-        if (decoded && isFinite(decoded) && decoded > 0) {
-          console.log('🎵 Duration detected via AudioContext:', decoded);
-          setDuration(decoded);
-          setDisplayDuration(formatTime(decoded));
-          setIsLoading(false);
-        }
-      };
-      // Schedule fallback attempts
-      const t1 = setTimeout(tryAudioContextFallback, 600);
-      const t2 = setTimeout(tryAudioContextFallback, 1500);
-      const t3 = setTimeout(tryAudioContextFallback, 3000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }
+}, [audioUrl]);
 
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
-    }
-  }, [audioUrl]);
+const togglePlayPause = async () => {
+  const audio = audioRef.current;
+  if (!audio) return;
 
-  const togglePlayPause = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
+  if (isPlaying) {
+    audio.pause();
+    setIsPlaying(false);
+    try { onPlayStateChange && onPlayStateChange(false); } catch {}
+  } else {
+    try {
+      console.log('🎵 Attempting to play audio:', {
+        audioUrl: audioUrl,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+        duration: audio.duration,
+        src: audio.src
+      });
+      
+      // If jingle is playing, stop it and restart main audio
+      if (isPlayingJingle && jingleRef.current) {
+        try { jingleRef.current.pause(); jingleRef.current.currentTime = 0; } catch {}
+        setIsPlayingJingle(false);
+      }
+      await audio.play();
+      setIsPlaying(true);
+      try { onPlayStateChange && onPlayStateChange(true); } catch {}
+    } catch (error) {
+      // Use console.log instead of console.error to avoid triggering Next.js error handling
+      console.log('🎵 Audio play attempt failed (this is normal):', {
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        audioUrl: audioUrl,
+        readyState: audio.readyState,
+        networkState: audio.networkState
+      });
       setIsPlaying(false);
       try { onPlayStateChange && onPlayStateChange(false); } catch {}
-    } else {
-      try {
-        console.log('🎵 Attempting to play audio:', {
-          audioUrl: audioUrl,
-          readyState: audio.readyState,
-          networkState: audio.networkState,
-          duration: audio.duration,
-          src: audio.src
-        });
-        
-        // If jingle is playing, stop it and restart main audio
-        if (isPlayingJingle && jingleRef.current) {
-          try { jingleRef.current.pause(); jingleRef.current.currentTime = 0; } catch {}
-          setIsPlayingJingle(false);
-        }
-        await audio.play();
-        setIsPlaying(true);
-        try { onPlayStateChange && onPlayStateChange(true); } catch {}
-      } catch (error) {
-        // Use console.log instead of console.error to avoid triggering Next.js error handling
-        console.log('🎵 Audio play attempt failed (this is normal):', {
-          errorName: error instanceof Error ? error.name : 'Unknown',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          audioUrl: audioUrl,
-          readyState: audio.readyState,
-          networkState: audio.networkState
-        });
-        setIsPlaying(false);
-        try { onPlayStateChange && onPlayStateChange(false); } catch {}
-        
-        // If the source is invalid, try to reload it
-        if (error instanceof Error && error.name === 'NotSupportedError') {
-          console.log('🎵 NotSupportedError detected, attempting to reload audio source');
-          audio.load();
-        }
+      
+      // If the source is invalid, try to reload it
+      if (error instanceof Error && error.name === 'NotSupportedError') {
+        console.log('🎵 NotSupportedError detected, attempting to reload audio source');
+        audio.load();
       }
     }
-  };
+  }
+};
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current;
-    if (!audio || !duration) return;
+const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const audio = audioRef.current;
+  if (!audio || !duration) return;
 
-    const newTime = parseFloat(e.target.value);
-    
-    // Ensure the new time is within valid bounds
-    if (newTime >= 0 && newTime <= duration) {
-      audio.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  };
+  const newTime = parseFloat(e.target.value);
+  
+  // Ensure the new time is within valid bounds
+  if (newTime >= 0 && newTime <= duration) {
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  }
+};
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current;
-    if (!audio) return;
+const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const audio = audioRef.current;
+  if (!audio) return;
 
-    const newVolume = parseFloat(e.target.value);
-    audio.volume = newVolume;
-    setVolume(newVolume);
-    setIsMuted(newVolume === 0);
-  };
+  const newVolume = parseFloat(e.target.value);
+  audio.volume = newVolume;
+  setVolume(newVolume);
+  setIsMuted(newVolume === 0);
+};
 
-  const toggleMute = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
+const toggleMute = () => {
+  const audio = audioRef.current;
+  if (!audio) return;
 
-    if (isMuted) {
-      audio.volume = volume;
-      setIsMuted(false);
-    } else {
-      audio.volume = 0;
-      setIsMuted(true);
-    }
-  };
+  if (isMuted) {
+    audio.volume = volume;
+    setIsMuted(false);
+  } else {
+    audio.volume = 0;
+    setIsMuted(true);
+  }
+};
 
-  const formatTime = (time: number) => {
-    // Handle invalid time values (NaN, Infinity, negative numbers)
-    if (!isFinite(time) || time < 0) {
-      return '0:00';
-    }
-    
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
+const formatTime = (time: number) => {
+  // Handle invalid time values (NaN, Infinity, negative numbers)
+  if (!isFinite(time) || time < 0) {
+    return '0:00';
+  }
+  
+  const minutes = Math.floor(time / 60);
+  const seconds = Math.floor(time % 60);
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
 
-  return (
-    <div className={`w-full max-w-full min-w-0 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
-      <audio 
-        ref={audioRef} 
-        src={audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media') ? `${audioUrl}?alt=media` : audioUrl}
-        preload="metadata"
-        crossOrigin="anonymous"
-        onLoadStart={() => console.log('🎵 Audio load started:', audioUrl)}
-        onCanPlay={() => console.log('🎵 Audio can play:', audioUrl)}
-        onLoadedMetadata={() => console.log('🎵 Audio metadata loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
-        onLoadedData={() => console.log('🎵 Audio data loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
-        // Use log to avoid Next.js / next-auth error interception for harmless media errors
-        onError={(e) => {
-          console.log('🎵 Audio element error (non-fatal):', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState });
-          // Try fallback URL for Firebase Storage
-          if (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media')) {
-            const fallbackUrl = `${audioUrl}?alt=media`;
-            console.log('🎵 Trying fallback URL:', fallbackUrl);
-            e.currentTarget.src = fallbackUrl;
-            e.currentTarget.load();
-          }
+return (
+  <div className={`w-full max-w-full min-w-0 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
+    <audio 
+      ref={audioRef} 
+      src={isBlobUrl ? undefined : (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media') ? `${audioUrl}?alt=media` : audioUrl)}
+      preload="metadata"
+      crossOrigin="anonymous"
+      onLoadStart={() => console.log('🎵 Audio load started:', audioUrl)}
+      onCanPlay={() => console.log('🎵 Audio can play:', audioUrl)}
+      onLoadedMetadata={() => console.log('🎵 Audio metadata loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
+      onLoadedData={() => console.log('🎵 Audio data loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
+      // Use log to avoid Next.js / next-auth error interception for harmless media errors
+      onError={(e) => {
+        console.log('🎵 Audio element error (non-fatal):', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState });
+        // Try fallback URL for Firebase Storage
+        if (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media')) {
+          const fallbackUrl = `${audioUrl}?alt=media`;
+          console.log('🎵 Trying fallback URL:', fallbackUrl);
+          e.currentTarget.src = fallbackUrl;
+          e.currentTarget.load();
+        }
+      }}
+    />
+    {promoJingleUrl ? (
+      <audio
+        ref={jingleRef}
+        src={promoJingleUrl}
+        preload="auto"
+        onEnded={() => {
+          setIsPlayingJingle(false);
+          try { onEnded && onEnded(); } catch {}
         }}
       />
-      {promoJingleUrl ? (
-        <audio
-          ref={jingleRef}
-          src={promoJingleUrl}
-          preload="auto"
-          onEnded={() => {
-            setIsPlayingJingle(false);
-            try { onEnded && onEnded(); } catch {}
+    ) : null}
+    
+    {/* Waveform Visualization Placeholder (optional) */}
+    {showWaveform && (
+      <div className="h-16 bg-gradient-to-r from-orange-200 to-green-200 rounded-lg mb-4 flex items-center justify-center">
+        {isMounted ? (
+          <div className="flex items-center space-x-1">
+            {waveformHeights.map((height, i) => (
+              <div
+                key={i}
+                className="w-1 bg-orange-500 rounded-full animate-pulse"
+                style={{
+                  height: `${height}px`,
+                  animationDelay: `${i * 0.1}s`,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          // SSR placeholder - simple loading state
+          <div className="flex items-center space-x-2 text-orange-600">
+            <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-medium">Loading audio...</span>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* Audio Controls */}
+    <div className="flex items-center space-x-4 mb-4">
+      {/* Play/Pause Button */}
+      <button
+        onClick={togglePlayPause}
+        disabled={isLoading || isBlobUrl}
+        className="flex items-center justify-center w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors disabled:opacity-50"
+      >
+        {isLoading ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : isBlobUrl ? (
+          <Play size={20} />
+        ) : (isPlaying || isPlayingJingle) ? (
+          <Pause size={20} />
+        ) : (
+          <Play size={20} />
+        )}
+      </button>
+
+      {/* Progress Bar */}
+      <div className="flex-1">
+        <input
+          type="range"
+          min="0"
+          max={duration || 100}
+          value={duration > 0 ? currentTime : 0}
+          onChange={handleSeek}
+          disabled={!duration || duration <= 0 || isBlobUrl}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider disabled:opacity-50"
+          style={{
+            background: duration > 0 ? `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)` : '#e5e7eb'
           }}
         />
-      ) : null}
-      
-      {/* Waveform Visualization Placeholder (optional) */}
-      {showWaveform && (
-        <div className="h-16 bg-gradient-to-r from-orange-200 to-green-200 rounded-lg mb-4 flex items-center justify-center">
-          {isMounted ? (
-            <div className="flex items-center space-x-1">
-              {waveformHeights.map((height, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-orange-500 rounded-full animate-pulse"
-                  style={{
-                    height: `${height}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            // SSR placeholder - simple loading state
-            <div className="flex items-center space-x-2 text-orange-600">
-              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm font-medium">Loading audio...</span>
-            </div>
-          )}
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <span>{formatTime(currentTime)}</span>
+          <span>{duration > 0 ? formatTime(duration) : displayDuration || '0:00'}</span>
         </div>
-      )}
+      </div>
 
-      {/* Audio Controls */}
-      <div className="flex items-center space-x-4 mb-4">
-        {/* Play/Pause Button */}
-        <button
-          onClick={togglePlayPause}
-          disabled={isLoading}
-          className="flex items-center justify-center w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-colors disabled:opacity-50"
-        >
-          {isLoading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (isPlaying || isPlayingJingle) ? (
-            <Pause size={20} />
-          ) : (
-            <Play size={20} />
-          )}
+      {/* Volume Control */}
+      <div className="flex items-center space-x-2">
+        <button onClick={toggleMute} className="text-gray-600 hover:text-gray-800">
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.1"
+          value={isMuted ? 0 : volume}
+          onChange={handleVolumeChange}
+          className="w-16 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+        />
 
         {/* Progress Bar */}
         <div className="flex-1">
@@ -568,7 +619,7 @@ export default function AudioPlayer({
             max={duration || 100}
             value={duration > 0 ? currentTime : 0}
             onChange={handleSeek}
-            disabled={!duration || duration <= 0}
+            disabled={!duration || duration <= 0 || isBlobUrl}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider disabled:opacity-50"
             style={{
               background: duration > 0 ? `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)` : '#e5e7eb'
@@ -606,6 +657,12 @@ export default function AudioPlayer({
           <Download size={20} />
         </a>
       </div>
+
+      {isBlobUrl && (
+        <div className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+          Audio is not available yet. If this post was saved with a temporary blob URL, it cannot be replayed after reload. Please re-upload or wait for processing.
+        </div>
+      )}
     </div>
   );
 };

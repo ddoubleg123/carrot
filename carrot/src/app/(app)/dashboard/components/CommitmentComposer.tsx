@@ -4,7 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
-import { uploadFilesToFirebase } from '../../../../lib/uploadToFirebase';
+import { uploadFilesToFirebase, uploadFileToFirebase } from '../../../../lib/uploadToFirebase';
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
 import Toast from './Toast';
 import GifPicker from './GifPicker';
@@ -525,6 +525,21 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     setShowAudioRecorder(false);
     
     console.log('✅ Audio state updated - ready for posting');
+
+    // Begin background upload to Firebase Storage and swap URL when ready
+    try {
+      const file = new File([finalBlob], `recording_${Date.now()}.wav`, { type: finalBlob.type || 'audio/wav' });
+      const path = `posts/audio/${Date.now()}_${Math.random().toString(36).slice(2)}.wav`;
+      const downloadURL = await uploadFileToFirebase(file, path);
+      // Revoke temporary blob URL if any, then replace with permanent URL
+      try { if (finalAudioUrl && finalAudioUrl.startsWith('blob:')) URL.revokeObjectURL(finalAudioUrl); } catch {}
+      setAudioUrl(downloadURL);
+      showSuccessToast('Audio uploaded');
+      console.log('🎵 Firebase audio uploaded. URL:', downloadURL);
+    } catch (e) {
+      console.warn('⚠️ Background upload to Firebase failed; keeping local blob until retry:', e);
+      // Non-fatal; user can still post with blob URL in session, but it will not persist after reload
+    }
   };
 
   const onAudioCancel = () => {
