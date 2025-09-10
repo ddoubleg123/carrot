@@ -59,19 +59,18 @@ try {
   throw new Error('Database connection failed');
 }
 
-// Verify database connection on startup
-async function verifyDatabaseConnection() {
+// Lazy verification to avoid connecting during Next build/module import
+let __dbVerified = false;
+async function ensureDatabaseConnection() {
+  if (__dbVerified) return;
   try {
     await prisma.$queryRaw`SELECT 1`;
-    console.log('Database connection verified');
+    __dbVerified = true;
   } catch (error) {
     console.error('Database connection error:', error);
     throw new Error('Database connection failed');
   }
 }
-
-// Call verify on import to fail fast
-verifyDatabaseConnection().catch(console.error);
 
 function genId() {
   return `ing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -79,6 +78,7 @@ function genId() {
 
 export async function createJob(params: Omit<IngestJob, 'id' | 'createdAt' | 'updatedAt' | 'status'> & { status?: IngestJobStatus }) {
   try {
+    await ensureDatabaseConnection();
     const id = genId();
     console.log('[createJob] Creating job with data:', {
       id,
@@ -110,6 +110,7 @@ export async function createJob(params: Omit<IngestJob, 'id' | 'createdAt' | 'up
 
 export async function getJob(id: string) {
   try {
+    await ensureDatabaseConnection();
     const job = await prisma.ingestJob.findUnique({ 
       where: { id }
     });
@@ -124,6 +125,7 @@ export async function getJob(id: string) {
 
 export async function updateJob(id: string, patch: Partial<IngestJob>) {
   try {
+    await ensureDatabaseConnection();
     const updateData: any = {};
     if (patch.status !== undefined) updateData.status = patch.status;
     if (patch.progress !== undefined) updateData.progress = patch.progress;
@@ -179,6 +181,7 @@ function mapPrismaJobToIngestJob(job: any): IngestJob {
 
 export async function listJobs() {
   try {
+    await ensureDatabaseConnection();
     const jobs = await prisma.ingestJob.findMany({
       orderBy: { createdAt: 'desc' }
     });
