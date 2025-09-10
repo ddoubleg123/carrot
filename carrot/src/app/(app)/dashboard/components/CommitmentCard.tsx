@@ -143,6 +143,41 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     return `${Math.floor(diff / 86400)}d`;
   }, [timestamp]);
 
+  // Lightweight debug info for the overflow menu
+  const debugInfo = useMemo(() => {
+    const audioIsBlob = typeof audioUrl === 'string' && audioUrl.startsWith('blob:');
+    const hasVideo = Boolean(cfUid || cfPlaybackUrlHls || videoUrl);
+    return {
+      id,
+      authorId: author?.id || null,
+      hasAudio: Boolean(audioUrl),
+      audioUrl: audioUrl || null,
+      audioIsBlob,
+      hasVideo,
+      cfUid: cfUid || null,
+      cfPlaybackUrlHls: cfPlaybackUrlHls || null,
+      videoUrl: videoUrl || null,
+      uploadStatus: uploadStatus || null,
+      uploadProgress: uploadProgress ?? null,
+      transcriptionStatus: transcriptionStatus || null,
+      hasAudioTranscription: Boolean(audioTranscription),
+      timestamp: timestamp || null,
+    };
+  }, [id, author?.id, audioUrl, cfUid, cfPlaybackUrlHls, videoUrl, uploadStatus, uploadProgress, transcriptionStatus, audioTranscription, timestamp]);
+
+  const copyDebugToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
+      setIsMenuOpen(false);
+      // Optionally, a subtle alert to confirm
+      try { console.log('[CommitmentCard] Debug info copied:', debugInfo); } catch {}
+    } catch (e) {
+      // Fallback
+      alert('Could not copy debug info. Check console for details.');
+      try { console.log('[CommitmentCard] Debug info:', debugInfo); } catch {}
+    }
+  };
+
   // Dev-only unknown prop guard
   if (isDev && debugUnknownPropsToConsole) {
     try {
@@ -201,17 +236,77 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   <EllipsisHorizontalIcon className="h-5 w-5" />
                 </button>
                 {isMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-md border shadow z-10">
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-md border shadow z-10">
                     {isOwnPost ? (
-                      <button
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                        onClick={() => { setIsMenuOpen(false); setIsEditOpen(true); }}
-                      >
-                        Edit
-                      </button>
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-gray-500">No actions</div>
-                    )}
+                      <>
+                        <button
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                          onClick={() => { setIsMenuOpen(false); setIsEditOpen(true); }}
+                        >
+                          Edit
+                        </button>
+                        {typeof onDelete === 'function' ? (
+                          <button
+                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                            onClick={() => {
+                              if (confirm('Delete this post? This cannot be undone.')) {
+                                try { onDelete(id); } catch {}
+                                setIsMenuOpen(false);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    {/* Debug section */}
+                    <div className="px-3 py-2 border-t text-xs text-gray-700">
+                      <div className="font-semibold text-gray-900 mb-1">Debug</div>
+                      <div className="truncate" title={debugInfo.id}>ID: {debugInfo.id}</div>
+                      {debugInfo.hasAudio ? (
+                        <div className="mt-1">
+                          <div>Audio: {debugInfo.audioIsBlob ? 'blob URL (not playable after reload)' : 'URL'}</div>
+                          {debugInfo.audioIsBlob ? (
+                            <div className="text-orange-600">Stale blob detected — needs re-upload/persistent URL</div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-1">Audio: none</div>
+                      )}
+                      {debugInfo.hasVideo ? (
+                        <div className="mt-1">Video: present ({debugInfo.cfUid ? 'Stream UID' : debugInfo.videoUrl ? 'Direct URL' : 'HLS'})</div>
+                      ) : (
+                        <div className="mt-1">Video: none</div>
+                      )}
+                      {typeof debugInfo.uploadProgress === 'number' ? (
+                        <div className="mt-1">Upload: {debugInfo.uploadStatus || 'n/a'} {Math.round(debugInfo.uploadProgress)}%</div>
+                      ) : debugInfo.uploadStatus ? (
+                        <div className="mt-1">Upload: {debugInfo.uploadStatus}</div>
+                      ) : null}
+                      {debugInfo.transcriptionStatus ? (
+                        <div className="mt-1">Transcription: {debugInfo.transcriptionStatus}</div>
+                      ) : null}
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          className="px-2 py-1 rounded border text-gray-700 hover:bg-gray-50"
+                          onClick={copyDebugToClipboard}
+                        >
+                          Copy debug
+                        </button>
+                        {debugInfo.audioUrl && !debugInfo.audioIsBlob ? (
+                          <a
+                            className="px-2 py-1 rounded border text-gray-700 hover:bg-gray-50"
+                            href={debugInfo.audioUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            Open audio
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
