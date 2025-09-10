@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { ADMIN_USERS } from '@/config/auth';
+export const dynamic = 'force-dynamic';
 
 export default async function PortalPage() {
   const session = await auth();
