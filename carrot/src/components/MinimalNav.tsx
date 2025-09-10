@@ -130,7 +130,7 @@ const MENU_ITEMS = [
     label: 'Funds',
   },
   {
-    href: '/dashboard/settings',
+    href: '/settings',
     icon: NavIcons.Settings,
     label: 'Settings',
   },

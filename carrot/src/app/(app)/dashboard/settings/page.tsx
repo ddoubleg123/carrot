@@ -182,55 +182,16 @@ export default function SettingsPage() {
     }
   };
 
-  if (!session) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <p className="text-lg font-medium text-gray-700">Please sign in to view settings</p>
-        </div>
-      </div>
-    );
-  }
+  // Immediately redirect this legacy route to the new unified Settings
+  useEffect(() => {
+    // Replace so the legacy URL is not kept in history
+    router.replace('/settings');
+  }, [router]);
 
+  // Render a simple placeholder to avoid flashing the old layout
   return (
-    <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {activeTab === 'account' && (
-          <AccountInformation 
-            formData={formData} 
-            onInputChange={handleInputChange}
-            onUsernameChange={handleUsernameChange}
-            isSaving={isSaving}
-            saveError={saveError}
-            setSaveError={setSaveError}
-          />
-        )}
-        
-        {activeTab === 'notifications' && (
-          <NotificationPreferences />
-        )}
-        
-        {activeTab === 'privacy' && (
-          <PrivacySettings />
-        )}
-        
-        {/* Save button for all forms except username which has its own save */}
-        {activeTab !== 'account' && (
-          <div className="pt-4 border-t border-gray-200">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className={`px-4 py-2 rounded-md text-sm font-medium text-white ${
-                isSaving
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-primary-600 hover:bg-primary-700'
-              }`}
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        )}
-      </form>
-    </SettingsLayout>
+    <div className="flex items-center justify-center h-[60vh]">
+      <div className="text-center text-gray-600">Redirecting to Settings…</div>
+    </div>
   );
 }

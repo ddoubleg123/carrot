@@ -81,6 +81,22 @@ export default async function HomePage() {
   if (!session) redirect('/login');
 
   const commitments = await getCommitments();
+  // Fetch server-backed playback prefs using the same session cookie
+  const hdrs = await nextHeaders();
+  const cookieHeader = hdrs.get('cookie') || '';
+  let serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined;
+  try {
+    const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+    const resp = await fetch(`${base}/api/user/prefs`, { headers: { Cookie: cookieHeader }, cache: 'no-store' });
+    if (resp.ok) {
+      const j = await resp.json();
+      serverPrefs = {
+        reducedMotion: Boolean(j?.reducedMotion),
+        captionsDefault: j?.captionsDefault === true || j?.captionsDefault === 'on',
+        autoplay: typeof j?.autoplay === 'boolean' ? j.autoplay : undefined,
+      };
+    }
+  } catch {}
 
   return (
     <Suspense fallback={
@@ -100,7 +116,7 @@ export default async function HomePage() {
           <div className="w-full min-w-[320px] max-w-[720px] px-6" style={{ marginTop: -20, paddingTop: 0 }}>
             <FirebaseClientInit />
             <ClientSessionProvider>
-              <DashboardClient initialCommitments={commitments} isModalComposer={true} />
+              <DashboardClient initialCommitments={commitments} isModalComposer={true} serverPrefs={serverPrefs} />
             </ClientSessionProvider>
           </div>
 

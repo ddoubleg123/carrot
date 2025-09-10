@@ -4,6 +4,7 @@ import React, { useMemo, useState, forwardRef } from "react";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
 import CFVideoPlayer from "../../../../components/CFVideoPlayer";
+import HlsFeedPlayer from "../../../../components/video/HlsFeedPlayer";
 import VideoPlayer from "./VideoPlayer";
 import EditPostModal from "../../../../components/EditPostModal";
 
@@ -216,7 +217,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   }
 
   return (
-    <div ref={ref} className={['bg-transparent', className].filter(Boolean).join(' ')} {...dataAttrs} {...rest}>
+    <div
+      ref={ref}
+      data-commitment-id={id}
+      data-hls-master={cfPlaybackUrlHls || undefined}
+      className={['bg-transparent', className].filter(Boolean).join(' ')}
+      {...dataAttrs}
+      {...rest}
+    >
       <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4" style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}>
         {carrotText ? (
           <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
@@ -346,28 +354,47 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {/* Video */}
         {(cfUid || cfPlaybackUrlHls || videoUrl) && (
           <div className="mt-3">
-            {cfUid || cfPlaybackUrlHls ? (
-              <CFVideoPlayer
-                uid={cfUid || undefined}
-                playbackUrlHls={cfPlaybackUrlHls || undefined}
-                poster={thumbnailUrl || undefined}
-                autoPlay
-                muted
-                loop
-                controls
-                trackSrc={captionVttUrl || undefined}
-              />
-            ) : (
-              <VideoPlayer
-                videoUrl={videoUrl || ""}
-                thumbnailUrl={thumbnailUrl || undefined}
-                postId={id}
-                initialTranscription={audioTranscription || undefined}
-                transcriptionStatus={transcriptionStatus || undefined}
-                uploadStatus={uploadStatus || null}
-                uploadProgress={uploadProgress || 0}
-              />
-            )}
+            {(() => {
+              const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
+              if (useHls) {
+                return (
+                  <HlsFeedPlayer
+                    assetId={id}
+                    hlsMasterUrl={cfPlaybackUrlHls || undefined}
+                    posterUrl={thumbnailUrl || undefined}
+                    captionVttUrl={captionVttUrl || undefined}
+                    autoPlay
+                    muted
+                    className="rounded-xl overflow-hidden"
+                  />
+                );
+              }
+              if (cfUid || cfPlaybackUrlHls) {
+                return (
+                  <CFVideoPlayer
+                    uid={cfUid || undefined}
+                    playbackUrlHls={cfPlaybackUrlHls || undefined}
+                    poster={thumbnailUrl || undefined}
+                    autoPlay
+                    muted
+                    loop
+                    controls
+                    trackSrc={captionVttUrl || undefined}
+                  />
+                );
+              }
+              return (
+                <VideoPlayer
+                  videoUrl={videoUrl || ""}
+                  thumbnailUrl={thumbnailUrl || undefined}
+                  postId={id}
+                  initialTranscription={audioTranscription || undefined}
+                  transcriptionStatus={transcriptionStatus || undefined}
+                  uploadStatus={uploadStatus || null}
+                  uploadProgress={uploadProgress || 0}
+                />
+              );
+            })()}
           </div>
         )}
 

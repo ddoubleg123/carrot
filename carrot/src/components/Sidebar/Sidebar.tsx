@@ -41,7 +41,7 @@ const MENU = [
     label: 'Funds',
   },
   {
-    href: '/dashboard/settings',
+    href: '/settings',
     icon: <SidebarIcons.Settings />,
     label: 'Settings',
   },

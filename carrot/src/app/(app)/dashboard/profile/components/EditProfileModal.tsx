@@ -239,7 +239,7 @@ export default function EditProfileModal({ user, isOpen, onClose, onSave }: Edit
                     <EnvelopeIcon className="h-4 w-4 mr-2 text-gray-400" />
                     <span>{user.email}</span>
                     <a 
-                      href="/dashboard/settings" 
+                      href="/settings" 
                       className="ml-2 text-primary hover:text-primary-dark text-sm font-medium"
                     >
                       Change
@@ -250,7 +250,7 @@ export default function EditProfileModal({ user, isOpen, onClose, onSave }: Edit
                     <DevicePhoneMobileIcon className="h-4 w-4 mr-2 text-gray-400" />
                     <span>{user.phone || 'Not provided'}</span>
                     <a 
-                      href="/dashboard/settings" 
+                      href="/settings" 
                       className="ml-2 text-primary hover:text-primary-dark text-sm font-medium"
                     >
                       {user.phone ? 'Change' : 'Add'}
@@ -261,7 +261,7 @@ export default function EditProfileModal({ user, isOpen, onClose, onSave }: Edit
                     <UserIcon className="h-4 w-4 mr-2 text-gray-400" />
                     <span>@{user.username}</span>
                     <a 
-                      href="/dashboard/settings" 
+                      href="/settings" 
                       className="ml-2 text-primary hover:text-primary-dark text-sm font-medium"
                     >
                       Change

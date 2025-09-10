@@ -9,6 +9,7 @@ import ComposerTrigger from '../../../components/ComposerTrigger';
 import ComposerModal from '../../../components/ComposerModal';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
+import FeedMediaManager from '../../../components/video/FeedMediaManager';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -17,13 +18,14 @@ export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 
 interface DashboardClientProps {
   initialCommitments: DashboardCommitmentCardProps[];
   isModalComposer?: boolean;
+  serverPrefs?: { reducedMotion?: boolean; captionsDefault?: boolean; autoplay?: boolean };
 }
 
 
 
 import { useSyncFirebaseAuth } from '../../../lib/useSyncFirebaseAuth';
 
-export default function DashboardClient({ initialCommitments, isModalComposer = false }: DashboardClientProps) {
+export default function DashboardClient({ initialCommitments, isModalComposer = false, serverPrefs }: DashboardClientProps) {
   useSyncFirebaseAuth();
   const [commitments, setCommitments] = useState<DashboardCommitmentCardProps[]>(initialCommitments);
   const [isModalOpen, setIsModalOpen] = useModalState(false);
@@ -82,6 +84,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       cfUid: post.cfUid || post.cf_uid || null,
       cfPlaybackUrlHls: post.cfPlaybackUrlHls || post.cf_playback_url_hls || null,
       captionVttUrl: post.captionVttUrl || post.caption_vtt_url || null,
+      storyboardVttUrl: post.storyboardVttUrl || post.storyboard_vtt_url || null,
+      duration_s: post.duration_s || post.durationSeconds || post.duration || null,
+      codecs: post.codecs || null,
       audioUrl: post.audioUrl || null,
       audioTranscription: post.audioTranscription || null,
       transcriptionStatus: post.transcriptionStatus || null,
@@ -107,6 +112,121 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   // Keep a ref to the latest commitments for polling
   const commitmentsRef = useRef(commitments);
   useEffect(() => { commitmentsRef.current = commitments; }, [commitments]);
+
+  // Sync server-rendered playback prefs to localStorage ASAP to avoid client flicker
+  useEffect(() => {
+    if (!serverPrefs) return;
+    try {
+      if (typeof serverPrefs.reducedMotion === 'boolean') {
+        if (serverPrefs.reducedMotion) localStorage.setItem('carrot_reduced_motion', '1');
+        else localStorage.removeItem('carrot_reduced_motion');
+      }
+      if (typeof serverPrefs.captionsDefault === 'boolean') {
+        localStorage.setItem('carrot_captions_default', serverPrefs.captionsDefault ? 'on' : 'off');
+      }
+      if (typeof serverPrefs.autoplay === 'boolean') {
+        localStorage.setItem('carrot_autoplay_default', serverPrefs.autoplay ? 'on' : 'off');
+      }
+    } catch {}
+  }, [serverPrefs]);
+
+  // Feature-flagged viewport-driven Warm/Active state (HLS feed rollout)
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_FEED_HLS !== '1') return;
+    const root = document;
+    const tiles = new Map<Element, string>();
+
+    // Observe entries and select a single Active (>=0.75), one Warm (>=0.6), else Idle
+    const io = new IntersectionObserver((entries) => {
+      // Pick the most centered/highest ratio as candidate Active
+      let best: { el: Element; ratio: number } | null = null;
+      let warm: Element | null = null;
+      for (const e of entries) {
+        const id = (e.target as HTMLElement).getAttribute('data-commitment-id');
+        if (!id) continue;
+        tiles.set(e.target, id);
+        const r = e.intersectionRatio;
+        if (r >= 0.75 && (!best || r > best.ratio)) best = { el: e.target, ratio: r };
+        else if (r >= 0.6) warm = e.target;
+        else if (r <= 0.4) {
+          // Demote quickly when off-screen
+          const activeEl = (FeedMediaManager.inst.active as any)?.el as Element | undefined;
+          if (activeEl && activeEl === e.target) FeedMediaManager.inst.setActive(undefined);
+        }
+      }
+      if (best) {
+        const handle = FeedMediaManager.inst.getHandleByElement(best.el);
+        if (handle) FeedMediaManager.inst.setActive(handle);
+      }
+      if (warm) {
+        const handle = FeedMediaManager.inst.getHandleByElement(warm);
+        if (handle) FeedMediaManager.inst.setWarm(handle);
+        // Prefetch next tile HLS playlist + first segment via SW (parse real URIs)
+        (async () => {
+          try {
+            const master = (warm as HTMLElement).getAttribute('data-hls-master');
+            const swc = (navigator as any)?.serviceWorker?.controller;
+            if (!master || !swc) return;
+            // Network guard: skip prefetch on data saver or very low downlink
+            const conn: any = (navigator as any)?.connection || (navigator as any)?.mozConnection || (navigator as any)?.webkitConnection;
+            if (conn) {
+              const saveData = Boolean(conn.saveData);
+              const downlink = typeof conn.downlink === 'number' ? conn.downlink : 10; // Mbps
+              if (saveData || downlink < 1.5) return;
+            }
+            const masterUrl = new URL(master, location.href).toString();
+            const res = await fetch(masterUrl, { cache: 'no-store' });
+            if (!res.ok) return;
+            const text = await res.text();
+            const lines = text.split(/\r?\n/);
+            // Try to find the lowest BANDWIDTH variant
+            type Variant = { bandwidth: number; uri: string };
+            const variants: Variant[] = [];
+            for (let i = 0; i < lines.length - 1; i++) {
+              const l = lines[i];
+              if (l.startsWith('#EXT-X-STREAM-INF')) {
+                const bwMatch = l.match(/BANDWIDTH=(\d+)/);
+                const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+                const uri = lines[i + 1];
+                if (uri && !uri.startsWith('#')) variants.push({ bandwidth: bw, uri });
+              }
+            }
+            // If no variants, this is already a media playlist
+            let variantUrl = masterUrl;
+            if (variants.length > 0) {
+              variants.sort((a, b) => a.bandwidth - b.bandwidth);
+              const chosen = variants[0];
+              variantUrl = new URL(chosen.uri, masterUrl).toString();
+            }
+            // Fetch variant playlist and get first media segment
+            const vres = await fetch(variantUrl, { cache: 'no-store' });
+            if (!vres.ok) return;
+            const vtxt = await vres.text();
+            const vlines = vtxt.split(/\r?\n/);
+            let firstSeg: string | null = null;
+            for (let i = 0; i < vlines.length; i++) {
+              const l = vlines[i];
+              if (!l || l.startsWith('#')) continue;
+              firstSeg = l.trim();
+              break;
+            }
+            const segUrl = firstSeg ? new URL(firstSeg, variantUrl).toString() : null;
+            const urls = [variantUrl].concat(segUrl ? [segUrl] : []);
+            swc.postMessage({ type: 'PREFETCH', urls });
+          } catch {}
+        })();
+      }
+    }, { threshold: [0.4, 0.6, 0.75] });
+
+    const attach = () => {
+      root.querySelectorAll('[data-commitment-id]')?.forEach((el) => io.observe(el));
+    };
+    const detach = () => io.disconnect();
+
+    const t = setTimeout(attach, 0);
+    window.addEventListener('resize', attach);
+    return () => { clearTimeout(t); window.removeEventListener('resize', attach); detach(); };
+  }, []);
 
   // Poll background trim jobs and update posts when they complete (with simple backoff)
   useEffect(() => {

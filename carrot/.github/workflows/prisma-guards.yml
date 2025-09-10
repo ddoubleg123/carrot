@@ -1,0 +1,27 @@
+name: prisma-guards
+on:
+  pull_request:
+    branches: [ main, release/* ]
+  push:
+    branches: [ main ]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: corepack enable && pnpm i --frozen-lockfile
+
+      # 1) Forbid destructive scripts in package.json that could run in prod
+      - name: Guard package scripts
+        run: node scripts/prisma-guard.cjs check-scripts
+
+      # 2) Lint migration SQL for destructive ops
+      - name: Lint migrations
+        run: node scripts/prisma-guard.cjs lint-migrations
+
+      # 3) Optional: shadow DB status sanity
+      - name: Prisma validate
+        run: pnpm prisma validate

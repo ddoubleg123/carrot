@@ -4,9 +4,10 @@ import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import WindsurfAttributes from '../components/WindsurfAttributes';
 import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
 
 // Dynamically import Sidebar to avoid SSR issues with usePathname
-const Sidebar = dynamic(() => import('@/components/Sidebar/Sidebar'), {
+const Sidebar = dynamic(() => import('../components/Sidebar/Sidebar'), {
   ssr: false,
 });
 
@@ -17,6 +18,21 @@ export default function ClientLayout({
 }) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  
+  // Register a lightweight Service Worker for prefetch (idempotent)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ('serviceWorker' in navigator) {
+      const already = (navigator as any).__carrot_sw_registered;
+      if (!already) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(() => {
+            (navigator as any).__carrot_sw_registered = true;
+          }).catch(() => {});
+        });
+      }
+    }
+  }, []);
   const isAuthPage = pathname?.startsWith('/auth');
   const isLoginPage = pathname === '/login';
   const isPublicPage = pathname === '/' || pathname?.startsWith('/about') || isLoginPage;

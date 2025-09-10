@@ -44,8 +44,9 @@ export default function AudioPlayer({
   const resolvedSrc = React.useMemo(() => {
     if (!audioUrl) return '';
     if (isBlobUrl) return allowBlob ? audioUrl : '';
-    if (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media')) {
-      return `${audioUrl}?alt=media`;
+    if (audioUrl.includes('firebasestorage.googleapis.com')) {
+      const base = audioUrl.includes('alt=media') ? audioUrl : `${audioUrl}?alt=media`;
+      return `/api/audio?url=${encodeURIComponent(base)}`;
     }
     return audioUrl;
   }, [audioUrl, isBlobUrl, allowBlob]);
@@ -441,7 +442,7 @@ return (
   <div className={`w-full max-w-full min-w-0 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
     <audio 
       ref={audioRef} 
-      src={isBlobUrl ? undefined : (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media') ? `${audioUrl}?alt=media` : audioUrl)}
+      src={isBlobUrl ? undefined : resolvedSrc}
       preload="metadata"
       crossOrigin="anonymous"
       onLoadStart={() => console.log('🎵 Audio load started:', audioUrl)}

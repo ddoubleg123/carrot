@@ -125,3 +125,7 @@ carrot/prisma/.env
 carrot/prisma/.env.local
 secrets/
 carrot/prisma/*.db
+
+# Destructive migration override (tracked example only)
+.allow-destructive
+!.allow-destructive.example

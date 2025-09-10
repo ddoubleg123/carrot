@@ -1,0 +1,7 @@
+WARNING: proposed destructive DB action on production
+Reason: <why>
+Date: <YYYY-MM-DD>
+Approved by: <Full Name>
+Environment: production
+Rollback plan: <how to revert migration and/or restore>
+Backup: pg_dump run at <timestamp>

@@ -175,3 +175,101 @@ Use these steps to verify Render is using the intended GHCR image and to interpr
 
 8. __Sanity workflow__
    - Verify `/debug` → run POST `/ingest` with secret → watch logs for yt-dlp/ffmpeg → confirm uploads and callback.
+
+## Prisma Production Safety Plan (Must Follow)
+
+This project MUST follow the guardrails below for any schema changes and DB access in production.
+
+### Non‑negotiables
+
+- Never run `prisma migrate dev`, `prisma db push`, or `prisma migrate reset` against production.
+- Use separate databases (or schemas) for dev / staging / prod.
+- The running app uses a non‑DDL role (no ALTER/DROP). Only CI migration steps use the admin role.
+
+### Roles (prod one‑time)
+
+Create an app role with no DDL and an admin role for CI migrations.
+
+```sql
+CREATE ROLE carrot_app LOGIN PASSWORD '***';
+
+GRANT CONNECT ON DATABASE carrot_prod TO carrot_app;
+GRANT USAGE ON SCHEMA public TO carrot_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO carrot_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO carrot_app;
+```
+
+Do NOT grant CREATE/DROP/ALTER to `carrot_app`. Keep an `carrot_admin` role ONLY for migrations.
+
+### Environment variables (Render)
+
+- Running app (non‑DDL): `DATABASE_URL=postgresql://carrot_app:***@host:5432/carrot_prod?schema=public`
+- CI/Release migration step (admin): `MIGRATION_DATABASE_URL=postgresql://carrot_admin:***@host:5432/carrot_prod?schema=public`
+
+### Commands
+
+- Dev only (local/dev DB): `npx prisma migrate dev`
+- Prod/staging deploy: `DATABASE_URL="$MIGRATION_DATABASE_URL" npx prisma migrate deploy`
+
+### Guard script
+
+Use `scripts/prisma-guard.cjs` instead of calling Prisma directly in release steps.
+
+```bash
+node scripts/prisma-guard.cjs deploy
+```
+
+This script blocks dangerous commands in prod and enforces that prod migrations use the admin role URL.
+
+### CI checks
+
+Add a workflow to fail PRs that attempt destructive ops without explicit approval and to block dangerous npm scripts on main.
+
+Examples:
+
+- Fail if `package.json` scripts include `db push`, `migrate reset`, or `migrate dev` for prod.
+- Lint `prisma/migrations/**/migration.sql` for `DROP TABLE|DROP COLUMN|TRUNCATE`; require an adjacent `.allow-destructive` file to override.
+
+### Build/Start commands (Render)
+
+- Build:
+  - `npm ci`
+  - `npm run build`
+  - `npx prisma generate`
+- Start/Release:
+  - `node scripts/prisma-guard.cjs deploy`
+  - `node server.js`
+
+Ensure the running service uses the non‑DDL `DATABASE_URL`; only the deploy step uses `MIGRATION_DATABASE_URL`.
+
+### .gitignore and examples
+
+- Ensure env files and Prisma dev artifacts are ignored. Provide `prisma/.env.example` with placeholders only.
+
+### Seed scripts
+
+- Make seeds no‑op in prod.
+
+```javascript
+// prisma/seed.ts
+if (process.env.NODE_ENV === 'production') process.exit(0);
+// dev seeding below
+```
+
+### Shadow DB (dev only)
+
+- Use `shadowDatabaseUrl` only in dev; never set it in prod/staging.
+
+### Backups & rollbacks
+
+- Enable automated daily backups for prod.
+- Before risky releases, take a manual snapshot.
+- Keep previous app image and prior migration ready to rollback.
+
+### Quick test (prove guards)
+
+- Add `postinstall: prisma db push` → CI must fail.
+- Add `DROP TABLE` in a migration → CI fails unless `.allow-destructive` sits next to it.
+- Try deploy without `MIGRATION_DATABASE_URL` in prod → guard blocks.

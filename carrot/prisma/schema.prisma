@@ -2,6 +2,17 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Playback/user preferences synchronized across devices
+model UserPref {
+  userId         String  @id
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  captionsDefault Boolean @default(true)
+  reducedMotion   Boolean @default(false)
+  autoplay        Boolean @default(true)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
