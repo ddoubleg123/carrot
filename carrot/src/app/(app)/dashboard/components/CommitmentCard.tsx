@@ -114,6 +114,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     uploadStatus,
     uploadProgress,
     currentUserId,
+    onDelete,
     // new props
     carrotText,
     innerBoxColor,
@@ -175,6 +176,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       // Fallback
       alert('Could not copy debug info. Check console for details.');
       try { console.log('[CommitmentCard] Debug info:', debugInfo); } catch {}
+    }
+  };
+
+  const handleDelete = () => {
+    if (!onDelete) return;
+    if (confirm('Delete this post? This cannot be undone.')) {
+      try { onDelete(id); } catch {}
+      setIsMenuOpen(false);
     }
   };
 
@@ -245,15 +254,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                         >
                           Edit
                         </button>
-                        {typeof onDelete === 'function' ? (
+                        {onDelete ? (
                           <button
                             className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                            onClick={() => {
-                              if (confirm('Delete this post? This cannot be undone.')) {
-                                try { onDelete(id); } catch {}
-                                setIsMenuOpen(false);
-                              }
-                            }}
+                            onClick={handleDelete}
                           >
                             Delete
                           </button>
