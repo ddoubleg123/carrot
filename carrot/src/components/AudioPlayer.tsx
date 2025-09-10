@@ -610,60 +610,25 @@ return (
           onChange={handleVolumeChange}
           className="w-16 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
         />
-
-        {/* Progress Bar */}
-        <div className="flex-1">
-          <input
-            type="range"
-            min="0"
-            max={duration || 100}
-            value={duration > 0 ? currentTime : 0}
-            onChange={handleSeek}
-            disabled={!duration || duration <= 0 || isBlobUrl}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider disabled:opacity-50"
-            style={{
-              background: duration > 0 ? `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)` : '#e5e7eb'
-            }}
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>{formatTime(currentTime)}</span>
-            <span>{duration > 0 ? formatTime(duration) : displayDuration || '0:00'}</span>
-          </div>
-        </div>
-
-        {/* Volume Control */}
-        <div className="flex items-center space-x-2">
-          <button onClick={toggleMute} className="text-gray-600 hover:text-gray-800">
-            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={isMuted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-16 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-
-        {/* Download Button */}
-        <a
-          href={audioUrl}
-          download
-          className="text-gray-600 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors"
-          title="Download audio"
-        >
-          <Download size={20} />
-        </a>
       </div>
 
-      {isBlobUrl && (
-        <div className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
-          Audio is not available yet. If this post was saved with a temporary blob URL, it cannot be replayed after reload. Please re-upload or wait for processing.
-        </div>
-      )}
+      {/* Download Button */}
+      <a
+        href={audioUrl}
+        download
+        className="text-gray-600 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors"
+        title="Download audio"
+      >
+        <Download size={20} />
+      </a>
     </div>
-  );
+
+    {isBlobUrl && (
+      <div className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+        Audio is not available yet. If this post was saved with a temporary blob URL, it cannot be replayed after reload. Please re-upload or wait for processing.
+      </div>
+    )}
+  </div>
+);
 };
 
