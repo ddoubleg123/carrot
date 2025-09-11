@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useMemo, useState, forwardRef } from "react";
+import React, { useMemo, useState, forwardRef, useRef, useEffect } from "react";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
+import AudioHero from "../../../../components/audio/AudioHero";
+import { createAnalyserFromMedia } from "../../../../components/audio/AudioAnalyser";
 import CFVideoPlayer from "../../../../components/CFVideoPlayer";
 import HlsFeedPlayer from "../../../../components/video/HlsFeedPlayer";
 import VideoPlayer from "./VideoPlayer";
@@ -134,6 +136,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const [editedAt, setEditedAt] = useState<string | null | undefined>(props.editedAt);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const analyserRef = useRef<ReturnType<typeof createAnalyserFromMedia> | null>(null);
 
   const isOwnPost = useMemo(() => Boolean(currentUserId && author?.id && currentUserId === author.id), [currentUserId, author?.id]);
   const displayTime = useMemo(() => {
@@ -231,11 +235,17 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         ) : null}
         {/* Header */}
         <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
-            {author?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={author.avatar} alt={author?.username || "user"} className="h-full w-full object-cover" />
-            ) : null}
+          <div className="h-10 w-10 flex items-center justify-center">
+            {audioUrl ? (
+              <AudioHero avatarSrc={author?.avatar || null} size={40} analyser={analyserRef.current as any} state={isAudioPlaying ? 'playing' : 'paused'} />
+            ) : (
+              <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
+                {author?.avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={author.avatar} alt={author?.username || "user"} className="h-full w-full object-cover" />
+                ) : null}
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
@@ -401,7 +411,23 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {/* Audio */}
         {audioUrl && (
           <div className="mt-3">
-            <AudioPlayerCard audioUrl={audioUrl} avatarUrl={author?.avatar || undefined} seed={id || author?.id} promoJingleUrl="/carrotnom.mp3" />
+            <AudioPlayerCard 
+              audioUrl={audioUrl} 
+              avatarUrl={author?.avatar || undefined} 
+              seed={id || author?.id} 
+              promoJingleUrl="/carrotnom.mp3"
+              onAudioRef={(el) => {
+                try {
+                  // cleanup previous analyser
+                  if (!el) { analyserRef.current?.destroy?.(); analyserRef.current = null; return; }
+                  analyserRef.current?.destroy?.();
+                  analyserRef.current = createAnalyserFromMedia(el);
+                  el.addEventListener('play', () => setIsAudioPlaying(true));
+                  el.addEventListener('pause', () => setIsAudioPlaying(false));
+                  el.addEventListener('ended', () => setIsAudioPlaying(false));
+                } catch {}
+              }}
+            />
           </div>
         )}
 

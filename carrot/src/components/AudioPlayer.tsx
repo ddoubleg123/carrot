@@ -14,6 +14,7 @@ interface AudioPlayerProps {
   promoJingleUrl?: string; // optional 5s end bookend
   onEnded?: () => void; // fires after main (and jingle if provided) fully ends
   allowBlob?: boolean; // allow playing blob: URLs (safe inside composer session)
+  onAudioRef?: (el: HTMLAudioElement | null) => void; // expose underlying audio element
 }
 
 // Utility function to check if duration is valid
@@ -32,6 +33,7 @@ export default function AudioPlayer({
   promoJingleUrl,
   onEnded,
   allowBlob = false,
+  onAudioRef,
 }: AudioPlayerProps): JSX.Element {
   console.log('🎵 AudioPlayer rendered with:', { 
     postId, 
@@ -441,7 +443,7 @@ const formatTime = (time: number) => {
 return (
   <div className={`w-full max-w-full min-w-0 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg ${className}`}>
     <audio 
-      ref={audioRef} 
+      ref={(el) => { (audioRef as any).current = el; try { onAudioRef && onAudioRef(el); } catch {} }} 
       src={isBlobUrl ? undefined : resolvedSrc}
       preload="metadata"
       crossOrigin="anonymous"

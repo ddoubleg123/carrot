@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import AudioPlayer from './AudioPlayer';
+import AudioHero from './audio/AudioHero';
+import { createAnalyserFromMedia } from './audio/AudioAnalyser';
 
 interface AudioPlayerCardProps {
   audioUrl: string;
   avatarUrl?: string | null;
   seed?: string; // use postId or userId to make gradient deterministic
   promoJingleUrl?: string; // optional 5s bookend jingle
+  onAudioRef?: (el: HTMLAudioElement | null) => void;
 }
 
 // Deterministic gradient from seed
@@ -28,12 +31,13 @@ function gradientFromSeed(seed?: string) {
   };
 }
 
-export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingleUrl }: AudioPlayerCardProps) {
+export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingleUrl, onAudioRef }: AudioPlayerCardProps) {
   const g = useMemo(() => gradientFromSeed(seed), [seed]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showEndcard, setShowEndcard] = useState(false);
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const localAnalyserRef = useRef<ReturnType<typeof createAnalyserFromMedia> | null>(null);
 
   // Generate a deterministic waveform client-side so it doesn't cause SSR mismatch
   useEffect(() => {
@@ -51,22 +55,9 @@ export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingle
     <div className="relative w-full max-w-full sm:max-w-[560px] rounded-2xl overflow-hidden border border-white/40 shadow-md">
       {/* Poster background */}
       <div className="relative h-44 sm:h-56" style={{ background: g.css }}>
-        {/* Breathing concentric rings on play */}
-        <div className={`absolute inset-0 flex items-center justify-center transition-transform ${isPlaying ? 'animate-[pulse_3s_ease-in-out_infinite]' : ''}`}>
-          <div className="w-40 h-40 rounded-full bg-white/10" />
-          <div className="absolute w-28 h-28 rounded-full bg-white/10" />
-          <div className="absolute w-16 h-16 rounded-full bg-white/10" />
-        </div>
-        {/* Avatar with progress ring placeholder (progress ring v2) */}
+        {/* AudioHero: avatar + rings + reactive radial field */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-full ring-4 ${isPlaying ? 'ring-orange-400' : 'ring-white/70'} overflow-hidden bg-white shadow-md`}>
-            {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-white/40" />
-            )}
-          </div>
+          <AudioHero avatarSrc={avatarUrl || null} size={96} analyser={localAnalyserRef.current as any} state={isPlaying ? 'playing' : 'paused'} />
         </div>
         {/* Integrated waveform overlay (bottom center) */}
         {isMounted && (
@@ -104,6 +95,15 @@ export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingle
           onTimeUpdate={() => {}}
           showWaveform={false}
           promoJingleUrl={promoJingleUrl}
+          onAudioRef={(el) => {
+            try {
+              // create or cleanup local analyser for hero visuals
+              if (!el) { localAnalyserRef.current?.destroy?.(); localAnalyserRef.current = null; }
+              else { localAnalyserRef.current?.destroy?.(); localAnalyserRef.current = createAnalyserFromMedia(el); }
+            } catch {}
+            // forward to parent for feed avatar visuals (if provided)
+            try { onAudioRef && onAudioRef(el); } catch {}
+          }}
           onEnded={() => {
             setIsPlaying(false);
             setShowEndcard(true);
