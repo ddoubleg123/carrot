@@ -16,9 +16,9 @@ async function getSessionUserId(): Promise<string | null> {
 
 const cookieName = 'carrot_prefs';
 
-function readPrefsCookie(): { captionsDefault?: boolean; reducedMotion?: boolean; autoplay?: boolean } | null {
+function readPrefsCookieFromReq(req: NextRequest): { captionsDefault?: boolean; reducedMotion?: boolean; autoplay?: boolean } | null {
   try {
-    const c = cookies().get(cookieName)?.value;
+    const c = req.cookies.get(cookieName)?.value;
     if (!c) return null;
     const obj = JSON.parse(c);
     if (obj && (obj.v === 1 || obj.v === undefined)) {
@@ -87,7 +87,7 @@ export async function GET(_req: NextRequest) {
   }
 
   // Guest: return cookie fallback or defaults
-  const c = readPrefsCookie();
+  const c = readPrefsCookieFromReq(_req);
   return NextResponse.json({
     captionsDefault: c?.captionsDefault ?? true,
     reducedMotion: c?.reducedMotion ?? false,
