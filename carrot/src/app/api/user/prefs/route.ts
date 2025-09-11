@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
+import { auth } from '@/auth';
 
-// Attempt to load NextAuth authOptions dynamically without a hard import path.
-// If not present, we'll treat the request as unauthenticated.
+// Use NextAuth helper directly
 async function getSessionUserId(): Promise<string | null> {
   try {
-    const mod = await import('next-auth');
-    const getServerSession = (mod as any).getServerSession as (opts?: any) => Promise<any>;
-    let authOptions: any = undefined;
-    try {
-      // Try common locations for exported authOptions
-      authOptions = (await import('@/app/api/auth/[...nextauth]/route')).authOptions;
-    } catch {}
-    try {
-      if (!authOptions) authOptions = (await import('@/lib/auth')).authOptions;
-    } catch {}
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     const uid = (session as any)?.user?.id || (session as any)?.user?.uid || null;
     return uid ?? null;
   } catch {
