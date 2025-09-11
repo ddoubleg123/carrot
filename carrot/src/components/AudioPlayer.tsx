@@ -334,6 +334,7 @@ useEffect(() => {
   }
   console.log('🎵 Audio source resolved:', { src: resolvedSrc, allowBlob, isBlobUrl });
   const audio = audioRef.current;
+  try { (audio as any).crossOrigin = 'anonymous'; } catch {}
   audio.src = resolvedSrc;
   audio.load();
   setIsLoading(true);
@@ -369,9 +370,10 @@ const togglePlayPause = async () => {
         try { jingleRef.current.pause(); jingleRef.current.currentTime = 0; } catch {}
         setIsPlayingJingle(false);
       }
-      await audio.play();
+      // Optimistically set playing so visuals animate immediately
       setIsPlaying(true);
       try { onPlayStateChange && onPlayStateChange(true); } catch {}
+      await audio.play();
     } catch (error) {
       // Use console.log instead of console.error to avoid triggering Next.js error handling
       console.log('🎵 Audio play attempt failed (this is normal):', {
@@ -381,6 +383,7 @@ const togglePlayPause = async () => {
         readyState: audio.readyState,
         networkState: audio.networkState
       });
+      // Revert playing state on failure
       setIsPlaying(false);
       try { onPlayStateChange && onPlayStateChange(false); } catch {}
       

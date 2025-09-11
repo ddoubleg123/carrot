@@ -65,6 +65,9 @@ type CustomProps = {
   videoTranscriptionStatus?: string | null;
   audioDurationSeconds?: number | null;
   emoji?: string | null;
+  // Persisted audio visual overrides (optional)
+  visualSeed?: string | null;
+  visualStyle?: 'liquid' | 'radial' | 'arc' | null;
   // Gradient styling (optional)
   gradientFromColor?: string | null;
   gradientToColor?: string | null;
@@ -97,6 +100,26 @@ function isAriaOrData(k: string) {
 const CUSTOM_PROP_KEYS = new Set<keyof CustomProps>([
   'id','content','author','location','stats','userVote','onVote','onDelete','onBlock','timestamp','imageUrls','gifUrl','videoUrl','thumbnailUrl','cfUid','cfPlaybackUrlHls','captionVttUrl','audioUrl','audioTranscription','transcriptionStatus','uploadStatus','uploadProgress','currentUserId','editedAt','editCount','carrotText','stickText','videoThumbnail','videoTranscriptionStatus','audioDurationSeconds','emoji','gradientFromColor','gradientToColor','gradientViaColor','gradientDirection','innerBoxColor','asChild','debugUnknownPropsToConsole','debugDataPrefix','enableDataAttributes'
 ]);
+
+// Conservative whitelist of DOM event props we allow through to the root element
+const ALLOWED_EVENT_KEYS = new Set([
+  'onClick','onMouseEnter','onMouseLeave','onMouseDown','onMouseUp','onFocus','onBlur',
+  'onKeyDown','onKeyUp','onKeyPress','onScroll','onWheel','onTouchStart','onTouchEnd','onTouchMove'
+]);
+
+function filterRootDivProps(rest: Record<string, any>): Record<string, any> {
+  const safeRest: Record<string, any> = {};
+  try {
+    for (const [k, v] of Object.entries(rest)) {
+      if (CUSTOM_PROP_KEYS.has(k as keyof CustomProps)) continue; // never forward our custom API
+      if (ALLOWED_DIV_KEYS.has(k)) { safeRest[k] = v; continue; }
+      if (isAriaOrData(k)) { safeRest[k] = v; continue; }
+      if (isDomEventKey(k)) { if (ALLOWED_EVENT_KEYS.has(k)) safeRest[k] = v; continue; }
+      // Skip unknown keys by default
+    }
+  } catch {}
+  return safeRest;
+}
 
 const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function CommitmentCard(props, ref) {
   const {
@@ -227,12 +250,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       data-hls-master={cfPlaybackUrlHls || undefined}
       className={['bg-transparent', className].filter(Boolean).join(' ')}
       {...dataAttrs}
-      {...rest}
+      {...filterRootDivProps(rest as Record<string, any>)}
     >
       <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4" style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}>
         {carrotText ? (
           <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
         ) : null}
+        {/* ... (rest of the code remains the same) */}
         {/* Header */}
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 flex items-center justify-center">
@@ -415,13 +439,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               audioUrl={audioUrl} 
               avatarUrl={author?.avatar || undefined} 
               seed={id || author?.id} 
+              visualSeedOverride={props.visualSeed ?? null}
+              visualStyleOverride={props.visualStyle ?? null}
               promoJingleUrl="/carrotnom.mp3"
               onAudioRef={(el) => {
                 try {
-                  // cleanup previous analyser
-                  if (!el) { analyserRef.current?.destroy?.(); analyserRef.current = null; return; }
-                  analyserRef.current?.destroy?.();
-                  analyserRef.current = createAnalyserFromMedia(el);
+                  // Do not create another MediaElementSource here; let child own analyser
+                  if (!el) { setIsAudioPlaying(false); return; }
                   el.addEventListener('play', () => setIsAudioPlaying(true));
                   el.addEventListener('pause', () => setIsAudioPlaying(false));
                   el.addEventListener('ended', () => setIsAudioPlaying(false));

@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import prisma from '../../../lib/prisma';
-import { auth } from '../../../auth';
+import { getServerSession } from 'next-auth';
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   console.log('🚨 POST /api/posts - ROUTE ENTERED');
   
-  const session = await auth();
+  // Resolve session via NextAuth v5 pattern
+  const { authOptions } = await import('../../../auth');
+  const session: any = await getServerSession(authOptions as any);
   if (!session?.user?.id) {
     console.log('🚨 POST /api/posts - UNAUTHORIZED');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,6 +43,46 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     cfStatus,
   } = body;
   try {
+    // In mock feed mode, avoid DB and echo a fake-created post for local testing
+    if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
+      const now = new Date().toISOString();
+      const fakeId = `post-${Date.now()}`;
+      const effectiveVideoUrl = videoUrl || (externalUrl && !audioUrl ? externalUrl : null);
+      const effectiveAudioUrl = audioUrl || null;
+      const post: any = {
+        id: fakeId,
+        userId: session.user.id,
+        content: content || '',
+        gradientDirection: gradientDirection || null,
+        gradientFromColor: gradientFromColor || null,
+        gradientViaColor: gradientViaColor || null,
+        gradientToColor: gradientToColor || null,
+        imageUrls: Array.isArray(imageUrls) ? imageUrls : [],
+        videoUrl: effectiveVideoUrl,
+        thumbnailUrl: thumbnailUrl || null,
+        gifUrl: gifUrl || null,
+        audioUrl: effectiveAudioUrl,
+        audioTranscription: audioTranscription || null,
+        transcriptionStatus: (effectiveAudioUrl || effectiveVideoUrl) ? 'pending' : null,
+        cfUid: cfUid || null,
+        cfStatus: cfUid ? (cfStatus || 'queued') : null,
+        emoji: emoji || '🎯',
+        carrotText: carrotText || '',
+        stickText: stickText || '',
+        createdAt: now,
+        updatedAt: now,
+        User: {
+          id: session.user.id,
+          name: session.user.name || '',
+          email: session.user.email,
+          image: session.user.image || null,
+          profilePhoto: (session.user as any).profilePhoto || null,
+          username: (session.user as any).username || 'demo',
+        },
+      };
+      return NextResponse.json(post, { status: 201 });
+    }
+
     console.log(`🔍 POST /api/posts - Creating post with audioUrl: ${audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - User ID: ${session.user.id}`);
     
@@ -150,6 +192,13 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
 // GET /api/posts - get all posts (latest first)
 export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   try {
+    // In mock feed mode, avoid touching the database and return an empty list
+    if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.warn('[api/posts] Mock mode enabled, returning 0 posts.'); } catch {}
+      }
+      return NextResponse.json([]);
+    }
     const posts = await prisma.post.findMany({
       orderBy: { createdAt: 'desc' },
       include: { 

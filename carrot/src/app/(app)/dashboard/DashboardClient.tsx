@@ -113,6 +113,44 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   const commitmentsRef = useRef(commitments);
   useEffect(() => { commitmentsRef.current = commitments; }, [commitments]);
 
+  // Dev-only: provide a mock post so visuals can be tested without a DB
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_USE_MOCK_FEED !== '1') return;
+    if (commitments && commitments.length > 0) return;
+    const avatar = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg';
+    const mock: DashboardCommitmentCardProps = {
+      id: 'mock-1',
+      content: 'Mock audio post to verify AudioHero visuals (arc/liquid/radial).',
+      carrotText: 'Carrot',
+      stickText: 'Stick',
+      author: {
+        name: '',
+        username: (session?.user as any)?.username || 'demo',
+        avatar,
+        flag: '🇺🇸',
+        id: (session?.user as any)?.id || 'u_mock',
+      },
+      location: { zip: '10001', city: 'New York', state: 'NY' },
+      stats: { likes: 12, comments: 3, reposts: 1, views: 180 },
+      userVote: null,
+      timestamp: new Date().toISOString(),
+      imageUrls: [],
+      gifUrl: null,
+      videoUrl: null,
+      thumbnailUrl: null,
+      // Route external audio through local proxy to avoid CORS in dev
+      audioUrl: `/api/proxy-audio?url=${encodeURIComponent('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3')}`,
+      audioTranscription: null,
+      transcriptionStatus: null,
+      emoji: '🎯',
+      gradientFromColor: '#ff8a00',
+      gradientToColor: '#8e2de2',
+      gradientViaColor: '#ff5f6d',
+      gradientDirection: 'to-r',
+    } as any;
+    setCommitments([mock]);
+  }, [commitments, session]);
+
   // Sync server-rendered playback prefs to localStorage ASAP to avoid client flicker
   useEffect(() => {
     if (!serverPrefs) return;
@@ -290,6 +328,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return; // skip API in mock mode
       try {
         const res = await fetch('/api/posts', { cache: 'no-store' });
         if (!res.ok) return;
@@ -335,6 +374,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
   // Poll posts that have Cloudflare UID but are missing playback URL, so they update when webhook fills metadata
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return; // skip polling in mock mode
     let cancelled = false;
     let timer: any;
 

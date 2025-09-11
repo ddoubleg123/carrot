@@ -18,6 +18,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Visual style used by audio poster visualizer
+enum VisualStyle {
+  liquid
+  radial
+  arc
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String  @map("user_id")
@@ -91,6 +98,10 @@ model Post {
   id                  String   @id @default(cuid())
   content             String
   userId              String
+  /// Stable seed for poster visualizer (palette, motion)
+  visualSeed          String?
+  /// Persisted style for poster visualizer. If null, UI will derive from seed.
+  visualStyle         VisualStyle?
   gradientDirection   String?
   gradientFromColor   String?
   gradientViaColor    String?

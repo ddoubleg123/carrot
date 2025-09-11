@@ -111,7 +111,9 @@ function logObjectSize(name: string, obj: any) {
   }
 }
 
-const adapter = patchAdapter(PrismaAdapter(prisma));
+// Avoid eager adapter patching/logging in RSC import path
+// Enable by setting USE_PATCHED_ADAPTER=1 if you need it during local debugging
+const adapter = process.env.USE_PATCHED_ADAPTER === '1' ? patchAdapter(PrismaAdapter(prisma)) : undefined as any;
 
 export const authOptions = {
   // adapter,
@@ -251,33 +253,41 @@ export const authOptions = {
 
       // Fetch user data from database to get uploaded profile photo
       let userData: any = null;
+      const skipDb = process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1' || process.env.SKIP_DB_IN_DEV === '1';
       try {
-        const { PrismaClient } = await import('@prisma/client');
-        // Use default env-based datasource (Postgres in production). Do not force SQLite fallback.
-        const prisma = new PrismaClient();
-        userData = await prisma.user.findUnique({
-          where: { email: token.email as string },
-          select: { 
-            id: true, 
-            username: true, 
-            profilePhoto: true, 
-            image: true,
-            isOnboarded: true 
-          }
-        });
-        
-        // Sync OAuth image to database if missing
-        if (userData && !userData.image && (token.picture || token.image)) {
-          await prisma.user.update({
+        if (!skipDb) {
+          const { PrismaClient } = await import('@prisma/client');
+          // Use default env-based datasource (Postgres in production). Do not force SQLite fallback.
+          const prisma = new PrismaClient();
+          userData = await prisma.user.findUnique({
             where: { email: token.email as string },
-            data: { image: token.picture || token.image }
+            select: { 
+              id: true, 
+              username: true, 
+              profilePhoto: true, 
+              image: true,
+              isOnboarded: true 
+            }
           });
-          userData.image = token.picture || token.image;
+          
+          // Sync OAuth image to database if missing
+          if (userData && !userData.image && (token.picture || token.image)) {
+            await prisma.user.update({
+              where: { email: token.email as string },
+              data: { image: token.picture || token.image }
+            });
+            userData.image = token.picture || token.image;
+          }
+          await prisma.$disconnect();
+          console.log('[NextAuth][session] Database user found:', userData);
         }
-        await prisma.$disconnect();
-        console.log('[NextAuth][session] Database user found:', userData);
       } catch (error) {
-        console.log('[NextAuth][session] Database query failed:', error);
+        // Suppress noisy DB errors in dev mock mode
+        if (!skipDb) {
+          console.log('[NextAuth][session] Database query failed:', error);
+        } else if (process.env.NODE_ENV !== 'production') {
+          try { console.warn('[NextAuth][session] Skipping DB in dev mock mode'); } catch {}
+        }
       }
 
       if (!userData) {

@@ -12,6 +12,12 @@ export type AudioHeroProps = {
   className?: string;
   analyser?: { getRms: () => number; getSpectrum: () => Float32Array } | null;
   size?: number; // px, outer container size
+  simpleMode?: boolean; // if true, draw without blur/gradients/blending
+  minimal?: boolean; // if true, hide avatar/rings and show only canvas
+  debugSolidBg?: boolean; // if true, in simpleMode draw an opaque dark background (for diagnostics)
+  debugOverlay?: boolean; // draw RMS text/moving dot overlay (dev only)
+  disableCanvas?: boolean; // if true, do not render the internal canvas (use external background field)
+  fillGradientBg?: boolean; // if true, simpleMode will paint an internal gradient bg to avoid white panels
 };
 
 // Tokens
@@ -26,6 +32,12 @@ export default function AudioHero({
   className = '',
   analyser,
   size = 112,
+  simpleMode = false,
+  minimal = false,
+  debugSolidBg = false,
+  debugOverlay = false,
+  disableCanvas = false,
+  fillGradientBg = false,
 }: AudioHeroProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -34,6 +46,8 @@ export default function AudioHero({
   const [mode, setMode] = useState<FieldStyle>(style);
 
   useEffect(() => { setPlaying(state === 'playing'); }, [state]);
+  // Ensure external `style` prop changes update internal mode
+  useEffect(() => { setMode(style); }, [style]);
 
   // Runtime style override via localStorage or env var
   useEffect(() => {
@@ -87,12 +101,26 @@ export default function AudioHero({
       const w = c.clientWidth;
       const h = c.clientHeight;
       g.clearRect(0, 0, w, h);
-      // Gradient subtle bg overlay
-      const grd = g.createLinearGradient(0, 0, w, h);
-      grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
-      grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
-      g.fillStyle = grd as any;
-      g.fillRect(0, 0, w, h);
+      if (!simpleMode) {
+        // Gradient subtle bg overlay
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
+        grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      } else if (debugSolidBg) {
+        // Optional opaque background in simple mode when debugging
+        (g as any).globalAlpha = 1;
+        (g as any).globalCompositeOperation = 'source-over';
+        g.fillStyle = '#101010';
+        g.fillRect(0, 0, w, h);
+      } else if (fillGradientBg) {
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, '#1f2937');
+        grd.addColorStop(1, '#0A5AFF');
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      }
 
       // Center
       const cx = w / 2, cy = h / 2;
@@ -108,9 +136,10 @@ export default function AudioHero({
       }
       (g as any).save();
       (g as any).translate(cx, cy);
-      (g as any).globalAlpha = prefersReducedMotion ? 0.15 : 0.22;
-      (g as any).strokeStyle = hexWithAlpha('#ffffff', 0.5);
-      (g as any).lineWidth = 1.5;
+      const hasAnalyser = !!analyser;
+      (g as any).globalAlpha = simpleMode ? 1 : (prefersReducedMotion ? 0.15 : (hasAnalyser ? 0.5 : 0.22));
+      (g as any).strokeStyle = simpleMode ? '#00E0FF' : hexWithAlpha('#ffffff', 0.5);
+      (g as any).lineWidth = simpleMode ? 2.5 : 1.5;
       for (let i = 0; i < N; i++) {
         const angle = (i / N) * Math.PI * 2;
         const nx = Math.cos(angle), ny = Math.sin(angle);
@@ -137,12 +166,25 @@ export default function AudioHero({
       const w = c.clientWidth;
       const h = c.clientHeight;
       g.clearRect(0, 0, w, h);
-      // soft gradient wash
-      const grd = g.createLinearGradient(0, 0, w, h);
-      grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
-      grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
-      g.fillStyle = grd as any;
-      g.fillRect(0, 0, w, h);
+      if (!simpleMode) {
+        // soft gradient wash
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
+        grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      } else if (debugSolidBg) {
+        (g as any).globalAlpha = 1;
+        (g as any).globalCompositeOperation = 'source-over';
+        g.fillStyle = '#101010';
+        g.fillRect(0, 0, w, h);
+      } else if (fillGradientBg) {
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, '#1f2937');
+        grd.addColorStop(1, '#0A5AFF');
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      }
 
       const cx = w / 2, cy = h / 2;
       const spec = analyser?.getSpectrum?.();
@@ -170,11 +212,11 @@ export default function AudioHero({
       ];
 
       g.save();
-      (g as any).globalCompositeOperation = 'lighter';
+      if (!simpleMode) (g as any).globalCompositeOperation = 'lighter';
       for (const b of blobs) {
         g.beginPath();
-        g.fillStyle = hexWithAlpha(b.c, prefersReducedMotion ? 0.12 : 0.18);
-        g.filter = 'blur(12px)';
+        g.fillStyle = simpleMode ? b.c : hexWithAlpha(b.c, prefersReducedMotion ? 0.12 : 0.18);
+        g.filter = simpleMode ? 'none' : 'blur(12px)';
         g.arc(b.x, b.y, b.r, 0, Math.PI * 2);
         g.fill();
       }
@@ -188,13 +230,25 @@ export default function AudioHero({
       const w = c.clientWidth;
       const h = c.clientHeight;
       g.clearRect(0, 0, w, h);
-
-      // subtle gradient fill
-      const grd = g.createLinearGradient(0, 0, w, h);
-      grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
-      grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
-      g.fillStyle = grd as any;
-      g.fillRect(0, 0, w, h);
+      if (!simpleMode) {
+        // subtle gradient fill
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, hexWithAlpha(ORANGE, 0.10));
+        grd.addColorStop(1, hexWithAlpha(BLUE, 0.10));
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      } else if (debugSolidBg) {
+        (g as any).globalAlpha = 1;
+        (g as any).globalCompositeOperation = 'source-over';
+        g.fillStyle = '#101010';
+        g.fillRect(0, 0, w, h);
+      } else if (fillGradientBg) {
+        const grd = g.createLinearGradient(0, 0, w, h);
+        grd.addColorStop(0, '#1f2937');
+        grd.addColorStop(1, '#0A5AFF');
+        g.fillStyle = grd as any;
+        g.fillRect(0, 0, w, h);
+      }
 
       const cx = w / 2, cy = h / 2;
       const radius = Math.min(w, h) * 0.46;
@@ -217,7 +271,8 @@ export default function AudioHero({
       g.save();
       g.translate(cx, cy);
       g.rotate(-Math.PI); // start at 180° left side
-      g.lineWidth = 2;
+      const hasAnalyser = !!analyser;
+      g.lineWidth = simpleMode ? 4 : (hasAnalyser ? 3 : 2);
       for (let i = 0; i < N; i++) {
         const a = (i / (N - 1)) * Math.PI; // 180° arc
         const len = (prefersReducedMotion ? 0.12 : bars[i]) * maxLen;
@@ -226,7 +281,7 @@ export default function AudioHero({
         const x2 = Math.cos(a) * (radius - 4 - len);
         const y2 = Math.sin(a) * (radius - 4 - len);
         const col = i < N / 2 ? ORANGE : BLUE;
-        (g as any).strokeStyle = hexWithAlpha(col, 0.45);
+        (g as any).strokeStyle = simpleMode ? '#00E0FF' : hexWithAlpha(col, hasAnalyser ? 0.85 : 0.45);
         g.beginPath();
         g.moveTo(x1, y1);
         g.lineTo(x2, y2);
@@ -248,6 +303,33 @@ export default function AudioHero({
         else if (m === 'arc') drawArc(ts);
         else /* radial & default */ drawRadial(ts);
       }
+
+      // Debug overlay: show RMS and a moving dot if diagnostics enabled
+      try {
+        if (debugOverlay) {
+          const c = canvas as HTMLCanvasElement;
+          const g = ctx as CanvasRenderingContext2D;
+          const w = c.clientWidth, h = c.clientHeight;
+          g.save();
+          // translucent strip at top
+          g.fillStyle = 'rgba(0,0,0,0.25)';
+          g.fillRect(0, 0, w, 28);
+          // text
+          g.fillStyle = '#fff';
+          g.font = 'bold 14px system-ui, -apple-system, Segoe UI, Roboto';
+          let rmsVal = 0;
+          try { rmsVal = analyser?.getRms?.() ?? 0; } catch { rmsVal = 0; }
+          g.fillText(`RMS ${rmsVal.toFixed(3)}  •  dbg`, 8, 19);
+          // moving dot for render-loop proof
+          const t = (Date.now() % 2000) / 2000; // 0..1
+          const x = 8 + (w - 16) * t;
+          const y = 34;
+          g.fillStyle = '#00E0FF';
+          g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill();
+          g.restore();
+        }
+      } catch {}
+
       rafRef.current = requestAnimationFrame(loop);
     };
 
@@ -259,55 +341,61 @@ export default function AudioHero({
     };
   }, [analyser, intensity, playing, style, mode, prefersReducedMotion]);
 
-  // IntersectionObserver to stop rendering offscreen
+  // Keep the loop running; do not cancel via IntersectionObserver (can prevent restart in dev)
   useEffect(() => {
     const el = canvasRef.current as any;
     if (!el || !(window as any).IntersectionObserver) return;
-    const io = new (window as any).IntersectionObserver((entries: any[]) => {
-      const e = entries[0];
-      if (!e.isIntersecting) cancelAnimationFrame(rafRef.current);
-    }, { threshold: 0.01 });
+    const io = new (window as any).IntersectionObserver(() => {}, { threshold: 0.01 });
     io.observe(el);
     return () => io.disconnect();
   }, []);
 
-  const avatarSize = Math.round(size * 0.85);
+  const avatarSize = Math.round(size * 0.78);
   return (
     <div className={[
       'relative rounded-full overflow-visible select-none',
       'grid place-items-center',
       className,
     ].join(' ')} style={{ width: size, height: size }}>
-      {/* Canvas audio field behind */}
-      <div className="absolute inset-0 -z-10">
-        <canvas ref={canvasRef} className="w-full h-full" style={{ filter: 'blur(10px)' }} />
-      </div>
+      {/* Canvas audio field behind (above parent background) */}
+      {!disableCanvas && (
+        <div className={minimal ? 'absolute inset-0 z-20' : 'absolute inset-0 z-0'}>
+          <canvas ref={canvasRef} className="w-full h-full" style={{ filter: simpleMode ? 'none' : 'blur(10px)' }} />
+        </div>
+      )}
 
       {/* Concentric rings */}
-      <div className="absolute inset-0 pointer-events-none">
-        <Ring index={0} delay={0} prefersReducedMotion={prefersReducedMotion} />
-        <Ring index={1} delay={300} prefersReducedMotion={prefersReducedMotion} />
-        <Ring index={2} delay={600} prefersReducedMotion={prefersReducedMotion} />
-        <Ring index={3} delay={900} prefersReducedMotion={prefersReducedMotion} />
-      </div>
-
-      {/* Avatar */}
-      <div className="relative rounded-full p-[2px] bg-white">
-        <div className="rounded-full overflow-hidden shadow-sm" style={{ width: avatarSize, height: avatarSize }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {avatarSrc ? <img src={String(avatarSrc)} alt="avatar" className="w-full h-full object-cover"/> : <div className="w-full h-full bg-gray-200"/>}
+      {!minimal && (
+        <div className="absolute inset-0 pointer-events-none">
+          <Ring index={0} delay={0} prefersReducedMotion={prefersReducedMotion} playing={playing} />
+          <Ring index={1} delay={300} prefersReducedMotion={prefersReducedMotion} playing={playing} />
+          <Ring index={2} delay={600} prefersReducedMotion={prefersReducedMotion} playing={playing} />
+          <Ring index={3} delay={900} prefersReducedMotion={prefersReducedMotion} playing={playing} />
         </div>
-      </div>
-    </div>
-  );
+      )}
+
+    {/* Avatar */}
+      {!minimal && (
+        <div className="relative z-10">
+          <div className="rounded-full overflow-hidden shadow-lg ring-1 ring-white/40" style={{ width: avatarSize, height: avatarSize, background: 'transparent' }}>
+            {!avatarSrc ? (
+              <div className="w-full h-full grid place-items-center text-gray-300">◉</div>
+            ) : (
+              <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+            )}
+          </div>
+        </div>
+      )}
+  </div>
+);
 }
 
-function Ring({ index, delay, prefersReducedMotion }: { index: number; delay: number; prefersReducedMotion: boolean }) {
+function Ring({ index, delay, prefersReducedMotion, playing }: { index: number; delay: number; prefersReducedMotion: boolean; playing?: boolean }) {
   // Compute size relative to parent via CSS transforms; base approximates inner radii
   const base = 60 + index * 12; // px relative baseline; container sets absolute size
   const border = index === 0 ? 2 : 1;
   const duration = prefersReducedMotion ? 0 : 7000 + index * 600;
-  const opacity = prefersReducedMotion ? 0.25 : 0.35 - index * 0.05;
+  const opacity = prefersReducedMotion ? 0.25 : (playing ? 0.42 : 0.35) - index * 0.05;
   return (
     <div
       className="absolute rounded-full"
@@ -331,6 +419,11 @@ function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     try {
+      // Dev override via env/localStorage
+      const envForce = (process.env.NEXT_PUBLIC_AUDIO_ANIM_FORCE || '').trim() === '1';
+      let lsForce = false;
+      try { lsForce = (window.localStorage.getItem('carrot_audio_anim_force') || '') === '1'; } catch {}
+      if (envForce || lsForce) { setReduced(false); return; }
       const mq = (window as any).matchMedia('(prefers-reduced-motion: reduce)');
       const on = () => setReduced(mq.matches);
       on();

@@ -1,6 +1,7 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
 import '../../../lib/firebase';
-import { auth } from '../../../auth';
+// Avoid direct auth() import to prevent bundler/env pitfalls; use getServerSession
+import { getServerSession } from 'next-auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
 import { redirect } from 'next/navigation';
@@ -16,8 +17,13 @@ const inter = Inter({ subsets: ['latin'] });
 // Server-side data fetching from database (same mapping as dashboard)
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
+    // In dev mock mode, skip server fetch entirely and let the client inject a mock post
+    if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
+      return [];
+    }
     // Get session to use profile photo from session data like composer does
-    const session = await auth();
+    const { authOptions } = await import('../../../auth');
+    const session: any = await getServerSession(authOptions as any);
     
     // Forward cookies to preserve session auth when calling API from a server component
     const hdrs = await nextHeaders();
@@ -31,8 +37,10 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     });
     
     if (!response.ok) {
-      const text = await response.text();
-      console.error('Error fetching /api/posts:', response.status, text);
+      // Avoid noisy stack in dev when DB is intentionally unavailable
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.warn('Error fetching /api/posts (suppressed):', response.status); } catch {}
+      }
       return [];
     }
     const posts = await response.json();
@@ -77,7 +85,8 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 }
 
 export default async function HomePage() {
-  const session = await auth();
+  const { authOptions } = await import('../../../auth');
+  const session: any = await getServerSession(authOptions as any);
   if (!session) redirect('/login');
 
   const commitments = await getCommitments();

@@ -273,3 +273,96 @@ if (process.env.NODE_ENV === 'production') process.exit(0);
 - Add `postinstall: prisma db push` → CI must fail.
 - Add `DROP TABLE` in a migration → CI fails unless `.allow-destructive` sits next to it.
 - Try deploy without `MIGRATION_DATABASE_URL` in prod → guard blocks.
+
+## Recent Infrastructure & UX Improvements (September 2025)
+
+This section captures all changes made to harden production safety, streamline Render deploys, and improve playback UX.
+
+### Render Build Pipeline: Guarded Migrations + Health Check
+
+- Build Command (Root Directory = `carrot/`):
+  ```bash
+  npm ci && node ./scripts/prisma-guard.cjs check-scripts && node ./scripts/prisma-guard.cjs lint-migrations && if [ "$RENDER_GIT_BRANCH" = "main" ] && [ "$ENABLE_MIGRATIONS" = "true" ]; then npx prisma migrate deploy && node ./scripts/health-check.mjs; fi && npm run build
+  ```
+- Location of scripts (new): `carrot/scripts/`
+  - `prisma-guard.cjs`: blocks dangerous Prisma CLI usages in release steps, lints migration SQL for destructive ops, and can proxy a safe `deploy`.
+  - `health-check.mjs`: verifies DB connectivity and counts successful migrations using Prisma Client; supports multiple Prisma migration schemas.
+- Environment gating in Render (prod web service only):
+  - `ENABLE_MIGRATIONS=true` (only prod; prevents accidental schema changes elsewhere)
+  - `DATABASE_URL` → runtime app user
+  - `MIGRATION_DATABASE_URL` → admin role for migrations
+  - `NEXT_PUBLIC_COOKIE_DOMAIN=.gotcarrot.com`
+  - `NEXT_PUBLIC_FEED_HLS=1`
+- Root Directory must be `carrot/`. The guard and health scripts are referenced as `./scripts/...` from there.
+
+### Prisma Production Safety: Roles, Overrides, CI
+
+- Roles created on Postgres (prod):
+  - `carrot_admin` (DDL allowed) → used only by `MIGRATION_DATABASE_URL` during gated `migrate deploy`.
+  - `carrot_db_singapore_user` (existing runtime app role) → used by the running app via `DATABASE_URL`.
+- New files and policies:
+  - `.github/pull_request_template.md`: adds a dedicated "DB Migrations" section with a destructive override block and required PR label.
+  - `.allow-destructive.example`: template tracked in repo. Real `.allow-destructive` is ignored by git; developers copy it locally when needed and include it in PRs.
+  - `.gitignore`: ignores the real `.allow-destructive` file by default.
+  - `carrot/.github/workflows/prisma-guards.yml`: CI runs Prisma guard checks and migration lint on PRs and main.
+- Guard behavior:
+  - Fails CI if `package.json` scripts contain `prisma db push`, `prisma migrate reset`, or `prisma migrate dev` that could hit prod.
+  - Fails CI if `migration.sql` contains destructive SQL unless `.allow-destructive` exists and contains required approval fields.
+  - Deploy step only runs `migrate deploy` on main when `ENABLE_MIGRATIONS=true`, then runs `health-check.mjs` to fail fast on DB issues.
+
+### Auth and API Hardening
+
+- `carrot/src/app/api/user/prefs/route.ts`:
+  - Uses `import { auth } from '@/auth'` instead of brittle dynamic imports of `authOptions`.
+  - Reads guest cookie from `NextRequest.cookies` to avoid typing issues with `cookies()` in different runtimes.
+  - Writes/deletes cookie with `NextResponse.cookies` and respects `NEXT_PUBLIC_COOKIE_DOMAIN` in prod.
+
+### Playback UX: SSR Prefs + Client Sync
+
+- New SSR resolver usage and client sync to eliminate initial flicker:
+  - `carrot/src/app/(app)/home/page.tsx` fetches `/api/user/prefs` server-side and passes `serverPrefs` to the client.
+  - `carrot/src/app/(app)/dashboard/DashboardClient.tsx` accepts `serverPrefs` and writes them to localStorage on mount:
+    - `carrot_reduced_motion`, `carrot_captions_default`, `carrot_autoplay_default`.
+  - Result: stable video playback settings from first paint, fewer UI jumps.
+
+### HLS Video: Lightweight Player and Dependency
+
+- New component: `carrot/src/components/video/HlsFeedPlayer.tsx`.
+  - Uses native HLS on Safari; dynamically imports `hls.js` on other browsers when available; falls back to basic `<video>` if not.
+  - Captures basic QoE (first-frame timing), keeps a small network profile, and supports Warm/Active tile behavior.
+- Dependency added: `hls.js` (in `carrot/package.json`).
+  - Ensure it remains in dependencies; Next.js needs it present at build time even though it’s imported dynamically.
+
+### Prisma Schema: Playback Preferences
+
+- New model: `UserPref` with one-to-one relation to `User`.
+  - `UserPref`: `userId` (PK), `captionsDefault`, `reducedMotion`, `autoplay`, timestamps.
+  - `User` now has optional `userPref` inverse relation.
+  - Used by `GET/PUT /api/user/prefs` and SSR pages to keep playback consistent across devices.
+
+### Render Service Configuration Summary
+
+- Web Service (Next.js app):
+  - Root Directory: `carrot/`
+  - Build Command: see top of this section.
+  - Start Command: default Next.js (Render auto-detect) unless customized.
+  - Env Vars (prod): `ENABLE_MIGRATIONS`, `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `NEXT_PUBLIC_COOKIE_DOMAIN`, `NEXT_PUBLIC_FEED_HLS`, plus existing OAuth/Firebase secrets.
+
+### Failure Modes & Recovery
+
+- Health check fails:
+  - Logs "DB health FAILED" with reason; fix DB connectivity or migration state; redeploy.
+- CI fails on destructive SQL:
+  - Add `.allow-destructive` with rationale and approver, apply backups/rollback plan, add PR label `destructive-migration`.
+- Build fails on `hls.js` not found:
+  - Run `npm --prefix carrot install hls.js`, commit lockfile, push.
+- Auth import errors in API route:
+  - Ensure `import { auth } from '@/auth'` rather than dynamic `authOptions` imports.
+
+### Verification Steps (Prod)
+
+1. Push to `main`.
+2. Render build runs guard checks, gated `migrate deploy` (if enabled), health check, and Next build.
+3. Confirm logs show: `✅ DB health OK` and successful Next.js build.
+4. On first page load in `/home`, verify no playback preference flicker (captions/autoplay/reduced motion align with server prefs).
+
