@@ -1,10 +1,8 @@
-import NextAuth from "next-auth";
-import { authOptions } from "../../../../auth";
+import { handlers } from "../../../../auth";
 
-// NextAuth v5 pattern: NextAuth returns a single handler function
-const handler = NextAuth(authOptions as any);
-export { handler as GET, handler as POST };
+// NextAuth v5 app router: use generated handlers from src/auth.ts
+export const { GET, POST } = handlers;
 
-// Optional (keep if you need Node runtime or dynamic):
+// Optional runtime hints (safe to keep)
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

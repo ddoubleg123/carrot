@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { auth } from '@/auth';
 import * as admin from 'firebase-admin';
 
 // Detect presence of required admin credentials once
@@ -35,8 +35,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     return NextResponse.json({ token: null });
   }
 
-  const { authOptions } = await import('../../../auth');
-  const session: any = await getServerSession(authOptions as any);
+  const session: any = await auth();
   if (!session?.user?.email) {
     // Return 200 with null token to avoid noisy client errors during signed-out states
     return NextResponse.json({ token: null });

@@ -1,7 +1,6 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
 import '../../../lib/firebase';
-// Avoid direct auth() import to prevent bundler/env pitfalls; use getServerSession
-import { getServerSession } from 'next-auth';
+import { auth } from '@/auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
 import { redirect } from 'next/navigation';
@@ -22,8 +21,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       return [];
     }
     // Get session to use profile photo from session data like composer does
-    const { authOptions } = await import('../../../auth');
-    const session: any = await getServerSession(authOptions as any);
+    const session: any = await auth();
     
     // Forward cookies to preserve session auth when calling API from a server component
     const hdrs = await nextHeaders();
@@ -85,8 +83,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 }
 
 export default async function HomePage() {
-  const { authOptions } = await import('../../../auth');
-  const session: any = await getServerSession(authOptions as any);
+  const session: any = await auth();
   if (!session) redirect('/login');
 
   const commitments = await getCommitments();

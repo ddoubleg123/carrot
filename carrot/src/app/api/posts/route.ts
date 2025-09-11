@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import prisma from '../../../lib/prisma';
-import { getServerSession } from 'next-auth';
+import { auth } from '@/auth';
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   console.log('🚨 POST /api/posts - ROUTE ENTERED');
   
   // Resolve session via NextAuth v5 pattern
-  const { authOptions } = await import('../../../auth');
-  const session: any = await getServerSession(authOptions as any);
+  const session: any = await auth();
   if (!session?.user?.id) {
     console.log('🚨 POST /api/posts - UNAUTHORIZED');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

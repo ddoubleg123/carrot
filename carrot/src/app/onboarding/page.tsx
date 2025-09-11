@@ -1,4 +1,4 @@
-import { getServerSession } from 'next-auth';
+import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 
 import OnboardingClient from './OnboardingClient';
@@ -8,8 +8,7 @@ import { TEST_USERS, ADMIN_USERS } from '../../config/auth';
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingPage() {
-  const { authOptions } = await import('../../auth');
-  const session: any = await getServerSession(authOptions as any);
+  const session: any = await auth();
   if (!session) redirect('/login?callbackUrl=/onboarding');
 
   const email = session.user?.email;
