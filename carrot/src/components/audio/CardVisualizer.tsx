@@ -16,18 +16,37 @@ export default function CardVisualizer({ analyser, style = 'radial', intensity =
   const raf = useRef<number>(0);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // Load avatar image when URL provided
+  // Load avatar image when URL provided, with robust fallbacks
   useEffect(() => {
     if (!avatarSrc) { imgRef.current = null; return; }
-    try {
+    let cancelled = false;
+
+    const tryLoad = (url: string, useAnon?: boolean, onDone?: (ok: boolean) => void) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => { imgRef.current = img; };
-      img.onerror = () => { imgRef.current = null; };
-      img.src = avatarSrc;
-    } catch {
-      imgRef.current = null;
-    }
+      if (useAnon) img.crossOrigin = 'anonymous';
+      img.onload = () => { if (!cancelled) { imgRef.current = img; onDone?.(true); } };
+      img.onerror = () => { onDone?.(false); };
+      img.src = url;
+    };
+
+    const isAbsolute = /^https?:\/\//i.test(avatarSrc);
+    const isSameOrigin = !isAbsolute || (typeof window !== 'undefined' && avatarSrc.startsWith(location.origin));
+
+    // Strategy: plain -> anonymous -> proxy
+    tryLoad(avatarSrc, false, (ok1) => {
+      if (ok1 || cancelled) return;
+      tryLoad(avatarSrc, true, (ok2) => {
+        if (ok2 || cancelled) return;
+        if (isAbsolute) {
+          const proxied = `/api/img?url=${encodeURIComponent(avatarSrc)}`;
+          tryLoad(proxied, false, (ok3) => { if (!ok3 && !cancelled) imgRef.current = null; });
+        } else {
+          imgRef.current = null;
+        }
+      });
+    });
+
+    return () => { cancelled = true; };
   }, [avatarSrc]);
 
   useEffect(() => {

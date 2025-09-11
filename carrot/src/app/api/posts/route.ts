@@ -123,6 +123,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             email: true,
             image: true,
             profilePhoto: true,
+            profilePhotoPath: true,
             username: true,
           }
         }

@@ -42,7 +42,16 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       return [];
     }
     const posts = await response.json();
-    return posts.map((post: any) => ({
+    return posts.map((post: any) => {
+      // Prefer durable storage path via proxy to ensure same-origin
+      const p = post.User || {};
+      const proxiedFromPath = p.profilePhotoPath ? `/api/img?path=${encodeURIComponent(p.profilePhotoPath)}` : null;
+      const proxiedFromUrl = p.profilePhoto && /^https?:\/\//i.test(p.profilePhoto)
+        ? `/api/img?url=${encodeURIComponent(p.profilePhoto)}`
+        : null;
+      const sessionAvatar = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg';
+      const avatar = proxiedFromPath || proxiedFromUrl || sessionAvatar;
+      return ({
       id: post.id,
       content: post.content || '',
       carrotText: post.carrotText || '',
@@ -50,7 +59,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       author: {
         name: '',
         username: post.User?.username || 'daniel',
-        avatar: post.User?.profilePhoto || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
+        avatar,
         flag: '🇺🇸',
         id: post.userId,
       },
@@ -75,7 +84,8 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       gradientToColor: post.gradientToColor || null,
       gradientViaColor: post.gradientViaColor || null,
       gradientDirection: post.gradientDirection || null,
-    }));
+    });
+    });
   } catch (e) {
     console.error('Error fetching posts for /home:', e);
     return [];
