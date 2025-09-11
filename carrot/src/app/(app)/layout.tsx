@@ -1,12 +1,10 @@
 import { redirect } from 'next/navigation';
+import { auth } from '../../auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  // Use dynamic imports to avoid edge bundler/type-resolution pitfalls
-  const { getServerSession } = await import('next-auth');
-  const authMod: any = await import('../../auth');
-  const session: any = await getServerSession(authMod.authOptions);
+  const session: any = await auth();
 
   if (!session?.user) {
     redirect('/login');
