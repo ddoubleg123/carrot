@@ -79,6 +79,8 @@ model User {
   posts             Post[]
   sessions          Session[]
   userVideos        UserVideo[]
+  /// Server-backed playback preferences (one-to-one)
+  userPref          UserPref?
   // Media Library relations
   mediaAssets       MediaAsset[]
   mediaLabels       MediaLabel[]
