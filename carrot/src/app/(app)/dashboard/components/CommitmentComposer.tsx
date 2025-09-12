@@ -79,8 +79,16 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     return 0;
   });
   
-  // Use shared color schemes so Composer visuals match audio post cards
+  // Use shared color schemes to match audio posts
   const colorSchemes = COLOR_SCHEMES;
+  
+  // Emoji categories for the inline emoji picker
+  const emojiCategories: Record<string, string[]> = {
+    Smileys: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤓','😎','🤩','🥳'],
+    Nature: ['🌱','🌿','🍀','🍃','🍂','🍁','🌾','🌲','🌳','🌴','🌵','🍄','🌸','🌺','🌻','🌹','🌷','🌼','🌙','🌕'],
+    Food: ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🥕','🧄','🧅','🥔','🍠'],
+    Symbols: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','☸️','✡️','☯️']
+  };
   
   // Toast notification state
   const [toastMessage, setToastMessage] = React.useState<string>('');
