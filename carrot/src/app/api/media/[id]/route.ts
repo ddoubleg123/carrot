@@ -47,6 +47,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = session.user.id as string; // safe after auth check
     const { id } = await ctx.params;
     const body = await req.json().catch(() => ({}));
     const title = typeof body?.title === 'string' ? body.title : undefined;
