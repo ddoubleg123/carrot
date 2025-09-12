@@ -267,13 +267,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       className={['bg-transparent', className].filter(Boolean).join(' ')}
       {...dataAttrs}
       {...filterRootDivProps(rest as Record<string, any>)}
-      style={hasGradient ? { background: gradientCss, borderRadius: 16, padding: 2 } : undefined}
+      style={undefined}
     >
       <div
         className={[
           hasGradient
-            ? "rounded-2xl shadow-sm p-4 bg-white/90 border border-white/60 backdrop-blur-[1px]"
-            : "bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4",
+            ? "rounded-2xl shadow-sm p-4 bg-white border border-white/60"
+            : "bg-white border border-white/40 rounded-2xl shadow-sm p-4",
         ].join(' ')}
         data-card-inner
         style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}
@@ -395,6 +395,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         </div>
 
         {/* Content */}
+        {/* Optional gradient visual block for non-media posts to match composer */}
+        {hasGradient && !gifUrl && (!imageUrls || imageUrls.length === 0) && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl ? (
+          <div
+            className="mt-3 rounded-xl w-full h-40"
+            style={{ background: gradientCss }}
+            aria-hidden
+          />
+        ) : null}
+
         {content ? (
           <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer" onClick={() => openPostModal(id)}>{content}</div>
         ) : null}
