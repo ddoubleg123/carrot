@@ -1,6 +1,5 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
 import '../../../lib/firebase';
-import { auth } from '../../../auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
 import { redirect } from 'next/navigation';
@@ -10,7 +9,9 @@ import ClientSessionProvider from '../dashboard/components/ClientSessionProvider
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
 import { Inter } from 'next/font/google';
-import { headers as nextHeaders } from 'next/headers';
+import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -21,17 +22,18 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
       return [];
     }
-    // Get session to use profile photo from session data like composer does
-    const session: any = await auth();
-    
     // Forward cookies to preserve session auth when calling API from a server component
-    const hdrs = await nextHeaders();
-    const cookieHeader = hdrs.get('cookie') || '';
-    
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/posts`, {
-      headers: {
-        'Cookie': cookieHeader,
-      },
+    const h = await nextHeaders();
+    const cookieHeader = h.get('cookie') || '';
+    // Optional: confirm session (not strictly required here)
+    try {
+      const sres = await fetch(`/api/auth/session`, { headers: { Cookie: cookieHeader }, cache: 'no-store' });
+      if (!sres.ok) {
+        try { console.warn('[home] session check failed', sres.status); } catch {}
+      }
+    } catch {}
+    const response = await fetch(`/api/posts`, {
+      headers: { 'Cookie': cookieHeader },
       cache: 'no-store',
     });
     
@@ -50,8 +52,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       const proxiedFromUrl = p.profilePhoto && /^https?:\/\//i.test(p.profilePhoto)
         ? `/api/img?url=${encodeURIComponent(p.profilePhoto)}`
         : null;
-      const sessionAvatar = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg';
-      const avatar = proxiedFromPath || proxiedFromUrl || sessionAvatar;
+      const avatar = proxiedFromPath || proxiedFromUrl || '/avatar-placeholder.svg';
       return ({
       id: post.id,
       content: post.content || '',
@@ -95,17 +96,54 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 }
 
 export default async function HomePage() {
-  const session: any = await auth();
-  if (!session) redirect('/login');
+  // First try auth() via dynamic import
+  let session: any = null;
+  try {
+    const mod: any = await import('../../../auth');
+    const authFn: any = typeof mod?.auth === 'function' ? mod.auth : (typeof mod?.default?.auth === 'function' ? mod.default.auth : null);
+    if (authFn) {
+      session = await authFn();
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.log('[home] auth() result user?', !!session?.user); } catch {}
+      }
+    }
+  } catch {}
+  // Fallback to session endpoint with forwarded cookies
+  if (!session?.user) {
+    const h = await nextHeaders();
+    const cookieHeader = h.get('cookie') || '';
+    try {
+      const sres = await fetch(`/api/auth/session`, { headers: { 'cookie': cookieHeader }, cache: 'no-store' });
+      if (sres.ok) session = await sres.json().catch(() => null);
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.log('[home] session fetch status', sres.status); } catch {}
+      }
+    } catch {}
+  }
+  // As a final guard, check for presence of NextAuth session cookie to avoid false negatives
+  if (!session?.user) {
+    const c = await nextCookies();
+    const hasCookie = Boolean(
+      c.get('next-auth.session-token')?.value ||
+      c.get('__Secure-next-auth.session-token')?.value ||
+      c.get('authjs.session-token')?.value ||
+      c.get('__Secure-authjs.session-token')?.value
+    );
+    if (process.env.NODE_ENV !== 'production') {
+      try { console.log('[home] cookie presence', hasCookie); } catch {}
+    }
+    if (!hasCookie) {
+      redirect('/login');
+    }
+  }
 
   const commitments = await getCommitments();
   // Fetch server-backed playback prefs using the same session cookie
-  const hdrs = await nextHeaders();
-  const cookieHeader = hdrs.get('cookie') || '';
   let serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined;
   try {
-    const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
-    const resp = await fetch(`${base}/api/user/prefs`, { headers: { Cookie: cookieHeader }, cache: 'no-store' });
+    const h2 = await nextHeaders();
+    const cookieHeader2 = h2.get('cookie') || '';
+    const resp = await fetch(`/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
     if (resp.ok) {
       const j = await resp.json();
       serverPrefs = {

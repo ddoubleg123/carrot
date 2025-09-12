@@ -779,6 +779,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
         onInsert={handleInsertFromLibrary}
       />
 
+      
+
       {/* Upload Modal - Create Post UX */}
       {showModal && mediaPreview && typeof document !== 'undefined' ? createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-2 sm:p-4">
@@ -1227,6 +1229,19 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
         </div>,
         document.body
       ) : null}
+
+      {/* Color Scheme Picker */}
+      <ColorPickerModal
+        open={showColorPicker}
+        schemes={colorSchemes}
+        currentIndex={currentColorScheme}
+        onSelect={(i) => {
+          setCurrentColorScheme(i);
+          try { if (typeof window !== 'undefined') localStorage.setItem('carrot-color-scheme', String(i)); } catch {}
+          setShowColorPicker(false);
+        }}
+        onClose={() => setShowColorPicker(false)}
+      />
 
       {/* Hidden file input for uploads */}
       <input

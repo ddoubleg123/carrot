@@ -43,6 +43,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
     const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
+    const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
       if (!post?.imageUrls) return [] as string[];
       if (Array.isArray(post.imageUrls)) return post.imageUrls.map((u: string) => prox(u)!).filter(Boolean) as string[];
@@ -67,6 +68,17 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     })();
     const fallbackScheme = COLOR_SCHEMES[schemeIndex] || COLOR_SCHEMES[0];
 
+    // Resolve avatar with preference: user.profilePhotoPath -> user.profilePhoto URL -> session user avatar -> placeholder
+    const userObj = post?.User || {};
+    const avatarFromPath = proxPath(userObj.profilePhotoPath);
+    const avatarFromUrl = userObj.profilePhoto ? prox(String(userObj.profilePhoto)) : (userObj.image ? prox(String(userObj.image)) : null);
+    const sessionAvatar = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || null;
+    const finalAvatar = avatarFromPath || avatarFromUrl || (sessionAvatar ? prox(String(sessionAvatar)) : null) || '/avatar-placeholder.svg';
+
+    // Username: prefer DB user.username, else session username/email local-part, else 'user'
+    const sessionUsername = (session?.user as any)?.username || ((session?.user as any)?.email ? String((session?.user as any).email).split('@')[0] : null);
+    const finalUsername = userObj?.username || sessionUsername || 'user';
+
     const mapped = {
       id: post.id,
       content: post.content || '',
@@ -74,12 +86,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       stickText: post.stickText || '',
       author: {
         name: '',
-        username: post.User?.username || 'daniel',
-        avatar: post.User?.profilePhoto || post.User?.image || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
+        username: finalUsername,
+        avatar: finalAvatar,
         flag: undefined,
         id: post.userId,
       },
-      homeCountry: post.User?.country || null,
+      homeCountry: userObj?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },
       stats: {
         likes: Math.floor(Math.random() * 50),
