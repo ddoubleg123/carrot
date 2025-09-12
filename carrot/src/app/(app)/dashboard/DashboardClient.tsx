@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
+import COLOR_SCHEMES from '../../../config/colorSchemes';
 import CommitmentComposer from './components/CommitmentComposer';
 import ComposerTrigger from '../../../components/ComposerTrigger';
 import ComposerModal from '../../../components/ComposerModal';
@@ -55,6 +56,17 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }
       return [] as string[];
     })();
+    // Determine gradient defaults if missing, based on a deterministic hash of post.id
+    const schemeIndex = (() => {
+      try {
+        const s = String(post?.id || post?.cfUid || Date.now());
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h % COLOR_SCHEMES.length;
+      } catch { return 0; }
+    })();
+    const fallbackScheme = COLOR_SCHEMES[schemeIndex] || COLOR_SCHEMES[0];
+
     const mapped = {
       id: post.id,
       content: post.content || '',
@@ -92,10 +104,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       audioTranscription: post.audioTranscription || null,
       transcriptionStatus: post.transcriptionStatus || null,
       emoji: post.emoji || '🎯',
-      gradientFromColor: post.gradientFromColor || null,
-      gradientToColor: post.gradientToColor || null,
-      gradientViaColor: post.gradientViaColor || null,
-      gradientDirection: post.gradientDirection || null,
+      gradientFromColor: post.gradientFromColor || fallbackScheme?.gradientFromColor || null,
+      gradientToColor: post.gradientToColor || fallbackScheme?.gradientToColor || null,
+      gradientViaColor: post.gradientViaColor || fallbackScheme?.gradientViaColor || null,
+      gradientDirection: post.gradientDirection || 'to-br',
       // transient job state (client-side only)
       ...(post.status ? ({ status: post.status } as any) : {}),
       ...(post.trimJobId ? ({ trimJobId: post.trimJobId } as any) : {}),

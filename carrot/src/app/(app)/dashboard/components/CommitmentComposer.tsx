@@ -14,6 +14,7 @@ import MediaLibraryModal from '../../../../components/media/MediaLibraryModal';
 import GifPicker from './GifPicker';
 import AudioRecorder from '../../../../components/AudioRecorder';
 import AudioPlayer from '../../../../components/AudioPlayer';
+import ColorPickerModal from '../../../../components/composer/ColorPickerModal';
 
 interface CommitmentComposerProps {
   onPost: (post: any) => void;
@@ -50,6 +51,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
   
   // Emoji picker state
   const [showEmojiPicker, setShowEmojiPicker] = React.useState<boolean>(false);
+  // Color picker modal state
+  const [showColorPicker, setShowColorPicker] = React.useState<boolean>(false);
   
   // Audio recording state
   const [showAudioRecorder, setShowAudioRecorder] = React.useState<boolean>(false);
@@ -270,17 +273,9 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     }, 0);
   };
 
-  // Color wheel click handler
+  // Color wheel click handler - open selector popup
   const handleColorWheelClick = () => {
-    const nextScheme = (currentColorScheme + 1) % colorSchemes.length;
-    setCurrentColorScheme(nextScheme);
-    
-    // Save to localStorage for persistence
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('carrot-color-scheme', nextScheme.toString());
-    }
-    
-    console.log('Color scheme changed to:', colorSchemes[nextScheme].name);
+    setShowColorPicker(true);
   };
 
   // GIF picker handlers
