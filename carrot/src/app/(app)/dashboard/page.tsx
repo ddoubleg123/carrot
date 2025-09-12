@@ -7,6 +7,7 @@ import { headers } from 'next/headers';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
+import PostModalController from '../../../components/post-modal/PostModalController';
 import ClientSessionProvider from './components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from './components/Widgets';
@@ -58,9 +59,10 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         name: '', // Remove name display per user request
         username: post.User?.username || 'daniel', // FIXED: Use actual username from database, not name
         avatar: post.User?.profilePhoto || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
-        flag: '🇺🇸',
+        flag: undefined,
         id: post.userId, // Add the author ID for ownership comparison
       },
+      homeCountry: post.User?.country || null,
       location: {
         zip: '10001',
         city: 'New York',
@@ -125,6 +127,8 @@ export default async function DashboardPage() {
             <FirebaseClientInit />
             <ClientSessionProvider>
               <DashboardClient initialCommitments={commitments} isModalComposer={true} />
+              {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
+              <PostModalController />
             </ClientSessionProvider>
           </div>
           

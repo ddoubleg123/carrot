@@ -1,40 +1,52 @@
 import { NextResponse } from 'next/server';
+import prisma from '../../../../lib/prisma';
 import { auth } from '../../../../auth';
-import { prisma } from '@/lib/prisma';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Uses shared Prisma singleton from '@/lib/prisma'
-
-// GET /api/posts/[id] - fetch a single post (with user)
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
+// GET /api/posts/[id] - fetch a single post (normalized for modal)
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await context.params;
+    const { id } = await ctx.params;
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
     const post = await prisma.post.findUnique({
       where: { id },
       include: {
         User: {
           select: {
             id: true,
-            name: true,
-            email: true,
+            username: true,
             image: true,
             profilePhoto: true,
-            username: true,
+            profilePhotoPath: true,
+            country: true, // treat as homeCountry
           },
         },
       },
     });
-    if (!post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-    }
-    return NextResponse.json(post);
-  } catch (error) {
-    console.error('Error fetching post:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const out: any = {
+      id: post.id,
+      content: post.content,
+      createdAt: post.createdAt,
+      imageUrls: post.imageUrls,
+      videoUrl: post.videoUrl,
+      thumbnailUrl: post.thumbnailUrl,
+      audioUrl: post.audioUrl,
+      User: {
+        id: post.User?.id,
+        username: post.User?.username,
+        profilePhoto: post.User?.profilePhoto || post.User?.image || null,
+        profilePhotoPath: (post.User as any)?.profilePhotoPath || null,
+        homeCountry: (post.User as any)?.country || null,
+      },
+    };
+    return NextResponse.json(out);
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
   }
 }
 

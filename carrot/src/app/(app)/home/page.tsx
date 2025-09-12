@@ -1,10 +1,11 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
 import '../../../lib/firebase';
-import { auth } from '@/auth';
+import { auth } from '../../../auth';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClient from '../dashboard/DashboardClient';
+import PostModalController from '../../../components/post-modal/PostModalController';
 import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
@@ -63,6 +64,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         flag: '🇺🇸',
         id: post.userId,
       },
+      homeCountry: post.User?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },
       stats: {
         likes: Math.floor(Math.random() * 50),
@@ -133,6 +135,8 @@ export default async function HomePage() {
             <FirebaseClientInit />
             <ClientSessionProvider>
               <DashboardClient initialCommitments={commitments} isModalComposer={true} serverPrefs={serverPrefs} />
+              {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
+              <PostModalController />
             </ClientSessionProvider>
           </div>
 

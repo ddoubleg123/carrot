@@ -9,6 +9,8 @@ import CFVideoPlayer from "../../../../components/CFVideoPlayer";
 import HlsFeedPlayer from "../../../../components/video/HlsFeedPlayer";
 import VideoPlayer from "./VideoPlayer";
 import EditPostModal from "../../../../components/EditPostModal";
+import FlagChip from "../../../../components/flags/FlagChip";
+import { useModalRoute } from "../../../../hooks/useModalRoute";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -65,6 +67,8 @@ type CustomProps = {
   videoTranscriptionStatus?: string | null;
   audioDurationSeconds?: number | null;
   emoji?: string | null;
+  // Country flag control
+  homeCountry?: string | null;
   // Persisted audio visual overrides (optional)
   visualSeed?: string | null;
   visualStyle?: 'liquid' | 'radial' | 'arc' | null;
@@ -161,6 +165,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const analyserRef = useRef<ReturnType<typeof createAnalyserFromMedia> | null>(null);
+  const { openPostModal } = useModalRoute();
 
   const isOwnPost = useMemo(() => Boolean(currentUserId && author?.id && currentUserId === author.id), [currentUserId, author?.id]);
   const displayTime = useMemo(() => {
@@ -277,6 +282,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <span className="font-semibold text-gray-900 truncate">
                   {author?.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
                 </span>
+                {props.homeCountry ? (<FlagChip countryCode={props.homeCountry} />) : null}
                 <span className="text-xs text-gray-500">• {displayTime}</span>
                 {editedAt ? (
                   <span className="text-xs text-gray-500" title={new Date(editedAt).toLocaleString()}>• Edited</span>
@@ -362,7 +368,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
         {/* Content */}
         {content ? (
-          <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words">{content}</div>
+          <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer" onClick={() => openPostModal(id)}>{content}</div>
         ) : null}
 
         {/* Children passthrough (optional) */}
@@ -372,12 +378,12 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
         {/* Images / GIF */}
         {gifUrl ? (
-          <div className="mt-3">
+          <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={gifUrl} alt="gif" className="w-full rounded-xl" />
           </div>
         ) : imageUrls && imageUrls.length > 0 ? (
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
             {imageUrls.slice(0, 4).map((u, i) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img key={i} src={u} alt={`img-${i}`} className="w-full h-48 object-cover rounded-xl" />

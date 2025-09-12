@@ -92,6 +92,8 @@ model User {
   mediaAssets       MediaAsset[]
   mediaLabels       MediaLabel[]
   mediaCollections  MediaCollection[]
+  // Comments relation
+  comments          Comment[]
 }
 
 model Post {
@@ -131,6 +133,8 @@ model Post {
   cfPlaybackUrlHls    String?  @map("cf_playback_url_hls")
   captionVttUrl       String?  @map("caption_vtt_url")
   User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Comments relation
+  comments            Comment[]
 
   @@map("posts")
 }
@@ -362,4 +366,21 @@ model MediaAssetCollection {
   @@unique([assetId, collectionId], name: "asset_collection_unique")
   @@index([collectionId])
   @@map("media_asset_collections")
+}
+
+/// COMMENTS
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  post  Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
 }

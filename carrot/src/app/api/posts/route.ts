@@ -209,6 +209,8 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
             email: true,
             image: true,
             profilePhoto: true,
+            profilePhotoPath: true,
+            country: true,
             username: true,
           }
         }
