@@ -11,6 +11,8 @@ import VideoPlayer from "./VideoPlayer";
 import EditPostModal from "../../../../components/EditPostModal";
 import FlagChip from "../../../../components/flags/FlagChip";
 import { useModalRoute } from "../../../../hooks/useModalRoute";
+import PostActionBar from "../../../../components/post/PostActionBar";
+import ShareSheet from "../../../../components/share/ShareSheet";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -198,6 +200,9 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       timestamp: timestamp || null,
     };
   }, [id, author?.id, audioUrl, cfUid, cfPlaybackUrlHls, videoUrl, uploadStatus, uploadProgress, transcriptionStatus, audioTranscription, timestamp]);
+
+  // In-app Share sheet state
+  const [showShare, setShowShare] = useState(false);
 
   const copyDebugToClipboard = async () => {
     try {
@@ -478,19 +483,30 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         )}
 
         {/* Actions */}
-        <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button className="flex items-center gap-1 text-gray-700 hover:text-gray-900">
-              <ChatBubbleLeftIcon className="h-5 w-5" />
-              <span className="text-sm">{stats.comments}</span>
-            </button>
-            <button className="flex items-center gap-1 text-gray-700 hover:text-gray-900">
-              <ShareIcon className="h-5 w-5" />
-              <span className="text-sm">Share</span>
-            </button>
-          </div>
-          <div className="text-xs text-gray-500">{stats.views.toLocaleString()} views</div>
-        </div>
+        <PostActionBar
+          postId={id}
+          stats={stats}
+          canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
+          permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
+          onComment={() => openPostModal(id, 'comments')}
+          onLike={(liked) => {
+            try {
+              // Optimistic UI already handled in child; optionally call API here
+              console.log('[ActionBar] like toggled', { id, liked });
+            } catch {}
+          }}
+          onSaveToggle={(saved) => {
+            try { console.log('[ActionBar] save toggled', { id, saved }); } catch {}
+          }}
+          onShareInApp={() => setShowShare(true)}
+          onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
+          onTranscribe={() => {
+            try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {}
+          }}
+          onTranslate={() => {
+            try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {}
+          }}
+        />
       </div>
 
       {/* Edit Modal */}
@@ -504,6 +520,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           if (meta?.editedAt) setEditedAt(meta.editedAt);
         }}
       />
+      {/* In-app Share sheet */}
+      {typeof window !== 'undefined' && (
+        <ShareSheet
+          open={showShare}
+          onClose={() => setShowShare(false)}
+          url={`${window.location.origin}/post/${id}`}
+          title={content?.slice(0, 80) || 'Check out this post on Carrot'}
+        />
+      )}
     </div>
   );
 });

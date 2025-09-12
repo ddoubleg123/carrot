@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import COLOR_SCHEMES from '../config/colorSchemes';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { X, Camera, Mic, Image as ImageIcon, Smile, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -523,29 +524,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     return 0;
   });
   
-  // Expanded color schemes with full spectrum
-  const colorSchemes = [
-    { name: 'Ocean Breeze', gradientFromColor: '#e0eafe', gradientToColor: '#d1f7e6', gradientViaColor: '#f6e6fa' },
-    { name: 'Lavender Dreams', gradientFromColor: '#f3e8ff', gradientToColor: '#fce7f3', gradientViaColor: '#e0e7ff' },
-    { name: 'Sunset Glow', gradientFromColor: '#fed7aa', gradientToColor: '#fef3c7', gradientViaColor: '#fecaca' },
-    { name: 'Forest Mist', gradientFromColor: '#d1fae5', gradientToColor: '#dbeafe', gradientViaColor: '#e0f2fe' },
-    { name: 'Rose Garden', gradientFromColor: '#fce7f3', gradientToColor: '#e9d5ff', gradientViaColor: '#fed7d7' },
-    { name: 'Crimson Fire', gradientFromColor: '#fee2e2', gradientToColor: '#fecaca', gradientViaColor: '#fca5a5' },
-    { name: 'Golden Hour', gradientFromColor: '#fef3c7', gradientToColor: '#fed7aa', gradientViaColor: '#fbbf24' },
-    { name: 'Emerald Valley', gradientFromColor: '#d1fae5', gradientToColor: '#a7f3d0', gradientViaColor: '#6ee7b7' },
-    { name: 'Azure Sky', gradientFromColor: '#dbeafe', gradientToColor: '#bfdbfe', gradientViaColor: '#93c5fd' },
-    { name: 'Violet Storm', gradientFromColor: '#e9d5ff', gradientToColor: '#d8b4fe', gradientViaColor: '#c084fc' },
-    { name: 'Coral Reef', gradientFromColor: '#fed7d7', gradientToColor: '#fbb6ce', gradientViaColor: '#f687b3' },
-    { name: 'Mint Fresh', gradientFromColor: '#ecfdf5', gradientToColor: '#d1fae5', gradientViaColor: '#a7f3d0' },
-    { name: 'Amber Glow', gradientFromColor: '#fffbeb', gradientToColor: '#fef3c7', gradientViaColor: '#fde68a' },
-    { name: 'Slate Storm', gradientFromColor: '#f8fafc', gradientToColor: '#e2e8f0', gradientViaColor: '#cbd5e1' },
-    { name: 'Teal Wave', gradientFromColor: '#f0fdfa', gradientToColor: '#ccfbf1', gradientViaColor: '#99f6e4' },
-    { name: 'Indigo Night', gradientFromColor: '#eef2ff', gradientToColor: '#e0e7ff', gradientViaColor: '#c7d2fe' },
-    { name: 'Pink Blossom', gradientFromColor: '#fdf2f8', gradientToColor: '#fce7f3', gradientViaColor: '#fbcfe8' },
-    { name: 'Lime Burst', gradientFromColor: '#f7fee7', gradientToColor: '#ecfccb', gradientViaColor: '#d9f99d' },
-    { name: 'Orange Sunset', gradientFromColor: '#fff7ed', gradientToColor: '#fed7aa', gradientViaColor: '#fdba74' },
-    { name: 'Purple Haze', gradientFromColor: '#faf5ff', gradientToColor: '#f3e8ff', gradientViaColor: '#e9d5ff' },
-  ];
+  // Use shared color schemes to match audio posts
+  const colorSchemes = COLOR_SCHEMES;
   
   // Emoji categories
   const emojiCategories = {

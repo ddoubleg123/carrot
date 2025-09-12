@@ -36,6 +36,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       videoUrl: post.videoUrl,
       thumbnailUrl: post.thumbnailUrl,
       audioUrl: post.audioUrl,
+      transcriptionStatus: (post as any).transcriptionStatus || null,
+      captionVttUrl: (post as any).captionVttUrl || null,
       User: {
         id: post.User?.id,
         username: post.User?.username,

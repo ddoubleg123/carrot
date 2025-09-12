@@ -5,10 +5,11 @@ export function useModalRoute() {
   const router = useRouter();
   const params = useSearchParams();
 
-  function openPostModal(postId: string) {
+  function openPostModal(postId: string, panel?: 'transcript' | 'translate' | 'comments') {
     const sp = new URLSearchParams(params?.toString() || '');
     sp.set('modal', '1');
     sp.set('post', postId);
+    if (panel) sp.set('panel', panel);
     router.push(`?${sp.toString()}`, { scroll: false });
   }
 
@@ -16,6 +17,7 @@ export function useModalRoute() {
     const sp = new URLSearchParams(params?.toString() || '');
     sp.delete('modal');
     sp.delete('post');
+    sp.delete('panel');
     const qs = sp.toString();
     router.replace(qs ? `?${qs}` : `?`, { scroll: false });
   }

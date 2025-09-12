@@ -5,12 +5,15 @@ import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { uploadFilesToFirebase, uploadFileToFirebase } from '../../../../lib/uploadToFirebase';
+import COLOR_SCHEMES from '../../../../config/colorSchemes';
+import { uploadToCloudflareStream } from '../../../../lib/cfStreamUpload';
+
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
 import Toast from './Toast';
+import MediaLibraryModal from '../../../../components/media/MediaLibraryModal';
 import GifPicker from './GifPicker';
 import AudioRecorder from '../../../../components/AudioRecorder';
 import AudioPlayer from '../../../../components/AudioPlayer';
-import { uploadToCloudflareStream } from '../../../../lib/cfStreamUpload';
 
 interface CommitmentComposerProps {
   onPost: (post: any) => void;
@@ -27,6 +30,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
   const [mediaFile, setMediaFile] = React.useState<File | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [mediaType, setMediaType] = React.useState<string | null>(null);
+  const [showMediaLibrary, setShowMediaLibrary] = React.useState<boolean>(false);
   const [currentScrubTime, setCurrentScrubTime] = React.useState<number>(0);
   const [uploadProgress, setUploadProgress] = React.useState<number>(0);
   const [isUploading, setIsUploading] = React.useState<boolean>(false);
@@ -66,18 +70,6 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     console.log('🔄 currentPostId state changed to:', currentPostId);
   }, [currentPostId]);
   
-  // Emoji categories and data
-  const emojiCategories = {
-    'Smileys': ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳'],
-    'Emotions': ['😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭'],
-    'Activities': ['⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛷', '⛸️', '🥌'],
-    'Objects': ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️'],
-    'Nature': ['🌱', '🌿', '☘️', '🍀', '🎋', '🍃', '🍂', '🍁', '🌾', '🌲', '🌳', '🌴', '🌵', '🌶️', '🍄', '🌰', '🎃', '🐚', '🌸', '🌺', '🌻', '🌹', '🥀', '🌷', '🌼', '🌙', '🌛', '🌜', '🌚', '🌕', '🌖'],
-    'Food': ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔', '🍠'],
-    'Travel': ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛹', '🛼', '🚁', '🛸', '✈️', '🛩️', '🛫', '🛬', '🪂', '💺', '🚀', '🛰️', '🚢'],
-    'Symbols': ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎']
-  };
-  
   // Color wheel state with localStorage persistence
   const [currentColorScheme, setCurrentColorScheme] = React.useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -87,129 +79,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     return 0;
   });
   
-  // Color schemes for the gradient backgrounds - 20 beautiful options
-  const colorSchemes = [
-    {
-      name: 'Ocean Breeze',
-      gradientFromColor: '#e0eafe',
-      gradientToColor: '#d1f7e6',
-      gradientViaColor: '#f6e6fa'
-    },
-    {
-      name: 'Lavender Dreams',
-      gradientFromColor: '#f3e8ff',
-      gradientToColor: '#fce7f3',
-      gradientViaColor: '#e0e7ff'
-    },
-    {
-      name: 'Sunset Glow',
-      gradientFromColor: '#fed7aa',
-      gradientToColor: '#fef3c7',
-      gradientViaColor: '#fecaca'
-    },
-    {
-      name: 'Forest Mist',
-      gradientFromColor: '#d1fae5',
-      gradientToColor: '#dbeafe',
-      gradientViaColor: '#e0f2fe'
-    },
-    {
-      name: 'Rose Garden',
-      gradientFromColor: '#fce7f3',
-      gradientToColor: '#e9d5ff',
-      gradientViaColor: '#fed7d7'
-    },
-    {
-      name: 'Arctic Aurora',
-      gradientFromColor: '#ecfdf5',
-      gradientToColor: '#f0f9ff',
-      gradientViaColor: '#f3e8ff'
-    },
-    {
-      name: 'Coral Reef',
-      gradientFromColor: '#ffedd5',
-      gradientToColor: '#fef2f2',
-      gradientViaColor: '#fce7f3'
-    },
-    {
-      name: 'Midnight Sky',
-      gradientFromColor: '#e0e7ff',
-      gradientToColor: '#ddd6fe',
-      gradientViaColor: '#e0f2fe'
-    },
-    {
-      name: 'Golden Hour',
-      gradientFromColor: '#fef3c7',
-      gradientToColor: '#fed7aa',
-      gradientViaColor: '#fde68a'
-    },
-    {
-      name: 'Cherry Blossom',
-      gradientFromColor: '#fdf2f8',
-      gradientToColor: '#f3e8ff',
-      gradientViaColor: '#fce7f3'
-    },
-    {
-      name: 'Mint Fresh',
-      gradientFromColor: '#f0fdfa',
-      gradientToColor: '#ecfdf5',
-      gradientViaColor: '#d1fae5'
-    },
-    {
-      name: 'Peach Sorbet',
-      gradientFromColor: '#fff7ed',
-      gradientToColor: '#fef2f2',
-      gradientViaColor: '#fed7d7'
-    },
-    {
-      name: 'Sapphire Waves',
-      gradientFromColor: '#eff6ff',
-      gradientToColor: '#e0f2fe',
-      gradientViaColor: '#dbeafe'
-    },
-    {
-      name: 'Amethyst Glow',
-      gradientFromColor: '#faf5ff',
-      gradientToColor: '#f3e8ff',
-      gradientViaColor: '#e9d5ff'
-    },
-    {
-      name: 'Citrus Burst',
-      gradientFromColor: '#fefce8',
-      gradientToColor: '#ffedd5',
-      gradientViaColor: '#fed7aa'
-    },
-    {
-      name: 'Emerald Valley',
-      gradientFromColor: '#f0fdf4',
-      gradientToColor: '#dcfce7',
-      gradientViaColor: '#d1fae5'
-    },
-    {
-      name: 'Cotton Candy',
-      gradientFromColor: '#fdf4ff',
-      gradientToColor: '#fce7f3',
-      gradientViaColor: '#f9a8d4'
-    },
-    {
-      name: 'Tropical Breeze',
-      gradientFromColor: '#f0fdfa',
-      gradientToColor: '#e6fffa',
-      gradientViaColor: '#ccfbf1'
-    },
-    {
-      name: 'Warm Embrace',
-      gradientFromColor: '#fef7ed',
-      gradientToColor: '#fed7aa',
-      gradientViaColor: '#fdba74'
-    },
-    {
-      name: 'Starlight',
-      gradientFromColor: '#f8fafc',
-      gradientToColor: '#e2e8f0',
-      gradientViaColor: '#cbd5e1'
-    }
-  ];
+  // Use shared color schemes so Composer visuals match audio post cards
+  const colorSchemes = COLOR_SCHEMES;
   
   // Toast notification state
   const [toastMessage, setToastMessage] = React.useState<string>('');
@@ -875,12 +746,13 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
 
   return (
     <>
-      {/* Toast Notification */}
-      <Toast
-        message={toastMessage}
-        type={toastType}
-        isVisible={showToast}
-        onClose={hideToast}
+      
+
+      {/* Media Library Modal (root-level) */}
+      <MediaLibraryModal
+        open={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onInsert={handleInsertFromLibrary}
       />
 
       {/* Upload Modal - Create Post UX */}
@@ -889,7 +761,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
           <div 
             className="rounded-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl"
             style={{
-              background: `linear-gradient(to bottom right, ${colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientViaColor}, ${colorSchemes[currentColorScheme].gradientToColor})`
+              background: `linear-gradient(to bottom right, ${colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientViaColor || colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientToColor})`
             }}
           >
             <div className="p-4 sm:p-8">
@@ -905,169 +777,130 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                 </button>
               </div>
 
-              {/* Media Preview */}
-              <div className="mb-4">
-                {mediaType && mediaType.startsWith('video/') ? (
-                  <div className="w-full">
-                    {/* Video Thumbnail Preview - Full Size */}
-                    <div className="relative rounded-2xl bg-white shadow-lg border border-gray-100 mb-6 overflow-hidden">
-                      {selectedFile ? (
-                        <div className="relative w-full">
-                          {isUploading ? (
-                            <div className="w-full h-80 bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
-                              <div className="text-center">
-                                {/* Cute bouncing carrot animation */}
-                                <div className="text-6xl mb-6 animate-bounce" style={{ animationDuration: '1s' }}>🥕</div>
-                                <div className="text-xl font-semibold text-orange-700 mb-2">Carrot is uploading your video...</div>
-                                <div className="text-sm text-orange-600 mb-6">Hang tight, this won't take long! 🐰</div>
-                                {/* Cute progress bar with carrot theme */}
-                                <div className="w-72 mx-auto">
-                                  <div className="flex justify-between text-sm text-orange-600 font-medium mb-3">
-                                    <span className="flex items-center gap-1">
-                                      <span className="text-xs">🥕</span>
-                                      Progress
-                                    </span>
-                                    <span className="font-bold">{Math.round(uploadProgress)}%</span>
-                                  </div>
-                                  <div className="w-full bg-orange-200 rounded-full h-4 shadow-inner">
-                                    <div 
-                                      className="bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 h-4 rounded-full transition-all duration-500 ease-out shadow-sm relative overflow-hidden"
-                                      style={{ width: `${uploadProgress}%` }}
-                                    >
-                                      {/* Subtle shimmer effect */}
-                                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
-                                    </div>
-                                  </div>
-                                  {/* Cute progress messages */}
-                                  <div className="text-xs text-orange-500 mt-2 font-medium">
-                                    {uploadProgress < 25 && "🐰 Starting upload..."}
-                                    {uploadProgress >= 25 && uploadProgress < 50 && "🥕 Making progress..."}
-                                    {uploadProgress >= 50 && uploadProgress < 75 && "🚀 Almost there..."}
-                                    {uploadProgress >= 75 && uploadProgress < 100 && "✨ Finishing up..."}
-                                    {uploadProgress >= 100 && "🎉 Upload complete!"}
-                                  </div>
+
+            {/* Media Preview */}
+            <div className="mb-4">
+              {mediaType && mediaType.startsWith('video/') ? (
+                <div className="w-full">
+                  <div className="relative rounded-2xl bg-white shadow-lg border border-gray-100 mb-6 overflow-hidden">
+                    {selectedFile ? (
+                      isUploading ? (
+                        <div className="w-full h-80 bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="text-6xl mb-6 animate-bounce" style={{ animationDuration: '1s' }}>🥕</div>
+                            <div className="text-xl font-semibold text-orange-700 mb-2">Carrot is uploading your video...</div>
+                            <div className="text-sm text-orange-600 mb-6">Hang tight, this won't take long! 🐰</div>
+                            <div className="w-72 mx-auto">
+                              <div className="flex justify-between text-sm text-orange-600 font-medium mb-3">
+                                <span className="flex items-center gap-1">
+                                  <span className="text-xs">🥕</span>
+                                  Progress
+                                </span>
+                                <span className="font-bold">{Math.round(uploadProgress)}%</span>
+                              </div>
+                              <div className="w-full bg-orange-200 rounded-full h-4 shadow-inner">
+                                <div className="bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 h-4 rounded-full transition-all duration-500 ease-out shadow-sm relative overflow-hidden" style={{ width: `${uploadProgress}%` }}>
+                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
                                 </div>
                               </div>
-                            </div>
-                          ) : thumbnailsLoading ? (
-                            <div className="w-full h-80 bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
-                              <div className="text-center">
-                                <div className="text-5xl mb-4 animate-pulse" style={{ animationDuration: '1.5s' }}>🐰</div>
-                                <div className="text-lg font-semibold text-purple-700 mb-2">Rabbit is preparing thumbnails...</div>
-                                <div className="text-sm text-purple-600">Creating beautiful previews for you! 🎬</div>
+                              <div className="text-xs text-orange-500 mt-2 font-medium">
+                                {uploadProgress < 25 && "🐰 Starting upload..."}
+                                {uploadProgress >= 25 && uploadProgress < 50 && "🥕 Making progress..."}
+                                {uploadProgress >= 50 && uploadProgress < 75 && "🚀 Almost there..."}
+                                {uploadProgress >= 75 && uploadProgress < 100 && "✨ Finishing up..."}
+                                {uploadProgress >= 100 && "🎉 Upload complete!"}
                               </div>
                             </div>
-                          ) : videoThumbnails.length > 0 ? (
-                            <div className="relative">
-                              <img
-                                src={videoThumbnails[currentThumbnailIndex]}
-                                alt={`Video thumbnail ${currentThumbnailIndex + 1}`}
-                                className="w-full h-80 object-cover bg-gray-100"
-                                onError={(e) => {
-                                  console.log('Thumbnail failed to load:', videoThumbnails[currentThumbnailIndex]);
-                                }}
-                              />
-                              {/* Frame indicator - only visible overlay */}
-                              <div className="absolute top-4 right-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm font-semibold px-3 py-1.5 rounded-full shadow-lg">
-                                Frame {currentThumbnailIndex + 1}/{videoThumbnails.length}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
-                              <div className="text-center">
-                                <div className="text-4xl mb-4">🎬</div>
-                                <div className="text-lg text-gray-600">Video preview</div>
-                              </div>
-                            </div>
-                          )}
+                          </div>
+                        </div>
+                      ) : thumbnailsLoading ? (
+                        <div className="w-full h-80 bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="text-5xl mb-4 animate-pulse" style={{ animationDuration: '1.5s' }}>🐰</div>
+                            <div className="text-lg font-semibold text-purple-700 mb-2">Rabbit is preparing thumbnails...</div>
+                            <div className="text-sm text-purple-600">Creating beautiful previews for you! 🎬</div>
+                          </div>
+                        </div>
+                      ) : videoThumbnails.length > 0 ? (
+                        <div className="relative">
+                          <img
+                            src={videoThumbnails[currentThumbnailIndex]}
+                            alt={`Video thumbnail ${currentThumbnailIndex + 1}`}
+                            className="w-full h-80 object-cover bg-gray-100"
+                            onError={() => {
+                              console.log('Thumbnail failed to load:', videoThumbnails[currentThumbnailIndex]);
+                            }}
+                          />
+                          <div className="absolute top-4 right-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm font-semibold px-3 py-1.5 rounded-full shadow-lg">
+                            Frame {currentThumbnailIndex + 1}/{videoThumbnails.length}
+                          </div>
                         </div>
                       ) : (
                         <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
-                          <div className="text-6xl">🎬</div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Frame-Based Thumbnail Scrubbing Slider */}
-                    {selectedFile && selectedFile.type.startsWith('video/') && videoThumbnails.length > 0 && (
-                      <div className="mt-6 bg-white rounded-xl p-6 shadow-md border border-gray-100">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-base text-gray-700 font-semibold">Choose thumbnail:</span>
-                          <span className="text-sm text-orange-600 font-bold bg-orange-50 px-3 py-1 rounded-full">Frame {currentThumbnailIndex + 1} of {videoThumbnails.length}</span>
-                        </div>
-                        <div className="relative w-full h-8 flex items-center">
-                          {/* Background track */}
-                          <div className="absolute inset-0 h-1 bg-gray-200 rounded-full top-1/2 transform -translate-y-1/2"></div>
-                          
-                          {/* Orange progress track */}
-                          <div 
-                            className="absolute h-1 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full top-1/2 transform -translate-y-1/2 transition-all duration-300"
-                            style={{ 
-                              left: '0%',
-                              width: `${((currentThumbnailIndex) / (videoThumbnails.length - 1)) * 100}%` 
-                            }}
-                          />
-                          
-                          {/* Clickable circular frame indicators */}
-                          <div className="absolute inset-0 flex justify-between items-center">
-                            {Array.from({ length: videoThumbnails.length }, (_, i) => {
-                              const frameNum = i + 1;
-                              const isSelected = i === currentThumbnailIndex;
-                              return (
-                                <button
-                                  key={i}
-                                  onClick={() => {
-                                    setCurrentThumbnailIndex(i);
-                                    console.log(`🖼️ Clicked to switch to thumbnail ${frameNum}/${videoThumbnails.length}`);
-                                  }}
-                                  className={`relative w-6 h-6 rounded-full border-2 transition-all duration-200 hover:scale-125 cursor-pointer flex items-center justify-center ${
-                                    isSelected 
-                                      ? 'bg-orange-500 border-orange-600 shadow-lg' 
-                                      : 'bg-white border-gray-300 hover:border-orange-400 shadow-md'
-                                  }`}
-                                  title={`Jump to frame ${frameNum}`}
-                                >
-                                  <span className={`text-xs font-bold ${
-                                    isSelected ? 'text-white' : 'text-gray-600'
-                                  }`}>
-                                    {frameNum}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                          <div className="text-center">
+                            <div className="text-4xl mb-4">🎬</div>
+                            <div className="text-lg text-gray-600">Video preview</div>
                           </div>
-                          
-                          {/* Hidden range input for keyboard accessibility */}
-                          <input
-                            type="range"
-                            min="0"
-                            max={videoThumbnails.length - 1}
-                            step="1"
-                            value={currentThumbnailIndex}
-                            onChange={(e) => {
-                              const newIndex = parseInt(e.target.value);
-                              setCurrentThumbnailIndex(newIndex);
-                              console.log(`🖼️ Slider moved to thumbnail ${newIndex + 1}/${videoThumbnails.length}`);
-                            }}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            style={{ 
-                              background: 'transparent',
-                              WebkitAppearance: 'none',
-                              appearance: 'none'
-                            }}
-                          />
                         </div>
+                      )
+                    ) : (
+                      <div className="w-full h-80 bg-gray-100 flex items-center justify-center">
+                        <div className="text-6xl">🎬</div>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <img
-                    src={mediaPreview}
-                    alt="Preview"
-                    className="w-full h-64 object-cover rounded-2xl bg-gray-100 shadow-lg"
-                  />
-                )}
-              </div>
+
+                  {/* Frame-Based Thumbnail Scrubbing Slider */}
+                  {selectedFile && selectedFile.type.startsWith('video/') && videoThumbnails.length > 0 && (
+                    <div className="mt-6 bg-white rounded-xl p-6 shadow-md border border-gray-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-base text-gray-700 font-semibold">Choose thumbnail:</span>
+                        <span className="text-sm text-orange-600 font-bold bg-orange-50 px-3 py-1 rounded-full">Frame {currentThumbnailIndex + 1} of {videoThumbnails.length}</span>
+                      </div>
+                      <div className="relative w-full h-8 flex items-center">
+                        <div className="absolute inset-0 h-1 bg-gray-200 rounded-full top-1/2 transform -translate-y-1/2"></div>
+                        <div className="absolute h-1 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full top-1/2 transform -translate-y-1/2 transition-all duration-300" style={{ left: '0%', width: `${((currentThumbnailIndex) / (videoThumbnails.length - 1)) * 100}%` }} />
+                        <div className="absolute inset-0 flex justify-between items-center">
+                          {Array.from({ length: videoThumbnails.length }, (_, i) => {
+                            const frameNum = i + 1;
+                            const isSelected = i === currentThumbnailIndex;
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  setCurrentThumbnailIndex(i);
+                                  console.log(`🖼️ Clicked to switch to thumbnail ${frameNum}/${videoThumbnails.length}`);
+                                }}
+                                className={`relative w-6 h-6 rounded-full border-2 transition-all duration-200 hover:scale-125 cursor-pointer flex items-center justify-center ${isSelected ? 'bg-orange-500 border-orange-600 shadow-lg' : 'bg-white border-gray-300 hover:border-orange-400 shadow-md'}`}
+                                title={`Jump to frame ${frameNum}`}
+                              >
+                                <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-gray-600'}`}>{frameNum}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={videoThumbnails.length - 1}
+                          step={1}
+                          value={currentThumbnailIndex}
+                          onChange={(e) => {
+                            const newIndex = parseInt(e.target.value);
+                            setCurrentThumbnailIndex(newIndex);
+                            console.log(`🖼️ Slider moved to thumbnail ${newIndex + 1}/${videoThumbnails.length}`);
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          style={{ background: 'transparent', WebkitAppearance: 'none', appearance: 'none' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <img src={mediaPreview} alt="Preview" className="w-full h-64 object-cover rounded-2xl bg-gray-100 shadow-lg" />
+              )}
+            </div>
 
             {/* Caption Input */}
             <div className="mb-6">
@@ -1387,7 +1220,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
           <div 
             className="rounded-2xl p-4 sm:p-6 w-full relative"
             style={{
-              background: `linear-gradient(to bottom right, ${colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientViaColor}, ${colorSchemes[currentColorScheme].gradientToColor})`
+              background: `linear-gradient(to bottom right, ${colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientViaColor || colorSchemes[currentColorScheme].gradientFromColor}, ${colorSchemes[currentColorScheme].gradientToColor})`
             }}
           >
             
@@ -1587,6 +1420,13 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                   onClick={() => openFileDialog("image/*,video/*,.mp4,.mov,.webm")}
                 >
                   <IconPhoto />
+                </button>
+                <button
+                  className="p-2 hover:bg-white/50 rounded-full transition-colors"
+                  title="Media Library"
+                  onClick={() => setShowMediaLibrary(true)}
+                >
+                  📚
                 </button>
                 <button 
                   className="p-2 hover:bg-white/50 rounded-full transition-colors" 
@@ -1891,7 +1731,9 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
+      )}
 
       <GifPicker
         isOpen={showGifPicker}

@@ -135,6 +135,10 @@ model Post {
   User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Comments relation
   comments            Comment[]
+  // Engagement
+  likes               PostLike[]
+  saves               PostSave[]
+  translations        PostTranslation[]
 
   @@map("posts")
 }
@@ -304,6 +308,7 @@ model MediaAsset {
   inUseCount  Int      @default(0) @map("in_use_count")
   cfUid       String?  @map("cf_uid")
   cfStatus    String?  @map("cf_status")
+  captionVttUrl String? @map("caption_vtt_url")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
