@@ -395,18 +395,30 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         </div>
 
         {/* Content */}
-        {/* Optional gradient visual block for non-media posts to match composer */}
+        {/* Non-media posts: place content inside the gradient visual to mirror composer */}
         {hasGradient && !gifUrl && (!imageUrls || imageUrls.length === 0) && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl ? (
-          <div
-            className="mt-3 rounded-xl w-full h-40"
-            style={{ background: gradientCss }}
-            aria-hidden
-          />
-        ) : null}
-
-        {content ? (
-          <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer" onClick={() => openPostModal(id)}>{content}</div>
-        ) : null}
+          <div className="mt-3 rounded-xl w-full" style={{ background: gradientCss }}>
+            <div className="p-4 sm:p-5">
+              {content ? (
+                <div
+                  className="bg-white/90 border border-white/60 rounded-lg p-3 sm:p-4 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
+                  onClick={() => openPostModal(id)}
+                >
+                  {content}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          content ? (
+            <div
+              className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
+              onClick={() => openPostModal(id)}
+            >
+              {content}
+            </div>
+          ) : null
+        )}
 
         {/* Children passthrough (optional) */}
         {children ? (
