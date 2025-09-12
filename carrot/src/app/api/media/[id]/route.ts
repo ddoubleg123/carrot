@@ -10,6 +10,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = session.user.id as string; // safe after auth check
     const { id } = await ctx.params;
     const asset = await (prisma as any).mediaAsset.findUnique({
       where: { id },
@@ -63,7 +64,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     // Ownership check
     const asset = await prisma.mediaAsset.findUnique({ where: { id } });
-    if (!asset || asset.userId !== session.user.id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!asset || asset.userId !== userId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Update fields
     if (typeof title !== 'undefined' || typeof hidden !== 'undefined') {
@@ -80,7 +81,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (addTags.length > 0) {
       // Find existing labels for user
       const existing = await prisma.mediaLabel.findMany({
-        where: { userId: session.user.id, name: { in: addTags } },
+        where: { userId, name: { in: addTags } },
         select: { id: true, name: true },
       });
       const existingNames = new Set(existing.map((x) => x.name));
@@ -89,13 +90,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (toCreate.length > 0) {
         // createMany does not return IDs; re-query afterwards
         await prisma.mediaLabel.createMany({
-          data: toCreate.map((name) => ({ name, userId: session.user.id })),
+          data: toCreate.map((name) => ({ name, userId })),
           skipDuplicates: true,
         });
       }
       // Gather all label IDs
       const labels = await prisma.mediaLabel.findMany({
-        where: { userId: session.user.id, name: { in: addTags } },
+        where: { userId, name: { in: addTags } },
         select: { id: true },
       });
       const labelIds = labels.map((l) => l.id);
@@ -111,7 +112,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // Tag removals
     if (removeTags.length > 0) {
       const labels = await prisma.mediaLabel.findMany({
-        where: { userId: session.user.id, name: { in: removeTags } },
+        where: { userId, name: { in: removeTags } },
         select: { id: true },
       });
       const labelIds = labels.map((l) => l.id);
