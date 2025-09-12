@@ -275,6 +275,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             ? "rounded-2xl shadow-sm p-4 bg-white/90 border border-white/60 backdrop-blur-[1px]"
             : "bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4",
         ].join(' ')}
+        data-card-inner
         style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}
       >
         {carrotText ? (

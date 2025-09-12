@@ -89,7 +89,7 @@ export default function PostActionBar(props: PostActionBarProps) {
   };
 
   return (
-    <div className="mt-3 flex items-center justify-between w-full">
+    <div className="mt-3 flex items-center justify-between w-full" data-card-actions>
       {/* Left cluster: primary actions */}
       <div className="flex items-center gap-2">
         {/* Like */}
