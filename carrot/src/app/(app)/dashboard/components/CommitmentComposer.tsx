@@ -1731,6 +1731,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
             </div>
           </div>
         </div>
+      </div>
 
       <GifPicker
         isOpen={showGifPicker}
