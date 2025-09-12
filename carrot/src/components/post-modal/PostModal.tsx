@@ -142,6 +142,43 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     }
   }
 
+  // Render media body without nested ternaries
+  function renderMedia() {
+    if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
+    if (data?.videoUrl) {
+      return (
+        <video
+          controls
+          playsInline
+          poster={data.thumbnailUrl || undefined}
+          className="w-full h-full object-contain bg-black"
+          ref={(el) => setMediaEl(el)}
+        >
+          <source src={data.videoUrl} />
+        </video>
+      );
+    }
+    if (data?.imageUrls) {
+      let arr: string[] = [];
+      try { arr = typeof data.imageUrls === 'string' ? JSON.parse(data.imageUrls) : data.imageUrls; } catch {}
+      const src = arr[0];
+      return src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="media" className="w-full h-full object-contain" />
+      ) : (
+        <div className="text-sm text-gray-500">No media</div>
+      );
+    }
+    if (data?.audioUrl) {
+      return (
+        <div className="w-full">
+          <AudioPlayer audioUrl={data.audioUrl} allowBlob={false} onAudioRef={(el) => setMediaEl(el)} />
+        </div>
+      );
+    }
+    return <div className="text-sm text-gray-500">No media</div>;
+  }
+
   const body = (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -186,39 +223,7 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
           {panel === 'media' && (
             <div className="p-3">
               <div className="rounded-xl overflow-hidden" style={{ background: "linear-gradient(135deg,#F97316,#3B82F6)" }}>
-                <div className="w-full h-[360px] flex items-center justify-center">
-                  {loading ? (
-                    <div className="text-sm text-gray-500">Loading…</div>
-                  ) : data?.videoUrl ? (
-                    <video
-                      controls
-                      playsInline
-                      poster={data.thumbnailUrl || undefined}
-                      className="w-full h-full object-contain bg-black"
-                      ref={(el) => setMediaEl(el)}
-                    >
-                      <source src={data.videoUrl} />
-                    </video>
-                  ) : (data?.imageUrls ? (
-                    (() => {
-                      let arr: string[] = [];
-                      try { arr = typeof data.imageUrls === 'string' ? JSON.parse(data.imageUrls) : data.imageUrls; } catch {}
-                      const src = arr[0];
-                      return src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={src} alt="media" className="w-full h-full object-contain" />
-                      ) : (
-                        <div className="text-sm text-gray-500">No media</div>
-                      );
-                    })()
-                  ) : (data?.audioUrl ? (
-                    <div className="w-full">
-                      <AudioPlayer audioUrl={data.audioUrl} allowBlob={false} onAudioRef={(el) => setMediaEl(el)} />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-500">No media</div>
-                  ))}
-                </div>
+                <div className="w-full h-[360px] flex items-center justify-center">{renderMedia()}</div>
               </div>
             </div>
           )}
