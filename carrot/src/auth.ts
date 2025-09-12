@@ -117,17 +117,7 @@ const adapter = process.env.USE_PATCHED_ADAPTER === '1' ? patchAdapter(PrismaAda
 
 export const authOptions = {
   // adapter,
-  cookies: {
-    sessionToken: {
-      name: "next-auth.session-token.carrot",
-      options: {
-        httpOnly: true,
-        sameSite: 'lax' as const,
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
+  trustHost: true,
   session: {
     strategy: 'jwt' as const,
   },
@@ -361,6 +351,9 @@ logger: {
 
 // Use NextAuth helpers (provides typed handlers, auth(), signIn(), signOut())
 export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
-// Re-export route handlers for App Router convenience
-export const GET = (handlers as any).GET;
-export const POST = (handlers as any).POST;
+// Provide a default export to ensure dynamic imports in RSC can access `.default.auth`
+const exported = { handlers, auth, signIn, signOut } as const;
+if (process.env.NODE_ENV !== 'production') {
+  try { console.log('[auth.ts] exports ready:', Object.keys(exported)); } catch {}
+}
+export default exported;

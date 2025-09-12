@@ -269,7 +269,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       {...filterRootDivProps(rest as Record<string, any>)}
       style={hasGradient ? { background: gradientCss, borderRadius: 16, padding: 2 } : undefined}
     >
-      <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4" style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}>
+      <div
+        className={[
+          hasGradient
+            ? "rounded-2xl shadow-sm p-4 bg-white/90 border border-white/60 backdrop-blur-[1px]"
+            : "bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4",
+        ].join(' ')}
+        style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}
+      >
         {carrotText ? (
           <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
         ) : null}
