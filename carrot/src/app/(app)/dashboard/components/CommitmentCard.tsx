@@ -253,6 +253,12 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     if (innerBoxColor) dataAttrs[`data-${prefix}-inner-box-color`] = safeColor(innerBoxColor);
   }
 
+  // Compute gradient background if provided
+  const hasGradient = Boolean(props.gradientFromColor && props.gradientToColor);
+  const gradientCss = hasGradient
+    ? `linear-gradient(135deg, ${props.gradientFromColor}, ${props.gradientViaColor || props.gradientFromColor}, ${props.gradientToColor})`
+    : undefined;
+
   return (
     <div
       ref={ref}
@@ -261,6 +267,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       className={['bg-transparent', className].filter(Boolean).join(' ')}
       {...dataAttrs}
       {...filterRootDivProps(rest as Record<string, any>)}
+      style={hasGradient ? { background: gradientCss, borderRadius: 16, padding: 2 } : undefined}
     >
       <div className="bg-white/95 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm p-4" style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}>
         {carrotText ? (

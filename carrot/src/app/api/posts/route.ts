@@ -124,6 +124,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             image: true,
             profilePhoto: true,
             profilePhotoPath: true,
+            country: true,
             username: true,
           }
         }

@@ -756,7 +756,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       />
 
       {/* Upload Modal - Create Post UX */}
-      {showModal && mediaPreview && typeof document !== 'undefined' && createPortal(
+      {showModal && mediaPreview && typeof document !== 'undefined' ? createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-2 sm:p-4">
           <div 
             className="rounded-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl"
@@ -1202,7 +1202,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
           </div>
         </div>,
         document.body
-      )}
+      ) : null}
 
       {/* Hidden file input for uploads */}
       <input
@@ -1731,9 +1731,6 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
             </div>
           </div>
         </div>
-      </div>,
-      document.body
-      )}
 
       <GifPicker
         isOpen={showGifPicker}
@@ -1742,7 +1739,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       />
 
       {/* Audio Recorder Modal */}
-      {showAudioRecorder && createPortal(
+      {showAudioRecorder ? createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md">
             <AudioRecorder
@@ -1754,7 +1751,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
           </div>
         </div>,
         document.body
-      )}
+      ) : null}
 
       {/* Toast Notification */}
       <Toast
