@@ -146,6 +146,12 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
   function renderMedia() {
     if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
     if (data?.videoUrl) {
+      const url = data.videoUrl;
+      const needsProxy = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
+      const withAlt = url.includes('firebasestorage.googleapis.com') && !url.includes('alt=media')
+        ? `${url}${url.includes('?') ? '&' : '?'}alt=media`
+        : url;
+      const resolved = needsProxy ? `/api/video?url=${encodeURIComponent(withAlt)}` : withAlt;
       return (
         <video
           controls
@@ -154,7 +160,7 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
           className="w-full h-full object-contain bg-black"
           ref={(el) => setMediaEl(el)}
         >
-          <source src={data.videoUrl} />
+          <source src={resolved} />
         </video>
       );
     }

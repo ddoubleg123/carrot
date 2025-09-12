@@ -44,6 +44,20 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     el.play().catch(() => {});
   };
 
+  // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS)
+  const resolvedSrc = React.useMemo(() => {
+    if (!videoUrl) return '';
+    const needsProxy = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com');
+    if (needsProxy) {
+      let u = videoUrl;
+      if (u.includes('firebasestorage.googleapis.com') && !u.includes('alt=media')) {
+        u = `${u}${u.includes('?') ? '&' : '?'}alt=media`;
+      }
+      return `/api/video?url=${encodeURIComponent(u)}`;
+    }
+    return videoUrl;
+  }, [videoUrl]);
+
   // Derive a best-guess MIME type from the URL/extension to help browsers choose the decoder
   const getMimeType = (url: string): string | undefined => {
     const lower = url.split('?')[0].toLowerCase();
@@ -220,14 +234,10 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     try {
       // Ensure muted stays true across source swaps for autoplay compliance
       el.muted = true;
-      
-      // Fix Firebase Storage URLs by adding proper auth parameters
-      if (videoUrl.includes('firebasestorage.googleapis.com') && !videoUrl.includes('alt=media')) {
-        const authUrl = `${videoUrl}?alt=media`;
-        el.src = authUrl;
-        console.log('🎬 Using Firebase Storage auth URL:', authUrl);
-      }
-      
+
+      // Always use resolvedSrc for playback (proxy if needed)
+      el.src = resolvedSrc;
+
       el.load();
       
       // Force autoplay attempt after load for older posts
@@ -242,7 +252,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
       el.addEventListener('canplay', forceAutoplay, { once: true });
       
     } catch {}
-  }, [videoUrl, isInView]);
+  }, [resolvedSrc, isInView]);
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
@@ -310,7 +320,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     <div className="w-full">
       <div className="relative">
         <video
-          key={videoUrl}
+          key={resolvedSrc}
           ref={videoRef}
           controls
           muted
@@ -320,7 +330,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           preload="auto"
           crossOrigin="anonymous"
           poster={thumbnailUrl || undefined}
-          src={videoUrl.includes('firebasestorage.googleapis.com') && !videoUrl.includes('alt=media') ? `${videoUrl}?alt=media` : videoUrl}
+          src={resolvedSrc}
           style={{ 
             width: '100%',
             maxWidth: '100%',
@@ -370,7 +380,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           {/* Provide explicit source with MIME type hint to improve decoding compatibility */}
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           {/* Add auth parameters for Firebase Storage URLs */}
-          <source src={videoUrl.includes('firebasestorage.googleapis.com') && !videoUrl.includes('alt=media') ? `${videoUrl}?alt=media` : videoUrl} type={getMimeType(videoUrl)} />
+          <source src={resolvedSrc} type={getMimeType(videoUrl)} />
         </video>
         
         {/* Upload Progress Overlay - Only show during actual upload, not after completion */}
