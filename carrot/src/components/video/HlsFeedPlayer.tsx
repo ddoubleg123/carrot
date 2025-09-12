@@ -36,6 +36,7 @@ export default function HlsFeedPlayer({
   const firstFrameSentRef = useRef<boolean>(false);
   const [shouldWarm, setShouldWarm] = useState(false);
   const hlsRef = useRef<any>(null);
+  const myHandleRef = useRef<VideoHandle | null>(null);
 
   // Read preferences from localStorage (reduced motion, captions default, network profile)
   const getReducedMotion = () => {
@@ -359,8 +360,34 @@ export default function HlsFeedPlayer({
       }
     };
     FeedMediaManager.inst.registerHandle(el, handle);
+    myHandleRef.current = handle;
     return () => { FeedMediaManager.inst.unregisterHandle(el); };
   }, [assetId, hlsMasterUrl]);
+
+  // Ensure only one video plays at a time; pause when scrolled away
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const onPlay = () => {
+      const h = myHandleRef.current || (el ? FeedMediaManager.inst.getHandleByElement(el as any) : undefined);
+      if (h) FeedMediaManager.inst.setActive(h);
+    };
+    el.addEventListener('play', onPlay);
+
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const visible = entry.intersectionRatio >= 0.5;
+      if (!visible) {
+        try { el.pause(); } catch {}
+      }
+    }, { threshold: [0, 0.5, 1] });
+    io.observe(el);
+    return () => {
+      try { el.removeEventListener('play', onPlay); } catch {}
+      try { io.disconnect(); } catch {}
+    };
+  }, [assetId]);
 
   return (
     <div className={`relative w-full ${className}`}>

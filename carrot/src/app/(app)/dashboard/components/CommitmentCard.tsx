@@ -283,7 +283,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   {author?.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
                 </span>
                 {props.homeCountry ? (<FlagChip countryCode={props.homeCountry} />) : null}
-                <span className="text-xs text-gray-500">• {displayTime}</span>
+                <button
+                  type="button"
+                  className="text-xs text-gray-500 underline-offset-2 hover:underline"
+                  onClick={() => openPostModal(id)}
+                  aria-label="Open post permalink"
+                  title="Open post"
+                >
+                  • {displayTime}
+                </button>
                 {editedAt ? (
                   <span className="text-xs text-gray-500" title={new Date(editedAt).toLocaleString()}>• Edited</span>
                 ) : null}
@@ -393,7 +401,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
         {/* Video */}
         {(cfUid || cfPlaybackUrlHls || videoUrl) && (
-          <div className="mt-3">
+          <div className="mt-3 relative">
             {(() => {
               const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
               if (useHls) {
@@ -435,6 +443,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 />
               );
             })()}
+            {/* Click overlay: leave bottom ~48px for native controls */}
+            <button
+              type="button"
+              className="absolute inset-x-0 top-0 bottom-12 z-10 cursor-pointer bg-transparent"
+              aria-label="Open post"
+              title="Open post"
+              onClick={() => openPostModal(id)}
+            />
           </div>
         )}
 

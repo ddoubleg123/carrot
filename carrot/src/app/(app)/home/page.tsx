@@ -61,7 +61,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         name: '',
         username: post.User?.username || 'daniel',
         avatar,
-        flag: '🇺🇸',
+        flag: undefined,
         id: post.userId,
       },
       homeCountry: post.User?.country || null,
