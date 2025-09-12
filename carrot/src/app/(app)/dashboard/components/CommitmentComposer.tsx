@@ -96,6 +96,27 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     setShowToast(true);
   };
 
+  // Handle insert from Media Library
+  const handleInsertFromLibrary = (m: any) => {
+    try {
+      // Prefer a direct URL; fallback to posterUrl
+      const url: string | null = m?.url || m?.posterUrl || null;
+      if (!url) {
+        setShowMediaLibrary(false);
+        return;
+      }
+      // For now, treat inserted media as an image/GIF attachment in the composer
+      setSelectedGifUrl(url);
+      // Clear any existing file-based selection
+      setMediaFile(null);
+      setSelectedFile(null);
+      setMediaPreview(null);
+      setMediaType(null);
+    } finally {
+      setShowMediaLibrary(false);
+    }
+  };
+
   const showErrorToast = (message: string) => {
     setToastMessage(message);
     setToastType('error');
