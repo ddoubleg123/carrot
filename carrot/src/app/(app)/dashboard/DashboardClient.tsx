@@ -107,7 +107,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       timestamp: post.createdAt,
       imageUrls: imageUrlsFinal,
       gifUrl: prox(post.gifUrl) || null,
-      videoUrl: prox(post.videoUrl) || null,
+      // IMPORTANT: do NOT proxy video URLs through /api/img; use raw URL
+      videoUrl: post.videoUrl || null,
       thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
@@ -134,6 +135,13 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         cfPlaybackUrlHls: mapped.cfPlaybackUrlHls,
         videoUrl: mapped.videoUrl,
       });
+      if (!mapped.videoUrl && !mapped.cfUid && !mapped.cfPlaybackUrlHls && (post?.videoUrl || post?.cfUid || post?.cfPlaybackUrlHls)) {
+        console.warn('[DashboardClient] server returned media fields but mapping resolved to empty', {
+          rawVideoUrl: post?.videoUrl,
+          rawCfUid: post?.cfUid,
+          rawCfHls: post?.cfPlaybackUrlHls,
+        });
+      }
     } catch {}
     return mapped;
   };
@@ -388,6 +396,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               // Preserve optimistic upload states but allow transcription status updates
               merged.uploadStatus = existing.uploadStatus ?? m.uploadStatus ?? null;
               merged.transcriptionStatus = m.transcriptionStatus ?? existing.transcriptionStatus ?? null;
+              // Preserve homeCountry if server doesn't provide it
+              if (!m.homeCountry && (existing as any).homeCountry) {
+                (merged as any).homeCountry = (existing as any).homeCountry;
+              }
               byId.set(m.id, merged);
             }
           }
@@ -548,7 +560,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           });
           
           // Merge mapped server fields to normalize proxies, then layer preserved fields
-          return { ...commitment, ...mappedFromServer, ...preservedMediaData } as any;
+          const merged: any = { ...commitment, ...mappedFromServer, ...preservedMediaData };
+          // Preserve homeCountry from optimistic if server omitted it
+          if (!mappedFromServer.homeCountry && (commitment as any).homeCountry) {
+            merged.homeCountry = (commitment as any).homeCountry;
+          }
+          return merged as any;
         }
         return commitment;
       })

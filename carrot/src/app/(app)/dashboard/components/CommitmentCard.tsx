@@ -482,56 +482,61 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
         {/* Video */}
         {(cfUid || cfPlaybackUrlHls || videoUrl) && (
-          <div className="mt-3 relative">
-            {(() => {
-              const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
-              if (useHls) {
+          <div className="mt-3">
+            <div
+              className="rounded-xl p-2 relative"
+              style={hasGradient ? { background: gradientCss } : undefined}
+            >
+              {(() => {
+                const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
+                if (useHls) {
+                  return (
+                    <HlsFeedPlayer
+                      assetId={id}
+                      hlsMasterUrl={cfPlaybackUrlHls || undefined}
+                      posterUrl={thumbnailUrl || undefined}
+                      captionVttUrl={captionVttUrl || undefined}
+                      autoPlay
+                      muted
+                      className="rounded-xl overflow-hidden"
+                    />
+                  );
+                }
+                if (cfUid || cfPlaybackUrlHls) {
+                  return (
+                    <CFVideoPlayer
+                      uid={cfUid || undefined}
+                      playbackUrlHls={cfPlaybackUrlHls || undefined}
+                      poster={thumbnailUrl || undefined}
+                      autoPlay
+                      muted
+                      loop
+                      controls
+                      trackSrc={captionVttUrl || undefined}
+                    />
+                  );
+                }
                 return (
-                  <HlsFeedPlayer
-                    assetId={id}
-                    hlsMasterUrl={cfPlaybackUrlHls || undefined}
-                    posterUrl={thumbnailUrl || undefined}
-                    captionVttUrl={captionVttUrl || undefined}
-                    autoPlay
-                    muted
-                    className="rounded-xl overflow-hidden"
+                  <VideoPlayer
+                    videoUrl={videoUrl || ""}
+                    thumbnailUrl={thumbnailUrl || undefined}
+                    postId={id}
+                    initialTranscription={audioTranscription || undefined}
+                    transcriptionStatus={transcriptionStatus || undefined}
+                    uploadStatus={uploadStatus || null}
+                    uploadProgress={uploadProgress || 0}
                   />
                 );
-              }
-              if (cfUid || cfPlaybackUrlHls) {
-                return (
-                  <CFVideoPlayer
-                    uid={cfUid || undefined}
-                    playbackUrlHls={cfPlaybackUrlHls || undefined}
-                    poster={thumbnailUrl || undefined}
-                    autoPlay
-                    muted
-                    loop
-                    controls
-                    trackSrc={captionVttUrl || undefined}
-                  />
-                );
-              }
-              return (
-                <VideoPlayer
-                  videoUrl={videoUrl || ""}
-                  thumbnailUrl={thumbnailUrl || undefined}
-                  postId={id}
-                  initialTranscription={audioTranscription || undefined}
-                  transcriptionStatus={transcriptionStatus || undefined}
-                  uploadStatus={uploadStatus || null}
-                  uploadProgress={uploadProgress || 0}
-                />
-              );
-            })()}
-            {/* Click overlay: leave bottom ~48px for native controls */}
-            <button
-              type="button"
-              className="absolute inset-x-0 top-0 bottom-12 z-10 cursor-pointer bg-transparent"
-              aria-label="Open post"
-              title="Open post"
-              onClick={() => openPostModal(id)}
-            />
+              })()}
+              {/* Click overlay: leave bottom ~48px for native controls */}
+              <button
+                type="button"
+                className="absolute inset-x-0 top-0 bottom-12 z-10 cursor-pointer bg-transparent"
+                aria-label="Open post"
+                title="Open post"
+                onClick={() => openPostModal(id)}
+              />
+            </div>
           </div>
         )}
 

@@ -995,7 +995,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         comments: 0,
                         shares: 0,
                         imageUrls: mediaPreview && !mediaType?.startsWith('video/') && !mediaType?.startsWith('audio/') ? [mediaPreview] : [],
-                        videoUrl: mediaPreview && mediaType?.startsWith('video/') ? mediaPreview : null,
+                        // Prefer library video selection for immediate display
+                        videoUrl: libraryVideo?.url || (mediaPreview && mediaType?.startsWith('video/') ? mediaPreview : null),
                         gifUrl: null,
                         audioUrl: audioUrl || null,
                         emoji: '🎯',
@@ -1009,9 +1010,14 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         transcriptionStatus: (mediaType?.startsWith('video/') || audioUrl) ? 'pending' : null,
                         audioTranscription: null,
                         // Add upload status for video posts
-                        uploadStatus: mediaType?.startsWith('video/') ? 'uploading' : null,
+                        uploadStatus: (libraryVideo || mediaType?.startsWith('video/')) ? 'uploading' : null,
                         uploadProgress: 0
                       };
+                      // If using trimmed library video, mark processing
+                      if (libraryVideo && (libraryVideo.inMs || libraryVideo.outMs)) {
+                        (newPost as any).trimJobId = 'pending';
+                        (newPost as any).status = 'processing';
+                      }
                       
                       // Add to UI immediately for responsive feel
                       onPost(newPost);
@@ -1023,6 +1029,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     const mediaTypeToSave = mediaType;
                     const audioUrlToSave = audioUrl;
                     const colorSchemeToSave = currentColorScheme;
+                    const libraryVideoToSave = libraryVideo; // capture
                     
                     setContent('');
                     setSelectedFile(null);
@@ -1031,7 +1038,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     cancelUpload();
                     selectRandomColorScheme();
                     // Show different toast based on media type
-                    if (mediaTypeToSave?.startsWith('video/')) {
+                    if (libraryVideoToSave || mediaTypeToSave?.startsWith('video/')) {
                       showSuccessToast('Video post created! Uploading in background...');
                     } else {
                       showSuccessToast('Post shared successfully!');
@@ -1089,7 +1096,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       
                       // Ensure CF uid is available for video before creating the post
                       let cfUidToSend = cfUid;
-                      if (mediaTypeToSave?.startsWith('video/') && !cfUidToSend && cfUploadPromise) {
+                      if (!libraryVideoToSave && mediaTypeToSave?.startsWith('video/') && !cfUidToSend && cfUploadPromise) {
                         try {
                           cfUidToSend = await Promise.race<string>([
                             cfUploadPromise,
@@ -1108,8 +1115,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         gradientToColor: colorSchemes[colorSchemeToSave].gradientToColor,
                         gradientViaColor: colorSchemes[colorSchemeToSave].gradientViaColor,
                         imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
-                        // If using Cloudflare Stream, do not send videoUrl
-                        videoUrl: cfUidToSend ? null : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null),
+                        // Prefer library video selection; else if using Cloudflare Stream, do not send videoUrl
+                        videoUrl: libraryVideoToSave ? libraryVideoToSave.url : (cfUidToSend ? null : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null)),
                         gifUrl: null,
                         audioUrl: audioUrlToSave || null,
                         emoji: '🎯',
@@ -1179,9 +1186,21 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           console.log('🔍 responseData exists:', !!responseData);
                           console.log('🔍 responseData.id exists:', !!responseData.id);
                         }
-                        // Wire image posts into Gallery (server-side media library)
+                        // Wire media into Gallery (server-side media library)
                         try {
-                          if (finalMediaUrl && !(mediaTypeToSave?.startsWith('video/'))) {
+                          if (libraryVideoToSave?.url) {
+                            await fetch('/api/media', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                url: libraryVideoToSave.url,
+                                type: 'video',
+                                title: contentToSave?.slice(0, 80) || 'Video',
+                                thumbUrl: (responseData.thumbnailUrl || null),
+                                source: 'post-create'
+                              })
+                            }).catch(() => {});
+                          } else if (finalMediaUrl && !(mediaTypeToSave?.startsWith('video/'))) {
                             await fetch('/api/media', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -1196,6 +1215,24 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           }
                         } catch (e) {
                           console.warn('⚠️ Failed to insert media into gallery:', e);
+                        }
+
+                        // If using a trimmed library video, start trim job and track
+                        if (libraryVideoToSave && (libraryVideoToSave.inMs || libraryVideoToSave.outMs)) {
+                          try {
+                            const tRes = await fetch('/api/ingest', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url: libraryVideoToSave.url, inMs: libraryVideoToSave.inMs, outMs: libraryVideoToSave.outMs, aspect: libraryVideoToSave.aspect })
+                            });
+                            if (tRes.ok) {
+                              const tj = await tRes.json().catch(() => ({} as any));
+                              const jobId = tj?.job?.id || tj?.job_id || null;
+                              if (jobId && onPostUpdate) {
+                                onPostUpdate(tempId, { id: postData.id, trimJobId: jobId, status: 'processing' });
+                              }
+                            }
+                          } catch {}
                         }
                         
                         // Start transcription for video/audio posts
@@ -1244,6 +1281,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         showErrorToast('Failed to save post. Please try again.');
                       }
                     })(); // End of background async function
+                    // Reset library video selection after posting
+                    setLibraryVideo(null);
                     
                   } catch (error) {
                     console.error('Post creation failed:', error);
