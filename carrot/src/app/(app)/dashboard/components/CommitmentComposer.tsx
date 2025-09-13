@@ -48,7 +48,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
   // GIF picker state
   const [showGifPicker, setShowGifPicker] = React.useState<boolean>(false);
   const [selectedGifUrl, setSelectedGifUrl] = React.useState<string | null>(null);
-  
+  // Media Library selected video (optional), including trim parameters
+  const [libraryVideo, setLibraryVideo] = React.useState<{
+    id: string; url: string; inMs?: number; outMs?: number; aspect?: string
+  } | null>(null);
+
   // Emoji picker state
   const [showEmojiPicker, setShowEmojiPicker] = React.useState<boolean>(false);
   // Color picker modal state
@@ -110,19 +114,27 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
   // Handle insert from Media Library
   const handleInsertFromLibrary = (m: any) => {
     try {
-      // Prefer a direct URL; fallback to posterUrl
-      const url: string | null = m?.url || m?.posterUrl || null;
-      if (!url) {
-        setShowMediaLibrary(false);
-        return;
+      if (m?.kind === 'video') {
+        const url: string | null = m?.url || null;
+        if (!url) { setShowMediaLibrary(false); return; }
+        setLibraryVideo({ id: m.id, url, inMs: m.inMs, outMs: m.outMs, aspect: m.aspect });
+        // Clear other attachments
+        setSelectedGifUrl(null);
+        setMediaFile(null);
+        setSelectedFile(null);
+        setMediaPreview(null);
+        setMediaType('video/library');
+      } else {
+        // Image/GIF path (existing behavior)
+        const url: string | null = m?.url || m?.posterUrl || null;
+        if (!url) { setShowMediaLibrary(false); return; }
+        setSelectedGifUrl(url);
+        // Clear any existing file-based selection
+        setMediaFile(null);
+        setSelectedFile(null);
+        setMediaPreview(null);
+        setMediaType(null);
       }
-      // For now, treat inserted media as an image/GIF attachment in the composer
-      setSelectedGifUrl(url);
-      // Clear any existing file-based selection
-      setMediaFile(null);
-      setSelectedFile(null);
-      setMediaPreview(null);
-      setMediaType(null);
     } finally {
       setShowMediaLibrary(false);
     }
@@ -970,12 +982,15 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           name: user.name || user.email?.split('@')[0] || 'You',
                           username: (user as any).username ? `@${(user as any).username}` : '@daniel',
                           avatar: user.image || null,
-                          flag: '🇺🇸'
+                          // Use country code for immediate FlagChip rendering
+                          flag: 'US'
                         },
                         location: {
                           city: 'San Francisco',
                           state: 'CA'
                         },
+                        // Provide homeCountry to render flag chip without refresh
+                        homeCountry: 'US',
                         likes: 0,
                         comments: 0,
                         shares: 0,
@@ -1163,6 +1178,24 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           console.log('🔍 responseData.post exists:', !!responseData.post);
                           console.log('🔍 responseData exists:', !!responseData);
                           console.log('🔍 responseData.id exists:', !!responseData.id);
+                        }
+                        // Wire image posts into Gallery (server-side media library)
+                        try {
+                          if (finalMediaUrl && !(mediaTypeToSave?.startsWith('video/'))) {
+                            await fetch('/api/media', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                url: finalMediaUrl,
+                                type: 'image',
+                                title: contentToSave?.slice(0, 80) || 'Image',
+                                thumbUrl: finalMediaUrl,
+                                source: 'post-create'
+                              })
+                            }).catch(() => {});
+                          }
+                        } catch (e) {
+                          console.warn('⚠️ Failed to insert media into gallery:', e);
                         }
                         
                         // Start transcription for video/audio posts
@@ -1563,8 +1596,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                     }
                   }
                   
-                  // Handle video upload
-                  if (mediaFile && mediaType?.startsWith('video/')) {
+                  // Handle video upload (skip if using library video)
+                  if (!libraryVideo && mediaFile && mediaType?.startsWith('video/')) {
                     try {
                       // With Cloudflare Stream, allow posting once we have a cfUid (upload may still be processing)
                       if (cfUid) {
@@ -1597,9 +1630,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         name: user?.name || user?.email?.split('@')[0] || 'You',
                         username: user?.name || 'Anonymous',
                         avatar: user?.image || null,
-                        flag: user?.name ? '🇺🇸' : undefined,
+                        // Use country code to match FlagChip expectations
+                        flag: 'US',
                         id: (user as any)?.id || undefined
                       },
+                      homeCountry: 'US',
                       location: {
                         zip: '00000',
                         city: 'Your City'
@@ -1617,8 +1652,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       audioUrl: audioUrl || null, // FIXED: Use actual audio URL (blob URL for instant display)
                       audioTranscription: audioTranscription,
                       transcriptionStatus: audioBlob ? 'pending' : null,
-                      // Video support with instant thumbnail display
-                      videoUrl: uploadedVideoUrl || null,
+                      // Video support with instant display (library video preferred)
+                      videoUrl: libraryVideo?.url || uploadedVideoUrl || null,
                       videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
                       videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
                       emoji: '🎯',
@@ -1628,6 +1663,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
                       gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor
                     };
+                    // Attach trim job id placeholder if we will start one
+                    if (libraryVideo && (libraryVideo.inMs || libraryVideo.outMs)) {
+                      (newPost as any).trimJobId = 'pending';
+                      (newPost as any).status = 'processing';
+                    }
                     
                     // Add to UI immediately for responsive feel
                     onPost(newPost);
@@ -1660,8 +1700,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       audioUrl: null, // Will be updated when upload completes
                       audioTranscription: audioTranscription,
                       transcriptionStatus: audioBlob ? 'pending' : null,
-                      // Video support: if using Cloudflare Stream, do not send videoUrl
-                      videoUrl: cfUidToSend2 ? null : (uploadedVideoUrl || null),
+                      // Video support: library video takes precedence, else CF, else direct upload
+                      videoUrl: libraryVideo ? libraryVideo.url : (cfUidToSend2 ? null : (uploadedVideoUrl || null)),
                       videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
                       videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
                       emoji: '🎯',
@@ -1692,58 +1732,44 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       try { showErrorToast('Failed to save. Please retry.'); } catch {}
                       return;
                     } else {
-                      const savedPost = await response.json();
-                      console.log('Post saved to database successfully');
-                      console.log('Real post ID:', savedPost.id);
-                      
-                      // Handle background audio upload completion
-                      if (audioUploadPromise && savedPost.id) {
-                        console.log('🎵 Waiting for background audio upload to complete...');
-                        audioUploadPromise.then(async (audioUploadResponse) => {
-                          console.log('🎵 Firebase upload response received:', { 
-                            response: audioUploadResponse, 
-                            isArray: Array.isArray(audioUploadResponse),
-                            length: audioUploadResponse?.length,
-                            firstItem: audioUploadResponse?.[0]
+                      const responseData = await response.json().catch(() => ({} as any));
+                      const savedPost = responseData.post || responseData;
+                      console.log('✅ Post saved (secondary flow):', savedPost?.id || '(unknown id)');
+
+                      // If using a trimmed library video, kick off a trim job now
+                      if (libraryVideo && (libraryVideo.inMs || libraryVideo.outMs)) {
+                        try {
+                          const tRes = await fetch('/api/ingest', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: libraryVideo.url, inMs: libraryVideo.inMs, outMs: libraryVideo.outMs, aspect: libraryVideo.aspect })
                           });
-                          
-                          if (audioUploadResponse && audioUploadResponse.length > 0) {
-                            const finalAudioUrl = audioUploadResponse[0];
-                            console.log('🎵 Background audio upload completed:', finalAudioUrl);
-                            
-                            // Update post with final audio URL
-                            try {
-                              const updateResponse = await fetch(`/api/posts/${savedPost.id}`, {
-                                method: 'PATCH',
-                                credentials: 'include',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                  audioUrl: finalAudioUrl,
-                                  transcriptionStatus: 'processing' 
-                                })
-                              });
-                              
-                              if (updateResponse.ok) {
-                                console.log('🎵 Post updated with final audio URL');
-                                setCurrentPostId(savedPost.id); // Enable transcription polling
-                                
-                                // Update the UI with the new audio URL (use real post ID since temp ID was already replaced)
-                                if (onPostUpdate) {
-                                  console.log('🎵 Updating UI with Firebase Storage URL:', finalAudioUrl);
-                                  onPostUpdate(savedPost.id, { audioUrl: finalAudioUrl });
-                                }
+                          if (tRes.ok) {
+                            const tj = await tRes.json().catch(() => ({} as any));
+                            const jobId = tj?.job?.id || tj?.job_id || null;
+                            if (jobId) {
+                              // Update the UI post to track this job
+                              if (onPostUpdate && tempPostId) {
+                                onPostUpdate(tempPostId, { id: savedPost?.id || tempPostId, trimJobId: jobId, status: 'processing' });
                               }
-                            } catch (updateError) {
-                              console.error('Failed to update post with audio URL:', updateError);
                             }
                           }
-                        }).catch((uploadError) => {
-                          console.error('Background audio upload failed:', uploadError);
-                        });
+                        } catch {}
                       }
 
-                      // Update dashboard feed post with real ID
-                      if (onPostUpdate && tempPostId && savedPost.id) {
+                      // Add video to Gallery if we have a direct URL
+                      try {
+                        const vurl = libraryVideo?.url || uploadedVideoUrl;
+                        if (vurl) {
+                          await fetch('/api/media', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: vurl, type: 'video', title: content?.slice(0, 80) || 'Video', thumbUrl: postBody2.videoThumbnail || undefined, source: 'post-create' })
+                          }).catch(() => {});
+                        }
+                      } catch {}
+
+                      // Update dashboard tile with real ID
+                      if (onPostUpdate && tempPostId && savedPost?.id) {
                         console.log('🔄 Updating dashboard post:', tempPostId, '→', savedPost.id);
                         onPostUpdate(tempPostId, savedPost);
                       }

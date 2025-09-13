@@ -165,12 +165,19 @@ export default function Sidebar() {
               <Link 
                 key={index}
                 href={item.href} 
-                className="nav-item group flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition-all duration-200 text-white/90 hover:text-white font-medium text-[15px] max-lg:justify-center cursor-pointer transform hover:scale-105" 
-                title={item.label}
+                className="nav-item group relative flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition-all duration-200 text-white/90 hover:text-white font-medium text-[15px] max-lg:justify-center cursor-pointer transform hover:scale-105" 
                 onClick={item.href === '/login' ? handleLogout : undefined}
+                aria-label={item.label}
               >
                 <span className="icon flex-shrink-0">{item.icon}</span>
                 <span className="label max-lg:hidden">{item.label}</span>
+                {/* Custom tooltip for collapsed mode (when label is hidden) */}
+                <span
+                  className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-black/90 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg max-lg:block hidden"
+                  role="tooltip"
+                >
+                  {item.label}
+                </span>
               </Link>
             ))}
           </div>
