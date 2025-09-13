@@ -2,6 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
+// Resolve public env at build time to avoid using `process` at runtime on the client
+const PUBLIC_BUCKET =
+  process.env.NEXT_PUBLIC_FIREBASE_BUCKET ||
+  process.env.FIREBASE_STORAGE_BUCKET ||
+  process.env.FIREBASE_BUCKET ||
+  '';
+
 interface VideoPlayerProps {
   videoUrl: string;
   thumbnailUrl?: string | null;
@@ -57,11 +64,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS) with path-mode to bypass expired signatures
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
-    const BUCKET =
-      (process as any).env?.NEXT_PUBLIC_FIREBASE_BUCKET ||
-      (process as any).env?.FIREBASE_STORAGE_BUCKET ||
-      (process as any).env?.FIREBASE_BUCKET ||
-      '';
     const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
       try {
         const url = new URL(u);
@@ -92,7 +94,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     const looksLikeStorage = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app');
     if (looksLikeStorage) {
       const { bucket, path } = tryExtractBucketAndPath(videoUrl);
-      const finalBucket = bucket || BUCKET;
+      const finalBucket = bucket || PUBLIC_BUCKET;
       if (path && finalBucket) {
         return `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
       }
