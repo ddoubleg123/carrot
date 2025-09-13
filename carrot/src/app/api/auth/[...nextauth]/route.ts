@@ -1,11 +1,9 @@
-import NextAuth from "next-auth";
-import { authOptions } from "../../../../auth";
+import { handlers } from "../../../../auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Export typed GET/POST handlers expected by Next.js 15
-const { handlers } = NextAuth(authOptions as any);
 export const GET = handlers.GET;
 export const POST = handlers.POST;
 

@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     // If unauthenticated, serve a safe public fallback from recent visible items
     const unauthenticated = !session?.user?.id;
     const where: any = unauthenticated ? {} : { userId: session.user.id };
-    if (!includeHidden) where.hidden = { in: [false, null] };
+    if (!includeHidden) where.OR = [{ hidden: false }, { hidden: null }];
     if (q) {
       where.OR = [
         { title: { contains: q, mode: 'insensitive' } },
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
         { title: { contains: q, mode: 'insensitive' } },
         { source: { contains: q, mode: 'insensitive' } },
         { url: { contains: q, mode: 'insensitive' } },
-      ] } : {}), hidden: { in: [false, null] } };
+      ] } : {}), OR: [{ hidden: false }, { hidden: null }] };
       rows = await prisma.mediaAsset.findMany({
         where: publicWhere,
         orderBy,

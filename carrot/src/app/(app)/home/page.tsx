@@ -27,12 +27,14 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     const cookieHeader = h.get('cookie') || '';
     // Optional: confirm session (not strictly required here)
     try {
-      const sres = await fetch(`/api/auth/session`, { headers: { Cookie: cookieHeader }, cache: 'no-store' });
+      const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+      const sres = await fetch(`${base}/api/auth/session`, { headers: { Cookie: cookieHeader }, cache: 'no-store' });
       if (!sres.ok) {
         try { console.warn('[home] session check failed', sres.status); } catch {}
       }
     } catch {}
-    const response = await fetch(`/api/posts`, {
+    const base2 = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+    const response = await fetch(`${base2}/api/posts`, {
       headers: { 'Cookie': cookieHeader },
       cache: 'no-store',
     });
@@ -143,7 +145,8 @@ export default async function HomePage() {
   try {
     const h2 = await nextHeaders();
     const cookieHeader2 = h2.get('cookie') || '';
-    const resp = await fetch(`/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
+    const base3 = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+    const resp = await fetch(`${base3}/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
     if (resp.ok) {
       const j = await resp.json();
       serverPrefs = {

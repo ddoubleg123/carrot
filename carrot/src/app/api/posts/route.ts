@@ -115,16 +115,30 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     // If an externalUrl is provided and no explicit media URLs exist, default it to videoUrl
     const effectiveVideoUrl = videoUrl || (externalUrl && !audioUrl ? externalUrl : null);
     const effectiveAudioUrl = audioUrl || null;
+    // Coerce gradients to safe strings so Prisma includes them in INSERT
+    const gDir = typeof gradientDirection === 'string' && gradientDirection ? gradientDirection : 'to-br';
+    const gFrom = typeof gradientFromColor === 'string' && gradientFromColor ? gradientFromColor : null;
+    const gVia = typeof gradientViaColor === 'string' && gradientViaColor ? gradientViaColor : null;
+    const gTo = typeof gradientToColor === 'string' && gradientToColor ? gradientToColor : null;
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.debug('POST /api/posts media+gradient snapshot:', {
+          effectiveVideoUrl: !!effectiveVideoUrl,
+          effectiveAudioUrl: !!effectiveAudioUrl,
+          gDir, gFrom, gVia, gTo,
+        });
+      } catch {}
+    }
 
     // Create post first
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
         content,
-        gradientDirection,
-        gradientFromColor,
-        gradientViaColor,
-        gradientToColor,
+        gradientDirection: gDir,
+        gradientFromColor: gFrom,
+        gradientViaColor: gVia,
+        gradientToColor: gTo,
         imageUrls: Array.isArray(imageUrls)
           ? JSON.stringify(imageUrls)
           : typeof imageUrls === 'string'
