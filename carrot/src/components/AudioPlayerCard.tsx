@@ -65,7 +65,7 @@ export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingle
   }, [audioUrl]);
 
   return (
-    <div className="relative w-full max-w-full sm:max-w-[560px] rounded-2xl overflow-hidden border border-white/40 shadow-md">
+    <div className="relative w-full max-w-full rounded-2xl overflow-hidden border border-white/40 shadow-md">
       {/* Poster background */}
       <div className="relative h-44 sm:h-56" style={{ background: g.css }}>
         {/* Single-canvas visualizer: gradient + field + rings + avatar */}

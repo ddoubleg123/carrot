@@ -5,52 +5,103 @@ import { auth } from '../../../auth';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET /api/media?query=&cursor=&limit=
+// GET /api/media
+// Supports both legacy and new clients.
+// Query params (new client): q, includeHidden=1, type, sort=newest|oldest|az|duration, limit, t
+// Legacy client: query, cursor, limit, format=wrapped to receive { items, nextCursor }
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const { searchParams } = url;
   try {
     const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const { searchParams } = new URL(req.url);
-    const q = (searchParams.get('query') || '').trim();
-    const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '24', 10) || 24));
-    const cursor = searchParams.get('cursor') || undefined;
+    if (!session?.user?.id) {
+      // Be forgiving for gallery: return empty list so UI doesn't hard-fail
+      return NextResponse.json([]);
+    }
 
-    const where: any = { userId: session.user.id, hidden: { in: [false, null] } };
-    if (q) where.OR = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { source: { contains: q, mode: 'insensitive' } },
-    ];
+    // Param normalization
+    const q = (searchParams.get('q') || searchParams.get('query') || '').trim();
+    const type = (searchParams.get('type') || 'any').toLowerCase();
+    const includeHidden = searchParams.get('includeHidden') === '1';
+    const sort = (searchParams.get('sort') || 'newest').toLowerCase();
+    const limit = Math.max(1, Math.min(60, parseInt(searchParams.get('limit') || '24', 10) || 24));
+    const cursor = searchParams.get('cursor') || undefined;
+    const wantWrapped = searchParams.get('format') === 'wrapped';
+
+    const where: any = { userId: session.user.id };
+    if (!includeHidden) where.hidden = { in: [false, null] };
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { source: { contains: q, mode: 'insensitive' } },
+        { url: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    if (type && type !== 'any') {
+      where.type = { contains: type, mode: 'insensitive' } as any;
+    }
+
+    const orderBy: any =
+      sort === 'oldest' ? { createdAt: 'asc' } :
+      sort === 'az' ? { title: 'asc' } :
+      sort === 'duration' ? { durationSec: 'desc' } :
+      { createdAt: 'desc' };
 
     const rows = await prisma.mediaAsset.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       take: limit,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      include: {
-        assets: false as any,
-        labels: {
-          include: { label: true },
-        },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        url: true,
+        storagePath: true,
+        thumbUrl: true,
+        thumbPath: true,
+        title: true,
+        hidden: true,
+        source: true,
+        durationSec: true,
+        width: true,
+        height: true,
+        createdAt: true,
+        updatedAt: true,
+        labels: { select: { label: { select: { name: true } } } },
       },
     } as any);
 
     const items = rows.map((r: any) => ({
       id: r.id,
-      kind: (r.type || '').toLowerCase().includes('video') ? 'video' : 'image',
-      title: r.title || '',
-      duration: typeof r.durationSec === 'number' ? r.durationSec : undefined,
-      thumbPath: r.thumbPath || r.storagePath || '',
-      posterUrl: r.thumbUrl || null,
+      userId: r.userId,
+      type: (r.type || '').toLowerCase(),
       url: r.url || null,
-      captionVttUrl: r.captionVttUrl || r.transcriptVttUrl || null,
-      storagePath: r.storagePath || '',
-      tags: (r.labels || []).map((x: any) => x?.label?.name).filter(Boolean),
+      storagePath: r.storagePath || null,
+      thumbUrl: r.thumbUrl || null,
+      thumbPath: r.thumbPath || null,
+      title: r.title || null,
       hidden: !!r.hidden,
+      source: r.source || null,
+      durationSec: typeof r.durationSec === 'number' ? r.durationSec : null,
+      width: typeof r.width === 'number' ? r.width : null,
+      height: typeof r.height === 'number' ? r.height : null,
+      inUseCount: 0,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      labels: Array.isArray(r.labels) ? r.labels.map((x: any) => x?.label?.name).filter(Boolean) : [],
     }));
-    const nextCursor = rows.length === limit ? rows[rows.length - 1]?.id : undefined;
-    return NextResponse.json({ items, nextCursor });
+
+    if (wantWrapped) {
+      const nextCursor = rows.length === limit ? rows[rows.length - 1]?.id : undefined;
+      return NextResponse.json({ items, nextCursor });
+    }
+    // Default shape for new client: plain array
+    return NextResponse.json(items);
   } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    try { console.error('[api/media] GET failed:', e); } catch {}
+    // Be defensive: do not break UI with 500s
+    return NextResponse.json([]);
   }
 }
 

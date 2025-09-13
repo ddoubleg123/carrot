@@ -302,7 +302,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <span className="font-semibold text-gray-900 truncate">
                   {author?.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
                 </span>
-                {props.homeCountry ? (<FlagChip countryCode={props.homeCountry} />) : null}
+                {(() => {
+                  const cc = props.homeCountry || (author as any)?.flag || null;
+                  return cc ? (<FlagChip countryCode={cc} />) : null;
+                })()}
                 <button
                   type="button"
                   className="text-xs text-gray-500 underline-offset-2 hover:underline"
@@ -407,6 +410,24 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   {content}
                 </div>
               ) : null}
+              {/* Composer parity: place actions over the gradient for non-media posts */}
+              <PostActionBar
+                postId={id}
+                stats={stats}
+                canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
+                permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
+                onComment={() => openPostModal(id, 'comments')}
+                onLike={(liked) => {
+                  try {
+                    console.log('[ActionBar] like toggled', { id, liked });
+                  } catch {}
+                }}
+                onSaveToggle={(saved) => { try { console.log('[ActionBar] save toggled', { id, saved }); } catch {} }}
+                onShareInApp={() => setShowShare(true)}
+                onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
+                onTranscribe={() => { try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {} }}
+                onTranslate={() => { try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {} }}
+              />
             </div>
           </div>
         ) : (
@@ -518,31 +539,34 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           </div>
         )}
 
-        {/* Actions */}
-        <PostActionBar
-          postId={id}
-          stats={stats}
-          canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
-          permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
-          onComment={() => openPostModal(id, 'comments')}
-          onLike={(liked) => {
-            try {
-              // Optimistic UI already handled in child; optionally call API here
-              console.log('[ActionBar] like toggled', { id, liked });
-            } catch {}
-          }}
-          onSaveToggle={(saved) => {
-            try { console.log('[ActionBar] save toggled', { id, saved }); } catch {}
-          }}
-          onShareInApp={() => setShowShare(true)}
-          onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
-          onTranscribe={() => {
-            try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {}
-          }}
-          onTranslate={() => {
-            try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {}
-          }}
-        />
+        {/* Actions (skip here if non-media gradient already rendered them inside) */}
+        {!(hasGradient && !gifUrl && (!imageUrls || imageUrls.length === 0) && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl) && (
+          <PostActionBar
+            postId={id}
+            stats={stats}
+            canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
+            permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
+            onComment={() => openPostModal(id, 'comments')}
+            onLike={(liked) => {
+              try {
+                // Optimistic UI already handled in child; optionally call API here
+                console.log('[ActionBar] like toggled', { id, liked });
+              } catch {}
+            }}
+            onSaveToggle={(saved) => {
+              try { console.log('[ActionBar] save toggled', { id, saved }); } catch {}
+            }}
+            onShareInApp={() => setShowShare(true)}
+            onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
+            onTranscribe={() => {
+              try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {}
+            }}
+            onTranslate={() => {
+              try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {}
+            }}
+          />
+        )}
+
       </div>
 
       {/* Edit Modal */}
