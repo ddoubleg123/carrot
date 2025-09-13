@@ -147,6 +147,49 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     return mapped;
   };
 
+  // Basic handlers to satisfy props and enable minimal UX
+  const handleCreateCommitment = (tempPost: any) => {
+    try {
+      // If the composer passes a mapped card, prepend it optimistically
+      if (!tempPost || !tempPost.id) return;
+      setCommitments(prev => {
+        // Avoid duplicate insert if already present
+        if (prev.find(p => p.id === tempPost.id)) return prev;
+        return [tempPost as any, ...prev];
+      });
+    } catch {}
+  };
+
+  const handlePost = handleCreateCommitment;
+
+  const handleVote = (id: string, vote: VoteType) => {
+    try {
+      setCommitments(prev => prev.map(p => p.id === id ? ({
+        ...p,
+        userVote: vote,
+        stats: {
+          ...p.stats,
+          likes: typeof p.stats?.likes === 'number' ? Math.max(0, p.stats.likes + (vote ? 1 : -1)) : 0,
+        }
+      }) : p));
+    } catch {}
+  };
+
+  const handleDeletePost = async (id: string) => {
+    try {
+      setCommitments(prev => prev.filter(p => p.id !== id));
+      // Fire-and-forget server delete
+      fetch(`/api/posts/${id}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+  };
+
+  const handleBlockPost = (id: string) => {
+    try {
+      // Local hide for now; future: add user blocks/categories
+      setCommitments(prev => prev.filter(p => p.id !== id));
+    } catch {}
+  };
+
   // Keep a ref to the latest commitments for polling
   const commitmentsRef = useRef(commitments);
   useEffect(() => { commitmentsRef.current = commitments; }, [commitments]);
