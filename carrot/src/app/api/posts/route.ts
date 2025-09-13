@@ -112,8 +112,71 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     console.log(`🔍 POST /api/posts - Creating post with audioUrl: ${audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - User ID: ${session.user.id}`);
     
+    // Normalize Firebase/Storage signed URLs to durable alt=media path form to avoid ExpiredToken later
+    const normalizeVideoUrl = (u?: string | null): string | null => {
+      if (!u || typeof u !== 'string') return null;
+      try {
+        const url = new URL(u);
+        const host = url.hostname;
+        const sp = url.searchParams;
+        const isStorage = host.includes('firebasestorage.googleapis.com') || host.includes('storage.googleapis.com') || host.endsWith('.firebasestorage.app');
+        // If it's not a Google storage URL, leave as-is
+        if (!isStorage) return u;
+        // Try to extract bucket and path
+        let bucket: string | undefined;
+        let path: string | undefined;
+        // firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
+        const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+        if (host === 'firebasestorage.googleapis.com' && m1) {
+          bucket = decodeURIComponent(m1[1]);
+          path = decodeURIComponent(m1[2]);
+        }
+        // storage.googleapis.com/<bucket>/<path>
+        if (!bucket || !path) {
+          const m2 = url.pathname.match(/^\/([^/]+)\/(.+)$/);
+          if (host === 'storage.googleapis.com' && m2) {
+            bucket = decodeURIComponent(m2[1]);
+            path = decodeURIComponent(m2[2]);
+          }
+        }
+        // <sub>.firebasestorage.app/o/<ENCODED_PATH>
+        if (!bucket || !path) {
+          const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
+          if (host.endsWith('.firebasestorage.app') && m4) {
+            path = decodeURIComponent(m4[1]);
+            // Infer bucket from GoogleAccessId if present
+            const ga = sp.get('GoogleAccessId') || '';
+            const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
+            if (projectMatch) bucket = `${projectMatch[1]}.appspot.com`;
+          }
+        }
+        // Generic: any /o/<ENCODED_PATH> segment, infer bucket
+        if (!bucket || !path) {
+          const m3 = url.pathname.match(/\/o\/([^?]+)$/);
+          if (m3) {
+            path = decodeURIComponent(m3[1]);
+            const ga = sp.get('GoogleAccessId') || '';
+            const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
+            if (projectMatch) bucket = `${projectMatch[1]}.appspot.com`;
+          }
+        }
+        if (bucket && path) {
+          const encPath = encodeURIComponent(path);
+          const durable = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`;
+          return durable;
+        }
+        // As a fallback, ensure alt=media for firebase endpoint
+        if (host === 'firebasestorage.googleapis.com' && !sp.has('alt')) {
+          url.searchParams.set('alt', 'media');
+          return url.toString();
+        }
+        return u;
+      } catch {
+        return u || null;
+      }
+    };
     // If an externalUrl is provided and no explicit media URLs exist, default it to videoUrl
-    const effectiveVideoUrl = videoUrl || (externalUrl && !audioUrl ? externalUrl : null);
+    const effectiveVideoUrl = normalizeVideoUrl(videoUrl || (externalUrl && !audioUrl ? externalUrl : null));
     const effectiveAudioUrl = audioUrl || null;
     // Coerce gradients to safe strings so Prisma includes them in INSERT
     const gDir = typeof gradientDirection === 'string' && gradientDirection ? gradientDirection : 'to-br';

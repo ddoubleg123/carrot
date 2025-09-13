@@ -1117,6 +1117,10 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
                         // Prefer library video selection; else if using Cloudflare Stream, do not send videoUrl
                         videoUrl: libraryVideoToSave ? libraryVideoToSave.url : (cfUidToSend ? null : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null)),
+                        // Include optional trim parameters from library video selection
+                        trimInMs: libraryVideoToSave?.inMs ?? null,
+                        trimOutMs: libraryVideoToSave?.outMs ?? null,
+                        trimAspect: libraryVideoToSave?.aspect ?? null,
                         gifUrl: null,
                         audioUrl: audioUrlToSave || null,
                         emoji: '🎯',
@@ -1741,6 +1745,10 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       transcriptionStatus: audioBlob ? 'pending' : null,
                       // Video support: library video takes precedence, else CF, else direct upload
                       videoUrl: libraryVideo ? libraryVideo.url : (cfUidToSend2 ? null : (uploadedVideoUrl || null)),
+                      // Include optional trim parameters from library video selection
+                      trimInMs: libraryVideo?.inMs ?? null,
+                      trimOutMs: libraryVideo?.outMs ?? null,
+                      trimAspect: libraryVideo?.aspect ?? null,
                       videoThumbnail: videoThumbnails.length > 0 ? videoThumbnails[currentThumbnailIndex] : null,
                       videoTranscriptionStatus: uploadedVideoUrl ? 'pending' : null,
                       emoji: '🎯',
