@@ -79,7 +79,11 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         // Generic: any \/o\/<ENCODED_PATH> segment (bucket unknown)
         const m3 = url.pathname.match(/\/o\/([^?]+)$/);
         if (m3) {
-          return { bucket: undefined, path: decodeURIComponent(m3[1]) };
+          // Try to infer bucket from GoogleAccessId (project-id)
+          const ga = url.searchParams.get('GoogleAccessId') || '';
+          const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
+          const inferredBucket = projectMatch ? `${projectMatch[1]}.appspot.com` : undefined;
+          return { bucket: inferredBucket, path: decodeURIComponent(m3[1]) };
         }
       } catch {}
       return {};

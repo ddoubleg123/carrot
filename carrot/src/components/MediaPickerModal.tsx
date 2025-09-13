@@ -310,7 +310,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
                     Refresh
                   </button>
                 </div>
-                {(!loading && results.length === 0) ? (
+                {(!loading && galleryAssets.length === 0) ? (
                   <div className="rounded-xl border border-dashed p-8 text-gray-600 text-center space-y-3">
                     <div className="text-sm">Your gallery is empty</div>
                     <div className="text-xs">We are syncing your recent ingests automatically…</div>
