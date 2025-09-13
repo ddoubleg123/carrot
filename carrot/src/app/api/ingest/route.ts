@@ -5,6 +5,10 @@ const INGEST_WORKER_SECRET = process.env.INGEST_WORKER_SECRET || 'dev_ingest_sec
 
 interface IngestRequest {
   url: string;
+  inMs?: number | null;
+  outMs?: number | null;
+  aspect?: string | null;
+  postId?: string | null;
 }
 
 interface RailwayIngestResponse {
@@ -46,7 +50,7 @@ export const runtime = 'nodejs';
 export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
     const body: IngestRequest = await request.json();
-    const { url } = body;
+    const { url, inMs, outMs, aspect, postId } = body;
 
     if (!url) {
       return NextResponse.json(
@@ -65,14 +69,14 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       );
     }
 
-    // Start ingestion job on Railway service
+    // Start ingestion job on worker service (forward trim params if provided)
     const response = await fetch(`${RAILWAY_SERVICE_URL}/ingest`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-worker-secret': INGEST_WORKER_SECRET,
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, inMs, outMs, aspect, postId }),
     });
 
     if (!response.ok) {
@@ -100,6 +104,10 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         progress: 0,
         url,
         message: railwayResponse.message,
+        inMs: typeof inMs === 'number' ? inMs : null,
+        outMs: typeof outMs === 'number' ? outMs : null,
+        aspect: aspect || null,
+        postId: postId || null,
       }
     });
 

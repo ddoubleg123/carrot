@@ -320,10 +320,38 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       }
     }
 
+    // If trim parameters are provided, kick off ingest/trim job via internal API
+    let trimJobId: string | null = null;
+    try {
+      const { trimInMs, trimOutMs, trimAspect } = body || {};
+      if ((typeof trimInMs === 'number' || typeof trimOutMs === 'number') && effectiveVideoUrl) {
+        const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+        const resp = await fetch(`${base}/api/ingest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: effectiveVideoUrl, inMs: trimInMs ?? null, outMs: trimOutMs ?? null, aspect: trimAspect ?? null, postId: post.id }),
+        });
+        if (resp.ok) {
+          const data = await resp.json().catch(() => null);
+          trimJobId = data?.job?.id || null;
+          console.log('[POST /api/posts] ingest trim job started', { trimJobId });
+        } else {
+          const et = await resp.text().catch(() => '');
+          console.warn('[POST /api/posts] failed to start ingest trim job', resp.status, et?.slice(0,200));
+        }
+      }
+    } catch (e) {
+      console.warn('[POST /api/posts] exception while starting trim job', e);
+    }
+
     // Return projected DTO (parse imageUrls if needed)
     const row: any = { ...post };
     if (typeof row.imageUrls === 'string') { try { row.imageUrls = JSON.parse(row.imageUrls); } catch {} }
-    const dto = projectPost(row);
+    const dto: any = projectPost(row);
+    if (trimJobId) {
+      dto.status = 'processing';
+      dto.trimJobId = trimJobId;
+    }
     return NextResponse.json(dto, { status: 201, headers: idemKey ? { 'Idempotency-Key': idemKey } : undefined });
   } catch (error) {
     console.error('💥 Detailed error creating post:', error);
