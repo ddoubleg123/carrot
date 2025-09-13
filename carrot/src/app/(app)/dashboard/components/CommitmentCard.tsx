@@ -489,6 +489,21 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             >
               {(() => {
                 const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
+                // While trimming is processing, prefer the original direct videoUrl for optimistic playback
+                const processing = (props as any)?.status === 'processing' || props.uploadStatus === 'processing';
+                if (processing && videoUrl) {
+                  return (
+                    <VideoPlayer
+                      videoUrl={videoUrl || ""}
+                      thumbnailUrl={thumbnailUrl || undefined}
+                      postId={id}
+                      initialTranscription={audioTranscription || undefined}
+                      transcriptionStatus={transcriptionStatus || undefined}
+                      uploadStatus={uploadStatus || null}
+                      uploadProgress={uploadProgress || 0}
+                    />
+                  );
+                }
                 if (useHls) {
                   return (
                     <HlsFeedPlayer

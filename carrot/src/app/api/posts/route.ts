@@ -239,6 +239,18 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     console.log(`✅ POST /api/posts - Post created successfully with ID: ${post.id}`);
     console.log(`🔍 POST /api/posts - Post audioUrl: ${post.audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
+    try {
+      console.log('[POST /api/posts] persisted media+gradients', {
+        postId: post.id,
+        videoUrl: !!post.videoUrl,
+        audioUrl: !!post.audioUrl,
+        thumbnailUrl: !!post.thumbnailUrl,
+        gDir: post.gradientDirection,
+        gFrom: post.gradientFromColor,
+        gVia: post.gradientViaColor,
+        gTo: post.gradientToColor,
+      });
+    } catch {}
 
     // Ensure gallery/media entry exists for the video (best-effort)
     if (effectiveVideoUrl) {
@@ -403,9 +415,12 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       }
       return projectPost(r);
     });
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug('GET /api/posts fetched posts:', shaped.length);
-    }
+    try {
+      const total = shaped.length;
+      const missingGrad = shaped.filter((x: any) => !x.gradientFromColor || !x.gradientToColor).length;
+      const signedUrls = shaped.filter((x: any) => typeof x.videoUrl === 'string' && x.videoUrl.includes('GoogleAccessId=')).length;
+      console.log('[GET /api/posts] summary', { total, missingGrad, signedUrls });
+    } catch {}
     return NextResponse.json(shaped);
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);

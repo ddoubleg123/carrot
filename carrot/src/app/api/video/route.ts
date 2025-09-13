@@ -58,6 +58,22 @@ export async function GET(req: NextRequest) {
       if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
     }
 
+    // Normalize "storage.googleapis.com/<project>.firebasestorage.app/<path>" to durable Firebase alt=media
+    try {
+      if (target && target.hostname === 'storage.googleapis.com') {
+        // Example path: "/involuted-river-466315-p0.firebasestorage.app/ingest/job-123/video.mp4"
+        const m = target.pathname.match(/^\/([^/]+)\.firebasestorage\.app\/(.+)$/);
+        if (m) {
+          const project = decodeURIComponent(m[1]);
+          const objectPath = decodeURIComponent(m[2]);
+          const bucket = `${project}.appspot.com`;
+          const encPath = encodeURIComponent(objectPath);
+          const rewritten = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+          target = rewritten;
+        }
+      }
+    } catch {}
+
     // Forward important headers
     const fwdHeaders: HeadersInit = {};
     const range = req.headers.get('range'); if (range) fwdHeaders['Range'] = range;

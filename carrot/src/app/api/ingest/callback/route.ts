@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { updateJob } from '@/lib/ingestJobs';
+import prisma from '@/lib/prisma';
 
-const WORKER_SECRET = process.env.INGEST_WORKER_SECRET ?? 'dev_ingest_secret';
+const WORKER_SECRET = process.env.INGEST_WORKER_SECRET ?? process.env.WORKER_SECRET ?? 'dev_ingest_secret';
 
 export const runtime = 'nodejs';
 
@@ -18,12 +19,15 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       error, 
       title, 
       channel,
-      secret 
+      secret,
+      postId,
     } = body;
 
-    // Validate worker secret
-    if (secret !== WORKER_SECRET) {
-      console.warn('[callback] Invalid worker secret');
+    // Validate worker secret (allow header or body, and support two env var names)
+    const headerSecret = (request.headers as any).get?.('x-worker-secret') || null;
+    const providedSecret = secret || headerSecret || null;
+    if (!providedSecret || providedSecret !== WORKER_SECRET) {
+      console.warn('[callback] Unauthorized: secret mismatch or missing');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -39,7 +43,8 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       thumbnailUrl,
       error,
       title,
-      channel
+      channel,
+      postId,
     });
 
     // Update job with callback data
@@ -62,6 +67,81 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     }
 
     console.log(`[callback] Successfully updated job ${jobId}`);
+
+    // Normalize Firebase/Storage signed URLs to durable alt=media path form
+    const normalizeVideoUrl = (u?: string | null): string | null => {
+      if (!u || typeof u !== 'string') return null;
+      try {
+        const url = new URL(u);
+        const host = url.hostname;
+        const sp = url.searchParams;
+        const isStorage = host.includes('firebasestorage.googleapis.com') || host.includes('storage.googleapis.com') || host.endsWith('.firebasestorage.app');
+        if (!isStorage) return u;
+        let bucket: string | undefined;
+        let path: string | undefined;
+        const m2 = url.pathname.match(/^\/([^/]+)\/(.+)$/); // storage.googleapis.com/<bucket>/<path>
+        if (host === 'storage.googleapis.com' && m2) {
+          bucket = decodeURIComponent(m2[1]);
+          path = decodeURIComponent(m2[2]);
+        }
+        const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/); // firebasestorage.googleapis.com
+        if (!bucket || !path) {
+          if (host === 'firebasestorage.googleapis.com' && m1) {
+            bucket = decodeURIComponent(m1[1]);
+            path = decodeURIComponent(m1[2]);
+          }
+        }
+        const m4 = url.pathname.match(/^\/o\/([^?]+)$/); // <sub>.firebasestorage.app/o/<ENCODED_PATH>
+        if (!bucket || !path) {
+          if (host.endsWith('.firebasestorage.app') && m4) {
+            path = decodeURIComponent(m4[1]);
+            const ga = sp.get('GoogleAccessId') || '';
+            const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
+            if (projectMatch) bucket = `${projectMatch[1]}.appspot.com`;
+          }
+        }
+        const m3 = url.pathname.match(/\/o\/([^?]+)$/); // generic /o/<ENCODED_PATH>
+        if (!bucket || !path) {
+          if (m3) {
+            path = decodeURIComponent(m3[1]);
+            const ga = sp.get('GoogleAccessId') || '';
+            const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
+            if (projectMatch) bucket = `${projectMatch[1]}.appspot.com`;
+          }
+        }
+        if (bucket && path) {
+          const encPath = encodeURIComponent(path);
+          return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`;
+        }
+        if (host === 'firebasestorage.googleapis.com' && !sp.has('alt')) {
+          url.searchParams.set('alt', 'media');
+          return url.toString();
+        }
+        return u;
+      } catch {
+        return u || null;
+      }
+    };
+
+    // If postId and a media URL present, persist trimmed URL to the Post
+    try {
+      const pid = postId || updatedJob?.postId || null;
+      const finalUrl = normalizeVideoUrl(videoUrl || mediaUrl || null);
+      if (pid && finalUrl) {
+        await prisma.post.update({
+          where: { id: pid },
+          data: {
+            videoUrl: finalUrl,
+            thumbnailUrl: thumbnailUrl || undefined,
+            updatedAt: new Date(),
+          }
+        });
+        console.log(`[callback] Post ${pid} updated with trimmed video URL`);
+      }
+    } catch (e) {
+      console.error('[callback] Failed to update post with trimmed URL', e);
+    }
+
     return NextResponse.json({ success: true });
 
   } catch (error) {
