@@ -57,6 +57,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }
       return [] as string[];
     })();
+    // Fallback: if no imageUrls but thumbnailUrl exists, use it as a single image
+    const imageUrlsFinal = (imageUrls && imageUrls.length > 0)
+      ? imageUrls
+      : (post?.thumbnailUrl ? [prox(post.thumbnailUrl)!].filter(Boolean) as string[] : []);
     // Determine gradient defaults if missing, based on a deterministic hash of post.id
     const schemeIndex = (() => {
       try {
@@ -101,7 +105,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       },
       userVote: null,
       timestamp: post.createdAt,
-      imageUrls,
+      imageUrls: imageUrlsFinal,
       gifUrl: prox(post.gifUrl) || null,
       videoUrl: prox(post.videoUrl) || null,
       thumbnailUrl: prox(post.thumbnailUrl) || null,
@@ -506,6 +510,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       audioUrl: updatedPost.audioUrl?.substring(0, 50) + '...'
     });
     
+    // Pre-map server post to our card shape for consistent media URL proxying
+    const mappedFromServer = mapServerPostToCard(updatedPost);
+
     setCommitments(prev => 
       prev.map(commitment => {
         if (commitment.id === tempId) {
@@ -517,7 +524,11 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             audioTranscription: updatedPost.audioTranscription || commitment.audioTranscription,
             transcriptionStatus: updatedPost.transcriptionStatus || commitment.transcriptionStatus,
             uploadStatus: updatedPost.uploadStatus !== undefined ? updatedPost.uploadStatus : commitment.uploadStatus,
-            uploadProgress: updatedPost.uploadProgress !== undefined ? updatedPost.uploadProgress : commitment.uploadProgress
+            uploadProgress: updatedPost.uploadProgress !== undefined ? updatedPost.uploadProgress : commitment.uploadProgress,
+            // Preserve images from optimistic state if server omitted them
+            imageUrls: (mappedFromServer.imageUrls && mappedFromServer.imageUrls.length > 0)
+              ? mappedFromServer.imageUrls
+              : (commitment.imageUrls || []),
           };
           
           console.log('🎬 Media URL update details:', {
@@ -531,7 +542,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             isBlobVideoUrl: commitment.videoUrl?.includes('blob:')
           });
           
-          return { ...commitment, ...updatedPost, ...preservedMediaData };
+          // Merge mapped server fields to normalize proxies, then layer preserved fields
+          return { ...commitment, ...mappedFromServer, ...preservedMediaData } as any;
         }
         return commitment;
       })
