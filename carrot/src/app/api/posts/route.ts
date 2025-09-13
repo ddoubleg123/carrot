@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { runtime } from 'node:process';
 import prisma from '../../../lib/prisma';
 import { auth } from '@/auth';
 import { projectPost } from './_project';
