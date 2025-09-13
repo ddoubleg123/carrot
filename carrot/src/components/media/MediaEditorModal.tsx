@@ -52,11 +52,16 @@ export default function MediaEditorModal({ item, onClose, onInsert }: {
 
   if (typeof document === 'undefined') return null;
 
-  const src = useMemo(() =>
-    item.kind === 'image'
-      ? (item.posterUrl || `/api/img?path=${encodeURIComponent(item.thumbPath)}`)
-      : (item.posterUrl || `/api/img?path=${encodeURIComponent(item.thumbPath)}`)
-  , [item]);
+  // Compute sources for preview
+  // - For images: use posterUrl or proxy the thumbPath via /api/img
+  // - For videos: use the actual video url for <video src>, and use poster image for the poster attribute
+  const imageSrc = useMemo(() => {
+    return item.posterUrl || (item.thumbPath ? `/api/img?path=${encodeURIComponent(item.thumbPath)}` : undefined);
+  }, [item.posterUrl, item.thumbPath]);
+
+  const videoSrc = useMemo(() => {
+    return item.kind === 'video' ? (item.url || undefined) : undefined;
+  }, [item.kind, item.url]);
 
   const body = (
     <div className="fixed inset-0 z-[80]">
@@ -74,10 +79,16 @@ export default function MediaEditorModal({ item, onClose, onInsert }: {
           <div className="rounded-xl border border-[#E6E8EC] overflow-hidden bg-black/5 aspect-video grid place-items-center">
             {item.kind === 'video' ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video ref={videoRef} src={src} controls className="w-full h-full object-contain" />
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                poster={imageSrc}
+                controls
+                className="w-full h-full object-contain"
+              />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={src} alt={item.title || 'media'} className="w-full h-full object-contain" />
+              <img src={imageSrc} alt={item.title || 'media'} className="w-full h-full object-contain" />
             )}
           </div>
           {/* Side panel */}

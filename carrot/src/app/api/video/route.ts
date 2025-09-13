@@ -17,12 +17,28 @@ function isAllowedUrl(u: URL) {
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const urlObj = new URL(req.url);
+    const { searchParams } = urlObj;
     const raw = searchParams.get('url');
     if (!raw) return NextResponse.json({ error: 'Missing url param' }, { status: 400 });
 
+    // Unwrap '/api/img?url=...' forms accidentally passed in
+    let candidate = raw;
+    try {
+      const maybeRel = new URL(raw, urlObj.origin);
+      if (maybeRel.pathname.startsWith('/api/img')) {
+        const inner = maybeRel.searchParams.get('url');
+        if (inner) candidate = inner;
+      }
+    } catch {}
+
     let target: URL;
-    try { target = new URL(raw); } catch { return NextResponse.json({ error: 'Invalid url' }, { status: 400 }); }
+    try {
+      target = new URL(candidate);
+    } catch {
+      // Support absolute-path URLs by resolving against origin
+      try { target = new URL(candidate, urlObj.origin); } catch { return NextResponse.json({ error: 'Invalid url' }, { status: 400 }); }
+    }
     if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
 
     // Forward important headers
