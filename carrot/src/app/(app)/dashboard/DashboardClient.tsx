@@ -150,12 +150,57 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   // Basic handlers to satisfy props and enable minimal UX
   const handleCreateCommitment = (tempPost: any) => {
     try {
-      // If the composer passes a mapped card, prepend it optimistically
-      if (!tempPost || !tempPost.id) return;
+      if (!tempPost) return;
+      const id = tempPost.id || tempPost.tempId || `temp-${Date.now()}`;
+      // If it's already shaped like a card, use it but ensure safe defaults
+      const ensureStats = (s: any) => ({
+        likes: typeof s?.likes === 'number' ? s.likes : 0,
+        comments: typeof s?.comments === 'number' ? s.comments : 0,
+        reposts: typeof s?.reposts === 'number' ? s.reposts : 0,
+        views: typeof s?.views === 'number' ? s.views : 0,
+      });
+      const optimistic: DashboardCommitmentCardProps = {
+        id,
+        content: tempPost.content || '',
+        carrotText: tempPost.carrotText || '',
+        stickText: tempPost.stickText || '',
+        author: {
+          name: '',
+          username: (tempPost.author && tempPost.author.username) || (session?.user as any)?.username || 'user',
+          avatar: (tempPost.author && tempPost.author.avatar) || (session?.user as any)?.image || '/avatar-placeholder.svg',
+          flag: undefined,
+          id: (tempPost.author && tempPost.author.id) || (session?.user as any)?.id || 'u_local',
+        },
+        homeCountry: tempPost.homeCountry || (tempPost.User?.country) || null,
+        location: { zip: '10001', city: 'New York', state: 'NY' },
+        stats: ensureStats(tempPost.stats),
+        userVote: null,
+        timestamp: tempPost.createdAt || new Date().toISOString(),
+        imageUrls: Array.isArray(tempPost.imageUrls) ? tempPost.imageUrls : [],
+        gifUrl: tempPost.gifUrl || null,
+        videoUrl: tempPost.videoUrl || null,
+        thumbnailUrl: tempPost.thumbnailUrl || null,
+        audioUrl: tempPost.audioUrl || null,
+        audioTranscription: tempPost.audioTranscription || null,
+        transcriptionStatus: tempPost.transcriptionStatus || null,
+        emoji: tempPost.emoji || '🎯',
+        // Preserve gradients picked in the composer
+        gradientFromColor: tempPost.gradientFromColor || (tempPost as any)?.gradient?.from || null,
+        gradientToColor: tempPost.gradientToColor || (tempPost as any)?.gradient?.to || null,
+        gradientViaColor: tempPost.gradientViaColor || (tempPost as any)?.gradient?.via || null,
+        gradientDirection: tempPost.gradientDirection || (tempPost as any)?.gradient?.direction || 'to-br',
+        // CF fields (if composer provided)
+        cfUid: tempPost.cfUid || null,
+        cfPlaybackUrlHls: tempPost.cfPlaybackUrlHls || null,
+        captionVttUrl: tempPost.captionVttUrl || null,
+        storyboardVttUrl: tempPost.storyboardVttUrl || null,
+        duration_s: tempPost.duration_s || tempPost.duration || null,
+        codecs: tempPost.codecs || null,
+      } as any;
+
       setCommitments(prev => {
-        // Avoid duplicate insert if already present
-        if (prev.find(p => p.id === tempPost.id)) return prev;
-        return [tempPost as any, ...prev];
+        if (prev.find(p => p.id === id)) return prev;
+        return [optimistic, ...prev];
       });
     } catch {}
   };

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../lib/prisma';
 import { auth } from '../../../../auth';
+import { projectPost } from '../_project';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,25 +29,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     });
     if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const out: any = {
-      id: post.id,
-      content: post.content,
-      createdAt: post.createdAt,
-      imageUrls: post.imageUrls,
-      videoUrl: post.videoUrl,
-      thumbnailUrl: post.thumbnailUrl,
-      audioUrl: post.audioUrl,
-      transcriptionStatus: (post as any).transcriptionStatus || null,
-      captionVttUrl: (post as any).captionVttUrl || null,
-      User: {
-        id: post.User?.id,
-        username: post.User?.username,
-        profilePhoto: post.User?.profilePhoto || post.User?.image || null,
-        profilePhotoPath: (post.User as any)?.profilePhotoPath || null,
-        homeCountry: (post.User as any)?.country || null,
-      },
-    };
-    return NextResponse.json(out);
+    // Parse imageUrls if serialized
+    const row: any = { ...post };
+    if (typeof row.imageUrls === 'string') {
+      try { row.imageUrls = JSON.parse(row.imageUrls); } catch {}
+    }
+    const dto = projectPost(row);
+    return NextResponse.json(dto);
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
   }

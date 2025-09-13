@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'nodejs';
+import { runtime } from 'node:process';
 import prisma from '../../../lib/prisma';
 import { auth } from '@/auth';
+import { projectPost } from './_project';
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
@@ -16,8 +17,29 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   
   console.log('🚨 POST /api/posts - SESSION VALID');
   const body = await req.json();
+  const idemKey = req.headers.get('idempotency-key') || null;
   if (process.env.NODE_ENV !== 'production') {
     try {
+    // Best-effort idempotency: if the same user just created a post with the same videoUrl & content in the last 5 minutes, reuse it
+    if (idemKey || (body?.videoUrl && body?.content)) {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existing = await prisma.post.findFirst({
+        where: {
+          userId: session.user.id,
+          createdAt: { gte: fiveMinAgo },
+          ...(body?.videoUrl ? { videoUrl: body.videoUrl } : {}),
+          ...(body?.content ? { content: body.content } : {}),
+        },
+        include: {
+          User: { select: { id: true, name: true, email: true, image: true, profilePhoto: true, profilePhotoPath: true, country: true, username: true } }
+        }
+      });
+      if (existing) {
+        const row: any = { ...existing };
+        if (typeof row.imageUrls === 'string') { try { row.imageUrls = JSON.parse(row.imageUrls); } catch {} }
+        return NextResponse.json(projectPost(row), { status: 200, headers: idemKey ? { 'Idempotency-Key': idemKey } : undefined });
+      }
+    }
       console.debug('POST /api/posts payload keys:', Object.keys(body));
     } catch {}
   }
@@ -79,7 +101,13 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           username: (session.user as any).username || 'demo',
         },
       };
-      return NextResponse.json(post, { status: 201 });
+      // Normalize/shape via projector
+    // Parse imageUrls JSON back to array for the projector if needed
+    if (typeof post.imageUrls === 'string') {
+      try { (post as any).imageUrls = JSON.parse(post.imageUrls); } catch {}
+    }
+    const dto = projectPost(post);
+    return NextResponse.json(dto, { status: 201 });
     }
 
     console.log(`🔍 POST /api/posts - Creating post with audioUrl: ${audioUrl ? 'Present' : 'Missing'}`);
@@ -89,6 +117,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     const effectiveVideoUrl = videoUrl || (externalUrl && !audioUrl ? externalUrl : null);
     const effectiveAudioUrl = audioUrl || null;
 
+    // Create post first
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
@@ -135,6 +164,47 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     console.log(`🔍 POST /api/posts - Post audioUrl: ${post.audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
 
+    // Ensure gallery/media entry exists for the video (best-effort)
+    if (effectiveVideoUrl) {
+      try {
+        const exists = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
+        if (!exists) {
+          const createdMedia = await prisma.mediaAsset.create({
+            data: {
+              userId: session.user.id,
+              url: effectiveVideoUrl,
+              type: 'video',
+              title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
+              thumbUrl: thumbnailUrl || null,
+              source: 'post',
+            },
+            select: { id: true }
+          });
+          console.log('📚 Media asset created for post video:', createdMedia.id);
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to create media asset for video; will retry once shortly');
+        try {
+          await new Promise(r => setTimeout(r, 1000));
+          const exists2 = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
+          if (!exists2) {
+            await prisma.mediaAsset.create({
+              data: {
+                userId: session.user.id,
+                url: effectiveVideoUrl,
+                type: 'video',
+                title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
+                thumbUrl: thumbnailUrl || null,
+                source: 'post-retry',
+              },
+              select: { id: true }
+            });
+            console.log('📚 Media asset created on retry.');
+          }
+        } catch {}
+      }
+    }
+
     // Trigger background transcription for audio and video posts
     if (process.env.NODE_ENV !== 'production') {
       console.debug('Derived media URLs:', { effectiveAudioUrl, effectiveVideoUrl });
@@ -174,7 +244,11 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       }
     }
 
-    return NextResponse.json(post, { status: 201 });
+    // Return projected DTO (parse imageUrls if needed)
+    const row: any = { ...post };
+    if (typeof row.imageUrls === 'string') { try { row.imageUrls = JSON.parse(row.imageUrls); } catch {} }
+    const dto = projectPost(row);
+    return NextResponse.json(dto, { status: 201, headers: idemKey ? { 'Idempotency-Key': idemKey } : undefined });
   } catch (error) {
     console.error('💥 Detailed error creating post:', error);
     if (error instanceof Error) {
@@ -217,10 +291,18 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
         }
       },
     });
+    // Parse imageUrls and project
+    const shaped = posts.map(p => {
+      const r: any = { ...p };
+      if (typeof r.imageUrls === 'string') {
+        try { r.imageUrls = JSON.parse(r.imageUrls); } catch {}
+      }
+      return projectPost(r);
+    });
     if (process.env.NODE_ENV !== 'production') {
-      console.debug('GET /api/posts fetched posts:', posts.length);
+      console.debug('GET /api/posts fetched posts:', shaped.length);
     }
-    return NextResponse.json(posts);
+    return NextResponse.json(shaped);
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);
     if (error instanceof Error) {
