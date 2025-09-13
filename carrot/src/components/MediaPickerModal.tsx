@@ -187,13 +187,42 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
       if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}`;
       return undefined;
     };
-    const list = (results || []).map((dto) => ({
+    // Client-side demo fallback when no results yet
+    const demo: MediaAssetDTO[] = [
+      {
+        id: 'demo-img-1', userId: 'public', type: 'image',
+        url: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d',
+        storagePath: null, thumbUrl: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?auto=format&fit=crop&w=240&q=60', thumbPath: null,
+        title: 'Sample Image 1', hidden: false, source: 'demo', durationSec: null, width: null, height: null, inUseCount: 0,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
+      },
+      {
+        id: 'demo-img-2', userId: 'public', type: 'image',
+        url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
+        storagePath: null, thumbUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=60', thumbPath: null,
+        title: 'Sample Image 2', hidden: false, source: 'demo', durationSec: null, width: null, height: null, inUseCount: 0,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
+      },
+      {
+        id: 'demo-video-1', userId: 'public', type: 'video',
+        url: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
+        storagePath: null, thumbUrl: 'https://peach.blender.org/wp-content/uploads/title_anouncement.jpg', thumbPath: null,
+        title: 'Sample Video', hidden: false, source: 'demo', durationSec: 10, width: null, height: null, inUseCount: 0,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
+      },
+    ];
+
+    const sourceList: MediaAssetDTO[] = Array.isArray(results) && results.length > 0 ? results : demo;
+
+    const list = (sourceList || []).map((dto) => ({
       id: dto.id,
       type: dto.type, // 'image' | 'video' | 'gif' | 'audio'
-      url: dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}` : undefined,
+      // Important: only proxy images through /api/img; keep videos as their original URL
+      url: dto.type === 'image' && dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}` : (dto.url || undefined),
       title: dto.title || null,
+      // For thumbnails/posters, try to use a proxied image path if possible
       thumbUrl: toProxyUrl(dto) || null,
-      posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}` : null,
+      posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}` : null),
       durationSec: dto.durationSec ?? null,
       hidden: !!dto.hidden,
       inUseCount: (dto as any).inUseCount ?? null,
