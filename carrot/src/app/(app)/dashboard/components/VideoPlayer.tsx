@@ -61,7 +61,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     el.play().catch(() => {});
   };
 
-  // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS) with path-mode to bypass expired signatures
+  // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS)
+  // Preference: if the URL has signed params (GoogleAccessId/Expires/Signature/token), keep url-mode via /api/video?url=...
+  // Only use path-mode (/api/video?path=...&bucket=...) for public objects without signed params
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
     const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
@@ -78,6 +80,12 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         if (host === 'storage.googleapis.com' && m2) {
           return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]) };
         }
+        // Pattern: <subdomain>.firebasestorage.app/o/<ENCODED_PATH>
+        const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
+        if (host.endsWith('.firebasestorage.app') && m4) {
+          // We need a bucket; use PUBLIC_BUCKET fallback or infer nothing (url-mode fallback will handle auth)
+          return { bucket: PUBLIC_BUCKET || undefined, path: decodeURIComponent(m4[1]) };
+        }
         // Generic: any \/o\/<ENCODED_PATH> segment (bucket unknown)
         const m3 = url.pathname.match(/\/o\/([^?]+)$/);
         if (m3) {
@@ -93,6 +101,20 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
 
     const looksLikeStorage = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app');
     if (looksLikeStorage) {
+      // If signed params exist, prefer url-mode to preserve access
+      try {
+        const url = new URL(videoUrl);
+        const sp = url.searchParams;
+        const hasSigned = sp.has('GoogleAccessId') || sp.has('Expires') || sp.has('Signature') || sp.has('token');
+        if (hasSigned) {
+          let u = videoUrl;
+          if (u.includes('firebasestorage.googleapis.com') && !u.includes('alt=media')) {
+            u = `${u}${u.includes('?') ? '&' : '?'}alt=media`;
+          }
+          return `/api/video?url=${encodeURIComponent(u)}`;
+        }
+      } catch {}
+
       const { bucket, path } = tryExtractBucketAndPath(videoUrl);
       const finalBucket = bucket || PUBLIC_BUCKET;
       if (path && finalBucket) {

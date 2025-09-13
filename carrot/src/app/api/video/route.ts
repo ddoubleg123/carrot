@@ -9,10 +9,15 @@ import { NextRequest, NextResponse } from 'next/server';
 const ALLOWED_HOSTS = new Set([
   'firebasestorage.googleapis.com',
   'storage.googleapis.com',
+  'commondatastorage.googleapis.com',
+  'firebasestorage.app', // generic, also allow subdomains via endsWith
 ]);
 
 function isAllowedUrl(u: URL) {
-  return ALLOWED_HOSTS.has(u.hostname);
+  if (ALLOWED_HOSTS.has(u.hostname)) return true;
+  // Allow any subdomain of firebasestorage.app
+  if (u.hostname.endsWith('.firebasestorage.app')) return true;
+  return false;
 }
 
 export async function GET(req: NextRequest) {
