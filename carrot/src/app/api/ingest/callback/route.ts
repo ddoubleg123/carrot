@@ -34,7 +34,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       // Do not leak configured values; print which env keys are set.
       const flags = { hasINGEST_WORKER_SECRET: Boolean(APP_SECRET_1), hasWORKER_SECRET: Boolean(APP_SECRET_2) };
       console.warn('[callback] Unauthorized: secret mismatch or missing', flags);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized', ...flags }, { status: 401 });
     }
 
     if (!jobId) {
