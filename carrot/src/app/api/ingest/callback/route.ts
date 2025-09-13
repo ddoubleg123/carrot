@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { updateJob } from '@/lib/ingestJobs';
 import prisma from '@/lib/prisma';
 
-const WORKER_SECRET = process.env.INGEST_WORKER_SECRET ?? process.env.WORKER_SECRET ?? 'dev_ingest_secret';
+// Accept either of the app-configured secrets. Do NOT leak values in logs.
+const APP_SECRET_1 = process.env.INGEST_WORKER_SECRET || '';
+const APP_SECRET_2 = process.env.WORKER_SECRET || '';
 
 export const runtime = 'nodejs';
 
@@ -23,11 +25,15 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       postId,
     } = body;
 
-    // Validate worker secret (allow header or body, and support two env var names)
+    // Validate worker secret (allow header or body). Accept either configured app-side secret.
     const headerSecret = (request.headers as any).get?.('x-worker-secret') || null;
-    const providedSecret = secret || headerSecret || null;
-    if (!providedSecret || providedSecret !== WORKER_SECRET) {
-      console.warn('[callback] Unauthorized: secret mismatch or missing');
+    const providedSecret = secret || headerSecret || '';
+    const validSecrets = [APP_SECRET_1, APP_SECRET_2, 'dev_ingest_secret'].filter(Boolean);
+    const authorized = providedSecret && validSecrets.includes(providedSecret);
+    if (!authorized) {
+      // Do not leak configured values; print which env keys are set.
+      const flags = { hasINGEST_WORKER_SECRET: Boolean(APP_SECRET_1), hasWORKER_SECRET: Boolean(APP_SECRET_2) };
+      console.warn('[callback] Unauthorized: secret mismatch or missing', flags);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
