@@ -529,6 +529,11 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             imageUrls: (mappedFromServer.imageUrls && mappedFromServer.imageUrls.length > 0)
               ? mappedFromServer.imageUrls
               : (commitment.imageUrls || []),
+            // Preserve gradient colors from optimistic UI if server omitted them
+            gradientFromColor: mappedFromServer.gradientFromColor || (commitment as any).gradientFromColor || null,
+            gradientToColor: mappedFromServer.gradientToColor || (commitment as any).gradientToColor || null,
+            gradientViaColor: mappedFromServer.gradientViaColor || (commitment as any).gradientViaColor || null,
+            gradientDirection: mappedFromServer.gradientDirection || (commitment as any).gradientDirection || 'to-br',
           };
           
           console.log('🎬 Media URL update details:', {

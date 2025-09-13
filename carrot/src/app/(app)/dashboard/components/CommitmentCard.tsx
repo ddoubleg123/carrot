@@ -453,11 +453,30 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             <img src={gifUrl} alt="gif" className="w-full rounded-xl" />
           </div>
         ) : imageUrls && imageUrls.length > 0 ? (
-          <div className="mt-3 grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
-            {imageUrls.slice(0, 4).map((u, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={u} alt={`img-${i}`} className="w-full h-48 object-cover rounded-xl" />
-            ))}
+          <div className="mt-3">
+            {/* Wrap media in gradient even when images exist so color passes over */}
+            <div
+              className="rounded-xl p-2"
+              style={hasGradient ? { background: gradientCss } : undefined}
+            >
+              {imageUrls.length === 1 ? (
+                <div className="cursor-pointer bg-white rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrls[0]}
+                    alt="img-0"
+                    className="w-full max-h-[520px] object-contain mx-auto"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
+                  {imageUrls.slice(0, 4).map((u, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={i} src={u} alt={`img-${i}`} className="w-full h-48 object-cover rounded-lg bg-white" />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
 
