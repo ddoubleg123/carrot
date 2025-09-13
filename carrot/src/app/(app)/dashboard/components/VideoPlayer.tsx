@@ -29,10 +29,20 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const [isInView, setIsInView] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Global modal-open signal to avoid background video loads when pickers are open
+  const isAnyModalOpen = () => {
+    try {
+      if (typeof document === 'undefined') return false;
+      return document.documentElement.getAttribute('data-modal-open') === '1';
+    } catch { return false; }
+  };
+
   // Safely attempt play, skipping when no source is available
   const safePlay = () => {
     const el = videoRef.current;
     if (!el) return;
+    // Do not autoplay if a modal is open (e.g., Gallery), to prevent flicker and background fetches
+    if (isAnyModalOpen()) return;
     // 3 = NETWORK_NO_SOURCE
     if (el.networkState === 3) return;
     // Skip if no selected source yet
@@ -44,11 +54,45 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     el.play().catch(() => {});
   };
 
-  // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS)
+  // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS) with path-mode to bypass expired signatures
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
-    const needsProxy = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com');
-    if (needsProxy) {
+    const BUCKET =
+      (process as any).env?.NEXT_PUBLIC_FIREBASE_BUCKET ||
+      (process as any).env?.FIREBASE_STORAGE_BUCKET ||
+      (process as any).env?.FIREBASE_BUCKET ||
+      '';
+    const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
+      try {
+        const url = new URL(u);
+        const host = url.hostname;
+        // Pattern: firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
+        const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+        if (host === 'firebasestorage.googleapis.com' && m1) {
+          return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]) };
+        }
+        // Pattern: storage.googleapis.com/<bucket>/<path>
+        const m2 = url.pathname.match(/^\/([^/]+)\/(.+)$/);
+        if (host === 'storage.googleapis.com' && m2) {
+          return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]) };
+        }
+        // Generic: any \/o\/<ENCODED_PATH> segment (bucket unknown)
+        const m3 = url.pathname.match(/\/o\/([^?]+)$/);
+        if (m3) {
+          return { bucket: undefined, path: decodeURIComponent(m3[1]) };
+        }
+      } catch {}
+      return {};
+    };
+
+    const looksLikeStorage = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app');
+    if (looksLikeStorage) {
+      const { bucket, path } = tryExtractBucketAndPath(videoUrl);
+      const finalBucket = bucket || BUCKET;
+      if (path && finalBucket) {
+        return `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
+      }
+      // Fallback to url mode; ensure alt=media for Firebase endpoint
       let u = videoUrl;
       if (u.includes('firebasestorage.googleapis.com') && !u.includes('alt=media')) {
         u = `${u}${u.includes('?') ? '&' : '?'}alt=media`;

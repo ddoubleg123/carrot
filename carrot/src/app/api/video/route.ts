@@ -20,26 +20,38 @@ export async function GET(req: NextRequest) {
     const urlObj = new URL(req.url);
     const { searchParams } = urlObj;
     const raw = searchParams.get('url');
-    if (!raw) return NextResponse.json({ error: 'Missing url param' }, { status: 400 });
+    const pathParam = searchParams.get('path');
+    const bucketParam = searchParams.get('bucket');
 
-    // Unwrap '/api/img?url=...' forms accidentally passed in
-    let candidate = raw;
-    try {
-      const maybeRel = new URL(raw, urlObj.origin);
-      if (maybeRel.pathname.startsWith('/api/img')) {
-        const inner = maybeRel.searchParams.get('url');
-        if (inner) candidate = inner;
-      }
-    } catch {}
-
-    let target: URL;
-    try {
-      target = new URL(candidate);
-    } catch {
-      // Support absolute-path URLs by resolving against origin
-      try { target = new URL(candidate, urlObj.origin); } catch { return NextResponse.json({ error: 'Invalid url' }, { status: 400 }); }
+    let target: URL | null = null;
+    // Preferred: path-based access to avoid expired signed URLs
+    if (pathParam) {
+      const bucket = bucketParam?.trim();
+      if (!bucket) return NextResponse.json({ error: 'Missing bucket for path mode' }, { status: 400 });
+      const encPath = encodeURIComponent(pathParam);
+      target = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
     }
-    if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
+
+    if (!target) {
+      if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
+      // Unwrap '/api/img?url=...' forms accidentally passed in
+      let candidate = raw;
+      try {
+        const maybeRel = new URL(raw, urlObj.origin);
+        if (maybeRel.pathname.startsWith('/api/img')) {
+          const inner = maybeRel.searchParams.get('url');
+          if (inner) candidate = inner;
+        }
+      } catch {}
+
+      try {
+        target = new URL(candidate);
+      } catch {
+        // Support absolute-path URLs by resolving against origin
+        try { target = new URL(candidate, urlObj.origin); } catch { return NextResponse.json({ error: 'Invalid url' }, { status: 400 }); }
+      }
+      if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
+    }
 
     // Forward important headers
     const fwdHeaders: HeadersInit = {};
