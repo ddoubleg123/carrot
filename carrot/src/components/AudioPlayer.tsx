@@ -1,6 +1,7 @@
+"use client";
+
 // Public env flag to enable verbose audio debug logs on client
 const DEBUG_AUDIO = process.env.NEXT_PUBLIC_DEBUG_AUDIO === '1';
-'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Download } from 'lucide-react';
