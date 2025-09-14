@@ -95,15 +95,29 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       );
     }
 
-    const railwayResponse: RailwayIngestResponse = await response.json();
+    // TEMP: success-path logging to inspect upstream 200 body shape
+    const okBodyText = await response.text();
+    try {
+      console.log('[api/ingest] upstream 200 body (trunc)', okBodyText.slice(0, 500));
+    } catch {}
+    let upstream: any = {};
+    try { upstream = okBodyText ? JSON.parse(okBodyText) : {}; } catch {}
+    try {
+      console.log('[api/ingest] upstream 200 keys', Array.isArray(upstream) ? ['<array>'] : Object.keys(upstream || {}));
+    } catch {}
+
+    // Try to extract common fields from various shapes
+    const jobId = upstream?.job_id ?? upstream?.jobId ?? upstream?.id ?? upstream?.job?.id ?? upstream?.job?.job_id ?? null;
+    const jobStatus = upstream?.status ?? upstream?.job?.status ?? 'accepted';
+    const jobMessage = upstream?.message ?? upstream?.msg ?? null;
 
     return NextResponse.json({
       job: {
-        id: railwayResponse.job_id,
-        status: railwayResponse.status,
+        id: jobId,
+        status: jobStatus,
         progress: 0,
         url,
-        message: railwayResponse.message,
+        message: jobMessage,
         inMs: typeof inMs === 'number' ? inMs : null,
         outMs: typeof outMs === 'number' ? outMs : null,
         aspect: aspect || null,
