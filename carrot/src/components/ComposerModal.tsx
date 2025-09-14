@@ -1059,9 +1059,17 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: newPost.content,
-            mediaUrl: newPost.mediaUrl,
-            mediaType: newPost.mediaType,
-            audioUrl: newPost.audioUrl,
+            // Persist gradients chosen in the composer (direction is a fixed default)
+            gradientDirection: 'to-br',
+            gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
+            gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
+            gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
+            // Media fields expected by the API
+            imageUrls: newPost.imageUrls || [],
+            videoUrl: newPost.videoUrl || null,
+            gifUrl: newPost.gifUrl || null,
+            audioUrl: newPost.audioUrl || null,
+            thumbnailUrl: editedThumb || null,
           }),
         });
         if (res.ok) {

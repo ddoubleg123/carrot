@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { auth } from '@/auth';
@@ -16,9 +16,20 @@ async function getSessionUserId(): Promise<string | null> {
 
 const cookieName = 'carrot_prefs';
 
-function readPrefsCookieFromReq(req: NextRequest): { captionsDefault?: boolean; reducedMotion?: boolean; autoplay?: boolean } | null {
+function readPrefsCookieFromReq(req: Request): { captionsDefault?: boolean; reducedMotion?: boolean; autoplay?: boolean } | null {
   try {
-    const c = req.cookies.get(cookieName)?.value;
+    const cookieHeader = req.headers.get('cookie') || '';
+    const c = (() => {
+      if (!cookieHeader) return null;
+      const parts = cookieHeader.split(/;\s*/);
+      for (const p of parts) {
+        const [k, ...rest] = p.split('=');
+        if (decodeURIComponent(k) === cookieName) {
+          return rest.join('=');
+        }
+      }
+      return null;
+    })();
     if (!c) return null;
     const obj = JSON.parse(c);
     if (obj && (obj.v === 1 || obj.v === undefined)) {
@@ -68,7 +79,7 @@ function deletePrefsCookie(res: NextResponse) {
   } catch {}
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   const uid = await getSessionUserId();
 
   if (uid) {
@@ -95,7 +106,7 @@ export async function GET(_req: NextRequest) {
   }, { status: 200 });
 }
 
-export async function PUT(req: NextRequest) {
+export async function PUT(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   const uid = await getSessionUserId();
   const data = await req.json().catch(() => ({}));
   const payload: { captionsDefault?: boolean; reducedMotion?: boolean; autoplay?: boolean } = {};

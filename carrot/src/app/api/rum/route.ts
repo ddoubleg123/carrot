@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Minimal RUM intake. We can later wire to a DB or external analytics.
 // Accepts POST JSON body with { type, value, tags }
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   try {
     const data = await req.json().catch(() => ({}));
     // Best-effort logging (server console only)
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   // Not supported for collection
   return NextResponse.json({ ok: true }, { status: 200 });
 }

@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 // Simple audio proxy to bypass CORS for development/testing.
 // Supports Range requests and streams bytes from the remote source.
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url);
     const target = searchParams.get('url');

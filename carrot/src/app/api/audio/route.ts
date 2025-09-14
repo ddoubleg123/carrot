@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Simple audio proxy to work around Firebase Storage CORS for media playback
 // Usage: /api/audio?url=<encoded Firebase download URL>
@@ -14,7 +14,7 @@ function isAllowedUrl(u: URL) {
   return ALLOWED_HOSTS.has(u.hostname);
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url);
     const raw = searchParams.get('url');
@@ -82,9 +82,9 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function HEAD(req: NextRequest) {
+export async function HEAD(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   // Implement HEAD by delegating to GET and stripping body
-  const res = await GET(req);
+  const res = await GET(req, _ctx);
   return new NextResponse(null, {
     status: res.status,
     headers: res.headers,

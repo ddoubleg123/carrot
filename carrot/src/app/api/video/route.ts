@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Video proxy with Range and CORS support
 // Usage: /api/video?url=<encoded public/download URL>
@@ -20,7 +20,7 @@ function isAllowedUrl(u: URL) {
   return false;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   try {
     const urlObj = new URL(req.url);
     const { searchParams } = urlObj;
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function HEAD(req: NextRequest) {
-  const res = await GET(req);
+export async function HEAD(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
+  const res = await GET(req, _ctx);
   return new NextResponse(null, { status: res.status, headers: res.headers });
 }

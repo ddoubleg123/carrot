@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 // Generates a simple WAV tone: GET /api/tone?f=440&d=5
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   const { searchParams } = new URL(req.url);
   const f = Math.min(2000, Math.max(50, Number(searchParams.get('f')) || 440));
   const d = Math.min(15, Math.max(1, Number(searchParams.get('d')) || 5));
