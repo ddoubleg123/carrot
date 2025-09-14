@@ -116,9 +116,9 @@ function TestDashboardClientInner() {
                     author={{
                       name: (post as any).User?.name ?? (post as any).author?.name ?? 'Unknown',
                       username: (post as any).User?.username ?? (post as any).author?.username ?? 'unknown',
-                      avatar: (post as any).User?.image ?? (post as any).author?.avatar ?? null,
+                      avatar: (post as any).User?.profilePhoto ?? (post as any).User?.image ?? (post as any).author?.avatar ?? null,
                       id: (post as any).userId ?? (post as any).author?.id,
-                      flag: (post as any).author?.flag ?? undefined,
+                      flag: (post as any).User?.country ?? (post as any).author?.flag ?? undefined,
                     }}
                     location={{
                       zip: (post as any).zip ?? '',

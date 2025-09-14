@@ -1050,32 +1050,17 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                       
                       // Upload media if we have a file
                       if (fileToUpload) {
-                        console.log('📤 Uploading media file in background...');
-                        
                         try {
-                          if (mediaTypeToSave?.startsWith('video/')) {
-                            // Cloudflare Stream path: if not started, start now
-                            if (!cfUid) {
-                              showSuccessToast('Uploading video to Cloudflare…');
-                              await uploadFileInBackground(fileToUpload);
-                            } else {
-                              console.log('▶️ CF upload already started. uid:', cfUid);
-                            }
-                            // No finalMediaUrl for CF videos; playback via cfUid
-                          } else {
-                            // Images (and other non-video) still use Firebase or existing flow
-                            const uploadResult = await uploadFilesToFirebase([fileToUpload], 'posts');
-                            console.log('✅ Upload result:', uploadResult);
-                            if (uploadResult && uploadResult.length > 0) {
-                              finalMediaUrl = uploadResult[0];
-                              console.log('🔗 Final media URL:', finalMediaUrl);
-                            }
+                          // Firebase-only plan: upload all files (including video) to Firebase
+                          const uploadResult = await uploadFilesToFirebase([fileToUpload], 'posts');
+                          console.log('✅ Firebase upload result:', uploadResult);
+                          if (uploadResult && uploadResult.length > 0) {
+                            finalMediaUrl = uploadResult[0];
+                            console.log('🔗 Final media URL (Firebase):', finalMediaUrl);
                           }
                         } catch (uploadError) {
-                          console.error('❌ Upload failed:', uploadError);
-                          if (mediaTypeToSave?.startsWith('video/')) {
-                            showErrorToast('Video upload failed. Please try again.');
-                          }
+                          console.error('❌ Upload error:', uploadError);
+                          showErrorToast('Failed to upload media. Please try again.');
                           return;
                         }
                       }
@@ -1094,19 +1079,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           colorScheme: colorSchemes[colorSchemeToSave].name
                         });
                       
-                      // Ensure CF uid is available for video before creating the post
-                      let cfUidToSend = cfUid;
-                      if (!libraryVideoToSave && mediaTypeToSave?.startsWith('video/') && !cfUidToSend && cfUploadPromise) {
-                        try {
-                          cfUidToSend = await Promise.race<string>([
-                            cfUploadPromise,
-                            new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timed out waiting for CF uid')), 10000))
-                          ]);
-                          setCfUid(cfUidToSend);
-                        } catch (e) {
-                          console.warn('⚠️ CF uid not ready before POST, proceeding without it');
-                        }
-                      }
+                      // Firebase-only plan: no cfUid involvement
+                      let cfUidToSend: string | null = null;
 
                       const postBody1 = {
                         content: contentToSave,
@@ -1115,8 +1089,8 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         gradientToColor: colorSchemes[colorSchemeToSave].gradientToColor,
                         gradientViaColor: colorSchemes[colorSchemeToSave].gradientViaColor,
                         imageUrls: finalMediaUrl && !mediaTypeToSave?.startsWith('video/') ? [finalMediaUrl] : [],
-                        // Prefer library video selection; else if using Cloudflare Stream, do not send videoUrl
-                        videoUrl: libraryVideoToSave ? libraryVideoToSave.url : (cfUidToSend ? null : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null)),
+                        // Firebase-only: always send videoUrl when posting a new video
+                        videoUrl: libraryVideoToSave ? libraryVideoToSave.url : (finalMediaUrl && mediaTypeToSave?.startsWith('video/') ? finalMediaUrl : null),
                         // Include optional trim parameters from library video selection
                         trimInMs: libraryVideoToSave?.inMs ?? null,
                         trimOutMs: libraryVideoToSave?.outMs ?? null,
@@ -1126,9 +1100,9 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                         emoji: '🎯',
                         carrotText: '',
                         stickText: '',
-                        // Cloudflare Stream identifiers
-                        cfUid: cfUidToSend || null,
-                        cfStatus: cfUidToSend ? (cfStatus || 'queued') : null,
+                        // Cloudflare Stream identifiers (disabled in Firebase-only mode)
+                        cfUid: null,
+                        cfStatus: null,
                         // Include temp ID for post update
                         tempId: tempId
                       };
@@ -1175,11 +1149,11 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           
                           onPostUpdate(tempId, {
                             ...postData,
-                            // Include CF fields for immediate playback
-                            cfUid: cfUid || postData.cfUid || null,
-                            cfStatus: cfUid ? (cfStatus || 'queued') : (postData.cfStatus || null),
-                            uploadStatus: mediaTypeToSave?.startsWith('video/') ? (cfUid ? 'processing' : 'ready') : null,
-                            transcriptionStatus: (postData.videoUrl || postData.audioUrl || cfUid) ? 'processing' : null
+                            // Firebase-only: video should be immediately playable via videoUrl
+                            cfUid: null,
+                            cfStatus: null,
+                            uploadStatus: mediaTypeToSave?.startsWith('video/') ? 'ready' : null,
+                            transcriptionStatus: (postData.videoUrl || postData.audioUrl) ? 'processing' : null
                           });
                           
                           console.log('✅ onPostUpdate called successfully');

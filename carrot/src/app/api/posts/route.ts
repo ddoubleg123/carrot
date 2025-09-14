@@ -268,18 +268,22 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     } catch {}
 
     // Ensure gallery/media entry exists for the video (best-effort)
-    if (effectiveVideoUrl) {
+    if (effectiveVideoUrl || post.cfUid) {
       try {
-        const exists = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
+        const exists = effectiveVideoUrl
+          ? await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } })
+          : await (prisma as any).mediaAsset.findFirst({ where: { userId: session.user.id, cfUid: post.cfUid } });
         if (!exists) {
-          const createdMedia = await prisma.mediaAsset.create({
+          const createdMedia = await (prisma as any).mediaAsset.create({
             data: {
               userId: session.user.id,
-              url: effectiveVideoUrl,
+              url: effectiveVideoUrl || null,
               type: 'video',
               title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
               thumbUrl: thumbnailUrl || null,
               source: 'post',
+              cfUid: post.cfUid || null,
+              cfStatus: post.cfStatus || null,
             },
             select: { id: true }
           });
@@ -289,16 +293,20 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         console.warn('⚠️ Failed to create media asset for video; will retry once shortly');
         try {
           await new Promise(r => setTimeout(r, 1000));
-          const exists2 = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
+          const exists2 = effectiveVideoUrl
+            ? await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } })
+            : await (prisma as any).mediaAsset.findFirst({ where: { userId: session.user.id, cfUid: post.cfUid } });
           if (!exists2) {
-            await prisma.mediaAsset.create({
+            await (prisma as any).mediaAsset.create({
               data: {
                 userId: session.user.id,
-                url: effectiveVideoUrl,
+                url: effectiveVideoUrl || null,
                 type: 'video',
                 title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
                 thumbUrl: thumbnailUrl || null,
                 source: 'post-retry',
+                cfUid: post.cfUid || null,
+                cfStatus: post.cfStatus || null,
               },
               select: { id: true }
             });

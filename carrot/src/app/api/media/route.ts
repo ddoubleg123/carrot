@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     // If unauthenticated, serve a safe public fallback from recent visible items
     const unauthenticated = !session?.user?.id;
     const where: any = unauthenticated ? {} : { userId: session.user.id };
-    if (!includeHidden) where.OR = [{ hidden: false }, { hidden: null }];
+    // Do not reference 'hidden' column for compatibility across schemas
     if (q) {
       where.OR = [
         { title: { contains: q, mode: 'insensitive' } },
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
           thumbUrl: true,
           thumbPath: true,
           title: true,
-          hidden: true,
+          // hidden omitted for compatibility
           source: true,
           durationSec: true,
           width: true,
@@ -109,7 +109,7 @@ export async function GET(req: Request) {
         { title: { contains: q, mode: 'insensitive' } },
         { source: { contains: q, mode: 'insensitive' } },
         { url: { contains: q, mode: 'insensitive' } },
-      ] } : {}), OR: [{ hidden: false }, { hidden: null }] };
+      ] } : {}) };
       try {
         rows = await prisma.mediaAsset.findMany({
           where: publicWhere,
@@ -124,7 +124,6 @@ export async function GET(req: Request) {
             thumbUrl: true,
             thumbPath: true,
             title: true,
-            hidden: true,
             source: true,
             durationSec: true,
             width: true,
@@ -174,7 +173,6 @@ export async function GET(req: Request) {
       thumbUrl: r.thumbUrl || null,
       thumbPath: r.thumbPath || null,
       title: r.title || null,
-      hidden: !!r.hidden,
       source: r.source || null,
       durationSec: typeof r.durationSec === 'number' ? r.durationSec : null,
       width: typeof r.width === 'number' ? r.width : null,
@@ -194,7 +192,7 @@ export async function GET(req: Request) {
           storagePath: null,
           thumbUrl: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?auto=format&fit=crop&w=240&q=60',
           thumbPath: null,
-          title: 'Sample Image 1', hidden: false, source: 'demo', durationSec: null,
+          title: 'Sample Image 1', source: 'demo', durationSec: null,
           width: null, height: null, inUseCount: 0,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         },
@@ -204,7 +202,7 @@ export async function GET(req: Request) {
           storagePath: null,
           thumbUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=60',
           thumbPath: null,
-          title: 'Sample Image 2', hidden: false, source: 'demo', durationSec: null,
+          title: 'Sample Image 2', source: 'demo', durationSec: null,
           width: null, height: null, inUseCount: 0,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         },
@@ -214,7 +212,7 @@ export async function GET(req: Request) {
           storagePath: null,
           thumbUrl: 'https://peach.blender.org/wp-content/uploads/title_anouncement.jpg',
           thumbPath: null,
-          title: 'Sample Video', hidden: false, source: 'demo', durationSec: 10,
+          title: 'Sample Video', source: 'demo', durationSec: 10,
           width: null, height: null, inUseCount: 0,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         },

@@ -97,6 +97,42 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         }
       }
 
+    // Special mode: create MediaAsset rows from Posts that have cfUid but no mediaAsset entry
+    if (mode === 'cfAssets') {
+      const backfillWhere: any = {
+        cfUid: { not: null },
+      };
+      if (!all) {
+        backfillWhere.createdAt = { gte: new Date(Date.now() - hours * 60 * 60 * 1000) };
+      }
+      const posts = await prisma.post.findMany({
+        where: backfillWhere,
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(1, Math.min(500, limit)),
+        select: { id: true, userId: true, content: true, thumbnailUrl: true, cfUid: true, cfStatus: true, videoUrl: true },
+      });
+      let created = 0;
+      let skipped = 0;
+      for (const p of posts) {
+        const exists = await (prisma as any).mediaAsset.findFirst({ where: { userId: p.userId, OR: [ { cfUid: p.cfUid }, { url: p.videoUrl || undefined } ] } });
+        if (exists) { skipped++; continue; }
+        await (prisma as any).mediaAsset.create({
+          data: {
+            userId: p.userId,
+            url: p.videoUrl || null,
+            type: 'video',
+            title: (p.content && typeof p.content === 'string') ? p.content.slice(0, 80) : null,
+            thumbUrl: p.thumbnailUrl || null,
+            source: 'post-backfill',
+            cfUid: p.cfUid,
+            cfStatus: p.cfStatus || null,
+          }
+        });
+        created++;
+      }
+      return NextResponse.json({ ok: true, mode, created, examined: posts.length, skipped });
+    }
+
       return NextResponse.json({ ok: true, mode, created, examined: assets.length, limit });
     }
 
