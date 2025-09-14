@@ -183,8 +183,10 @@ export async function GET(req: Request) {
       // labels omitted
     }));
 
-    // Absolute fallback demo media so UI isn't empty on fresh databases
-    if (!items || items.length === 0) {
+    // Absolute fallback demo media is disabled by default to avoid flicker.
+    // Enable only if query demo=1 or env NEXT_PUBLIC_SHOW_DEMO_MEDIA=1.
+    const showDemo = searchParams.get('demo') === '1' || process.env.NEXT_PUBLIC_SHOW_DEMO_MEDIA === '1';
+    if ((!items || items.length === 0) && showDemo) {
       items = [
         {
           id: 'demo-img-1', userId: 'public', type: 'image',
@@ -251,7 +253,15 @@ export async function POST(req: Request) {
     const source = typeof body?.source === 'string' ? body.source : 'upload';
 
     const exists = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url } });
-    if (exists) return NextResponse.json({ id: exists.id }, { status: 200 });
+    if (exists) {
+      // If we have a thumbnail URL now and the asset is missing it, update in place
+      if (thumbUrl && !exists.thumbUrl) {
+        try {
+          await prisma.mediaAsset.update({ where: { id: exists.id }, data: { thumbUrl } });
+        } catch {}
+      }
+      return NextResponse.json({ id: exists.id }, { status: 200 });
+    }
 
     const created = await prisma.mediaAsset.create({
       data: {
