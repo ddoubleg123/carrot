@@ -162,8 +162,10 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         }
         if (bucket && path) {
           const encPath = encodeURIComponent(path);
-          const durable = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`;
-          return durable;
+          const token = sp.get('token');
+          const durable = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+          if (token) durable.searchParams.set('token', token);
+          return durable.toString();
         }
         // As a fallback, ensure alt=media for firebase endpoint
         if (host === 'firebasestorage.googleapis.com' && !sp.has('alt')) {
@@ -176,7 +178,16 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       }
     };
     // If an externalUrl is provided and no explicit media URLs exist, default it to videoUrl
-    const effectiveVideoUrl = normalizeVideoUrl(videoUrl || (externalUrl && !audioUrl ? externalUrl : null));
+    let effectiveVideoUrl = normalizeVideoUrl(videoUrl || (externalUrl && !audioUrl ? externalUrl : null));
+    // Persist a server-owned playable URL if normalization failed but externalUrl exists
+    if (!effectiveVideoUrl && externalUrl && !audioUrl) {
+      try {
+        const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+        const enc = encodeURIComponent(String(externalUrl));
+        effectiveVideoUrl = `${base}/api/video?url=${enc}`;
+        console.log('[POST /api/posts] using proxy URL for playback');
+      } catch {}
+    }
     const effectiveAudioUrl = audioUrl || null;
     // Coerce gradients to safe strings so Prisma includes them in INSERT
     const gDir = typeof gradientDirection === 'string' && gradientDirection ? gradientDirection : 'to-br';

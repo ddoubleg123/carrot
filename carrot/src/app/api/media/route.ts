@@ -45,42 +45,13 @@ export async function GET(req: Request) {
       sort === 'duration' ? { durationSec: 'desc' } :
       { createdAt: 'desc' };
 
-    let rows = await prisma.mediaAsset.findMany({
-      where,
-      orderBy,
-      take: limit,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      select: {
-        id: true,
-        userId: true,
-        type: true,
-        url: true,
-        storagePath: true,
-        thumbUrl: true,
-        thumbPath: true,
-        title: true,
-        hidden: true,
-        source: true,
-        durationSec: true,
-        width: true,
-        height: true,
-        createdAt: true,
-        updatedAt: true,
-        // labels relation omitted for maximum compatibility across deployments
-      },
-    } as any);
-
-    // If authenticated scope returned nothing, provide a public fallback across all users
-    if ((!rows || rows.length === 0) && !unauthenticated) {
-      const publicWhere: any = { ...(q ? { OR: [
-        { title: { contains: q, mode: 'insensitive' } },
-        { source: { contains: q, mode: 'insensitive' } },
-        { url: { contains: q, mode: 'insensitive' } },
-      ] } : {}), OR: [{ hidden: false }, { hidden: null }] };
+    let rows: any[] = [];
+    try {
       rows = await prisma.mediaAsset.findMany({
-        where: publicWhere,
+        where,
         orderBy,
         take: limit,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
         select: {
           id: true,
           userId: true,
@@ -97,8 +68,100 @@ export async function GET(req: Request) {
           height: true,
           createdAt: true,
           updatedAt: true,
+          // labels relation omitted for maximum compatibility across deployments
         },
       } as any);
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      if (msg.includes('Argument `hidden` is missing')) {
+        try { delete (where as any).OR; } catch {}
+        rows = await prisma.mediaAsset.findMany({
+          where,
+          orderBy,
+          take: limit,
+          ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+          select: {
+            id: true,
+            userId: true,
+            type: true,
+            url: true,
+            storagePath: true,
+            thumbUrl: true,
+            thumbPath: true,
+            title: true,
+            // hidden may not exist in some schemas
+            source: true,
+            durationSec: true,
+            width: true,
+            height: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        } as any);
+      } else {
+        throw e;
+      }
+    }
+
+    // If authenticated scope returned nothing, provide a public fallback across all users
+    if ((!rows || rows.length === 0) && !unauthenticated) {
+      const publicWhere: any = { ...(q ? { OR: [
+        { title: { contains: q, mode: 'insensitive' } },
+        { source: { contains: q, mode: 'insensitive' } },
+        { url: { contains: q, mode: 'insensitive' } },
+      ] } : {}), OR: [{ hidden: false }, { hidden: null }] };
+      try {
+        rows = await prisma.mediaAsset.findMany({
+          where: publicWhere,
+          orderBy,
+          take: limit,
+          select: {
+            id: true,
+            userId: true,
+            type: true,
+            url: true,
+            storagePath: true,
+            thumbUrl: true,
+            thumbPath: true,
+            title: true,
+            hidden: true,
+            source: true,
+            durationSec: true,
+            width: true,
+            height: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        } as any);
+      } catch (e: any) {
+        const msg = String(e?.message || e || '');
+        if (msg.includes('Argument `hidden` is missing')) {
+          try { delete (publicWhere as any).OR; } catch {}
+          rows = await prisma.mediaAsset.findMany({
+            where: publicWhere,
+            orderBy,
+            take: limit,
+            select: {
+              id: true,
+              userId: true,
+              type: true,
+              url: true,
+              storagePath: true,
+              thumbUrl: true,
+              thumbPath: true,
+              title: true,
+              source: true,
+              durationSec: true,
+              width: true,
+              height: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          } as any);
+        } else {
+          throw e;
+        }
+      }
     }
 
     // Map to client DTO
