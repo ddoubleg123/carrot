@@ -37,6 +37,8 @@ export default function HlsFeedPlayer({
   const [shouldWarm, setShouldWarm] = useState(false);
   const hlsRef = useRef<any>(null);
   const myHandleRef = useRef<VideoHandle | null>(null);
+  const stateRef = useRef<'idle' | 'warm' | 'active'>('idle');
+  const lastDroppedRef = useRef<number>(0);
 
   // Read preferences from localStorage (reduced motion, captions default, network profile)
   const getReducedMotion = () => {
@@ -348,15 +350,26 @@ export default function HlsFeedPlayer({
       id: assetId,
       el,
       play: async () => {
+        const from = stateRef.current;
         try { hlsRef.current?.startLoad?.(); } catch {}
         try { await videoRef.current?.play(); } catch {}
+        if (from !== 'active') {
+          try { sendRum({ type: 'state_transition', value: { from, to: 'active' } }); } catch {}
+          stateRef.current = 'active';
+        }
       },
       pause: () => { try { videoRef.current?.pause(); } catch {} },
       warm: async () => {
         // Trigger warming path; will attach HLS without autoplay
+        const from = stateRef.current;
         try { setShouldWarm(true); } catch {}
+        if (from !== 'warm') {
+          try { sendRum({ type: 'state_transition', value: { from, to: 'warm' } }); } catch {}
+          stateRef.current = 'warm';
+        }
       },
       release: () => {
+        const from = stateRef.current;
         try {
           if (videoRef.current) {
             videoRef.current.pause();
@@ -366,12 +379,37 @@ export default function HlsFeedPlayer({
           try { hlsRef.current?.stopLoad?.(); } catch {}
           try { hlsRef.current?.destroy?.(); hlsRef.current = null; } catch {}
         } catch {}
+        if (from !== 'idle') {
+          try { sendRum({ type: 'state_transition', value: { from, to: 'idle' } }); } catch {}
+          stateRef.current = 'idle';
+        }
       }
     };
     FeedMediaManager.inst.registerHandle(el, handle);
     myHandleRef.current = handle;
     return () => { FeedMediaManager.inst.unregisterHandle(el); };
   }, [assetId, hlsMasterUrl]);
+
+  // Sample dropped frames periodically for RUM
+  useEffect(() => {
+    const v = videoRef.current as any;
+    if (!v) return;
+    let timer: any = null;
+    const sample = () => {
+      try {
+        const q = typeof v.getVideoPlaybackQuality === 'function' ? v.getVideoPlaybackQuality() : null;
+        const dropped = q && typeof q.droppedVideoFrames === 'number' ? q.droppedVideoFrames : 0;
+        if (dropped > lastDroppedRef.current) {
+          const delta = dropped - lastDroppedRef.current;
+          lastDroppedRef.current = dropped;
+          try { sendRum({ type: 'dropped_frames', value: delta }); } catch {}
+        }
+      } catch {}
+      timer = setTimeout(sample, 2000);
+    };
+    timer = setTimeout(sample, 2000);
+    return () => { try { clearTimeout(timer); } catch {} };
+  }, [assetId]);
 
   // Ensure only one video plays at a time; pause when scrolled away
   useEffect(() => {

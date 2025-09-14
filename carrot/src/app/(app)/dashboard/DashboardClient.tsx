@@ -319,93 +319,37 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     } catch {}
   }, [serverPrefs]);
 
-  // Feature-flagged viewport-driven Warm/Active state (HLS feed rollout)
+  // Feature-flagged viewport-driven Warm/Active state with hysteresis + debounce
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_FEED_HLS !== '1') return;
     const root = document;
-    const tiles = new Map<Element, string>();
+    const ENTER_ACTIVE = 0.75, ENTER_WARM = 0.60, EXIT_IDLE = 0.40;
+    const pending = new Map<Element, number>();
 
-    // Observe entries and select a single Active (>=0.75), one Warm (>=0.6), else Idle
     const io = new IntersectionObserver((entries) => {
-      // Pick the most centered/highest ratio as candidate Active
-      let best: { el: Element; ratio: number } | null = null;
-      let warm: Element | null = null;
       for (const e of entries) {
-        const id = (e.target as HTMLElement).getAttribute('data-commitment-id');
+        const el = e.target as HTMLElement;
+        const id = el.getAttribute('data-commitment-id');
         if (!id) continue;
-        tiles.set(e.target, id);
-        const r = e.intersectionRatio;
-        if (r >= 0.75 && (!best || r > best.ratio)) best = { el: e.target, ratio: r };
-        else if (r >= 0.6) warm = e.target;
-        else if (r <= 0.4) {
-          // Demote quickly when off-screen
-          const activeEl = (FeedMediaManager.inst.active as any)?.el as Element | undefined;
-          if (activeEl && activeEl === e.target) FeedMediaManager.inst.setActive(undefined);
-        }
+        // Debounce transitions to avoid chatter
+        const prev = pending.get(el);
+        if (prev) clearTimeout(prev);
+        const t = window.setTimeout(() => {
+          const ratio = e.intersectionRatio;
+          if (ratio >= ENTER_ACTIVE) {
+            const handle = FeedMediaManager.inst.getHandleByElement(el);
+            if (handle) FeedMediaManager.inst.setActive(handle);
+          } else if (ratio >= ENTER_WARM) {
+            const handle = FeedMediaManager.inst.getHandleByElement(el);
+            if (handle) FeedMediaManager.inst.setWarm(handle);
+          } else if (ratio <= EXIT_IDLE) {
+            const handle = FeedMediaManager.inst.getHandleByElement(el);
+            if (handle) FeedMediaManager.inst.setIdle(handle);
+          }
+        }, 180);
+        pending.set(el, t);
       }
-      if (best) {
-        const handle = FeedMediaManager.inst.getHandleByElement(best.el);
-        if (handle) FeedMediaManager.inst.setActive(handle);
-      }
-      if (warm) {
-        const handle = FeedMediaManager.inst.getHandleByElement(warm);
-        if (handle) FeedMediaManager.inst.setWarm(handle);
-        // Prefetch next tile HLS playlist + first segment via SW (parse real URIs)
-        (async () => {
-          try {
-            const master = (warm as HTMLElement).getAttribute('data-hls-master');
-            const swc = (navigator as any)?.serviceWorker?.controller;
-            if (!master || !swc) return;
-            // Network guard: skip prefetch on data saver or very low downlink
-            const conn: any = (navigator as any)?.connection || (navigator as any)?.mozConnection || (navigator as any)?.webkitConnection;
-            if (conn) {
-              const saveData = Boolean(conn.saveData);
-              const downlink = typeof conn.downlink === 'number' ? conn.downlink : 10; // Mbps
-              if (saveData || downlink < 1.5) return;
-            }
-            const masterUrl = new URL(master, location.href).toString();
-            const res = await fetch(masterUrl, { cache: 'no-store' });
-            if (!res.ok) return;
-            const text = await res.text();
-            const lines = text.split(/\r?\n/);
-            // Try to find the lowest BANDWIDTH variant
-            type Variant = { bandwidth: number; uri: string };
-            const variants: Variant[] = [];
-            for (let i = 0; i < lines.length - 1; i++) {
-              const l = lines[i];
-              if (l.startsWith('#EXT-X-STREAM-INF')) {
-                const bwMatch = l.match(/BANDWIDTH=(\d+)/);
-                const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
-                const uri = lines[i + 1];
-                if (uri && !uri.startsWith('#')) variants.push({ bandwidth: bw, uri });
-              }
-            }
-            // If no variants, this is already a media playlist
-            let variantUrl = masterUrl;
-            if (variants.length > 0) {
-              variants.sort((a, b) => a.bandwidth - b.bandwidth);
-              const chosen = variants[0];
-              variantUrl = new URL(chosen.uri, masterUrl).toString();
-            }
-            // Fetch variant playlist and get first media segment
-            const vres = await fetch(variantUrl, { cache: 'no-store' });
-            if (!vres.ok) return;
-            const vtxt = await vres.text();
-            const vlines = vtxt.split(/\r?\n/);
-            let firstSeg: string | null = null;
-            for (let i = 0; i < vlines.length; i++) {
-              const l = vlines[i];
-              if (!l || l.startsWith('#')) continue;
-              firstSeg = l.trim();
-              break;
-            }
-            const segUrl = firstSeg ? new URL(firstSeg, variantUrl).toString() : null;
-            const urls = [variantUrl].concat(segUrl ? [segUrl] : []);
-            swc.postMessage({ type: 'PREFETCH', urls });
-          } catch {}
-        })();
-      }
-    }, { threshold: [0.4, 0.6, 0.75] });
+    }, { threshold: [EXIT_IDLE, ENTER_WARM, ENTER_ACTIVE] });
 
     const attach = () => {
       root.querySelectorAll('[data-commitment-id]')?.forEach((el) => io.observe(el));

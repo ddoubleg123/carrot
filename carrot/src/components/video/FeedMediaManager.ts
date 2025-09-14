@@ -59,6 +59,15 @@ class FeedMediaManager {
     }
   }
 
+  // Demote a handle to idle: pause, release, and clear active/warm if it matches
+  setIdle(handle?: VideoHandle) {
+    if (!handle) return;
+    try { handle.pause(); } catch {}
+    try { handle.release(); } catch {}
+    if (this._active === handle) this._active = undefined;
+    if (this._warm === handle) this._warm = undefined;
+  }
+
   clearAll() {
     if (this._active) { try { this._active.pause(); this._active.release(); } catch {} }
     if (this._warm) { try { this._warm.release(); } catch {} }
