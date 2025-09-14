@@ -140,7 +140,10 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         }
         if (bucket && path) {
           const encPath = encodeURIComponent(path);
-          return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`;
+          const token = sp.get('token');
+          const durable = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+          if (token) durable.searchParams.set('token', token);
+          return durable.toString();
         }
         if (host === 'firebasestorage.googleapis.com' && !sp.has('alt')) {
           url.searchParams.set('alt', 'media');

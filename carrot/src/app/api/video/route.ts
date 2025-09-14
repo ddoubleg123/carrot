@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
           const bucket = `${project}.appspot.com`;
           const encPath = encodeURIComponent(objectPath);
           const rewritten = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+          const token = target.searchParams.get('token');
+          if (token) rewritten.searchParams.set('token', token);
           target = rewritten;
         }
       }
