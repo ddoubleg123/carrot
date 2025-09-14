@@ -191,9 +191,13 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     const effectiveAudioUrl = audioUrl || null;
     // Coerce gradients to safe strings so Prisma includes them in INSERT
     const gDir = typeof gradientDirection === 'string' && gradientDirection ? gradientDirection : 'to-br';
-    const gFrom = typeof gradientFromColor === 'string' && gradientFromColor ? gradientFromColor : null;
-    const gVia = typeof gradientViaColor === 'string' && gradientViaColor ? gradientViaColor : null;
-    const gTo = typeof gradientToColor === 'string' && gradientToColor ? gradientToColor : null;
+    // Provide safe defaults to prevent missing gradients
+    const DEFAULT_FROM = '#0f172a';
+    const DEFAULT_VIA = '#1f2937';
+    const DEFAULT_TO = '#0f172a';
+    const gFrom = typeof gradientFromColor === 'string' && gradientFromColor ? gradientFromColor : DEFAULT_FROM;
+    const gVia = typeof gradientViaColor === 'string' && gradientViaColor ? gradientViaColor : DEFAULT_VIA;
+    const gTo = typeof gradientToColor === 'string' && gradientToColor ? gradientToColor : DEFAULT_TO;
     if (process.env.NODE_ENV !== 'production') {
       try {
         console.debug('POST /api/posts media+gradient snapshot:', {

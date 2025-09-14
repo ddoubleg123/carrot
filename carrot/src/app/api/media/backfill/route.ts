@@ -100,6 +100,41 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       return NextResponse.json({ ok: true, mode, created, examined: assets.length, limit });
     }
 
+    // Special mode: backfill gradients for existing posts missing colors
+    if (mode === 'gradients') {
+      const DEFAULT_FROM = '#0f172a';
+      const DEFAULT_VIA = '#1f2937';
+      const DEFAULT_TO = '#0f172a';
+      const backfillWhere: any = { OR: [
+        { gradientFromColor: null },
+        { gradientToColor: null },
+      ] };
+      if (!all) {
+        backfillWhere.createdAt = { gte: new Date(Date.now() - hours * 60 * 60 * 1000) };
+      }
+      const candidates = await prisma.post.findMany({
+        where: backfillWhere,
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(1, Math.min(500, limit)),
+        select: { id: true, gradientFromColor: true, gradientViaColor: true, gradientToColor: true },
+      });
+      let updated = 0;
+      for (const p of candidates) {
+        await prisma.post.update({
+          where: { id: p.id },
+          data: {
+            gradientDirection: 'to-br',
+            gradientFromColor: p.gradientFromColor || DEFAULT_FROM,
+            gradientViaColor: p.gradientViaColor || DEFAULT_VIA,
+            gradientToColor: p.gradientToColor || DEFAULT_TO,
+          }
+        });
+        updated++;
+      }
+      const totalMissing = await prisma.post.count({ where: backfillWhere });
+      return NextResponse.json({ ok: true, mode, updated, examined: candidates.length, remaining: totalMissing });
+    }
+
     // Find recent completed ingest jobs (any user), then attach results to the current user's Media Library
     // This covers cases where ingests were started while not signed-in or under a different userId.
     const where: any = { status: { in: ['completed', 'success', 'done', 'finished'] } };
