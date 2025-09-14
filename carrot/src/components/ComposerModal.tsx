@@ -986,7 +986,35 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     try {
       // 1) Resolve media URL to attach
       let uploadedMediaUrl: string | null = null;
-      if (mediaFile) {
+      // Is a trim requested at all?
+      const trimmingRequested = !!(
+        mediaType === 'video' &&
+        ((videoTrimStart && videoTrimStart > 0) || (videoTrimEnd && videoTrimEnd > 0)) &&
+        (videoTrimEnd === 0 || videoTrimEnd > videoTrimStart)
+      );
+
+      // If user uploaded a file AND trimming is requested, render trimmed clip and upload that instead of full
+      if (mediaFile && trimmingRequested) {
+        try {
+          setIsRenderingClip(true);
+          // Prefer preview source if available, otherwise create a blob URL for the file
+          const src = mediaPreview || URL.createObjectURL(mediaFile);
+          const trimmedFile = await renderTrimmedClip(src, videoTrimStart || 0, videoTrimEnd || 0);
+          setIsRenderingClip(false);
+          if (trimmedFile) {
+            const uploaded = await uploadFilesToFirebase([trimmedFile], 'posts/');
+            uploadedMediaUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
+          }
+          // Cleanup object URL if we created one
+          try { if (src && src.startsWith('blob:') && src !== mediaPreview) URL.revokeObjectURL(src); } catch {}
+        } catch (e) {
+          console.error('[ComposerModal] Failed to trim uploaded file, falling back to full upload', e);
+          setIsRenderingClip(false);
+        }
+      }
+
+      // If no trimmed result yet and we have a media file, upload the original file
+      if (!uploadedMediaUrl && mediaFile) {
         try {
           const uploaded = await uploadFilesToFirebase([mediaFile], 'posts/');
           uploadedMediaUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
@@ -1016,11 +1044,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       }
 
       // 2) If trimming is requested on an external/derived video, try to render and upload the trimmed clip client-side
-      const trimmingRequested = !!(
-        mediaType === 'video' && mediaBaseUrlRef.current &&
-        ((videoTrimStart && videoTrimStart > 0) || (videoTrimEnd && videoTrimEnd > 0)) &&
-        (videoTrimEnd === 0 || videoTrimEnd > videoTrimStart)
-      );
       if (!mediaFile && trimmingRequested && mediaBaseUrlRef.current) {
         try {
           setIsRenderingClip(true);
@@ -1044,6 +1067,21 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       const user = (session as any)?.user || {};
       const mediaUrlToUse = uploadedMediaUrl || derivedVideoUrl || selectedGif || null;
       const mediaKind = mediaUrlToUse ? (mediaType || (selectedGif ? 'gif' : (audioClipUrl ? 'audio' : null))) : null;
+
+      // Upload edited thumbnail (data URL) to Firebase to ensure persistence
+      let thumbnailUrlToSend: string | null = editedThumb || null;
+      if (editedThumb && editedThumb.startsWith('data:')) {
+        try {
+          const resp = await fetch(editedThumb);
+          const blob = await resp.blob();
+          const thumbFile = new File([blob], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const uploaded = await uploadFilesToFirebase([thumbFile], 'posts/thumbs/');
+          const up = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
+          if (up) thumbnailUrlToSend = up;
+        } catch (e) {
+          console.warn('[ComposerModal] Failed to upload edited thumbnail, continuing without persistent thumbnail', e);
+        }
+      }
       const newPost: any = {
         id: tempId,
         content: content || '',
@@ -1099,7 +1137,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             videoUrl: newPost.videoUrl || null,
             gifUrl: newPost.gifUrl || null,
             audioUrl: newPost.audioUrl || null,
-            thumbnailUrl: editedThumb || null,
+            thumbnailUrl: thumbnailUrlToSend || null,
           }),
         });
         if (res.ok) {

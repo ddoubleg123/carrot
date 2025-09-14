@@ -15,13 +15,18 @@ type PostModalData = {
     username?: string | null;
     profilePhoto?: string | null;
     profilePhotoPath?: string | null;
-    homeCountry?: string | null;
+    country?: string | null;
   } | null;
   imageUrls?: string | null;
   videoUrl?: string | null;
   thumbnailUrl?: string | null;
   audioUrl?: string | null;
   captionVttUrl?: string | null;
+  // Visuals
+  gradientDirection?: string | null;
+  gradientFromColor?: string | null;
+  gradientViaColor?: string | null;
+  gradientToColor?: string | null;
 };
 
 function usePost(id?: string | null) {
@@ -49,9 +54,8 @@ function usePost(id?: string | null) {
 export default function PostModal({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, loading } = usePost(id);
   const params = useSearchParams();
-  const initialPanel = (params?.get('panel') as ('transcript' | 'translate' | 'comments' | null)) || null;
+  const initialPanel = (params?.get('panel') as ('comments' | null)) || null;
   const [showComments, setShowComments] = useState(initialPanel === 'comments');
-  const [panel, setPanel] = useState<"media" | "transcript" | "translate">(initialPanel === 'transcript' ? 'transcript' : initialPanel === 'translate' ? 'translate' : 'media');
   const [mediaEl, setMediaEl] = useState<HTMLVideoElement | HTMLAudioElement | null>(null);
   type Seg = { start: number; end?: number; text: string };
   const [segments, setSegments] = useState<Seg[]>([]);
@@ -72,75 +76,10 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     return "/avatar-placeholder.svg";
   }, [data?.User]);
 
-  // Load transcript segments from VTT if available
-  useEffect(() => {
-    async function loadVtt(url: string) {
-      setSegmentsLoading(true);
-      setSegmentsError(null);
-      try {
-        const resp = await fetch(url, { cache: 'no-store' });
-        if (!resp.ok) throw new Error(`VTT fetch failed: ${resp.status}`);
-        const text = await resp.text();
-        const segs = parseWebVtt(text);
-        setSegments(segs);
-      } catch (e: any) {
-        setSegmentsError(String(e?.message || e));
-        setSegments([]);
-      } finally {
-        setSegmentsLoading(false);
-      }
-    }
-    if (data?.captionVttUrl) {
-      loadVtt(data.captionVttUrl);
-    } else {
-      setSegments([]);
-      setSegmentsLoading(false);
-      setSegmentsError(null);
-    }
-  }, [data?.captionVttUrl]);
+  // Transcript removed from modal per design; handled elsewhere if needed
 
   // Regenerate transcript via existing trigger endpoint, then poll post for updated caption/transcription
-  async function regenerateTranscript() {
-    if (!data?.id || !data?.audioUrl) return;
-    setRegenBusy(true);
-    setRegenMsg('Regenerating transcript…');
-    try {
-      const resp = await fetch('/api/audio/trigger-transcription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: data.id, audioUrl: data.audioUrl })
-      });
-      if (!resp.ok) throw new Error(`Trigger failed: ${resp.status}`);
-      // Poll the post endpoint for updated status/captions for up to ~30s
-      const deadline = Date.now() + 30000;
-      let lastStatus = 'processing';
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1500));
-        const pr = await fetch(`/api/posts/${data.id}`, { cache: 'no-store' });
-        if (!pr.ok) continue;
-        const pj = await pr.json();
-        lastStatus = pj?.transcriptionStatus || lastStatus;
-        if (pj?.captionVttUrl) {
-          setRegenMsg('Transcript ready. Loading…');
-          // Trigger VTT reload
-          try {
-            const text = await (await fetch(pj.captionVttUrl, { cache: 'no-store' })).text();
-            setSegments(parseWebVtt(text));
-          } catch {}
-          break;
-        }
-        if (lastStatus === 'completed' || lastStatus === 'failed') {
-          // Even if no VTT, stop polling
-          break;
-        }
-      }
-    } catch (e: any) {
-      setRegenMsg(`Failed to regenerate: ${String(e?.message || e)}`);
-    } finally {
-      setTimeout(() => setRegenMsg(null), 3000);
-      setRegenBusy(false);
-    }
-  }
+  // Transcript regeneration removed from modal
 
   // Render media body without nested ternaries
   function renderMedia() {
@@ -199,137 +138,37 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900 truncate">{username}</span>
-                <FlagChip countryCode={data?.User?.homeCountry || undefined} />
+                <FlagChip countryCode={data?.User?.country || undefined} />
                 <span className="text-xs text-gray-500">• {data?.createdAt ? new Date(data.createdAt).toLocaleString() : ""}</span>
               </div>
             </div>
             <button className="px-2 py-1 rounded hover:bg-gray-100" aria-label="Close" onClick={onClose}>✕</button>
           </div>
 
-          {/* Tabs */}
+          {/* Simple toolbar: Content and Comments */}
           <div className="px-4 pt-3">
             <div className="flex items-center gap-2 border-b">
-              {([
-                { k: 'media', label: 'Content' },
-                { k: 'transcript', label: 'Transcript' },
-                { k: 'translate', label: 'Translate' },
-              ] as const).map(t => (
-                <button
-                  key={t.k}
-                  className={["px-3 py-2 text-sm", panel === t.k ? "border-b-2 border-gray-900 text-gray-900" : "text-gray-500 hover:text-gray-800"].join(' ')}
-                  onClick={() => setPanel(t.k)}
-                >{t.label}</button>
-              ))}
+              <span className="px-3 py-2 text-sm border-b-2 border-gray-900 text-gray-900">Content</span>
               <div className="ml-auto" />
               <button className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800" onClick={() => setShowComments(true)}>Comments</button>
             </div>
           </div>
 
           {/* Panel bodies */}
-          {panel === 'media' && (
-            <div className="p-3">
-              <div className="rounded-xl overflow-hidden" style={{ background: "linear-gradient(135deg,#F97316,#3B82F6)" }}>
-                <div className="w-full h-[360px] flex items-center justify-center">{renderMedia()}</div>
-              </div>
+          <div className="p-3">
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                background: `linear-gradient(135deg, ${data?.gradientFromColor || '#0f172a'}, ${data?.gradientViaColor || data?.gradientFromColor || '#1f2937'}, ${data?.gradientToColor || '#0f172a'})`
+              }}
+            >
+              <div className="w-full h-[360px] flex items-center justify-center">{renderMedia()}</div>
             </div>
-          )}
-
-          {panel === 'transcript' && (
-            <div className="p-4">
-              <div className="rounded-lg border bg-white">
-                <div className="p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <button
-                      className="px-2 py-1 rounded border text-xs disabled:opacity-50"
-                      onClick={regenerateTranscript}
-                      disabled={regenBusy || !data?.audioUrl}
-                      title={data?.audioUrl ? 'Regenerate transcript using Vosk service' : 'No audio available'}
-                    >{regenBusy ? 'Regenerating…' : 'Regenerate transcript'}</button>
-                    {regenMsg ? <span className="text-xs text-gray-500">{regenMsg}</span> : null}
-                  </div>
-                  {!data?.captionVttUrl ? (
-                    <div className="text-sm text-gray-600">No transcript available for this post.</div>
-                  ) : segmentsLoading ? (
-                    <div className="text-sm text-gray-600">Loading transcript…</div>
-                  ) : segmentsError ? (
-                    <div className="text-sm text-red-600">{segmentsError}</div>
-                  ) : segments.length === 0 ? (
-                    <div className="text-sm text-gray-600">No cues found in VTT.</div>
-                  ) : (
-                    <div className="max-h-80 overflow-auto divide-y">
-                      {segments.map((s, i) => (
-                        <button
-                          key={i}
-                          className="w-full text-left px-2 py-1.5 text-[13px] hover:bg-gray-50"
-                          onClick={() => {
-                            if (!mediaEl) return;
-                            const t = Math.max(0, s.start / 1000);
-                            try { (mediaEl as any).pause?.(); } catch {}
-                            try { (mediaEl as any).currentTime = t; } catch {}
-                            try { (mediaEl as any).play?.(); } catch {}
-                          }}
-                        >
-                          <span className="text-gray-400 mr-2">[{formatTimeMs(s.start)}]</span>
-                          <span>{s.text}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {panel === 'translate' && (
-            <div className="p-4">
-              <div className="rounded-lg border bg-white">
-                <div className="p-3 text-sm text-gray-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Target language</label>
-                    <select className="border rounded px-2 py-1 text-sm" value={lang} onChange={(e) => setLang(e.target.value)}>
-                      <option value="en">English</option>
-                      <option value="es">Spanish</option>
-                      <option value="fr">French</option>
-                      <option value="de">German</option>
-                      <option value="pt">Portuguese</option>
-                      <option value="zh">Chinese</option>
-                      <option value="ja">Japanese</option>
-                    </select>
-                    <button
-                      className="ml-2 px-2 py-1 rounded border text-xs"
-                      disabled={!segments.length || translateLoading}
-                      onClick={async () => {
-                        setTranslateError(null);
-                        setTranslated(null);
-                        setTranslateLoading(true);
-                        try {
-                          const text = segments.map(s => s.text).join(' ');
-                          const res = await fetch('/api/translate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text, targetLanguage: lang })
-                          });
-                          const j = await res.json();
-                          if (!res.ok || j?.success === false) throw new Error(j?.error || 'Translation failed');
-                          setTranslated(j.translation || j.translatedText || '');
-                        } catch (e: any) {
-                          setTranslateError(String(e?.message || e));
-                        } finally {
-                          setTranslateLoading(false);
-                        }
-                      }}
-                    >{translateLoading ? 'Translating…' : 'Translate'}</button>
-                  </div>
-                  {translateError ? <div className="text-sm text-red-600">{translateError}</div> : null}
-                  {translated ? (
-                    <div className="text-[13px] leading-6 whitespace-pre-wrap">{translated}</div>
-                  ) : (
-                    <div className="text-xs text-gray-500">Choose a language and translate the transcript.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+            {data?.content ? (
+              <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words">{data.content}</div>
+            ) : null}
+          </div>
+          {/* Transcript/Translate removed per design */}
 
           {/* Footer actions (kept minimal; main actions live on cards) */}
           <div className="px-4 pb-4 text-xs text-gray-500">Tip: Use the action bar in the feed to like, share, save, or open transcript/translate directly.</div>
