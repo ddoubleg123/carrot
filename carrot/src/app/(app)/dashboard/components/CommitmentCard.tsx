@@ -168,6 +168,39 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const analyserRef = useRef<ReturnType<typeof createAnalyserFromMedia> | null>(null);
   const { openPostModal } = useModalRoute();
+  // Hover UI state and video element handle
+  const [hovering, setHovering] = useState(false);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const [muted, setMuted] = useState(true);
+  const [playing, setPlaying] = useState(false);
+  const attachVideoRef = (el: HTMLVideoElement | null) => {
+    videoElRef.current = el;
+    try {
+      if (!el) return;
+      // Keep local state in sync for button labels
+      const onPlay = () => setPlaying(true);
+      const onPause = () => setPlaying(false);
+      const onVolume = () => setMuted(el.muted);
+      el.addEventListener('play', onPlay);
+      el.addEventListener('pause', onPause);
+      el.addEventListener('volumechange', onVolume);
+      // Initialize
+      setMuted(el.muted);
+      setPlaying(!el.paused);
+      // Cleanup when element changes
+      const cleanup = () => {
+        try {
+          el.removeEventListener('play', onPlay);
+          el.removeEventListener('pause', onPause);
+          el.removeEventListener('volumechange', onVolume);
+        } catch {}
+      };
+      (attachVideoRef as any)._cleanup = cleanup;
+    } catch {}
+  };
+  useEffect(() => {
+    return () => { try { (attachVideoRef as any)?._cleanup?.(); } catch {} };
+  }, []);
 
   const isOwnPost = useMemo(() => Boolean(currentUserId && author?.id && currentUserId === author.id), [currentUserId, author?.id]);
   const displayTime = useMemo(() => {
@@ -268,6 +301,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       {...dataAttrs}
       {...filterRootDivProps(rest as Record<string, any>)}
       style={undefined}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
     >
       <div
         className={[
@@ -501,6 +536,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       transcriptionStatus={transcriptionStatus || undefined}
                       uploadStatus={uploadStatus || null}
                       uploadProgress={uploadProgress || 0}
+                      onVideoRef={attachVideoRef}
                     />
                   );
                 }
@@ -540,6 +576,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     transcriptionStatus={transcriptionStatus || undefined}
                     uploadStatus={uploadStatus || null}
                     uploadProgress={uploadProgress || 0}
+                    onVideoRef={attachVideoRef}
                   />
                 );
               })()}
@@ -551,6 +588,45 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 title="Open post"
                 onClick={() => openPostModal(id)}
               />
+              {/* Hover inline controls that do not block the modal click elsewhere */}
+              {hovering && (
+                <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded bg-black/60 text-white text-xs hover:bg-black/70"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      try {
+                        const el = videoElRef.current;
+                        if (!el) return;
+                        if (el.paused) { el.play().catch(() => {}); setPlaying(true); }
+                        else { el.pause(); setPlaying(false); }
+                      } catch {}
+                    }}
+                    aria-label={playing ? 'Pause video' : 'Play video'}
+                    title={playing ? 'Pause' : 'Play'}
+                  >
+                    {playing ? 'Pause' : 'Play'}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded bg-black/60 text-white text-xs hover:bg-black/70"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      try {
+                        const el = videoElRef.current;
+                        if (!el) return;
+                        el.muted = !el.muted;
+                        setMuted(el.muted);
+                      } catch {}
+                    }}
+                    aria-label={muted ? 'Unmute video' : 'Mute video'}
+                    title={muted ? 'Unmute' : 'Mute'}
+                  >
+                    {muted ? 'Unmute' : 'Mute'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

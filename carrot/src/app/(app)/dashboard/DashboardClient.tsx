@@ -92,7 +92,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         name: '',
         username: finalUsername,
         avatar: finalAvatar,
-        flag: undefined,
+        flag: userObj?.country || null,
         id: post.userId,
       },
       homeCountry: userObj?.country || null,
@@ -167,8 +167,14 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         author: {
           name: '',
           username: (tempPost.author && tempPost.author.username) || (session?.user as any)?.username || 'user',
-          avatar: (tempPost.author && tempPost.author.avatar) || (session?.user as any)?.image || '/avatar-placeholder.svg',
-          flag: undefined,
+          avatar: (tempPost.author && tempPost.author.avatar)
+            || (session?.user as any)?.profilePhoto
+            || (session?.user as any)?.image
+            || '/avatar-placeholder.svg',
+          flag: (tempPost.author && (tempPost.author as any).flag)
+            || (tempPost as any)?.homeCountry
+            || (tempPost.User && (tempPost.User as any).country)
+            || null,
           id: (tempPost.author && tempPost.author.id) || (session?.user as any)?.id || 'u_local',
         },
         homeCountry: tempPost.homeCountry || (tempPost.User?.country) || null,

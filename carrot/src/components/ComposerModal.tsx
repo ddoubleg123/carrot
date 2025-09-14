@@ -1015,12 +1015,29 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         }
       }
 
-      // 2) Decide if we should request background trim for externally ingested video
-      const shouldBackgroundTrim = !!(
-        !mediaFile && mediaType === 'video' && mediaBaseUrlRef.current &&
+      // 2) If trimming is requested on an external/derived video, try to render and upload the trimmed clip client-side
+      const trimmingRequested = !!(
+        mediaType === 'video' && mediaBaseUrlRef.current &&
         ((videoTrimStart && videoTrimStart > 0) || (videoTrimEnd && videoTrimEnd > 0)) &&
         (videoTrimEnd === 0 || videoTrimEnd > videoTrimStart)
       );
+      if (!mediaFile && trimmingRequested && mediaBaseUrlRef.current) {
+        try {
+          setIsRenderingClip(true);
+          const trimmed: File | null = await renderTrimmedClip(mediaBaseUrlRef.current, videoTrimStart || 0, videoTrimEnd || 0);
+          setIsRenderingClip(false);
+          if (trimmed) {
+            const uploaded = await uploadFilesToFirebase([trimmed], 'posts/');
+            const trimmedUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
+            if (trimmedUrl) {
+              uploadedMediaUrl = trimmedUrl;
+            }
+          }
+        } catch (e) {
+          console.error('[ComposerModal] Failed to render/upload trimmed clip, falling back to original URL', e);
+          setIsRenderingClip(false);
+        }
+      }
 
       // 3) Create post payload (client-side model; API may vary)
       const tempId = `post-${Date.now()}`;
@@ -1037,7 +1054,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         uploadStatus: isUploading ? 'uploading' : 'uploaded',
         uploadProgress,
         transcriptionStatus: audioClipUrl || mediaKind === 'video' ? 'pending' : null,
-        status: shouldBackgroundTrim ? 'processing' : null,
+        status: null,
         // fields consumed by DashboardClient.mapServerPostToCard
         userId: user?.id,
         User: {
@@ -1045,11 +1062,24 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           username: (user as any)?.username || (user as any)?.name || (user as any)?.email?.split('@')?.[0] || 'me',
           profilePhoto: (user as any)?.profilePhoto || null,
           image: (user as any)?.image || null,
+          country: (user as any)?.country || null,
         },
+        author: {
+          id: user?.id,
+          username: (user as any)?.username || (user as any)?.name || (user as any)?.email?.split('@')?.[0] || 'me',
+          avatar: (user as any)?.profilePhoto || (user as any)?.image || '/avatar-placeholder.svg',
+          flag: (user as any)?.country || null,
+        },
+        homeCountry: (user as any)?.country || null,
+        gradientFromColor: colorSchemes[currentColorScheme].gradientFromColor,
+        gradientToColor: colorSchemes[currentColorScheme].gradientToColor,
+        gradientViaColor: colorSchemes[currentColorScheme].gradientViaColor,
+        gradientDirection: 'to-br',
         // convenience fields for any other optimistic consumers
         mediaUrl: mediaUrlToUse,
         mediaType: mediaKind,
         createdAt: new Date().toISOString(),
+        thumbnailUrl: editedThumb || null,
       };
 
       // 4) Persist post via API (best-effort; keep optimistic update)
@@ -1083,37 +1113,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       // 5) Surface to feed immediately
       onPost(newPost);
 
-      // 6) Start background trim if required
-      if (shouldBackgroundTrim && mediaBaseUrlRef.current) {
-        try {
-          const trimRes = await fetch('/api/trim', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sourceUrl: mediaBaseUrlRef.current,
-              startSec: videoTrimStart || 0,
-              endSec: videoTrimEnd || 0,
-              postId: newPost.id,
-            }),
-          });
-          if (trimRes.ok) {
-            const trimData = await trimRes.json().catch(() => null);
-            const trimJobId = trimData?.job?.id || trimData?.jobId || null;
-            if (trimJobId) {
-              onPostUpdate(newPost.id, { ...newPost, status: 'processing', trimJobId });
-              showSuccessToast('Trimming started in background. We will update your post when ready.');
-            } else {
-              showErrorToast('Trim job started but no job ID returned.');
-            }
-          } else {
-            const t = await trimRes.text().catch(() => '');
-            showErrorToast(`Failed to start trim job (${trimRes.status})${t ? ': ' + t : ''}`);
-          }
-        } catch (trimErr) {
-          console.error('Failed to enqueue trim job:', trimErr);
-          showErrorToast('Failed to start background trimming');
-        }
-      }
+      // 6) Background trim no longer needed when client-side trim succeeded; if trimming failed and you still want background, we can re-enable later.
 
       // 7) Link ingest job to post if this was an external video
       if (ingestJobId) {

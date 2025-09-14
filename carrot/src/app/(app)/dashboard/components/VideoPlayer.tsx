@@ -17,9 +17,10 @@ interface VideoPlayerProps {
   transcriptionStatus?: string | null;
   uploadStatus?: 'uploading' | 'uploaded' | 'processing' | 'ready' | null;
   uploadProgress?: number;
+  onVideoRef?: (el: HTMLVideoElement | null) => void;
 }
 
-export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTranscription, transcriptionStatus, uploadStatus, uploadProgress }: VideoPlayerProps) {
+export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTranscription, transcriptionStatus, uploadStatus, uploadProgress, onVideoRef }: VideoPlayerProps) {
   const [hasError, setHasError] = useState(false);
   const [browserInfo, setBrowserInfo] = useState<{ isChromium: boolean; supportsH264: boolean } | null>(null);
   
@@ -153,6 +154,11 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     
     setBrowserInfo({ isChromium, supportsH264 });
   }, []);
+
+  // Expose null on unmount
+  useEffect(() => {
+    return () => { try { if (onVideoRef) onVideoRef(null); } catch {} };
+  }, [onVideoRef]);
 
   // Poll for transcription status if postId is provided
   useEffect(() => {
@@ -288,6 +294,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    try { if (onVideoRef) onVideoRef(el); } catch {}
     // Ensure muted is set ASAP to satisfy autoplay policies
     el.muted = true;
     const rect = el.getBoundingClientRect();
