@@ -1,9 +1,54 @@
 "use client";
 import React from "react";
 
-function countryToEmoji(code?: string | null): string | null {
-  if (!code) return null;
-  let cc = code.trim().toUpperCase();
+const NAME_TO_ISO2: Record<string, string> = {
+  // Common names to ISO-2
+  "UNITED STATES": "US",
+  "USA": "US",
+  "UNITED KINGDOM": "GB",
+  "UK": "GB",
+  "GREAT BRITAIN": "GB",
+  "ENGLAND": "GB",
+  "SCOTLAND": "GB",
+  "WALES": "GB",
+  "N. IRELAND": "GB",
+  "NORTHERN IRELAND": "GB",
+  "PALESTINE": "PS",
+  "ISRAEL": "IL",
+  "CANADA": "CA",
+  "MEXICO": "MX",
+  "FRANCE": "FR",
+  "GERMANY": "DE",
+  "SPAIN": "ES",
+  "PORTUGAL": "PT",
+  "BRAZIL": "BR",
+  "INDIA": "IN",
+  "CHINA": "CN",
+  "JAPAN": "JP",
+  "SOUTH KOREA": "KR",
+  "KOREA": "KR",
+  "RUSSIA": "RU",
+  "UKRAINE": "UA",
+  "TURKEY": "TR",
+  "UAE": "AE",
+  "UNITED ARAB EMIRATES": "AE",
+};
+
+function normalizeCountry(input?: string | null): string | null {
+  if (!input) return null;
+  let s = input.trim();
+  if (!s) return null;
+  // If already looks like 2-letter code, normalize case
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  const upper = s.toUpperCase();
+  const mapped = NAME_TO_ISO2[upper];
+  return mapped ? mapped : null;
+}
+
+function countryToEmoji(codeOrName?: string | null): string | null {
+  const norm = normalizeCountry(codeOrName);
+  if (!norm) return null;
+  let cc = norm;
   // Business rule: replace Israel (IL) with Palestinian flag (PS)
   if (cc === 'IL') cc = 'PS';
   if (!/^[A-Z]{2}$/.test(cc)) return null;
@@ -29,7 +74,7 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
         </span>
       ) : (
         <span className="text-[11px] font-semibold tracking-wide">
-          {(countryCode || '').toString().toUpperCase().slice(0, 3)}
+          {(normalizeCountry(countryCode) || '').toString().toUpperCase().slice(0, 3)}
         </span>
       )}
     </span>

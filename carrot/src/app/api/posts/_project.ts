@@ -59,5 +59,7 @@ export function projectPost(row: any) {
       image: user.image || null,
     },
   };
+  // For backward-compat consumers, mirror country at top-level homeCountry
+  (out as any).homeCountry = (user as any)?.country || null;
   return out;
 }

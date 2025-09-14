@@ -18,9 +18,10 @@ interface VideoPlayerProps {
   uploadStatus?: 'uploading' | 'uploaded' | 'processing' | 'ready' | null;
   uploadProgress?: number;
   onVideoRef?: (el: HTMLVideoElement | null) => void;
+  disableNativeControls?: boolean; // when true, rely on overlay controls
 }
 
-export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTranscription, transcriptionStatus, uploadStatus, uploadProgress, onVideoRef }: VideoPlayerProps) {
+export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTranscription, transcriptionStatus, uploadStatus, uploadProgress, onVideoRef, disableNativeControls = true }: VideoPlayerProps) {
   const [hasError, setHasError] = useState(false);
   const [browserInfo, setBrowserInfo] = useState<{ isChromium: boolean; supportsH264: boolean } | null>(null);
   
@@ -401,7 +402,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         <video
           key={resolvedSrc}
           ref={videoRef}
-          controls
+          controls={!disableNativeControls}
           muted
           loop
           playsInline

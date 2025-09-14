@@ -537,6 +537,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       uploadStatus={uploadStatus || null}
                       uploadProgress={uploadProgress || 0}
                       onVideoRef={attachVideoRef}
+                      disableNativeControls
                     />
                   );
                 }
@@ -577,13 +578,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     uploadStatus={uploadStatus || null}
                     uploadProgress={uploadProgress || 0}
                     onVideoRef={attachVideoRef}
+                    disableNativeControls
                   />
                 );
               })()}
-              {/* Click overlay: leave bottom ~48px for native controls */}
+              {/* Click overlay: exclude area where hover controls live (right side) to keep them fully clickable */}
               <button
                 type="button"
-                className="absolute inset-x-0 top-0 bottom-12 z-10 cursor-pointer bg-transparent"
+                className="absolute left-0 top-0 bottom-0 right-24 z-10 cursor-pointer bg-transparent"
                 aria-label="Open post"
                 title="Open post"
                 onClick={() => openPostModal(id)}

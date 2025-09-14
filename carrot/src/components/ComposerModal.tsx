@@ -986,12 +986,18 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     try {
       // 1) Resolve media URL to attach
       let uploadedMediaUrl: string | null = null;
-      // Is a trim requested at all?
+      // Is a trim requested at all? Consider any video-like input
+      const isVideoType = Boolean(
+        (typeof mediaType === 'string' && mediaType.toLowerCase().startsWith('video')) ||
+        (mediaFile && mediaFile.type && mediaFile.type.toLowerCase().startsWith('video')) ||
+        (mediaBaseUrlRef.current && typeof mediaBaseUrlRef.current === 'string')
+      );
       const trimmingRequested = !!(
-        mediaType === 'video' &&
+        isVideoType &&
         ((videoTrimStart && videoTrimStart > 0) || (videoTrimEnd && videoTrimEnd > 0)) &&
         (videoTrimEnd === 0 || videoTrimEnd > videoTrimStart)
       );
+      try { console.log('[Composer] trimmingRequested?', { isVideoType, videoTrimStart, videoTrimEnd, trimmingRequested, mediaType }); } catch {}
 
       // If user uploaded a file AND trimming is requested, render trimmed clip and upload that instead of full
       if (mediaFile && trimmingRequested) {
@@ -1000,10 +1006,12 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           // Prefer preview source if available, otherwise create a blob URL for the file
           const src = mediaPreview || URL.createObjectURL(mediaFile);
           const trimmedFile = await renderTrimmedClip(src, videoTrimStart || 0, videoTrimEnd || 0);
+          try { console.log('[Composer] renderTrimmedClip result:', trimmedFile ? { size: trimmedFile.size, type: trimmedFile.type } : null); } catch {}
           setIsRenderingClip(false);
           if (trimmedFile) {
             const uploaded = await uploadFilesToFirebase([trimmedFile], 'posts/');
             uploadedMediaUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
+            try { console.log('[Composer] trimmed clip uploaded URL:', uploadedMediaUrl); } catch {}
           }
           // Cleanup object URL if we created one
           try { if (src && src.startsWith('blob:') && src !== mediaPreview) URL.revokeObjectURL(src); } catch {}
@@ -1054,6 +1062,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             const trimmedUrl = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
             if (trimmedUrl) {
               uploadedMediaUrl = trimmedUrl;
+              try { console.log('[Composer] external/library trimmed clip uploaded URL:', uploadedMediaUrl); } catch {}
             }
           }
         } catch (e) {
@@ -1066,6 +1075,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       const tempId = `post-${Date.now()}`;
       const user = (session as any)?.user || {};
       const mediaUrlToUse = uploadedMediaUrl || derivedVideoUrl || selectedGif || null;
+      try { console.log('[Composer] final mediaUrlToUse:', mediaUrlToUse); } catch {}
       const mediaKind = mediaUrlToUse ? (mediaType || (selectedGif ? 'gif' : (audioClipUrl ? 'audio' : null))) : null;
 
       // Upload edited thumbnail (data URL) to Firebase to ensure persistence
@@ -1117,7 +1127,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         mediaUrl: mediaUrlToUse,
         mediaType: mediaKind,
         createdAt: new Date().toISOString(),
-        thumbnailUrl: editedThumb || null,
+        thumbnailUrl: thumbnailUrlToSend || null,
       };
 
       // 4) Persist post via API (best-effort; keep optimistic update)
