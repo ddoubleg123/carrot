@@ -58,9 +58,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     carrotText,
     stickText,
     externalUrl,
-    // Cloudflare Stream fields (optional on create)
-    cfUid,
-    cfStatus,
+    // Cloudflare fields removed for Firebase-only plan
   } = body;
   try {
     // In mock feed mode, avoid DB and echo a fake-created post for local testing
@@ -84,8 +82,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         audioUrl: effectiveAudioUrl,
         audioTranscription: audioTranscription || null,
         transcriptionStatus: (effectiveAudioUrl || effectiveVideoUrl) ? 'pending' : null,
-        cfUid: cfUid || null,
-        cfStatus: cfUid ? (cfStatus || 'queued') : null,
+        // Cloudflare fields removed in Firebase-only plan
         emoji: emoji || '🎯',
         carrotText: carrotText || '',
         stickText: stickText || '',
@@ -228,9 +225,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         audioUrl: effectiveAudioUrl,
         audioTranscription,
         transcriptionStatus: (effectiveAudioUrl || effectiveVideoUrl) ? 'pending' : null,
-        // Persist Cloudflare Stream identifiers if present
-        cfUid: cfUid || null,
-        cfStatus: cfUid ? (cfStatus || 'queued') : null,
+        // Cloudflare fields removed in Firebase-only plan
         emoji,
         carrotText,
         stickText,
@@ -268,11 +263,9 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     } catch {}
 
     // Ensure gallery/media entry exists for the video (best-effort)
-    if (effectiveVideoUrl || post.cfUid) {
+    if (effectiveVideoUrl) {
       try {
-        const exists = effectiveVideoUrl
-          ? await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } })
-          : await (prisma as any).mediaAsset.findFirst({ where: { userId: session.user.id, cfUid: post.cfUid } });
+        const exists = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
         if (!exists) {
           const createdMedia = await (prisma as any).mediaAsset.create({
             data: {
@@ -282,8 +275,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
               title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
               thumbUrl: thumbnailUrl || null,
               source: 'post',
-              cfUid: post.cfUid || null,
-              cfStatus: post.cfStatus || null,
+              // CF fields removed
             },
             select: { id: true }
           });
@@ -293,9 +285,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         console.warn('⚠️ Failed to create media asset for video; will retry once shortly');
         try {
           await new Promise(r => setTimeout(r, 1000));
-          const exists2 = effectiveVideoUrl
-            ? await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } })
-            : await (prisma as any).mediaAsset.findFirst({ where: { userId: session.user.id, cfUid: post.cfUid } });
+          const exists2 = await prisma.mediaAsset.findFirst({ where: { userId: session.user.id, url: effectiveVideoUrl } });
           if (!exists2) {
             await (prisma as any).mediaAsset.create({
               data: {
@@ -305,8 +295,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
                 title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
                 thumbUrl: thumbnailUrl || null,
                 source: 'post-retry',
-                cfUid: post.cfUid || null,
-                cfStatus: post.cfStatus || null,
+                // CF fields removed
               },
               select: { id: true }
             });

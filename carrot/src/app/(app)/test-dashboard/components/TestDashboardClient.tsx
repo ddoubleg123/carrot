@@ -5,7 +5,8 @@ import { useSession, SessionProvider } from 'next-auth/react';
 import CommitmentComposer from '../../dashboard/components/CommitmentComposer';
 import CommitmentCard from '../../dashboard/components/CommitmentCard';
 import ModernHeader from '../../dashboard-test/components/ModernHeader';
-import { Post } from '@/types/post';
+// Local minimal Post type to avoid depending on '@/types/post' in this test component
+type Post = any;
 
 function TestDashboardClientInner() {
   const { data: session } = useSession();

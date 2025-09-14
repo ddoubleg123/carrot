@@ -43,7 +43,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       for (const a of assets) {
         const t = String(a.type || '').toLowerCase();
         if (t === 'video') {
-          const exists = await prisma.post.findFirst({ where: { userId, OR: [{ videoUrl: a.url }, { cfUid: a.cfUid || undefined }] } });
+          const exists = await prisma.post.findFirst({ where: { userId, videoUrl: a.url } });
           if (exists) { skipped++; continue; }
           await prisma.post.create({
             data: {
@@ -51,8 +51,6 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
               content: a.title || 'Imported media',
               thumbnailUrl: a.thumbUrl || null,
               videoUrl: a.url,
-              cfUid: a.cfUid || null,
-              cfStatus: a.cfStatus || null,
               gradientDirection: 'to-br',
               gradientFromColor: '#0f172a',
               gradientViaColor: '#1f2937',
@@ -97,10 +95,13 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         }
       }
 
-    // Special mode: create MediaAsset rows from Posts that have cfUid but no mediaAsset entry
-    if (mode === 'cfAssets') {
+      return NextResponse.json({ ok: true, mode, created, examined: assets.length, limit });
+    }
+
+    // Special mode: create MediaAsset rows from Posts that have a videoUrl but no mediaAsset entry (Firebase-only healing)
+    if (mode === 'postAssets') {
       const backfillWhere: any = {
-        cfUid: { not: null },
+        videoUrl: { not: null },
       };
       if (!all) {
         backfillWhere.createdAt = { gte: new Date(Date.now() - hours * 60 * 60 * 1000) };
@@ -109,23 +110,22 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         where: backfillWhere,
         orderBy: { createdAt: 'desc' },
         take: Math.max(1, Math.min(500, limit)),
-        select: { id: true, userId: true, content: true, thumbnailUrl: true, cfUid: true, cfStatus: true, videoUrl: true },
+        select: { id: true, userId: true, content: true, thumbnailUrl: true, videoUrl: true },
       });
       let created = 0;
       let skipped = 0;
       for (const p of posts) {
-        const exists = await (prisma as any).mediaAsset.findFirst({ where: { userId: p.userId, OR: [ { cfUid: p.cfUid }, { url: p.videoUrl || undefined } ] } });
+        if (!p.videoUrl) { skipped++; continue; }
+        const exists = await (prisma as any).mediaAsset.findFirst({ where: { userId: p.userId, url: p.videoUrl } });
         if (exists) { skipped++; continue; }
         await (prisma as any).mediaAsset.create({
           data: {
             userId: p.userId,
-            url: p.videoUrl || null,
+            url: p.videoUrl,
             type: 'video',
             title: (p.content && typeof p.content === 'string') ? p.content.slice(0, 80) : null,
             thumbUrl: p.thumbnailUrl || null,
             source: 'post-backfill',
-            cfUid: p.cfUid,
-            cfStatus: p.cfStatus || null,
           }
         });
         created++;
@@ -133,8 +133,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       return NextResponse.json({ ok: true, mode, created, examined: posts.length, skipped });
     }
 
-      return NextResponse.json({ ok: true, mode, created, examined: assets.length, limit });
-    }
+    // Note: Cloudflare-specific backfill (cfAssets) removed for Firebase-only plan
 
     // Special mode: backfill gradients for existing posts missing colors
     if (mode === 'gradients') {
@@ -198,8 +197,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         width: job.width ?? null,
         height: job.height ?? null,
         source: 'external',
-        cfUid: job.cfUid ?? null,
-        cfStatus: job.cfStatus ?? null,
+        // CF fields removed in Firebase-only plan
       });
       created += 1;
     }
