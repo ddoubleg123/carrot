@@ -366,3 +366,63 @@ This section captures all changes made to harden production safety, streamline R
 3. Confirm logs show: `✅ DB health OK` and successful Next.js build.
 4. On first page load in `/home`, verify no playback preference flicker (captions/autoplay/reduced motion align with server prefs).
 
+## Infra-only Media Performance Stack (September 2025)
+
+This section summarizes the feed playback performance upgrades deployed without any UI/UX changes. Referenced files are under `carrot/` unless otherwise noted.
+
+### What Changed
+
+- __/api/video stabilization__ (`src/app/api/video/route.ts`)
+  - In-flight request deduplication to prevent parallel fetch storms for the same URL.
+  - Short negative-result caching for upstream `404/410/403` to reduce repeated errors: `Cache-Control: public, max-age=60, stale-while-revalidate=30`.
+  - Maintains Firebase URL normalization and `alt=media` enforcement.
+
+- __Visibility-driven MP4 attach__ (`src/app/(app)/dashboard/components/VideoPlayer.tsx`)
+  - Attach `src` only when in view; detach on leave; `preload="metadata"` for fast poster paint.
+  - Single active decoder guard (pauses other players when one plays).
+
+- __HLS feed path__
+  - Player: `src/components/video/HlsFeedPlayer.tsx` with `hls.js` (dynamic import) or native HLS on Safari.
+  - Tuning: start on lowest level, cap level on FPS drop, short buffers, and tiny randomized attach jitter to avoid bursts.
+  - Manager integration: registers with `src/components/video/FeedMediaManager.ts` for coordinated Warm/Active.
+
+- __Feed Media Manager (behavior-only)__ (`src/components/video/FeedMediaManager.ts`)
+  - Ensures at most 1 Active and 1 Warm tile. Warm attaches and partially preloads; Active plays; others release quickly.
+
+- __Gallery and thumbnails__
+  - Removed client-side demo items (`src/components/MediaPickerModal.tsx`) to eliminate flicker.
+  - Media API updates existing assets with missing thumbnails on POST (see `src/app/api/media/route.ts`).
+
+### Ops: Storage CORS and CDN (No UI Impact)
+
+- __Firebase/Cloud Storage CORS__
+  - Apply `cors.json` (see repo root `cors.json` example) with `GET, HEAD, OPTIONS` and response headers including `Content-Type`, `Accept-Ranges`, `Range`, `Content-Length`, `Timing-Allow-Origin`.
+  - Verify with `curl -I` against an `alt=media` URL.
+
+- __CDN in front of the app (recommended)__
+  - Put CDN in front of Next.js so it fronts `/api/video`, `/api/img`, and HLS endpoints.
+  - Cache policies:
+    - HLS segments (*.ts/*.m4s): long TTL (immutable).
+    - HLS playlists (*.m3u8): short TTL.
+    - Progressive MP4: cache where safe; `/api/video` adds negative-result short caching and dedupe.
+  - Ensure Range is forwarded end-to-end.
+
+### Rollout Flags and Defaults
+
+- `NEXT_PUBLIC_FEED_HLS=1` — Prefer HLS when `cfPlaybackUrlHls` is present.
+- Optional feature flags (env or simple constants) can gate:
+  - Manager-lite enforcement (1 Active + 1 Warm) across MP4 and HLS.
+  - Service Worker prefetch of playlist + first segment (LRU-capped) for near-viewport tiles.
+
+### SLOs / Observability
+
+- Emit QoE events (optionally via `/api/rum`): `startup_ms`, `first_frame_ms`, `rebuffer_count`, `rebuffer_ms`, `dropped_frames`, `errors`.
+- Guardrails to ship: `startup_ms` p95 ≤ 200 ms (desktop Wi‑Fi) and rebuffer% < 0.5%.
+
+### Developer Notes
+
+- Uploads remain direct to Firebase; CDN affects reads only.
+- Avoids UI changes; all improvements are transport/attach/caching behaviors.
+- If you see many `/api/video` 404s in Network:
+  - Confirm Storage CORS and object availability.
+  - Negative-result caching should reduce repeats within 60s automatically.

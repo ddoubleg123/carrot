@@ -61,6 +61,11 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const ffmpegRef = useRef<any>(null);
   const [isRenderingClip, setIsRenderingClip] = useState(false);
+  // Noise-reduction guards
+  const renderInFlightRef = useRef(false);
+  const uploadInFlightRef = useRef(false);
+  const trimAbortRef = useRef<AbortController | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   // Track repeated completed-without-valid-url observations to avoid perpetual processing state
   const ingestInvalidCountRef = useRef(0);
   const [videoDuration, setVideoDuration] = useState(0);
@@ -606,6 +611,9 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       setIngestError(null);
       setIsPosting(false);
       setCfUidPreview(null);
+      // Abort any in-flight work
+      try { trimAbortRef.current?.abort(); } catch {}
+      try { uploadAbortRef.current?.abort(); } catch {}
     }
   }, [isOpen]);
 
@@ -755,13 +763,19 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
   // Produce a trimmed clip from a source URL (external-ingested video)
   const renderTrimmedClip = async (srcUrl: string, start: number, end: number): Promise<File | null> => {
+    // Prevent overlapping renders
+    if (renderInFlightRef.current) return null;
+    renderInFlightRef.current = true;
     try {
+      // Setup abort for this render
+      const controller = new AbortController();
+      trimAbortRef.current = controller;
       const ff = await ensureFfmpeg();
       const inName = 'input.mp4';
       const outName = 'output.mp4';
       // Fetch bytes and write to FS
       const absoluteSrc = (() => { try { return new URL(srcUrl, window.location.origin).toString(); } catch { return srcUrl; } })();
-      const buf = await fetchWithTimeout(absoluteSrc, {}, 60000).then(r => r.arrayBuffer());
+      const buf = await fetchWithTimeout(absoluteSrc, { signal: controller.signal }, 60000).then(r => r.arrayBuffer());
       ff.FS('writeFile', inName, new Uint8Array(buf));
       const ss = Math.max(0, start || 0);
       const hasEnd = end && end > ss;
@@ -780,13 +794,16 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         outName,
       ];
       await ff.run(...args);
-      const data = ff.FS('readFile', outName);
-      const blob = new Blob([data.buffer], { type: 'video/mp4' });
-      return new File([blob], 'edited.mp4', { type: 'video/mp4' });
+      const out = ff.FS('readFile', outName);
+      const blob = new Blob([out], { type: 'video/mp4' });
+      return new File([blob], 'clip.mp4', { type: 'video/mp4' });
     } catch (e) {
-      console.warn('renderTrimmedClip failed; falling back to original', e);
+      console.error('[ComposerModal] renderTrimmedClip failed:', e);
       showErrorToast('Failed to render trimmed clip; posting original video.');
       return null;
+    } finally {
+      renderInFlightRef.current = false;
+      if (trimAbortRef.current) trimAbortRef.current = null;
     }
   };
 

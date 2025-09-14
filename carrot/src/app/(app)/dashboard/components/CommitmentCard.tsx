@@ -582,10 +582,17 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   />
                 );
               })()}
-              {/* Click overlay: exclude area where hover controls live (right side) to keep them fully clickable */}
+              {/* Click overlay: only center region opens modal, never overlaps hover controls (top-right) */}
               <button
                 type="button"
-                className="absolute left-0 top-0 bottom-0 right-24 z-10 cursor-pointer bg-transparent"
+                className="absolute z-10 cursor-pointer bg-transparent"
+                style={{
+                  // Leave generous gutters so edge UI is fully clickable
+                  left: 16,
+                  right: 160, // reserve space for hover controls on the right
+                  top: 48,    // avoid the header/hover area
+                  bottom: 56, // avoid the bottom actions row space
+                }}
                 aria-label="Open post"
                 title="Open post"
                 onClick={() => openPostModal(id)}

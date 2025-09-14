@@ -1,3 +1,5 @@
+// Public env flag to enable verbose audio debug logs on client
+const DEBUG_AUDIO = process.env.NEXT_PUBLIC_DEBUG_AUDIO === '1';
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -35,12 +37,14 @@ export default function AudioPlayer({
   allowBlob = false,
   onAudioRef,
 }: AudioPlayerProps): JSX.Element {
-  console.log('🎵 AudioPlayer rendered with:', { 
-    postId, 
-    audioUrl: audioUrl?.substring(0, 50) + '...', 
-    isBlobUrl: audioUrl?.includes('blob:'),
-    isFirebaseUrl: audioUrl?.includes('firebasestorage.googleapis.com')
-  });
+  if (DEBUG_AUDIO) {
+    console.log('🎵 AudioPlayer rendered with:', { 
+      postId, 
+      audioUrl: audioUrl?.substring(0, 50) + '...', 
+      isBlobUrl: audioUrl?.includes('blob:'),
+      isFirebaseUrl: audioUrl?.includes('firebasestorage.googleapis.com')
+    });
+  }
   const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:');
   // Resolve Firebase Storage URLs once to a stable, playable URL
   const resolvedSrc = React.useMemo(() => {
@@ -72,10 +76,10 @@ export default function AudioPlayer({
     try {
       if (!url) return null;
 
-      console.log('🎵 Attempting AudioContext duration decode...', url);
+      if (DEBUG_AUDIO) console.log('🎵 Attempting AudioContext duration decode...', url);
       const res = await fetch(url, { mode: 'cors' as RequestMode });
       if (!res.ok) {
-        console.log('🎵 AudioContext decode fetch not ok:', res.status, res.statusText);
+        if (DEBUG_AUDIO) console.log('🎵 AudioContext decode fetch not ok:', res.status, res.statusText);
         return null;
       }
       const arrayBuffer = await res.arrayBuffer();
@@ -97,7 +101,7 @@ export default function AudioPlayer({
       }
     } catch (e: any) {
       // Most likely CORS or decoding unsupported. Non-fatal.
-      console.log('🎵 AudioContext duration decode failed (non-fatal):', e?.message || e);
+      if (DEBUG_AUDIO) console.log('🎵 AudioContext duration decode failed (non-fatal):', e?.message || e);
     }
     return null;
   };
@@ -143,12 +147,12 @@ export default function AudioPlayer({
     
     const updateDuration = () => {
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity) {
-        console.log('🎵 Audio duration detected:', audio.duration);
+        if (DEBUG_AUDIO) console.log('🎵 Audio duration detected:', audio.duration);
         setDuration(audio.duration);
         setDisplayDuration(formatTime(audio.duration));
         return true;
       } else {
-        console.log('🎵 Audio duration not ready (invalid/Infinity/NaN):', audio.duration);
+        if (DEBUG_AUDIO) console.log('🎵 Audio duration not ready (invalid/Infinity/NaN):', audio.duration);
         // Reset to 0:00 for invalid durations
         if (audio.duration === Infinity || isNaN(audio.duration)) {
           setDuration(0);
@@ -197,7 +201,7 @@ export default function AudioPlayer({
         console.log('🎵 Audio duration not ready (invalid/Infinity/NaN):', audio.duration);
         // For blob URLs (especially converted audio), try multiple approaches
         if (audioUrl && audioUrl.startsWith('blob:')) {
-          console.log('🎵 Attempting duration detection for blob URL...');
+          if (DEBUG_AUDIO) console.log('🎵 Attempting duration detection for blob URL...');
           
           // Try forcing a load and play/pause cycle to get duration
           const attemptDurationDetection = async () => {
@@ -209,13 +213,13 @@ export default function AudioPlayer({
               audio.currentTime = 0;
               
               if (isValidDuration(audio.duration)) {
-                console.log('🎵 Duration detected after play/pause:', audio.duration);
+                if (DEBUG_AUDIO) console.log('🎵 Duration detected after play/pause:', audio.duration);
                 setDuration(audio.duration);
                 setDisplayDuration(formatTime(audio.duration));
                 setIsLoading(false);
               }
             } catch (error) {
-              console.log('🎵 Play/pause duration detection failed:', error);
+              if (DEBUG_AUDIO) console.log('🎵 Play/pause duration detection failed:', error);
             }
           };
           
@@ -240,13 +244,13 @@ export default function AudioPlayer({
       
       // Only log meaningful errors, avoid console.error spam
       if (error && error.code && error.code !== 4 && error.message) {
-        console.log('🎵 Audio loading issue:', {
-          errorCode: error.code,
-          errorMessage: error.message,
-          audioUrl: audioUrl?.substring(0, 50) + '...',
-          networkState: target.networkState,
-          readyState: target.readyState
-        });
+        if (process.env.NEXT_PUBLIC_DEBUG_AUDIO) console.log('🎵 Audio loading issue:', {
+        errorCode: error.code,
+        errorMessage: error.message,
+        audioUrl: audioUrl?.substring(0, 50) + '...',
+        networkState: target.networkState,
+        readyState: target.readyState
+      });
       }
       // Silently handle empty errors and format errors (code 4) to avoid spam
       
@@ -257,12 +261,12 @@ export default function AudioPlayer({
     };
     
     const handleLoadedMetadata = () => {
-      console.log('🎵 Audio metadata loaded, duration:', audio.duration);
+      if (DEBUG_AUDIO) console.log('🎵 Audio metadata loaded, duration:', audio.duration);
       updateDuration();
     };
     
     const handleLoadedData = () => {
-      console.log('🎵 Audio data loaded, duration:', audio.duration);
+      if (DEBUG_AUDIO) console.log('🎵 Audio data loaded, duration:', audio.duration);
       updateDuration();
     };
 
@@ -283,12 +287,12 @@ export default function AudioPlayer({
       if (durationDetected) return; // Avoid duplicate updates
       
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
-        console.log('🎵 Duration check successful:', audio.duration);
+        if (DEBUG_AUDIO) console.log('🎵 Duration check successful:', audio.duration);
         setDuration(audio.duration);
         setDisplayDuration(formatTime(audio.duration));
         durationDetected = true;
       } else {
-        console.log('🎵 Duration check failed, retrying...', audio.duration);
+        if (DEBUG_AUDIO) console.log('🎵 Duration check failed, retrying...', audio.duration);
         // Force audio to load more data
         if (audio.readyState < 2) {
           audio.load();
@@ -332,7 +336,7 @@ useEffect(() => {
     setDisplayDuration('0:00');
     return;
   }
-  console.log('🎵 Audio source resolved:', { src: resolvedSrc, allowBlob, isBlobUrl });
+  if (DEBUG_AUDIO) console.log('🎵 Audio source resolved:', { src: resolvedSrc, allowBlob, isBlobUrl });
   const audio = audioRef.current;
   try { (audio as any).crossOrigin = 'anonymous'; } catch {}
   audio.src = resolvedSrc;
@@ -357,7 +361,7 @@ const togglePlayPause = async () => {
     try { onPlayStateChange && onPlayStateChange(false); } catch {}
   } else {
     try {
-      console.log('🎵 Attempting to play audio:', {
+      if (DEBUG_AUDIO) console.log('🎵 Attempting to play audio:', {
         audioUrl: audioUrl,
         readyState: audio.readyState,
         networkState: audio.networkState,
@@ -376,7 +380,7 @@ const togglePlayPause = async () => {
       await audio.play();
     } catch (error) {
       // Use console.log instead of console.error to avoid triggering Next.js error handling
-      console.log('🎵 Audio play attempt failed (this is normal):', {
+      if (DEBUG_AUDIO) console.log('🎵 Audio play attempt failed (this is normal):', {
         errorName: error instanceof Error ? error.name : 'Unknown',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
         audioUrl: audioUrl,
@@ -389,7 +393,7 @@ const togglePlayPause = async () => {
       
       // If the source is invalid, try to reload it
       if (error instanceof Error && error.name === 'NotSupportedError') {
-        console.log('🎵 NotSupportedError detected, attempting to reload audio source');
+        if (DEBUG_AUDIO) console.log('🎵 NotSupportedError detected, attempting to reload audio source');
         audio.load();
       }
     }
@@ -450,17 +454,17 @@ return (
       src={isBlobUrl ? undefined : resolvedSrc}
       preload="metadata"
       crossOrigin="anonymous"
-      onLoadStart={() => console.log('🎵 Audio load started:', audioUrl)}
-      onCanPlay={() => console.log('🎵 Audio can play:', audioUrl)}
-      onLoadedMetadata={() => console.log('🎵 Audio metadata loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
-      onLoadedData={() => console.log('🎵 Audio data loaded:', { url: audioUrl, duration: audioRef.current?.duration })}
+      onLoadStart={() => { if (DEBUG_AUDIO) console.log('🎵 Audio load started:', audioUrl); }}
+      onCanPlay={() => { if (DEBUG_AUDIO) console.log('🎵 Audio can play:', audioUrl); }}
+      onLoadedMetadata={() => { if (DEBUG_AUDIO) console.log('🎵 Audio metadata loaded:', { url: audioUrl, duration: audioRef.current?.duration }); }}
+      onLoadedData={() => { if (DEBUG_AUDIO) console.log('🎵 Audio data loaded:', { url: audioUrl, duration: audioRef.current?.duration }); }}
       // Use log to avoid Next.js / next-auth error interception for harmless media errors
       onError={(e) => {
-        console.log('🎵 Audio element error (non-fatal):', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState });
+        if (DEBUG_AUDIO) console.log('🎵 Audio element error (non-fatal):', { url: audioUrl, error: e.currentTarget.error, networkState: e.currentTarget.networkState, readyState: e.currentTarget.readyState });
         // Try fallback URL for Firebase Storage
         if (audioUrl.includes('firebasestorage.googleapis.com') && !audioUrl.includes('alt=media')) {
           const fallbackUrl = `${audioUrl}?alt=media`;
-          console.log('🎵 Trying fallback URL:', fallbackUrl);
+          if (DEBUG_AUDIO) console.log('🎵 Trying fallback URL:', fallbackUrl);
           e.currentTarget.src = fallbackUrl;
           e.currentTarget.load();
         }

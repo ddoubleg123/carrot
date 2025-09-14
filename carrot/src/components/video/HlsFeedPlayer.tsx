@@ -157,6 +157,8 @@ export default function HlsFeedPlayer({
       if (canUseNativeHls()) {
         try {
           const el = videoRef.current; if (!el) return;
+          // Tiny jitter to avoid bursty loads when many tiles enter view simultaneously
+          try { await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80))); } catch {}
           el.src = hlsMasterUrl;
           setReady(true);
           const honorAutoPlay = autoPlay && !getReducedMotion() && getAutoplayDefault();
@@ -196,6 +198,7 @@ export default function HlsFeedPlayer({
         // Fallback: try direct assignment (works for progressive URLs)
         try {
           const el2 = videoRef.current; if (!el2) return;
+          try { await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80))); } catch {}
           el2.src = hlsMasterUrl;
           setReady(true);
           const honorAutoPlay = autoPlay && !getReducedMotion();
@@ -220,8 +223,12 @@ export default function HlsFeedPlayer({
 
       const el = videoRef.current; if (!el) return;
       hls.attachMedia(el);
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        try { hls.loadSource(hlsMasterUrl); } catch {}
+      hls.on(Hls.Events.MEDIA_ATTACHED, async () => {
+        try {
+          // Jitter before starting load to smooth multi-tile attach
+          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80)));
+          hls.loadSource(hlsMasterUrl);
+        } catch {}
       });
       hls.on(Hls.Events.MANIFEST_PARSED, async () => {
         // Resolution-aware start: choose the largest level not exceeding container size
@@ -300,6 +307,8 @@ export default function HlsFeedPlayer({
       if (stallStart != null) {
         const delta = performance.now() - stallStart;
         try { updateNetProfile(undefined, undefined, delta, 0); } catch {}
+        try { sendRum({ type: 'rebuffer_ms', value: Math.round(delta) }); } catch {}
+        try { sendRum({ type: 'rebuffer_count', value: 1 }); } catch {}
         stallStart = null;
       }
     };

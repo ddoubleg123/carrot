@@ -46,6 +46,52 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     } catch { return false; }
   };
 
+  // Register this element with FeedMediaManager to enforce one Active + one Warm
+  useEffect(() => {
+    try {
+      const FeedMediaManager = require('@/components/video/FeedMediaManager').default as typeof import('@/components/video/FeedMediaManager').default;
+      const el = (videoRef.current as unknown as Element) || undefined;
+      if (!el) return;
+      const handle = {
+        id: String(postId || thumbnailUrl || resolvedSrc || 'mp4'),
+        el,
+        play: async () => { try { await videoRef.current?.play(); } catch {} },
+        pause: () => { try { videoRef.current?.pause(); } catch {} },
+        warm: async () => {
+          // Attach src (if not attached) and load metadata, but do not play
+          const v = videoRef.current; if (!v) return;
+          try {
+            if (!v.currentSrc) {
+              v.src = resolvedSrc;
+              v.load();
+            }
+          } catch {}
+        },
+        release: () => {
+          const v = videoRef.current; if (!v) return;
+          try { v.pause(); } catch {}
+          try { v.removeAttribute('src'); v.load(); } catch {}
+        },
+      } as any;
+      FeedMediaManager.inst.registerHandle(el, handle);
+      const onPlay = () => { try { FeedMediaManager.inst.setActive(handle); } catch {} };
+      const v = videoRef.current; v?.addEventListener('play', onPlay);
+      // Pause when not sufficiently visible
+      const io = new IntersectionObserver((entries) => {
+        const entry = entries[0]; if (!entry) return;
+        if (entry.intersectionRatio < 0.5) {
+          try { v?.pause(); } catch {}
+        }
+      }, { threshold: [0, 0.5, 1] });
+      if (v) io.observe(v);
+      return () => {
+        try { v?.removeEventListener('play', onPlay); } catch {}
+        try { io.disconnect(); } catch {}
+        try { FeedMediaManager.inst.unregisterHandle(el); } catch {}
+      };
+    } catch {}
+  }, [resolvedSrc, postId, thumbnailUrl]);
+
   // Safely attempt play, skipping when no source is available
   const safePlay = () => {
     const el = videoRef.current;
@@ -60,6 +106,16 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     if (el.readyState < 1) return;
     // Ensure muted for autoplay policy
     el.muted = true;
+    // Concurrency: pause other feed players to keep only one active decoder
+    try {
+      const others = Array.from(document.querySelectorAll('video[data-feed-player="1"]')) as HTMLVideoElement[];
+      for (const v of others) {
+        if (v !== el && !v.paused) {
+          try { v.pause(); } catch {}
+        }
+      }
+      el.setAttribute('data-feed-player', '1');
+    } catch {}
     el.play().catch(() => {});
   };
 
@@ -305,34 +361,36 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     }
   }, []);
 
-  // Reload the media element when the source URL changes to avoid stale networkState
+  // Visibility-driven source attach/detach to reduce network and avoid offscreen 404s
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     setHasError(false);
-    setVideoLoaded(false);
-    try {
-      // Ensure muted stays true across source swaps for autoplay compliance
-      el.muted = true;
-
-      // Always use resolvedSrc for playback (proxy if needed)
-      el.src = resolvedSrc;
-
-      el.load();
-      
-      // Force autoplay attempt after load for older posts
-      const forceAutoplay = () => {
-        if (el && isInView) {
-          safePlay();
+    if (isInView) {
+      setVideoLoaded(false);
+      try {
+        el.muted = true;
+        // Attach source only when in view
+        if (el.src !== resolvedSrc) {
+          el.src = resolvedSrc;
+          el.load();
         }
-      };
-      
-      // Try autoplay after metadata loads
-      el.addEventListener('loadedmetadata', forceAutoplay, { once: true });
-      el.addEventListener('canplay', forceAutoplay, { once: true });
-      
-    } catch {}
-  }, [resolvedSrc, isInView]);
+        const forceAutoplay = () => { if (isInView) safePlay(); };
+        el.addEventListener('loadedmetadata', forceAutoplay, { once: true });
+        el.addEventListener('canplay', forceAutoplay, { once: true });
+      } catch {}
+    } else {
+      // Detach source when out of view to free decoder and stop background network
+      try {
+        if (!el.paused) el.pause();
+      } catch {}
+      try {
+        el.removeAttribute('src');
+        el.load();
+      } catch {}
+      setIsPlaying(false);
+    }
+  }, [isInView, resolvedSrc]);
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
@@ -407,7 +465,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           loop
           playsInline
           autoPlay
-          preload="auto"
+          preload="metadata"
           crossOrigin="anonymous"
           poster={thumbnailUrl || undefined}
           src={resolvedSrc}

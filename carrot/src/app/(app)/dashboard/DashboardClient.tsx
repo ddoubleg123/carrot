@@ -40,6 +40,24 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   const showSuccessToast = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
   const showErrorToast = (msg: string) => { setToastMessage(msg); setToastType('error'); setShowToast(true); };
 
+  // Register media Service Worker for HLS/segment prefetch when flagged
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (process.env.NEXT_PUBLIC_MEDIA_SW !== '1') return;
+    if (!('serviceWorker' in navigator)) return;
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('/sw-media.js', { scope: '/' });
+        // Wait for activation in background; no UI side effects
+        if (reg.installing) {
+          reg.installing.addEventListener('statechange', () => {});
+        }
+      } catch {
+        // Silent: SW is optional
+      }
+    })();
+  }, []);
+
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
     const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);

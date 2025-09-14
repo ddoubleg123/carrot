@@ -85,37 +85,8 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     return serverItems;
   }, [serverItems, activeTab]);
 
-  // Persisted source list to avoid flicker: start with demo, only replace when server yields >0
-  const demoList: MediaAssetDTO[] = React.useMemo(() => ([
-    {
-      id: 'demo-img-1', userId: 'public', type: 'image',
-      url: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d',
-      storagePath: null, thumbUrl: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?auto=format&fit=crop&w=240&q=60', thumbPath: null,
-      title: 'Sample Image 1', hidden: false, source: 'demo', durationSec: null, width: null, height: null, inUseCount: 0,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
-    },
-    {
-      id: 'demo-img-2', userId: 'public', type: 'image',
-      url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-      storagePath: null, thumbUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=60', thumbPath: null,
-      title: 'Sample Image 2', hidden: false, source: 'demo', durationSec: null, width: null, height: null, inUseCount: 0,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
-    },
-    {
-      id: 'demo-video-1', userId: 'public', type: 'video',
-      url: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
-      storagePath: null, thumbUrl: 'https://peach.blender.org/wp-content/uploads/title_anouncement.jpg', thumbPath: null,
-      title: 'Sample Video', hidden: false, source: 'demo', durationSec: 10, width: null, height: null, inUseCount: 0,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), labels: [],
-    },
-  ]), []);
-
-  const [persistedSource, setPersistedSource] = React.useState<MediaAssetDTO[]>(demoList);
-  React.useEffect(() => {
-    if (Array.isArray(serverItems) && serverItems.length > 0) {
-      setPersistedSource(serverItems);
-    }
-  }, [serverItems]);
+  // Remove client-side demo items to avoid any flicker; only show server items.
+  // If server returns empty, we render the empty state and optionally trigger a one-shot backfill.
 
   // Backfill guard to avoid loops
   const triedBackfillRef = React.useRef(false);
@@ -230,10 +201,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
       if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}`;
       return undefined;
     };
-    // Client-side demo fallback when no results yet
-    const sourceList: MediaAssetDTO[] = Array.isArray(persistedSource) && persistedSource.length > 0 ? persistedSource : demoList;
-
-    const list = (sourceList || []).map((dto) => ({
+    const list = (serverItems || []).map((dto) => ({
       id: dto.id,
       type: dto.type, // 'image' | 'video' | 'gif' | 'audio'
       // Important: gallery never loads video sources; only images are proxied for thumbs
@@ -248,7 +216,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
       labels: dto.labels || [],
     }));
     return list;
-  }, [persistedSource, demoList]);
+  }, [serverItems]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
