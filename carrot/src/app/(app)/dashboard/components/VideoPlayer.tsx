@@ -46,51 +46,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     } catch { return false; }
   };
 
-  // Register this element with FeedMediaManager to enforce one Active + one Warm
-  useEffect(() => {
-    try {
-      const FeedMediaManager = require('@/components/video/FeedMediaManager').default as typeof import('@/components/video/FeedMediaManager').default;
-      const el = (videoRef.current as unknown as Element) || undefined;
-      if (!el) return;
-      const handle = {
-        id: String(postId || thumbnailUrl || resolvedSrc || 'mp4'),
-        el,
-        play: async () => { try { await videoRef.current?.play(); } catch {} },
-        pause: () => { try { videoRef.current?.pause(); } catch {} },
-        warm: async () => {
-          // Attach src (if not attached) and load metadata, but do not play
-          const v = videoRef.current; if (!v) return;
-          try {
-            if (!v.currentSrc) {
-              v.src = resolvedSrc;
-              v.load();
-            }
-          } catch {}
-        },
-        release: () => {
-          const v = videoRef.current; if (!v) return;
-          try { v.pause(); } catch {}
-          try { v.removeAttribute('src'); v.load(); } catch {}
-        },
-      } as any;
-      FeedMediaManager.inst.registerHandle(el, handle);
-      const onPlay = () => { try { FeedMediaManager.inst.setActive(handle); } catch {} };
-      const v = videoRef.current; v?.addEventListener('play', onPlay);
-      // Pause when not sufficiently visible
-      const io = new IntersectionObserver((entries) => {
-        const entry = entries[0]; if (!entry) return;
-        if (entry.intersectionRatio < 0.5) {
-          try { v?.pause(); } catch {}
-        }
-      }, { threshold: [0, 0.5, 1] });
-      if (v) io.observe(v);
-      return () => {
-        try { v?.removeEventListener('play', onPlay); } catch {}
-        try { io.disconnect(); } catch {}
-        try { FeedMediaManager.inst.unregisterHandle(el); } catch {}
-      };
-    } catch {}
-  }, [resolvedSrc, postId, thumbnailUrl]);
+  
 
   // Safely attempt play, skipping when no source is available
   const safePlay = () => {
@@ -187,6 +143,52 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     }
     return videoUrl;
   }, [videoUrl]);
+
+  // Register this element with FeedMediaManager to enforce one Active + one Warm
+  useEffect(() => {
+    try {
+      const FeedMediaManager = require('../../../../components/video/FeedMediaManager').default as typeof import('../../../../components/video/FeedMediaManager').default;
+      const el = (videoRef.current as unknown as Element) || undefined;
+      if (!el) return;
+      const handle = {
+        id: String(postId || thumbnailUrl || resolvedSrc || 'mp4'),
+        el,
+        play: async () => { try { await videoRef.current?.play(); } catch {} },
+        pause: () => { try { videoRef.current?.pause(); } catch {} },
+        warm: async () => {
+          // Attach src (if not attached) and load metadata, but do not play
+          const v = videoRef.current; if (!v) return;
+          try {
+            if (!v.currentSrc) {
+              v.src = resolvedSrc;
+              v.load();
+            }
+          } catch {}
+        },
+        release: () => {
+          const v = videoRef.current; if (!v) return;
+          try { v.pause(); } catch {}
+          try { v.removeAttribute('src'); v.load(); } catch {}
+        },
+      } as any;
+      FeedMediaManager.inst.registerHandle(el, handle);
+      const onPlay = () => { try { FeedMediaManager.inst.setActive(handle); } catch {} };
+      const v = videoRef.current; v?.addEventListener('play', onPlay);
+      // Pause when not sufficiently visible
+      const io = new IntersectionObserver((entries) => {
+        const entry = entries[0]; if (!entry) return;
+        if (entry.intersectionRatio < 0.5) {
+          try { v?.pause(); } catch {}
+        }
+      }, { threshold: [0, 0.5, 1] });
+      if (v) io.observe(v);
+      return () => {
+        try { v?.removeEventListener('play', onPlay); } catch {}
+        try { io.disconnect(); } catch {}
+        try { FeedMediaManager.inst.unregisterHandle(el); } catch {}
+      };
+    } catch {}
+  }, [resolvedSrc, postId, thumbnailUrl]);
 
   // Derive a best-guess MIME type from the URL/extension to help browsers choose the decoder
   const getMimeType = (url: string): string | undefined => {
