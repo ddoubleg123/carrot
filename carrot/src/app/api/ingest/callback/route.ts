@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { updateJob } from '@/lib/ingestJobs';
+import { updateJob, getJob, createJob } from '@/lib/ingestJobs';
 import prisma from '@/lib/prisma';
 
 // Accept either of the app-configured secrets. Do NOT leak values in logs.
@@ -7,6 +7,7 @@ const APP_SECRET_1 = process.env.INGEST_WORKER_SECRET || '';
 const APP_SECRET_2 = process.env.WORKER_SECRET || '';
 
 export const runtime = 'nodejs';
+const DISABLE_JOB_DB = process.env.DISABLE_INGEST_JOB_DB === '1';
 
 export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
@@ -65,14 +66,36 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     if (title) updateData.title = title;
     if (channel) updateData.channel = channel;
 
-    const updatedJob = await updateJob(jobId, updateData);
-    
-    if (!updatedJob) {
-      console.error(`[callback] Job ${jobId} not found`);
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    if (!DISABLE_JOB_DB) {
+      // Ensure an ingest job row exists; if not, create one first
+      let existing = null as any;
+      try { existing = await getJob(jobId); } catch {}
+      if (!existing) {
+        try {
+          const srcUrl = videoUrl || mediaUrl || '';
+          existing = await createJob({
+            sourceUrl: srcUrl || 'about:blank',
+            sourceType: 'youtube',
+            userId: null,
+            postId: postId || null,
+            status: (status as any) || 'processing',
+          } as any);
+          console.log(`[callback] Created ingest job placeholder (local id: ${existing?.id}) for external jobId ${jobId}`);
+        } catch (e) {
+          console.warn('[callback] Failed to create placeholder job; proceeding to update or post patch anyway');
+        }
+      }
+
+      try {
+        await updateJob(jobId, updateData);
+      } catch (e) {
+        console.warn(`[callback] updateJob failed for ${jobId}; job may not exist locally yet. Continuing.`, (e as any)?.message || e);
+      }
+    } else {
+      console.warn('[callback] Job DB disabled via DISABLE_INGEST_JOB_DB=1; skipping job upsert/update');
     }
 
-    console.log(`[callback] Successfully updated job ${jobId}`);
+    console.log(`[callback] Job callback processed for ${jobId}`);
 
     // Normalize Firebase/Storage signed URLs to durable alt=media path form
     const normalizeVideoUrl = (u?: string | null): string | null => {
@@ -131,7 +154,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
 
     // If postId and a media URL present, persist trimmed URL to the Post
     try {
-      const pid = postId || updatedJob?.postId || null;
+      const pid = postId || null;
       const finalUrl = normalizeVideoUrl(videoUrl || mediaUrl || null);
       if (pid && finalUrl) {
         await prisma.post.update({
