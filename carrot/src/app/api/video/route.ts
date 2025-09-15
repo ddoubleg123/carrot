@@ -44,6 +44,8 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     const raw = searchParams.get('url');
     const pathParam = searchParams.get('path');
     const bucketParam = searchParams.get('bucket');
+    // Track whether we performed a single decode on the incoming url param
+    let decodedOnce = false;
 
     let target: URL | null = null;
     // Preferred: path-based access to avoid expired signed URLs
@@ -59,11 +61,12 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
       // Unwrap '/api/img?url=...' forms accidentally passed in
       let candidate = raw;
-      // Decode at most once. Over-decoding will break signed GCS URLs since the signature
-      // is computed over the exact encoded path/query.
+      // Always decode at most once to fix double-encoding from client query embedding (e.g., %252F -> %2F, %2540 -> %40)
+      // IMPORTANT: Do not decode twice, or signed URLs will break. One decode is correct for both signed and unsigned.
       try {
         if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
           candidate = decodeURIComponent(candidate);
+          decodedOnce = true;
         }
       } catch {}
       try {
@@ -73,7 +76,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           if (inner) candidate = inner;
         }
       } catch {}
-
+      // If after unwrapping we still see double-encoded sequences, decode once more (still only once total for the final string)
+      try {
+        if (!decodedOnce && /%25[0-9A-Fa-f]{2}/.test(candidate)) {
+          candidate = decodeURIComponent(candidate);
+          decodedOnce = true;
+        }
+      } catch {}
       try {
         target = new URL(candidate);
       } catch {
@@ -178,6 +187,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     // Debug headers (do not leak full URL)
     headers.set('x-video-proxy-host', target.hostname);
     headers.set('x-video-proxy-mode', mode);
+    try { headers.set('x-video-proxy-decoded', decodedOnce ? '1' : '0'); } catch {}
 
     // On errors, log a small snippet of the upstream body to aid diagnosis
     if (status >= 400) {
