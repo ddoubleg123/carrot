@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const admin = require('firebase-admin');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,13 +49,75 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     // Track whether we performed a single decode on the incoming url param
     let decodedOnce = false;
 
+    // Helper: stream via Firebase Admin (supports private objects and Range)
+    const adminDownload = async (bucketName: string, objectPath: string) => {
+      // Initialize admin app if needed
+      if (!admin.apps || !admin.apps.length) {
+        const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+          }),
+          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+        });
+      }
+      const bucket = admin.storage().bucket(bucketName);
+      const file = bucket.file(objectPath.replace(/^\/+/, ''));
+      const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public,max-age=86400' }]);
+
+      const range = req.headers.get('range');
+      const size = Number(meta?.size || 0);
+      const contentType = meta?.contentType || 'application/octet-stream';
+      const cacheControl = meta?.cacheControl || 'public, max-age=86400';
+      if (range && size > 0) {
+        const m = /bytes=(\d+)-(\d*)/.exec(range);
+        const start = m ? parseInt(m[1], 10) : 0;
+        const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1);
+        if (isNaN(start) || isNaN(end) || start > end) return new NextResponse('Malformed Range', { status: 416 });
+        const stream = file.createReadStream({ start, end });
+        return new NextResponse(stream as any, {
+          status: 206,
+          headers: {
+            'content-type': contentType,
+            'cache-control': cacheControl,
+            'content-length': String(end - start + 1),
+            'content-range': `bytes ${start}-${end}/${size}`,
+            'accept-ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'x-video-proxy-host': 'admin',
+            'x-video-proxy-mode': 'admin-range',
+          },
+        });
+      }
+      const stream = file.createReadStream();
+      return new NextResponse(stream as any, {
+        status: 200,
+        headers: {
+          'content-type': contentType,
+          'cache-control': cacheControl,
+          'accept-ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
+          'x-video-proxy-host': 'admin',
+          'x-video-proxy-mode': 'admin-stream',
+        },
+      });
+    };
+
     let target: URL | null = null;
-    // Preferred: path-based access to avoid expired signed URLs
+    // Preferred: path-based access using Admin SDK (private-safe) with Range support
     if (pathParam) {
-      const bucket = bucketParam?.trim();
+      const bucket = (bucketParam || process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '').trim();
       if (!bucket) return NextResponse.json({ error: 'Missing bucket for path mode' }, { status: 400 });
-      const encPath = encodeURIComponent(pathParam);
-      target = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+      // Stream directly via Admin SDK and return early
+      try {
+        return await adminDownload(bucket, pathParam);
+      } catch (e: any) {
+        console.warn('[api/video] admin stream failed, falling back to HTTPS', e?.message);
+        const encPath = encodeURIComponent(pathParam);
+        target = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+      }
     }
 
     let mode: 'preserved' | 'rewritten' | 'path' = target ? 'path' : 'preserved';
@@ -61,8 +125,10 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
       // Unwrap '/api/img?url=...' forms accidentally passed in
       let candidate = raw;
-      // Always decode at most once to fix double-encoding from client query embedding (e.g., %252F -> %2F, %2540 -> %40)
-      // IMPORTANT: Do not decode twice, or signed URLs will break. One decode is correct for both signed and unsigned.
+      // Detect signed URLs (GCS V2: GoogleAccessId/Signature/Expires, or GCS V4: X-Goog-*)
+      const looksSigned = /(?:[?&])(GoogleAccessId|Signature|Expires|X-Goog-Algorithm|X-Goog-Credential|X-Goog-Date|X-Goog-Expires|X-Goog-SignedHeaders|X-Goog-Signature)=/i.test(candidate);
+      // Decode at most once for ALL URLs (including signed). The client encodes the entire URL when passing as query,
+      // which turns %40/%2F inside the signed URL into %2540/%252F; we must reduce one layer back.
       try {
         if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
           candidate = decodeURIComponent(candidate);
@@ -76,7 +142,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           if (inner) candidate = inner;
         }
       } catch {}
-      // If after unwrapping we still see double-encoded sequences, decode once more (still only once total for the final string)
+      // If after unwrapping we still see a double-encoded marker and we haven't decoded yet, decode once
       try {
         if (!decodedOnce && /%25[0-9A-Fa-f]{2}/.test(candidate)) {
           candidate = decodeURIComponent(candidate);
@@ -116,25 +182,33 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
     } catch {}
 
-    // Normalize Firebase v0 path: ensure /o/<object> is encoded exactly once
+    // Normalize Firebase v0 path: ensure /o/<object> is encoded exactly once (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
       try {
-        const parts = target.pathname.split('/');
-        const oIdx = parts.findIndex((p) => p === 'o');
-        if (oIdx > -1 && parts[oIdx + 1]) {
-          const rawSeg = parts[oIdx + 1];
-          // If looks double-encoded (%252F), decode once and re-encode
-          const looksDouble = /%25/i.test(rawSeg);
-          const onceDecoded = looksDouble ? decodeURIComponent(rawSeg) : rawSeg;
-          const normalizedSeg = encodeURIComponent(onceDecoded);
-          if (normalizedSeg !== rawSeg) {
-            parts[oIdx + 1] = normalizedSeg;
-            target = new URL(target.origin + parts.join('/') + target.search);
+        const isSigned = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
+          target.searchParams.has('X-Goog-Algorithm');
+        if (!isSigned) {
+          const parts = target.pathname.split('/');
+          const oIdx = parts.findIndex((p) => p === 'o');
+          if (oIdx > -1 && parts[oIdx + 1]) {
+            const rawSeg = parts[oIdx + 1];
+            // If looks double-encoded (%252F), decode once and re-encode
+            const looksDouble = /%25/i.test(rawSeg);
+            const onceDecoded = looksDouble ? decodeURIComponent(rawSeg) : rawSeg;
+            const normalizedSeg = encodeURIComponent(onceDecoded);
+            if (normalizedSeg !== rawSeg) {
+              parts[oIdx + 1] = normalizedSeg;
+              target = new URL(target.origin + parts.join('/') + target.search);
+            }
           }
         }
       } catch {}
       // Firebase download endpoints often need alt=media
-      if (!target.searchParams.has('alt')) target.searchParams.set('alt', 'media');
+      try {
+        const isSigned = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
+          target.searchParams.has('X-Goog-Algorithm');
+        if (!isSigned && !target.searchParams.has('alt')) target.searchParams.set('alt', 'media');
+      } catch {}
     }
 
     // Forward important headers
@@ -175,6 +249,21 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (v) headers.set(h, v);
     }
 
+    // Optional redirect for signed or token URLs to avoid any proxy byte-mismatch (feature flagged)
+    try {
+      const ALLOW_REDIRECT = String(process.env.VIDEO_PROXY_ALLOW_REDIRECT || '0').toLowerCase() === '1';
+      const isSignedFinal = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
+        target.searchParams.has('X-Goog-Algorithm') || target.searchParams.has('token');
+      if (ALLOW_REDIRECT && isSignedFinal) {
+        const redir = NextResponse.redirect(target.toString(), 302);
+        redir.headers.set('Access-Control-Allow-Origin', '*');
+        redir.headers.set('Cache-Control', 'public, max-age=300');
+        redir.headers.set('x-video-proxy-mode', 'redirect');
+        redir.headers.set('x-video-proxy-signed', '1');
+        return redir;
+      }
+    } catch {}
+
     // Add CORS for our origin
     headers.set('Access-Control-Allow-Origin', '*');
     // Short negative caching to prevent request storms on missing/forbidden objects
@@ -187,7 +276,12 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     // Debug headers (do not leak full URL)
     headers.set('x-video-proxy-host', target.hostname);
     headers.set('x-video-proxy-mode', mode);
-    try { headers.set('x-video-proxy-decoded', decodedOnce ? '1' : '0'); } catch {}
+    try {
+      const isSignedFinal = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
+        target.searchParams.has('X-Goog-Algorithm');
+      headers.set('x-video-proxy-decoded', decodedOnce ? '1' : '0');
+      headers.set('x-video-proxy-signed', isSignedFinal ? '1' : '0');
+    } catch {}
 
     // On errors, log a small snippet of the upstream body to aid diagnosis
     if (status >= 400) {

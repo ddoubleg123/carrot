@@ -77,8 +77,8 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   };
 
   // Resolve playable src via proxy for Firebase/Storage URLs (avoids CORS)
-  // Preference: if the URL has signed params (GoogleAccessId/Expires/Signature/token), keep url-mode via /api/video?url=...
-  // Only use path-mode (/api/video?path=...&bucket=...) for public objects without signed params
+  // Preference: always use path-mode (/api/video?path=...&bucket=...) when we can extract bucket+path,
+  // since the server now supports Admin SDK streaming with Range for private objects. Fallback to url-mode only if needed.
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
     const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
@@ -116,20 +116,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
 
     const looksLikeStorage = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app');
     if (looksLikeStorage) {
-      // If signed params exist, prefer url-mode to preserve access
-      try {
-        const url = new URL(videoUrl);
-        const sp = url.searchParams;
-        const hasSigned = sp.has('GoogleAccessId') || sp.has('Expires') || sp.has('Signature') || sp.has('token');
-        if (hasSigned) {
-          let u = videoUrl;
-          if (u.includes('firebasestorage.googleapis.com') && !u.includes('alt=media')) {
-            u = `${u}${u.includes('?') ? '&' : '?'}alt=media`;
-          }
-          return `/api/video?url=${encodeURIComponent(u)}`;
-        }
-      } catch {}
-
       const { bucket, path } = tryExtractBucketAndPath(videoUrl);
       const finalBucket = bucket || PUBLIC_BUCKET;
       if (path && finalBucket) {
