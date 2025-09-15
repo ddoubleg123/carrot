@@ -61,10 +61,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       let candidate = raw;
       // Handle double-encoded URLs passed from client (e.g., %252F and %2540). Decode only if we see %25.
       try {
+        // Robustly decode up to 3 times, stopping if stable or decoding fails
         let decoded = candidate;
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 3; i++) {
           if (!/%25/i.test(decoded)) break; // only decode when still double-encoded
-          decoded = decodeURIComponent(decoded);
+          const next = decodeURIComponent(decoded);
+          if (next === decoded) break;
+          decoded = next;
         }
         candidate = decoded;
       } catch {}
@@ -119,6 +122,22 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     if (target.hostname === 'firebasestorage.googleapis.com' && !target.searchParams.has('alt')) {
       target.searchParams.set('alt', 'media');
     }
+
+    // Fast-path: for signed storage.googleapis.com URLs, avoid proxying and redirect the client directly.
+    // This bypasses potential HTTP/3/QUIC flakiness between our origin and GCS and preserves signatures.
+    try {
+      const isGcs = target.hostname === 'storage.googleapis.com';
+      const hasSignedParams = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires');
+      if (isGcs && hasSignedParams) {
+        const res = NextResponse.redirect(target.toString(), 302);
+        res.headers.set('Access-Control-Allow-Origin', '*');
+        res.headers.set('Cache-Control', 'public, max-age=300');
+        res.headers.set('x-video-proxy-host', target.hostname);
+        res.headers.set('x-video-proxy-mode', 'redirect');
+        statBump(302);
+        return res;
+      }
+    } catch {}
 
     // In-flight dedupe: avoid multiple parallel fetches for the same normalized URL
     const k = target.toString();
