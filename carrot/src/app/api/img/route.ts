@@ -137,12 +137,15 @@ export async function GET(req: NextRequest) {
   catch { return passthrough(upstream); }
 
   const headers = new Headers();
-  headers.set('content-type', fmt === 'avif' ? 'image/avif' : fmt === 'webp' ? 'image/webp' : fmt === 'png' ? 'image/png' : 'image/jpeg');
+  const contentType = fmt === 'avif' ? 'image/avif' : fmt === 'webp' ? 'image/webp' : fmt === 'png' ? 'image/png' : 'image/jpeg';
+  headers.set('content-type', contentType);
   headers.set('cache-control', 'public, max-age=604800, s-maxage=604800, immutable');
   const etag = upstream.headers.get('etag'); if (etag) headers.set('etag', etag);
   const lm = upstream.headers.get('last-modified'); if (lm) headers.set('last-modified', lm);
   headers.set('vary', 'accept');
   headers.set('x-proxy', 'img-sharp');
 
-  return new NextResponse(out, { status: 200, headers });
+  // Wrap Node Buffer in a Blob to satisfy Next.js Response body types
+  const blob = new Blob([out], { type: contentType });
+  return new NextResponse(blob, { status: 200, headers });
 }
