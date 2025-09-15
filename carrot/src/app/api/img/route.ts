@@ -1,6 +1,4 @@
-import { NextResponse } from 'next/server';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const admin = require('firebase-admin');
+import { NextRequest, NextResponse } from 'next/server';
 
 // Image proxy: fetches bytes server-side and streams to the client.
 // Supports either:
@@ -11,243 +9,15 @@ const admin = require('firebase-admin');
 const PUBLIC_BASE = process.env.STORAGE_PUBLIC_BASE
   || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/';
 
+// Image proxy + optional transform with long cache
+// Usage: /api/img?url=<encoded>&w=400&h=300&q=75&format=webp
+// - Preserves aspect ratio by default
+// - Prevents upscaling (won't resize beyond source dimensions)
+// - Chooses modern format based on Accept if format is not specified
+// - Falls back to passthrough if sharp is unavailable or processing fails
+
 export const runtime = 'nodejs';
-
-export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const urlRaw = searchParams.get('url');
-    // Safely decode up to 2 times, but only if double-encoded markers exist (%25)
-    const urlParam = (() => {
-      if (!urlRaw) return urlRaw;
-      try {
-        let d = urlRaw;
-        for (let i = 0; i < 2; i++) {
-          if (!/%25/i.test(d)) break;
-          d = decodeURIComponent(d);
-        }
-        return d;
-      } catch {
-        return urlRaw;
-      }
-    })();
-    const pathParam = searchParams.get('path');
-    const allowUrlFallback = (process.env.IMG_ALLOW_URL_FALLBACK ?? 'true').toLowerCase() === 'true';
-
-    const adminDownload = async (bucketName: string, objectPath: string) => {
-      // Ensure admin app exists
-      if (!admin.apps || !admin.apps.length) {
-        const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-        admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            // Normalize private key where \n are stored as literal backslash+n in env
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-          }),
-          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-        });
-      }
-      const bucket = admin.storage().bucket(bucketName);
-      const file = bucket.file(objectPath);
-      const [meta] = await file.getMetadata().catch(() => [{ contentType: 'image/jpeg', cacheControl: 'public,max-age=300' }]);
-
-      // Support HTTP Range for streaming (videos)
-      const range = req.headers.get('range');
-      const size = Number(meta?.size || 0);
-      const contentType = meta?.contentType || 'application/octet-stream';
-      const cacheControl = meta?.cacheControl || 'public, max-age=86400, stale-while-revalidate=604800';
-
-      if (range && size > 0) {
-        // Example: bytes=start-end
-        const m = /bytes=(\d+)-(\d*)/.exec(range);
-        const start = m ? parseInt(m[1], 10) : 0;
-        const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1); // 1MB default chunk
-        if (isNaN(start) || isNaN(end) || start > end) {
-          return new NextResponse('Malformed Range', { status: 416 });
-        }
-        const stream = file.createReadStream({ start, end });
-        return new NextResponse(stream as any, {
-          status: 206,
-          headers: {
-            'content-type': contentType,
-            'cache-control': cacheControl,
-            'content-length': String(end - start + 1),
-            'content-range': `bytes ${start}-${end}/${size}`,
-            'accept-ranges': 'bytes',
-            'Access-Control-Allow-Origin': '*',
-            'x-img-bucket': bucketName,
-            'x-img-path': objectPath,
-            'x-img-mode': 'admin-range',
-          },
-        });
-      }
-
-      // No Range: stream entire object without buffering in memory
-      const stream = file.createReadStream();
-      return new NextResponse(stream as any, {
-        status: 200,
-        headers: {
-          'content-type': contentType,
-          'cache-control': cacheControl,
-          'accept-ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
-          'x-img-bucket': bucketName,
-          'x-img-path': objectPath,
-          'x-img-mode': 'admin-stream',
-        },
-      });
-    };
-
-    let target: string | null = null;
-    if (urlParam) {
-      // If urlParam is a Firebase Storage URL, try to extract the bucket and object path and use Admin SDK
-      // Case 1: Standard Firebase URL: https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<object>
-      const m = urlParam.match(/\/b\/([^/]+)\/o\/([^?]+)(?:\?|$)/);
-      // Case 2: Google Storage proxy form: https://storage.googleapis.com/<bucket>.firebasestorage.app/<object>
-      const gcsAlt = (() => {
-        try {
-          const u = new URL(urlParam);
-          if (u.hostname === 'storage.googleapis.com') {
-            // pathname like: /<bucket>.firebasestorage.app/<object>
-            const parts = u.pathname.replace(/^\/+/, '').split('/');
-            if (parts.length >= 2 && parts[0].endsWith('.firebasestorage.app')) {
-              const bucketFromHost = parts[0].replace(/\.firebasestorage\.app$/i, '');
-              const objectPath = parts.slice(1).join('/');
-              return { bucket: bucketFromHost, object: objectPath } as const;
-            }
-            if (parts.length >= 2 && parts[0].endsWith('.appspot.com')) {
-              const objectPath = parts.slice(1).join('/');
-              return { object: objectPath } as const;
-            }
-          }
-          // Case 3: Host ends with firebasestorage.googleapis.com with v0 path already handled by regex above
-        } catch {}
-        return null;
-      })();
-      const pathOnly = urlParam.match(/\/o\/([^?]+)(?:\?|$)/);
-      if (m && m[1] && m[2]) {
-        const urlBucketRaw = decodeURIComponent(m[1]);
-        const candidates: string[] = [];
-        if (urlBucketRaw.endsWith('.firebasestorage.app')) {
-          candidates.push(urlBucketRaw);
-          candidates.push(`${urlBucketRaw.replace(/\.firebasestorage\.app$/i, '')}.appspot.com`);
-        } else {
-          candidates.push(urlBucketRaw);
-        }
-        const safePath = decodeURIComponent(decodeURIComponent(m[2])).replace(/^\/+/, '');
-        for (const bucketName of candidates) {
-          try {
-            const resp = await adminDownload(bucketName, safePath);
-            const h = new Headers(resp.headers);
-            h.set('x-img-bucket-final', bucketName);
-            return new NextResponse(resp.body as any, { status: resp.status, headers: h });
-          } catch {}
-        }
-        if (!allowUrlFallback) {
-          return NextResponse.json({ error: 'Admin download failed', triedBuckets: candidates, path: safePath }, { status: 502 });
-        }
-        target = urlParam; // fallback during cutover
-      } else if (gcsAlt && gcsAlt.object) {
-        // storage.googleapis.com/<bucket>.firebasestorage.app/<object>
-        const safePath = decodeURIComponent(decodeURIComponent(gcsAlt.object)).replace(/^\/+/, '');
-        try {
-          const project = (gcsAlt as any).bucket as string | undefined;
-          const candidates: string[] = [];
-          if (project) {
-            candidates.push(`${project}.firebasestorage.app`);
-            candidates.push(`${project}.appspot.com`);
-          } else {
-            const envBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-            if (envBucket) candidates.push(envBucket);
-          }
-          for (const bucketName of candidates) {
-            try {
-              const resp = await adminDownload(bucketName, safePath);
-              const h = new Headers(resp.headers);
-              h.set('x-img-bucket-final', bucketName);
-              return new NextResponse(resp.body as any, { status: resp.status, headers: h });
-            } catch {}
-          }
-          throw new Error('admin candidates exhausted');
-        } catch (e) {
-          if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
-          }
-          target = urlParam; // temporary fallback during cutover
-        }
-      } else if (pathOnly && pathOnly[1]) {
-        // If bucket is not present in URL (non-standard form), attempt with configured bucket
-        const safePath = decodeURIComponent(decodeURIComponent(pathOnly[1])).replace(/^\/+/, '');
-        try {
-          const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-          if (!fallbackBucket) throw new Error('Missing FIREBASE_STORAGE_BUCKET');
-          return await adminDownload(fallbackBucket, safePath);
-        } catch (e) {
-          if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
-          }
-          target = urlParam; // temporary fallback during cutover
-        }
-      } else {
-        target = urlParam;
-      }
-    } else if (pathParam) {
-      const safePath = decodeURIComponent(decodeURIComponent(pathParam)).replace(/^\/+/, '');
-      // First try Firebase Admin SDK (works for private objects)
-      try {
-        const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-        if (!bucketName) throw new Error('Missing FIREBASE_STORAGE_BUCKET');
-        return await adminDownload(bucketName, safePath);
-      } catch (e) {
-        // Fall back to HTTPS fetch using a public base + alt=media (only if allowed)
-        if (!allowUrlFallback) {
-          return NextResponse.json({ error: 'Admin download failed', bucketTried: process.env.FIREBASE_STORAGE_BUCKET, path: safePath }, { status: 502 });
-        }
-        target = PUBLIC_BASE.endsWith('/') ? `${PUBLIC_BASE}${encodeURIComponent(safePath)}?alt=media` : `${PUBLIC_BASE}/${encodeURIComponent(safePath)}?alt=media`;
-      }
-    }
-
-    if (!target) {
-      return NextResponse.json({ error: 'Missing url or path' }, { status: 400 });
-    }
-
-    // Validate
-    try { new URL(target); } catch { return NextResponse.json({ error: 'Invalid target URL' }, { status: 400 }); }
-
-    // Fetch and forward bytes. Forward Range for streaming.
-    try { console.log('[api/img] fetch', { host: new URL(target).hostname, pathPrefix: new URL(target).pathname.slice(0, 64) }); } catch {}
-    const upstream = await fetch(target, {
-      // Pass through conditional headers for 304 reuse
-      headers: {
-        ...(req.headers.get('range') ? { range: req.headers.get('range') as string } : {}),
-      },
-      cache: 'no-store',
-    });
-
-    const status = upstream.status;
-    const body = upstream.body;
-
-    // Forward content-type and etag/last-modified if present
-    const ct = upstream.headers.get('content-type') || 'application/octet-stream';
-    const etag = upstream.headers.get('etag');
-    const lm = upstream.headers.get('last-modified');
-
-    const headers = new Headers();
-    headers.set('content-type', ct);
-    if (etag) headers.set('etag', etag);
-    if (lm) headers.set('last-modified', lm);
-
-    // Long cache for immutable image URLs; clients can revalidate via ETag
-    headers.set('cache-control', 'public, max-age=604800, s-maxage=604800');
-    headers.set('x-proxy', 'img');
-    headers.set('vary', 'accept');
-
-    return new NextResponse(body, { status, headers });
-  } catch (e: any) {
-    return new NextResponse(`img proxy error: ${e?.message || e}`, { status: 500 });
-  }
-}
+export const dynamic = 'force-dynamic';
 
 const ALLOW_HOSTS = new Set([
   'firebasestorage.googleapis.com',
@@ -259,50 +29,120 @@ const ALLOW_HOSTS = new Set([
   'lh6.googleusercontent.com',
 ]);
 
-export async function GETImageProxy(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const rawUrl = searchParams.get('url');
-    if (!rawUrl) {
-      return new NextResponse('Missing url', { status: 400 });
-    }
-    let target: URL;
-    try { target = new URL(rawUrl); } catch { return new NextResponse('Bad url', { status: 400 }); }
-    if (!ALLOW_HOSTS.has(target.hostname)) {
-      return new NextResponse('Host not allowed', { status: 400 });
-    }
+function chooseFormat(acceptHeader?: string | null, explicit?: string | null) {
+  if (explicit) return explicit.toLowerCase();
+  const a = (acceptHeader || '').toLowerCase();
+  if (a.includes('image/avif')) return 'avif';
+  if (a.includes('image/webp')) return 'webp';
+  return 'jpeg';
+}
 
-    const upstream = await fetch(target.toString(), {
-      // Pass through conditional headers for 304 reuse
-      headers: {
-        ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
-        ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
-        // Hint preferred formats
-        accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
-      },
-      cache: 'no-store',
-    });
+function clampQuality(q?: number) {
+  if (!q || isNaN(q)) return 75;
+  return Math.min(95, Math.max(30, Math.round(q)));
+}
 
-    const status = upstream.status;
-    const body = upstream.body;
+async function fetchUpstream(req: NextRequest, target: URL) {
+  const upstream = await fetch(target.toString(), {
+    headers: {
+      ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
+      ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
+      accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
+    },
+    cache: 'no-store',
+  });
+  return upstream;
+}
 
-    // Forward content-type and etag/last-modified if present
-    const ct = upstream.headers.get('content-type') || 'image/*';
-    const etag = upstream.headers.get('etag');
-    const lm = upstream.headers.get('last-modified');
+async function passthrough(upstream: Response) {
+  const status = upstream.status;
+  const body = upstream.body;
+  const headers = new Headers();
+  headers.set('content-type', upstream.headers.get('content-type') || 'image/*');
+  const etag = upstream.headers.get('etag'); if (etag) headers.set('etag', etag);
+  const lm = upstream.headers.get('last-modified'); if (lm) headers.set('last-modified', lm);
+  headers.set('cache-control', 'public, max-age=604800, s-maxage=604800, immutable');
+  headers.set('vary', 'accept');
+  headers.set('x-proxy', 'img-pass');
+  return new NextResponse(body, { status, headers });
+}
 
-    const headers = new Headers();
-    headers.set('content-type', ct);
-    if (etag) headers.set('etag', etag);
-    if (lm) headers.set('last-modified', lm);
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const sp = url.searchParams;
+  const rawUrl = sp.get('url');
+  if (!rawUrl) return new NextResponse('Missing url', { status: 400 });
 
-    // Long cache for immutable image URLs; clients can revalidate via ETag
-    headers.set('cache-control', 'public, max-age=604800, s-maxage=604800');
-    headers.set('x-proxy', 'img');
-    headers.set('vary', 'accept');
+  let target: URL;
+  try { target = new URL(rawUrl); } catch { return new NextResponse('Bad url', { status: 400 }); }
+  if (!ALLOW_HOSTS.has(target.hostname)) return new NextResponse('Host not allowed', { status: 400 });
 
-    return new NextResponse(body, { status, headers });
-  } catch (e: any) {
-    return new NextResponse(`img proxy error: ${e?.message || e}`, { status: 500 });
+  // Dimensions & options
+  const w = sp.get('w') ? Math.max(1, Math.min(4096, parseInt(sp.get('w') as string, 10) || 0)) : undefined;
+  const h = sp.get('h') ? Math.max(1, Math.min(4096, parseInt(sp.get('h') as string, 10) || 0)) : undefined;
+  const q = clampQuality(sp.get('q') ? parseInt(sp.get('q') as string, 10) : undefined);
+  const fmt = chooseFormat(req.headers.get('accept'), sp.get('format'));
+
+  // Fetch upstream
+  const upstream = await fetchUpstream(req, target);
+  if (!upstream.ok) {
+    // Pass through errors with short cache
+    const txt = await upstream.text().catch(() => '');
+    return new NextResponse(txt, { status: upstream.status, headers: { 'cache-control': 'public, max-age=60' } });
   }
+
+  // If no transforms requested, passthrough with long cache
+  if (!w && !h && (!sp.get('format') || fmt === 'jpeg')) {
+    return passthrough(upstream);
+  }
+
+  // If sharp is not available, passthrough
+  let sharp: any;
+  try { sharp = (await import('sharp')).default; } catch {
+    return passthrough(upstream);
+  }
+
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  let image = sharp(buf, { limitInputPixels: 268435456 }); // 16K*16K safety
+
+  // Get metadata to prevent upscaling
+  const meta = await image.metadata().catch(() => ({} as any));
+  const srcW = meta.width || undefined;
+  const srcH = meta.height || undefined;
+
+  let targetW = w;
+  let targetH = h;
+  if (srcW && targetW && targetW > srcW) targetW = srcW; // no upscale
+  if (srcH && targetH && targetH > srcH) targetH = srcH; // no upscale
+
+  if (targetW || targetH) {
+    image = image.resize({
+      width: targetW,
+      height: targetH,
+      fit: 'inside', // preserve aspect ratio inside the box
+      withoutEnlargement: true,
+    });
+  }
+
+  // Format & quality
+  const options: Record<string, any> = { quality: q }; // shared
+  if (fmt === 'webp') image = image.webp(options);
+  else if (fmt === 'avif') image = image.avif({ quality: q });
+  else if (fmt === 'jpeg' || fmt === 'jpg') image = image.jpeg(options);
+  else if (fmt === 'png') image = image.png(); // png ignores q
+  else image = image.jpeg(options);
+
+  let out: Buffer;
+  try { out = await image.toBuffer(); }
+  catch { return passthrough(upstream); }
+
+  const headers = new Headers();
+  headers.set('content-type', fmt === 'avif' ? 'image/avif' : fmt === 'webp' ? 'image/webp' : fmt === 'png' ? 'image/png' : 'image/jpeg');
+  headers.set('cache-control', 'public, max-age=604800, s-maxage=604800, immutable');
+  const etag = upstream.headers.get('etag'); if (etag) headers.set('etag', etag);
+  const lm = upstream.headers.get('last-modified'); if (lm) headers.set('last-modified', lm);
+  headers.set('vary', 'accept');
+  headers.set('x-proxy', 'img-sharp');
+
+  return new NextResponse(out, { status: 200, headers });
 }
