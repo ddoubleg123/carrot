@@ -144,6 +144,20 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     return videoUrl;
   }, [videoUrl]);
 
+  // Proxy poster thumbnail via /api/img to avoid CORS on Firebase/Storage URLs
+  const resolvedPoster = React.useMemo(() => {
+    if (!thumbnailUrl) return undefined;
+    try {
+      // Avoid double-proxying or proxying data/blob URLs
+      if (thumbnailUrl.startsWith('/api/img') || thumbnailUrl.startsWith('data:') || thumbnailUrl.startsWith('blob:')) {
+        return thumbnailUrl;
+      }
+      return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
+    } catch {
+      return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
+    }
+  }, [thumbnailUrl]);
+
   // Register this element with FeedMediaManager to enforce one Active + one Warm
   useEffect(() => {
     try {
@@ -469,7 +483,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           autoPlay
           preload="metadata"
           crossOrigin="anonymous"
-          poster={thumbnailUrl || undefined}
+          poster={resolvedPoster}
           src={resolvedSrc}
           style={{ 
             width: '100%',

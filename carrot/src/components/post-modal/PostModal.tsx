@@ -91,11 +91,13 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
         ? `${url}${url.includes('?') ? '&' : '?'}alt=media`
         : url;
       const resolved = needsProxy ? `/api/video?url=${encodeURIComponent(withAlt)}` : withAlt;
+      // Proxy poster image to avoid CORS
+      const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
       return (
         <video
           controls
           playsInline
-          poster={data.thumbnailUrl || undefined}
+          poster={poster}
           className="w-full h-full object-contain bg-black"
           ref={(el) => setMediaEl(el)}
         >
@@ -109,7 +111,13 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
       const src = arr[0];
       return src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="media" className="w-full h-full object-contain" />
+        <img
+          src={`/api/img?url=${encodeURIComponent(src)}`}
+          alt={data?.content ? `${data.content.slice(0, 60)} (image)` : 'Post image'}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-contain"
+        />
       ) : (
         <div className="text-sm text-gray-500">No media</div>
       );
@@ -134,7 +142,13 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-9 w-9 rounded-full overflow-hidden bg-gray-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={avatar} alt="avatar" className="h-full w-full object-cover" />
+                <img
+                  src={avatar}
+                  alt={username ? `${username}'s avatar` : 'User avatar'}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900 truncate">{username}</span>

@@ -34,7 +34,13 @@ export default function MediaTile({ m, onOpen, onRename, onToggleHidden }: {
     <div className="relative group" aria-label={label}>
       <button className="block w-full rounded-lg border border-[#E6E8EC] overflow-hidden shadow-sm hover:-translate-y-0.5 transition-transform" onClick={() => onOpen(m)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={thumbUrl} alt={m.title || 'media'} className="w-full aspect-video object-cover" />
+        <img
+          src={thumbUrl}
+          alt={m.title || (m.kind === 'video' ? 'Video thumbnail' : 'Image thumbnail')}
+          loading="lazy"
+          decoding="async"
+          className="w-full aspect-video object-cover"
+        />
       </button>
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button className="rounded bg-white/90 border border-gray-200 px-2 py-1 text-xs shadow" onClick={() => setMenu((v) => !v)} aria-label="Menu">⋮</button>

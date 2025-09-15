@@ -32,8 +32,16 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
       <section style={{marginBottom: '1rem'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
           {post?.User?.image ? (
-            // Let Next's optimizer handle external avatars
-            <img src={post.User.image} alt={post.User?.username || 'user'} width={48} height={48} style={{borderRadius: 24}} />
+            // External avatar: add loading/decoding hints
+            <img
+              src={post.User.image}
+              alt={post.User?.username ? `${post.User.username}'s avatar` : 'User avatar'}
+              width={48}
+              height={48}
+              loading="lazy"
+              decoding="async"
+              style={{borderRadius: 24}}
+            />
           ) : null}
           <div>
             <div style={{fontWeight: 600}}>{post?.User?.username || post?.User?.name || 'User'}</div>
@@ -59,7 +67,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
         </div>
       ) : proxiedThumb ? (
         <div style={{marginTop: '1rem'}}>
-          <img src={proxiedThumb} alt="thumbnail" style={{maxWidth: '100%'}} />
+          <img src={proxiedThumb} alt={post?.content ? `${String(post.content).slice(0,60)} (thumbnail)` : 'Post thumbnail'} loading="lazy" decoding="async" style={{maxWidth: '100%'}} />
         </div>
       ) : null}
 
@@ -69,7 +77,14 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
             try {
               const arr = Array.isArray(post.imageUrls) ? post.imageUrls : JSON.parse(post.imageUrls || '[]');
               return arr.map((u: string, idx: number) => (
-                <img key={idx} src={`/api/img?url=${encodeURIComponent(u)}`} alt={`img-${idx}`} style={{maxWidth: '48%'}} />
+                <img
+                  key={idx}
+                  src={`/api/img?url=${encodeURIComponent(u)}`}
+                  alt={post?.content ? `${String(post.content).slice(0, 40)} (image ${idx+1})` : `Post image ${idx+1}`}
+                  loading="lazy"
+                  decoding="async"
+                  style={{maxWidth: '48%'}}
+                />
               ));
             } catch {
               return null;

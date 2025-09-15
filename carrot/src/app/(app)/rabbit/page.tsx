@@ -222,6 +222,8 @@ export default function RabbitAIPage() {
                       <img
                         src={selectedMedia.url}
                         alt="Uploaded content"
+                        loading="lazy"
+                        decoding="async"
                         className="max-w-full max-h-full rounded-lg"
                       />
                     )}
@@ -331,6 +333,8 @@ export default function RabbitAIPage() {
                       <img
                         src={agent.avatar}
                         alt={`${agent.name} avatar`}
+                        loading="lazy"
+                        decoding="async"
                         className="w-8 h-8 rounded-full mx-auto mb-2"
                       />
                       <div className="text-xs font-medium text-gray-900 text-center truncate">
@@ -357,6 +361,8 @@ export default function RabbitAIPage() {
                     <img
                       src={selectedAgent.avatar}
                       alt={`${selectedAgent.name} avatar`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-10 h-10 rounded-full"
                     />
                     <div>

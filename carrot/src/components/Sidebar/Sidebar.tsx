@@ -145,6 +145,8 @@ export default function Sidebar() {
             alt="Carrot Home"
             width={56}
             height={56}
+            loading="lazy"
+            decoding="async"
             className="object-contain"
             style={{ 
               width: '56px', 
@@ -204,8 +206,10 @@ export default function Sidebar() {
           <div className="w-[50px] h-[50px] rounded-full bg-white/20 mb-1.5 flex items-center justify-center max-lg:w-10 max-lg:h-10">
             {user?.image ? (
               <img
-                src={user.image}
+                src={`/api/img?url=${encodeURIComponent(user.image)}`}
                 alt={user?.name || 'Profile'}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full rounded-full object-cover"
               />
             ) : (

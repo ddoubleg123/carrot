@@ -326,7 +326,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
                 {author?.avatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/img?url=${encodeURIComponent(author.avatar)}`} alt={author?.username || "user"} className="h-full w-full object-cover" />
+                  <img
+                    src={`/api/img?url=${encodeURIComponent(author.avatar)}`}
+                    alt={author?.username ? `${author.username}'s avatar` : 'User avatar'}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 ) : null}
               </div>
             )}
@@ -485,7 +491,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/img?url=${encodeURIComponent(gifUrl)}`} alt="gif" className="w-full rounded-xl" />
+            <img
+              src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
+              alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
+              loading="lazy"
+              decoding="async"
+              className="w-full rounded-xl"
+            />
           </div>
         ) : imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
@@ -499,7 +511,9 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/api/img?url=${encodeURIComponent(imageUrls[0])}`}
-                    alt="img-0"
+                    alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full max-h-[520px] object-contain mx-auto"
                   />
                 </div>
@@ -507,7 +521,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={`/api/img?url=${encodeURIComponent(u)}`} alt={`img-${i}`} className="w-full h-48 object-cover rounded-lg bg-white" />
+                    <img
+                      key={i}
+                      src={`/api/img?url=${encodeURIComponent(u)}`}
+                      alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-48 object-cover rounded-lg bg-white"
+                    />
                   ))}
                 </div>
               )}

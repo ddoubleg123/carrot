@@ -158,6 +158,8 @@ export default function MinimalNav() {
           <img 
             src="/logo-carrot.png" 
             alt="Carrot Logo" 
+            loading="lazy"
+            decoding="async"
             className="w-8 h-8"
           />
         </div>

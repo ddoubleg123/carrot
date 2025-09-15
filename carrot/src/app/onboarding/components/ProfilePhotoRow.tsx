@@ -24,8 +24,21 @@ export default function ProfilePhotoRow({ avatar, onAvatarChange, userId }: { av
 
   const [error, setError] = useState<string | null>(null);
 
-  // Show staged photo URL if available
-  const stagedPhotoUrl = draft?.image?.storagePath ? `https://firebasestorage.googleapis.com/v0/b/YOUR_BUCKET/o/${encodeURIComponent(draft.image.storagePath)}?alt=media` : null;
+  // Show staged photo URL if available (proxy via path to avoid CORS)
+  const stagedPhotoUrl = draft?.image?.storagePath
+    ? `/api/img?path=${encodeURIComponent(draft.image.storagePath)}`
+    : null;
+
+  // Helper to proxy any direct URL through our image proxy
+  const toImgProxy = (u?: string | null): string | null => {
+    if (!u) return null;
+    try {
+      // If already proxied or a data/blob URL, return as-is
+      if (u.startsWith('/api/img')) return u;
+      if (u.startsWith('data:') || u.startsWith('blob:')) return u;
+      return `/api/img?url=${encodeURIComponent(u)}`;
+    } catch { return `/api/img?url=${encodeURIComponent(u)}`; }
+  };
 
   async function handlePhoto(dataUrlOrFile: string | File) {
     if (uploading) cancelUpload();
@@ -83,7 +96,8 @@ export default function ProfilePhotoRow({ avatar, onAvatarChange, userId }: { av
         const storage = (await import('../../../lib/firebase')).storage;
         const photoRef = storageRef(storage, image.storagePath);
         const downloadUrl = await getDownloadURL(photoRef);
-        setProfilePhotoPreview(downloadUrl); // Swap to remote URL as soon as available
+        // Swap to proxied remote URL for display to avoid CORS
+        setProfilePhotoPreview(toImgProxy(downloadUrl));
         onAvatarChange(downloadUrl);
         setOpen(false); // Close modal after avatar updates
       } catch (urlErr) {
@@ -102,7 +116,7 @@ export default function ProfilePhotoRow({ avatar, onAvatarChange, userId }: { av
 
       <div className="flex items-center gap-3">
         <img
-          src={profilePhotoPreview || stagedPhotoUrl || avatar || "/avatar-placeholder.svg"}
+          src={profilePhotoPreview || stagedPhotoUrl || toImgProxy(avatar) || "/avatar-placeholder.svg"}
           alt="profile"
           className="h-16 w-16 rounded-full object-cover bg-gray-100"
           onError={e => {
@@ -151,7 +165,8 @@ export default function ProfilePhotoRow({ avatar, onAvatarChange, userId }: { av
             // Defensive: Try to reconstruct File from storagePath if possible (not always possible client-side)
             if (draft?.image?.storagePath) {
               try {
-                const url = `https://firebasestorage.googleapis.com/v0/b/YOUR_BUCKET/o/${encodeURIComponent(draft.image.storagePath)}?alt=media`;
+                // Fetch via proxy to avoid CORS issues
+                const url = `/api/img?path=${encodeURIComponent(draft.image.storagePath)}`;
                 const res = await fetch(url);
                 const blob = await res.blob();
                 const file = new File([blob], 'profilePhoto.jpg', { type: blob.type || 'image/jpeg' });
