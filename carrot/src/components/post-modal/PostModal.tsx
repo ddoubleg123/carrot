@@ -5,6 +5,7 @@ import AudioPlayer from "../AudioPlayer";
 import { createPortal } from "react-dom";
 import FlagChip from "../flags/FlagChip";
 import CommentsDrawer from "./CommentsDrawer";
+import VideoPortalMount from "../video/VideoPortalMount";
 
 type PostModalData = {
   id: string;
@@ -57,6 +58,7 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
   const initialPanel = (params?.get('panel') as ('comments' | null)) || null;
   const [showComments, setShowComments] = useState(initialPanel === 'comments');
   const [mediaEl, setMediaEl] = useState<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const [adopted, setAdopted] = useState(false);
   type Seg = { start: number; end?: number; text: string };
   const [segments, setSegments] = useState<Seg[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
@@ -81,8 +83,8 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
   // Regenerate transcript via existing trigger endpoint, then poll post for updated caption/transcription
   // Transcript regeneration removed from modal
 
-  // Render media body without nested ternaries
-  function renderMedia() {
+  // Render media body without nested ternaries (fallback when DOM-transfer is not used)
+  function renderMediaFallback() {
     if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
     if (data?.videoUrl) {
       const url = data.videoUrl;
@@ -90,7 +92,31 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
       const withAlt = url.includes('firebasestorage.googleapis.com') && !url.includes('alt=media')
         ? `${url}${url.includes('?') ? '&' : '?'}alt=media`
         : url;
-      const resolved = needsProxy ? `/api/video?url=${encodeURIComponent(withAlt)}` : withAlt;
+      // Prefer path-mode when possible (server supports Admin SDK streaming)
+      let resolved = withAlt;
+      try {
+        const u = new URL(withAlt);
+        if (needsProxy) {
+          // Try extract bucket+path
+          const host = u.hostname;
+          const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+          const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/);
+          let bucket: string | undefined; let path: string | undefined;
+          if (host === 'firebasestorage.googleapis.com' && m1) { bucket = decodeURIComponent(m1[1]); path = decodeURIComponent(m1[2]); }
+          else if (host === 'storage.googleapis.com' && m2) { bucket = decodeURIComponent(m2[1]); path = decodeURIComponent(m2[2]); }
+          else {
+            const m4 = u.pathname.match(/^\/o\/([^?]+)$/);
+            if (host.endsWith('.firebasestorage.app') && m4) { bucket = process.env.NEXT_PUBLIC_FIREBASE_BUCKET as string; path = decodeURIComponent(m4[1]); }
+          }
+          if (bucket && path) {
+            resolved = `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(bucket)}`;
+          } else {
+            resolved = `/api/video?url=${encodeURIComponent(withAlt)}`;
+          }
+        }
+      } catch {
+        resolved = needsProxy ? `/api/video?url=${encodeURIComponent(withAlt)}` : withAlt;
+      }
       // Proxy poster image to avoid CORS
       const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
       return (
@@ -131,6 +157,22 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     }
     return <div className="text-sm text-gray-500">No media</div>;
   }
+
+  // Watch for DOM-transfer adoption into the portal; if a <video> appears, hide the fallback
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const sel = `[data-video-portal-for="${id}"] video`;
+    const update = () => {
+      try { setAdopted(Boolean(document.querySelector(sel))); } catch {}
+    };
+    update();
+    const onReady = (e: any) => { if (e?.detail?.postId === id) setTimeout(update, 10); };
+    const onDismiss = (e: any) => { if (e?.detail?.postId === id) setTimeout(update, 10); };
+    window.addEventListener('carrot-video-portal-ready', onReady as any);
+    window.addEventListener('carrot-video-portal-dismiss', onDismiss as any);
+    const t = setInterval(update, 300); // brief polling while modal is open
+    return () => { window.removeEventListener('carrot-video-portal-ready', onReady as any); window.removeEventListener('carrot-video-portal-dismiss', onDismiss as any); clearInterval(t); };
+  }, [id]);
 
   const body = (
     <div className="fixed inset-0 z-50">
@@ -179,7 +221,12 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
               }}
             >
               <div className="w-full" style={{ aspectRatio: '16 / 9' }}>
-                <div className="w-full h-full flex items-center justify-center">{renderMedia()}</div>
+                {/* Primary: DOM transfer mount */}
+                <VideoPortalMount postId={id} className="w-full h-full" />
+                {/* Fallback: render a separate element only if we have not adopted the feed element */}
+                {!adopted && (
+                  <div className="w-full h-full flex items-center justify-center">{renderMediaFallback()}</div>
+                )}
               </div>
             </div>
             {data?.content ? (
@@ -252,4 +299,3 @@ function parseWebVtt(text: string): { start: number; end?: number; text: string 
   }
   return out;
 }
-

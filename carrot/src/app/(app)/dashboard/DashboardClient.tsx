@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
+import { VideoProvider } from '../../context/VideoContext';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -19,8 +20,6 @@ interface DashboardClientProps {
   isModalComposer?: boolean;
   serverPrefs?: { reducedMotion?: boolean; captionsDefault?: boolean; autoplay?: boolean };
 }
-
-
 
 import { useSyncFirebaseAuth } from '../../../lib/useSyncFirebaseAuth';
 
@@ -505,7 +504,31 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     return () => { cancelled = true; };
   }, []);
 
-  // ... (rest of the code remains the same)
+  // Hydration & spinner diagnostics
+  useEffect(() => {
+    try { console.log('[Dashboard] Hydrated'); } catch {}
+    if (process.env.NODE_ENV === 'production') return; // dev-only fetch logger
+    const origFetch = window.fetch.bind(window);
+    const inflight = new Map<number, { url: string; start: number; timeout: number }>();
+    let seq = 1;
+    (window as any).fetch = async (...args: any[]) => {
+      const id = seq++;
+      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+      const start = Date.now();
+      const timeout = window.setTimeout(() => {
+        try { console.warn('[Fetch>30s]', { url, id, startedMsAgo: Date.now() - start }); } catch {}
+      }, 30000);
+      inflight.set(id, { url, start, timeout });
+      try {
+        const res = await origFetch(...args);
+        return res;
+      } finally {
+        const entry = inflight.get(id);
+        if (entry) { clearTimeout(entry.timeout); inflight.delete(id); }
+      }
+    };
+    return () => { (window as any).fetch = origFetch; inflight.forEach(e => clearTimeout(e.timeout)); inflight.clear(); };
+  }, []);
 
   const handleUpdateCommitment = useCallback((tempId: string, updatedPost: any) => {
     // Update post with real ID after database save
@@ -576,6 +599,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   }, [setCommitments, showSuccessToast]);
 
   // ... (rest of the code remains the same)
+
   const updatePost = useCallback((tempId: string, updatedPost: any) => {
     // Update post with real ID after database save
     console.log('🔄 DashboardClient updating post:', tempId, '→', updatedPost.id);
@@ -611,7 +635,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   };
 
   return (
-    <>
+    <VideoProvider>
       <div className="dashboard-feed-root">
         <div className="px-4" style={{ paddingTop: '32px' }}>
           {isModalComposer ? (
@@ -653,6 +677,6 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           onClose={() => setShowToast(false)}
         />)
       }
-    </>
+    </VideoProvider>
   );
 }

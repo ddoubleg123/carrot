@@ -201,6 +201,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     videoElRef.current = el;
     try {
       if (!el) return;
+      try { el.setAttribute('data-post-video-id', id); } catch {}
       // Keep local state in sync for button labels
       const onPlay = () => setPlaying(true);
       const onPause = () => setPlaying(false);
@@ -249,6 +250,50 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       }
     } catch {}
   }, [showLightbox]);
+
+  // DOM transfer: listen for global portal events and adopt/return the <video> element
+  useEffect(() => {
+    const adopt = (mount: HTMLElement) => {
+      try {
+        const v = videoElRef.current; if (!v) return;
+        if (!originalParentRef.current) originalParentRef.current = v.parentElement as HTMLElement | null;
+        if (v.parentElement !== mount) {
+          mount.appendChild(v);
+          v.controls = true;
+        }
+      } catch {}
+    };
+    const restore = () => {
+      try {
+        const v = videoElRef.current; if (!v) return;
+        const parent = originalParentRef.current; if (!parent) return;
+        if (v.parentElement !== parent) parent.appendChild(v);
+      } catch {}
+    };
+    const onReady = (e: any) => {
+      try {
+        const pid = e?.detail?.postId;
+        if (pid !== id) return;
+        const mount = document.querySelector(`[data-video-portal-for="${id}"]`) as HTMLElement | null;
+        if (mount) adopt(mount);
+      } catch {}
+    };
+    const onDismiss = (e: any) => {
+      try {
+        const pid = e?.detail?.postId;
+        if (pid !== id) return;
+        restore();
+      } catch {}
+    };
+    window.addEventListener('carrot-video-portal-ready', onReady as any);
+    window.addEventListener('carrot-video-portal-dismiss', onDismiss as any);
+    return () => {
+      window.removeEventListener('carrot-video-portal-ready', onReady as any);
+      window.removeEventListener('carrot-video-portal-dismiss', onDismiss as any);
+      // Best-effort restore on unmount
+      restore();
+    };
+  }, [id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLightbox(false); };
