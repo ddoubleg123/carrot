@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, forwardRef, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
@@ -192,6 +193,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   // Hover UI state and video element handle
   const [hovering, setHovering] = useState(false);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const originalParentRef = useRef<HTMLElement | null>(null);
+  const lightboxMountRef = useRef<HTMLDivElement | null>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
   const attachVideoRef = (el: HTMLVideoElement | null) => {
@@ -222,6 +225,36 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   useEffect(() => {
     return () => { try { (attachVideoRef as any)?._cleanup?.(); } catch {} };
   }, []);
+
+  // Lightweight lightbox which re-parents the existing <video> element so it doesn't re-download
+  const [showLightbox, setShowLightbox] = useState(false);
+  useEffect(() => {
+    try {
+      const video = videoElRef.current;
+      const lightTarget = lightboxMountRef.current;
+      if (!video) return;
+      if (!originalParentRef.current) {
+        originalParentRef.current = video.parentElement as HTMLElement | null;
+      }
+      if (showLightbox) {
+        if (lightTarget && video.parentElement !== lightTarget) {
+          lightTarget.appendChild(video);
+          video.controls = true;
+        }
+      } else {
+        const originalParent = originalParentRef.current;
+        if (originalParent && video.parentElement !== originalParent) {
+          originalParent.appendChild(video);
+        }
+      }
+    } catch {}
+  }, [showLightbox]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLightbox(false); };
+    if (showLightbox) window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showLightbox]);
 
   const isOwnPost = useMemo(() => Boolean(currentUserId && author?.id && currentUserId === author.id), [currentUserId, author?.id]);
   const displayTime = useMemo(() => {
@@ -573,6 +606,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               className="rounded-xl p-2 relative"
               style={hasGradient ? { background: gradientCss } : undefined}
             >
+              {/* Video rendered by player; original parent is captured dynamically when opening lightbox */}
               {(() => {
                 const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
                 // While trimming is processing, prefer the original direct videoUrl for optimistic playback
@@ -599,6 +633,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       hlsMasterUrl={cfPlaybackUrlHls || undefined}
                       posterUrl={thumbnailUrl || undefined}
                       captionVttUrl={captionVttUrl || undefined}
+                      onVideoRef={attachVideoRef}
                       autoPlay
                       muted
                       className="rounded-xl overflow-hidden"
@@ -633,60 +668,23 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   />
                 );
               })()}
-              {/* Click overlay: only center region opens modal, never overlaps hover controls (top-right) */}
+              {/* Click overlay: center opens lightweight lightbox modal; no top overlay controls */}
               <button
                 type="button"
                 className="absolute z-10 cursor-pointer bg-transparent"
                 style={{
-                  // Leave generous gutters so edge UI is fully clickable
-                  left: 16,
-                  right: 160, // reserve space for hover controls on the right
-                  top: 48,    // avoid the header/hover area
-                  bottom: 56, // avoid the bottom actions row space
+                  left: 12,
+                  right: 12,
+                  top: 12,
+                  bottom: 56, // avoid the bottom actions row space where native controls might be
                 }}
-                aria-label="Open post"
-                title="Open post"
-                onClick={() => openPostModal(id)}
+                aria-label="Open video"
+                title="Open video"
+                onClick={() => {
+                  if (videoElRef.current) setShowLightbox(true);
+                  else openPostModal(id);
+                }}
               />
-              {/* Hover inline controls that do not block the modal click elsewhere */}
-              {hovering && (
-                <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="px-2 py-1 rounded bg-black/60 text-white text-xs hover:bg-black/70"
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      try {
-                        const el = videoElRef.current;
-                        if (!el) return;
-                        if (el.paused) { el.play().catch(() => {}); setPlaying(true); }
-                        else { el.pause(); setPlaying(false); }
-                      } catch {}
-                    }}
-                    aria-label={playing ? 'Pause video' : 'Play video'}
-                    title={playing ? 'Pause' : 'Play'}
-                  >
-                    {playing ? 'Pause' : 'Play'}
-                  </button>
-                  <button
-                    type="button"
-                    className="px-2 py-1 rounded bg-black/60 text-white text-xs hover:bg-black/70"
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      try {
-                        const el = videoElRef.current;
-                        if (!el) return;
-                        el.muted = !el.muted;
-                        setMuted(el.muted);
-                      } catch {}
-                    }}
-                    aria-label={muted ? 'Unmute video' : 'Mute video'}
-                    title={muted ? 'Unmute' : 'Mute'}
-                  >
-                    {muted ? 'Unmute' : 'Mute'}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -764,8 +762,39 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           title={content?.slice(0, 80) || 'Check out this post on Carrot'}
         />
       )}
+      {/* Lightbox that reuses the same video element (no re-download) */}
+      <Lightbox open={showLightbox} onClose={() => setShowLightbox(false)}>
+        <div className="relative w-full" style={{ aspectRatio: '16 / 9' }} ref={lightboxMountRef} />
+      </Lightbox>
     </div>
   );
 });
+
+// Lightbox Portal root appended to document body
+function Lightbox({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  if (typeof window === 'undefined') return null;
+  const root = document.getElementById('carrot-lightbox-root') || (() => {
+    const el = document.createElement('div');
+    el.id = 'carrot-lightbox-root';
+    document.body.appendChild(el);
+    return el;
+  })();
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] bg-black/80 flex items-center justify-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden />
+      <div className="relative z-10 max-w-5xl w-[92vw]">
+        {children}
+        <button
+          className="absolute -top-10 right-0 text-white/80 hover:text-white text-sm"
+          onClick={onClose}
+          aria-label="Close video"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  , root);
+}
 
 export default React.memo(CommitmentCard);

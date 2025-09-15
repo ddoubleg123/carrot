@@ -13,6 +13,7 @@ export type HlsFeedPlayerProps = {
   onQoE?: (e: { type: string; value?: any }) => void;
   onError?: (e: Error) => void;
   className?: string;
+  onVideoRef?: (el: HTMLVideoElement | null) => void;
 };
 
 // Lightweight HLS player for feed tiles.
@@ -29,8 +30,13 @@ export default function HlsFeedPlayer({
   onQoE,
   onError,
   className = "",
+  onVideoRef,
 }: HlsFeedPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const setVideoRef = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    try { onVideoRef?.(el); } catch {}
+  };
   const [ready, setReady] = useState(false);
   const startedAtRef = useRef<number | null>(null);
   const firstFrameSentRef = useRef<boolean>(false);
@@ -339,6 +345,7 @@ export default function HlsFeedPlayer({
         video.removeEventListener('timeupdate', onTimeUpdate);
       } catch {}
       if (typeof cleanup === "function") cleanup();
+      try { onVideoRef?.(null); } catch {}
     };
   }, [assetId, hlsMasterUrl, autoPlay, muted]);
 
@@ -439,7 +446,7 @@ export default function HlsFeedPlayer({
   return (
     <div className={`relative w-full ${className}`}>
       <video
-        ref={videoRef}
+        ref={setVideoRef}
         poster={posterUrl ?? undefined}
         playsInline
         muted={muted}
