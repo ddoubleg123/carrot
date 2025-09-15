@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useUserVideos, useVideoVariants, getVideoThumbnail, getPlatformDisplayName, formatDuration } from '@/lib/videoDeduplicationClient';
+import Image from 'next/image';
+import { useUserVideos, useVideoVariants, getVideoThumbnail, getPlatformDisplayName, formatDuration, type UserVideo } from '../lib/videoDeduplicationClient';
 import { VideoIngestModal } from './VideoIngestModal';
 
 const VideoVariantEditorDynamic = dynamic(() => import('./VideoVariantEditor').then(m => m.VideoVariantEditor), {
@@ -74,7 +75,7 @@ export function VideoLibrary() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {videos.map((video) => (
+          {videos.map((video: UserVideo) => (
             <VideoCard
               key={video.id}
               video={video}
@@ -116,11 +117,16 @@ function VideoCard({ video, onCreateVariant }: VideoCardProps) {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       {thumbnailUrl && (
-        <div className="aspect-video bg-gray-200">
-          <img
+        <div className="relative aspect-video bg-gray-200">
+          <Image
             src={thumbnailUrl}
             alt={video.asset.title || 'Video thumbnail'}
-            className="w-full h-full object-cover"
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            priority={false}
+            loading="lazy"
+            decoding="async"
+            style={{ objectFit: 'cover' }}
           />
         </div>
       )}

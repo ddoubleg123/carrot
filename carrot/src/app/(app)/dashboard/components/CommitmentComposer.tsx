@@ -1340,14 +1340,17 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
               className="absolute -top-2 right-7 sm:right-9 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform z-10"
               onClick={handleColorWheelClick}
               title={`Current: ${colorSchemes[currentColorScheme].name}`}
+              aria-label="Open color scheme picker"
             >
               <span className="text-white font-bold text-base sm:text-lg">🎨</span>
             </div>
             
             {/* White input card */}
             <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 mb-4 relative">
+              <label htmlFor="postContent" className="sr-only">What's happening?</label>
               <textarea
                 ref={textareaRef}
+                id="postContent"
                 className="w-full h-16 sm:h-20 text-base sm:text-lg border-none bg-transparent focus:outline-none resize-none placeholder-gray-500"
                 placeholder="What's happening?"
                 value={content}

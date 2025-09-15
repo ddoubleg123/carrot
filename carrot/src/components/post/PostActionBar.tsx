@@ -27,7 +27,7 @@ export type PostActionBarProps = {
   initiallyLiked?: boolean;
 };
 
-export default function PostActionBar(props: PostActionBarProps) {
+function PostActionBar(props: PostActionBarProps) {
   const {
     postId,
     stats,
@@ -163,3 +163,5 @@ export default function PostActionBar(props: PostActionBarProps) {
     </div>
   );
 }
+
+export default React.memo(PostActionBar);

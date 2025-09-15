@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
@@ -9,7 +9,6 @@ import dynamic from 'next/dynamic';
 import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
-import FeedMediaManager from '../../../components/video/FeedMediaManager';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -182,7 +181,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   };
 
   // Basic handlers to satisfy props and enable minimal UX
-  const handleCreateCommitment = (tempPost: any) => {
+  const handleCreateCommitment = useCallback((tempPost: any) => {
     try {
       if (!tempPost) return;
       const id = tempPost.id || tempPost.tempId || `temp-${Date.now()}`;
@@ -243,11 +242,11 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return [optimistic, ...prev];
       });
     } catch {}
-  };
+  }, [session, setCommitments]);
 
   const handlePost = handleCreateCommitment;
 
-  const handleVote = (id: string, vote: VoteType) => {
+  const handleVote = useCallback((id: string, vote: VoteType) => {
     try {
       setCommitments(prev => prev.map(p => p.id === id ? ({
         ...p,
@@ -258,22 +257,22 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         }
       }) : p));
     } catch {}
-  };
+  }, [setCommitments]);
 
-  const handleDeletePost = async (id: string) => {
+  const handleDeletePost = useCallback(async (id: string) => {
     try {
       setCommitments(prev => prev.filter(p => p.id !== id));
       // Fire-and-forget server delete
       fetch(`/api/posts/${id}`, { method: 'DELETE' }).catch(() => {});
     } catch {}
-  };
+  }, [setCommitments]);
 
-  const handleBlockPost = (id: string) => {
+  const handleBlockPost = useCallback((id: string) => {
     try {
       // Local hide for now; future: add user blocks/categories
       setCommitments(prev => prev.filter(p => p.id !== id));
     } catch {}
-  };
+  }, [setCommitments]);
 
   // Keep a ref to the latest commitments for polling
   const commitmentsRef = useRef(commitments);
@@ -342,6 +341,15 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     const ENTER_ACTIVE = 0.75, ENTER_WARM = 0.60, EXIT_IDLE = 0.40;
     const pending = new Map<Element, number>();
 
+    // Lazily load FeedMediaManager only if/when needed
+    let FMM: any = null;
+    const ensureFMM = async () => {
+      if (FMM) return FMM;
+      const mod = await import('../../../components/video/FeedMediaManager');
+      FMM = (mod as any).default || mod;
+      return FMM;
+    };
+
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         const el = e.target as HTMLElement;
@@ -352,16 +360,19 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         if (prev) clearTimeout(prev);
         const t = window.setTimeout(() => {
           const ratio = e.intersectionRatio;
-          if (ratio >= ENTER_ACTIVE) {
-            const handle = FeedMediaManager.inst.getHandleByElement(el);
-            if (handle) FeedMediaManager.inst.setActive(handle);
-          } else if (ratio >= ENTER_WARM) {
-            const handle = FeedMediaManager.inst.getHandleByElement(el);
-            if (handle) FeedMediaManager.inst.setWarm(handle);
-          } else if (ratio <= EXIT_IDLE) {
-            const handle = FeedMediaManager.inst.getHandleByElement(el);
-            if (handle) FeedMediaManager.inst.setIdle(handle);
-          }
+          ensureFMM().then(() => {
+            if (!FMM) return;
+            if (ratio >= ENTER_ACTIVE) {
+              const handle = FMM.inst.getHandleByElement(el);
+              if (handle) FMM.inst.setActive(handle);
+            } else if (ratio >= ENTER_WARM) {
+              const handle = FMM.inst.getHandleByElement(el);
+              if (handle) FMM.inst.setWarm(handle);
+            } else if (ratio <= EXIT_IDLE) {
+              const handle = FMM.inst.getHandleByElement(el);
+              if (handle) FMM.inst.setIdle(handle);
+            }
+          }).catch(() => {});
         }, 180);
         pending.set(el, t);
       }
@@ -496,7 +507,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
   // ... (rest of the code remains the same)
 
-  const handleUpdateCommitment = (tempId: string, updatedPost: any) => {
+  const handleUpdateCommitment = useCallback((tempId: string, updatedPost: any) => {
     // Update post with real ID after database save
     console.log('🔄 DashboardClient updating post:', tempId, '→', updatedPost.id || tempId);
     console.log('📊 Status update details:', {
@@ -562,10 +573,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return commitment;
       })
     );
-  };
+  }, [setCommitments, showSuccessToast]);
 
   // ... (rest of the code remains the same)
-  const updatePost = (tempId: string, updatedPost: any) => {
+  const updatePost = useCallback((tempId: string, updatedPost: any) => {
     // Update post with real ID after database save
     console.log('🔄 DashboardClient updating post:', tempId, '→', updatedPost.id);
     setCommitments(prev => 
@@ -576,9 +587,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return commitment;
       })
     );
-  };
+  }, [setCommitments]);
 
-  const updatePostAudioUrl = (postId: string, newAudioUrl: string) => {
+  const updatePostAudioUrl = useCallback((postId: string, newAudioUrl: string) => {
     console.log('🎵 DashboardClient updating audio URL for post:', postId, '→', newAudioUrl);
     setCommitments(prev => 
       prev.map(commitment => {
@@ -592,7 +603,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return commitment;
       })
     );
-  };
+  }, [setCommitments]);
 
   const handleToggleBookmark = (id: string) => {
     console.log(`Toggled bookmark on commitment ${id}`);

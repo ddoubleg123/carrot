@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, forwardRef, useRef, useEffect } from "react";
+import Image from "next/image";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
 import AudioHero from "../../../../components/audio/AudioHero";
@@ -343,15 +344,16 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             {audioUrl ? (
               <AudioHero avatarSrc={author?.avatar || null} size={40} analyser={analyserRef.current as any} state={isAudioPlaying ? 'playing' : 'paused'} />
             ) : (
-              <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
+              <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative">
                 {author?.avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={`/api/img?url=${encodeURIComponent(author.avatar)}`}
                     alt={author?.username ? `${author.username}'s avatar` : 'User avatar'}
+                    fill
+                    sizes="40px"
+                    priority={false}
                     loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
+                    style={{ objectFit: 'cover' }}
                   />
                 ) : null}
               </div>
@@ -510,16 +512,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {/* Images / GIF */}
         {gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
-            <div className="w-full rounded-xl overflow-hidden bg-white" style={{ aspectRatio: '16 / 9' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <div className="w-full rounded-xl overflow-hidden bg-white relative" style={{ aspectRatio: '16 / 9' }}>
+              <Image
                 src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
                 alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
+                fill
+                sizes="(max-width: 768px) 100vw, 700px"
+                priority={false}
                 loading="lazy"
-                decoding="async"
-                width={1280}
-                height={720}
-                className="w-full h-full object-cover"
+                style={{ objectFit: 'cover' }}
               />
             </div>
           </div>
@@ -532,33 +533,32 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             >
               {imageUrls.length === 1 ? (
                 <div className="cursor-pointer bg-white rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
-                  <div className="w-full" style={{ aspectRatio: '16 / 9' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                  <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
+                    <Image
                       src={`/api/img?url=${encodeURIComponent(imageUrls[0])}`}
                       alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 700px"
+                      priority={false}
                       loading="lazy"
-                      decoding="async"
-                      width={1280}
-                      height={720}
-                      className="w-full h-full object-contain"
+                      style={{ objectFit: 'contain' }}
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={i}
-                      src={`/api/img?url=${encodeURIComponent(u)}`}
-                      alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
-                      loading="lazy"
-                      decoding="async"
-                      width={640}
-                      height={360}
-                      className="w-full h-48 object-cover rounded-lg bg-white"
-                    />
+                    <div key={i} className="relative w-full h-48 rounded-lg bg-white overflow-hidden">
+                      <Image
+                        src={`/api/img?url=${encodeURIComponent(u)}`}
+                        alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
+                        fill
+                        sizes="(max-width: 768px) 50vw, 33vw"
+                        priority={false}
+                        loading="lazy"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
                   ))}
                 </div>
               )}
@@ -768,4 +768,4 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   );
 });
 
-export default CommitmentCard;
+export default React.memo(CommitmentCard);
