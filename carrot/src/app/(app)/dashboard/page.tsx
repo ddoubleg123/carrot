@@ -140,16 +140,16 @@ export default async function DashboardPage() {
           <div className="w-full min-w-[320px] max-w-[720px] px-6">
             <FirebaseClientInit />
             <ClientSessionProvider>
-              {/* Reserve space then hydrate DashboardClient lazily */}
-              <DashboardClientDynamic initialCommitments={commitments} isModalComposer={true} />
+              {/* Client dashboard (hydrated in client file) */}
+              <DashboardClient initialCommitments={commitments} isModalComposer={true} />
               {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
-              <PostModalControllerDynamic />
+              <PostModalController />
             </ClientSessionProvider>
           </div>
           
           {/* Right rail / Third column (hidden on small screens) */}
           <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-            <WidgetsDynamic />
+            <Widgets />
           </aside>
         </main>
       </div>
