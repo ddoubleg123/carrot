@@ -37,6 +37,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const [isPlaying, setIsPlaying] = useState(false);
   const [isInView, setIsInView] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const inViewRef = useRef(false);
 
   // Global modal-open signal to avoid background video loads when pickers are open
   const isAnyModalOpen = () => {
@@ -344,8 +345,12 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         entries.forEach((entry) => {
           lastRatio = entry.intersectionRatio;
           // Hysteresis: mark in-view only after > 0.35, out-of-view only below 0.15
-          const nextInView = entry.intersectionRatio > 0.35 ? true : (entry.intersectionRatio < 0.15 ? false : isInView);
-          setIsInView(nextInView);
+          const prev = inViewRef.current;
+          const nextInView = entry.intersectionRatio > 0.35 ? true : (entry.intersectionRatio < 0.15 ? false : prev);
+          if (nextInView !== prev) {
+            inViewRef.current = nextInView;
+            setIsInView(nextInView);
+          }
           if (nextInView && videoRef.current) {
             safePlay();
             setIsPlaying(true);

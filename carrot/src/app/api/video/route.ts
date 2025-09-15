@@ -107,33 +107,32 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
     } catch {}
 
+    // Normalize Firebase v0 path: ensure /o/<object> is encoded exactly once
+    if (target.hostname === 'firebasestorage.googleapis.com') {
+      try {
+        const parts = target.pathname.split('/');
+        const oIdx = parts.findIndex((p) => p === 'o');
+        if (oIdx > -1 && parts[oIdx + 1]) {
+          const rawSeg = parts[oIdx + 1];
+          // If looks double-encoded (%252F), decode once and re-encode
+          const looksDouble = /%25/i.test(rawSeg);
+          const onceDecoded = looksDouble ? decodeURIComponent(rawSeg) : rawSeg;
+          const normalizedSeg = encodeURIComponent(onceDecoded);
+          if (normalizedSeg !== rawSeg) {
+            parts[oIdx + 1] = normalizedSeg;
+            target = new URL(target.origin + parts.join('/') + target.search);
+          }
+        }
+      } catch {}
+      // Firebase download endpoints often need alt=media
+      if (!target.searchParams.has('alt')) target.searchParams.set('alt', 'media');
+    }
+
     // Forward important headers
     const fwdHeaders: HeadersInit = {};
     const range = req.headers.get('range'); if (range) fwdHeaders['Range'] = range;
     const ifNoneMatch = req.headers.get('if-none-match'); if (ifNoneMatch) fwdHeaders['If-None-Match'] = ifNoneMatch;
     const ifModifiedSince = req.headers.get('if-modified-since'); if (ifModifiedSince) fwdHeaders['If-Modified-Since'] = ifModifiedSince;
-
-    // Firebase download endpoints often need alt=media
-    if (target.hostname === 'firebasestorage.googleapis.com' && !target.searchParams.has('alt')) {
-      target.searchParams.set('alt', 'media');
-    }
-
-    // Optional fast-path: allow redirect only when explicitly enabled.
-    // WARNING: Redirecting can trigger CORS blocks if the bucket doesn't allow your origin.
-    try {
-      const allowRedirect = process.env.VIDEO_PROXY_ALLOW_REDIRECT === '1';
-      const isGcs = target.hostname === 'storage.googleapis.com';
-      const hasSignedParams = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires');
-      if (allowRedirect && isGcs && hasSignedParams) {
-        const res = NextResponse.redirect(target.toString(), 302);
-        res.headers.set('Access-Control-Allow-Origin', '*');
-        res.headers.set('Cache-Control', 'public, max-age=300');
-        res.headers.set('x-video-proxy-host', target.hostname);
-        res.headers.set('x-video-proxy-mode', 'redirect');
-        statBump(302);
-        return res;
-      }
-    } catch {}
 
     // In-flight dedupe: avoid multiple parallel fetches for the same normalized URL
     const k = target.toString();
@@ -180,6 +179,19 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     headers.set('x-video-proxy-host', target.hostname);
     headers.set('x-video-proxy-mode', mode);
 
+    // On errors, log a small snippet of the upstream body to aid diagnosis
+    if (status >= 400) {
+      try {
+        const clone = upstream.clone();
+        const text = await clone.text();
+        console.warn('[api/video] upstream error', {
+          host: target.hostname,
+          status,
+          mode,
+          bodySnippet: text?.slice(0, 256),
+        });
+      } catch {}
+    }
     statBump(status);
     return new NextResponse(upstream.body, { status, headers });
   } catch (e: any) {

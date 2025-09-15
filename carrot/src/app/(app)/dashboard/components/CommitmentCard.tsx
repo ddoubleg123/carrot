@@ -623,7 +623,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       uploadStatus={uploadStatus || null}
                       uploadProgress={uploadProgress || 0}
                       onVideoRef={attachVideoRef}
-                      disableNativeControls
+                      disableNativeControls={false}
                     />
                   );
                 }
@@ -665,7 +665,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     uploadStatus={uploadStatus || null}
                     uploadProgress={uploadProgress || 0}
                     onVideoRef={attachVideoRef}
-                    disableNativeControls
+                    disableNativeControls={false}
                   />
                 );
               })()}
