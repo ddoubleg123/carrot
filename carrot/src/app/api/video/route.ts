@@ -183,7 +183,10 @@ const inflight = new Map<string, Promise<Response>>();
 function fetchDedupe(key: string, factory: () => Promise<Response>): Promise<Response> {
   const normalized = key;
   const existing = inflight.get(normalized);
-  if (existing) return existing;
+  if (existing) {
+    // Important: clone the Response for subsequent consumers to avoid locked body errors
+    return existing.then((res) => res.clone());
+  }
   const p = factory()
     .catch((e) => { throw e; })
     .finally(() => {
