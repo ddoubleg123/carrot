@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // --- Rate-limited aggregate logging ---
 const STAT: Record<string, number> = Object.create(null);
 let STAT_LAST_FLUSH = Date.now();
@@ -56,18 +59,17 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
       // Unwrap '/api/img?url=...' forms accidentally passed in
       let candidate = raw;
-      // Handle double-encoded URLs passed from client (e.g., %252F and %2540)
+      // Handle double-encoded URLs passed from client (e.g., %252F and %2540). Decode only if we see %25.
       try {
         let decoded = candidate;
         for (let i = 0; i < 2; i++) {
-          const next = decodeURIComponent(decoded);
-          if (next === decoded) break;
-          decoded = next;
+          if (!/%25/i.test(decoded)) break; // only decode when still double-encoded
+          decoded = decodeURIComponent(decoded);
         }
         candidate = decoded;
       } catch {}
       try {
-        const maybeRel = new URL(raw, urlObj.origin);
+        const maybeRel = new URL(candidate, urlObj.origin);
         if (maybeRel.pathname.startsWith('/api/img')) {
           const inner = maybeRel.searchParams.get('url');
           if (inner) candidate = inner;
@@ -131,6 +133,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       method: 'GET',
       headers: fwdHeaders,
       redirect: 'follow',
+      cache: 'no-store',
     }));
 
     const status = upstream.status;

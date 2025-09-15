@@ -326,7 +326,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100">
                 {author?.avatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={author.avatar} alt={author?.username || "user"} className="h-full w-full object-cover" />
+                  <img src={`/api/img?url=${encodeURIComponent(author.avatar)}`} alt={author?.username || "user"} className="h-full w-full object-cover" />
                 ) : null}
               </div>
             )}
@@ -485,7 +485,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gifUrl} alt="gif" className="w-full rounded-xl" />
+            <img src={`/api/img?url=${encodeURIComponent(gifUrl)}`} alt="gif" className="w-full rounded-xl" />
           </div>
         ) : imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
@@ -498,7 +498,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <div className="cursor-pointer bg-white rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imageUrls[0]}
+                    src={`/api/img?url=${encodeURIComponent(imageUrls[0])}`}
                     alt="img-0"
                     className="w-full max-h-[520px] object-contain mx-auto"
                   />
@@ -507,7 +507,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={u} alt={`img-${i}`} className="w-full h-48 object-cover rounded-lg bg-white" />
+                    <img key={i} src={`/api/img?url=${encodeURIComponent(u)}`} alt={`img-${i}`} className="w-full h-48 object-cover rounded-lg bg-white" />
                   ))}
                 </div>
               )}

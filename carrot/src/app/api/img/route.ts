@@ -76,6 +76,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
             'content-length': String(end - start + 1),
             'content-range': `bytes ${start}-${end}/${size}`,
             'accept-ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
             'x-img-bucket': bucketName,
             'x-img-path': objectPath,
             'x-img-mode': 'admin-range',
@@ -91,6 +92,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
           'content-type': contentType,
           'cache-control': cacheControl,
           'accept-ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
           'x-img-bucket': bucketName,
           'x-img-path': objectPath,
           'x-img-mode': 'admin-stream',
@@ -208,6 +210,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     const headers: Record<string, string> = {
       'content-type': contentType,
       'cache-control': cache,
+      'Access-Control-Allow-Origin': '*',
       'x-img-mode': 'fallback-stream',
     };
     const contentRange = upstream.headers.get('content-range');
