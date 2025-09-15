@@ -290,7 +290,34 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     };
   }, [postId, realTranscriptionStatus]);
 
-  // IntersectionObserver for autoplay on scroll
+  // Visibility-driven play/pause with hysteresis; keep src attached to avoid flicker
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    setHasError(false);
+    let pauseTimer: any;
+    if (isInView) {
+      try {
+        el.muted = true;
+        if (el.src !== resolvedSrc) {
+          el.src = resolvedSrc;
+          el.load();
+        }
+        const forceAutoplay = () => { if (isInView) safePlay(); };
+        el.addEventListener('loadedmetadata', forceAutoplay, { once: true });
+        el.addEventListener('canplay', forceAutoplay, { once: true });
+      } catch {}
+    } else {
+      // Delay pause slightly to avoid rapid flicker at threshold
+      pauseTimer = setTimeout(() => {
+        try { if (!el.paused) el.pause(); } catch {}
+        setIsPlaying(false);
+      }, 350);
+    }
+    return () => { if (pauseTimer) clearTimeout(pauseTimer); };
+  }, [isInView, resolvedSrc]);
+
+  // IntersectionObserver for autoplay on scroll (with threshold hysteresis)
   useEffect(() => {
     if (!videoRef.current) return;
 
@@ -311,27 +338,23 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
 
     const rootEl = findScrollParent(videoRef.current) as Element | null;
 
+    let lastRatio = 0;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          setIsInView(entry.isIntersecting);
-          
-          if (entry.isIntersecting && videoRef.current) {
-            // Auto-play when video comes into view (muted)
+          lastRatio = entry.intersectionRatio;
+          // Hysteresis: mark in-view only after > 0.35, out-of-view only below 0.15
+          const nextInView = entry.intersectionRatio > 0.35 ? true : (entry.intersectionRatio < 0.15 ? false : isInView);
+          setIsInView(nextInView);
+          if (nextInView && videoRef.current) {
             safePlay();
             setIsPlaying(true);
-          } else if (!entry.isIntersecting && videoRef.current && !videoRef.current.paused) {
-            // Pause when video goes out of view
-            videoRef.current.pause();
-            setIsPlaying(false);
+          } else if (!nextInView && videoRef.current && !videoRef.current.paused) {
+            // Actual pausing happens in the visibility effect (with small delay)
           }
         });
       },
-      {
-        threshold: 0.15, // Trigger when 15% of video is visible
-        rootMargin: '0px',
-        root: rootEl || null
-      }
+      { threshold: [0, 0.15, 0.35, 1], rootMargin: '0px', root: rootEl || null }
     );
 
     observer.observe(videoRef.current);
@@ -376,37 +399,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
       safePlay();
     }
   }, []);
-
-  // Visibility-driven source attach/detach to reduce network and avoid offscreen 404s
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    setHasError(false);
-    if (isInView) {
-      setVideoLoaded(false);
-      try {
-        el.muted = true;
-        // Attach source only when in view
-        if (el.src !== resolvedSrc) {
-          el.src = resolvedSrc;
-          el.load();
-        }
-        const forceAutoplay = () => { if (isInView) safePlay(); };
-        el.addEventListener('loadedmetadata', forceAutoplay, { once: true });
-        el.addEventListener('canplay', forceAutoplay, { once: true });
-      } catch {}
-    } else {
-      // Detach source when out of view to free decoder and stop background network
-      try {
-        if (!el.paused) el.pause();
-      } catch {}
-      try {
-        el.removeAttribute('src');
-        el.load();
-      } catch {}
-      setIsPlaying(false);
-    }
-  }, [isInView, resolvedSrc]);
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.target as HTMLVideoElement;
@@ -474,7 +466,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     <div className="w-full">
       <div className="relative">
         <video
-          key={resolvedSrc}
           ref={videoRef}
           controls={!disableNativeControls}
           muted

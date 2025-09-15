@@ -517,9 +517,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
                 onComment={() => openPostModal(id, 'comments')}
                 onLike={(liked) => {
-                  try {
-                    console.log('[ActionBar] like toggled', { id, liked });
-                  } catch {}
+                  try { console.log('[ActionBar] like toggled', { id, liked }); } catch {}
                 }}
                 onSaveToggle={(saved) => { try { console.log('[ActionBar] save toggled', { id, saved }); } catch {} }}
                 onShareInApp={() => setShowShare(true)}
@@ -671,23 +669,6 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   />
                 );
               })()}
-              {/* Click overlay: center opens lightweight lightbox modal; no top overlay controls */}
-              <button
-                type="button"
-                className="absolute z-10 cursor-pointer bg-transparent"
-                style={{
-                  left: 12,
-                  right: 12,
-                  top: 12,
-                  bottom: 56, // avoid the bottom actions row space where native controls might be
-                }}
-                aria-label="Open video"
-                title="Open video"
-                onClick={() => {
-                  if (videoElRef.current) setShowLightbox(true);
-                  else openPostModal(id);
-                }}
-              />
             </div>
           </div>
         )}
