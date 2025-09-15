@@ -59,17 +59,12 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
       // Unwrap '/api/img?url=...' forms accidentally passed in
       let candidate = raw;
-      // Handle double-encoded URLs passed from client (e.g., %252F and %2540). Decode only if we see %25.
+      // Decode at most once. Over-decoding will break signed GCS URLs since the signature
+      // is computed over the exact encoded path/query.
       try {
-        // Robustly decode up to 3 times, stopping if stable or decoding fails
-        let decoded = candidate;
-        for (let i = 0; i < 3; i++) {
-          if (!/%25/i.test(decoded)) break; // only decode when still double-encoded
-          const next = decodeURIComponent(decoded);
-          if (next === decoded) break;
-          decoded = next;
+        if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
+          candidate = decodeURIComponent(candidate);
         }
-        candidate = decoded;
       } catch {}
       try {
         const maybeRel = new URL(candidate, urlObj.origin);
