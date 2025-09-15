@@ -507,7 +507,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   // Hydration & spinner diagnostics
   useEffect(() => {
     try { console.log('[Dashboard] Hydrated'); } catch {}
-    if (process.env.NODE_ENV === 'production') return; // dev-only fetch logger
+    const ENABLE = process.env.NEXT_PUBLIC_ENABLE_PERF_LOG === '1' || process.env.NODE_ENV !== 'production';
+    if (!ENABLE) return; // enable in dev or when explicitly flagged in prod
     const origFetch = window.fetch.bind(window);
     const inflight = new Map<number, { url: string; start: number; timeout: number }>();
     let seq = 1;
@@ -527,6 +528,37 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         if (entry) { clearTimeout(entry.timeout); inflight.delete(id); }
       }
     };
+    // Page-load guard: after 5s, report any inflight fetches
+    const fiveSec = window.setTimeout(() => {
+      try {
+        if (inflight.size > 0) {
+          console.warn('[PageLoadGuard>5s] pending fetches:', Array.from(inflight.values()).map(v => ({ url: v.url, ageMs: Date.now() - v.start })));
+        }
+      } catch {}
+    }, 5000);
+    // LCP and long-task observers
+    try {
+      const observePerf = () => {
+        try {
+          // LCP
+          const po = new PerformanceObserver((list) => {
+            const entries = list.getEntries();
+            for (const e of entries) {
+              if ((e as any).value) console.log('[Perf] LCP', (e as any).value, 'ms');
+            }
+          });
+          po.observe({ type: 'largest-contentful-paint', buffered: true } as any);
+          // Long tasks
+          const longPo = new PerformanceObserver((list) => {
+            for (const e of list.getEntries()) {
+              if (e.duration > 50) console.warn('[Perf] LongTask', { duration: Math.round(e.duration), name: e.name || 'task' });
+            }
+          });
+          longPo.observe({ type: 'longtask', buffered: true } as any);
+        } catch {}
+      };
+      if ('PerformanceObserver' in window) observePerf();
+    } catch {}
     return () => { (window as any).fetch = origFetch; inflight.forEach(e => clearTimeout(e.timeout)); inflight.clear(); };
   }, []);
 
