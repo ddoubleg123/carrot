@@ -26,9 +26,12 @@ type Props = {
 export function MediaCard({ asset, selected, onSelect, onMenu }: Props) {
   const isVideo = asset.type?.toLowerCase() === "video";
   const isImage = asset.type?.toLowerCase() === "image";
-  const src = isVideo
-    ? (asset.posterUrl || asset.thumbUrl || undefined)
-    : (asset.thumbUrl || asset.url || undefined);
+  // Always proxy through /api/img to avoid CORS issues with Firebase/GCS
+  const src = (() => {
+    const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || undefined)
+                        : (asset.thumbUrl || asset.url || undefined);
+    return raw ? `/api/img?url=${encodeURIComponent(raw)}` : undefined;
+  })();
 
   return (
     <div

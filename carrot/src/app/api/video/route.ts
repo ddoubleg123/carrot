@@ -51,10 +51,21 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       target = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
     }
 
+    let mode: 'preserved' | 'rewritten' | 'path' = target ? 'path' : 'preserved';
     if (!target) {
       if (!raw) return NextResponse.json({ error: 'Missing url or path param' }, { status: 400 });
       // Unwrap '/api/img?url=...' forms accidentally passed in
       let candidate = raw;
+      // Handle double-encoded URLs passed from client (e.g., %252F and %2540)
+      try {
+        let decoded = candidate;
+        for (let i = 0; i < 2; i++) {
+          const next = decodeURIComponent(decoded);
+          if (next === decoded) break;
+          decoded = next;
+        }
+        candidate = decoded;
+      } catch {}
       try {
         const maybeRel = new URL(raw, urlObj.origin);
         if (maybeRel.pathname.startsWith('/api/img')) {
@@ -90,6 +101,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
             const token = target.searchParams.get('token');
             if (token) rewritten.searchParams.set('token', token);
             target = rewritten;
+            mode = 'rewritten';
           }
         }
       }
@@ -108,6 +120,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // In-flight dedupe: avoid multiple parallel fetches for the same normalized URL
     const k = target.toString();
+    try {
+      console.log('[api/video] proxy', {
+        host: target.hostname,
+        pathPrefix: target.pathname.slice(0, 64),
+        mode,
+      });
+    } catch {}
     const upstream = await fetchDedupe(k, () => fetch(k, {
       method: 'GET',
       headers: fwdHeaders,
@@ -138,6 +157,10 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     } else if (!headers.has('cache-control')) {
       headers.set('Cache-Control', 'public, max-age=86400');
     }
+
+    // Debug headers (do not leak full URL)
+    headers.set('x-video-proxy-host', target.hostname);
+    headers.set('x-video-proxy-mode', mode);
 
     statBump(status);
     return new NextResponse(upstream.body, { status, headers });
