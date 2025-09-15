@@ -139,22 +139,10 @@ export default function Sidebar() {
         </Link>
         
         {/* Compact Carrot Logo - Centered and larger, clickable */}
-        <Link href="/dashboard" className="flex items-center justify-center px-4 py-3 rounded-xl hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:scale-105 lg:hidden text-white">
-          <img
-            src="/logo-carrot.png"
-            alt="Carrot Home"
-            width={56}
-            height={56}
-            loading="lazy"
-            decoding="async"
-            className="object-contain"
-            style={{ 
-              width: '56px', 
-              height: '56px',
-              maxWidth: '56px',
-              maxHeight: '56px'
-            }}
-          />
+        <Link href="/dashboard" aria-label="Home" className="flex items-center justify-center px-4 py-3 rounded-xl hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:scale-105 lg:hidden text-white">
+          <div className="object-contain" style={{ width: '56px', height: '56px' }} aria-hidden>
+            <CarrotLogo />
+          </div>
         </Link>
       </div>
       

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import CarrotLogo from './CarrotLogo';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -153,15 +154,12 @@ export default function MinimalNav() {
       <Link 
         href="/home" 
         className="mb-8 p-2 rounded-xl hover:bg-orange-50 transition-colors duration-200"
+        aria-label="Home"
       >
         <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg border border-gray-100">
-          <img 
-            src="/logo-carrot.png" 
-            alt="Carrot Logo" 
-            loading="lazy"
-            decoding="async"
-            className="w-8 h-8"
-          />
+          <div className="w-8 h-8" aria-hidden>
+            <CarrotLogo />
+          </div>
         </div>
       </Link>
 

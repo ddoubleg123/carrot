@@ -218,35 +218,91 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     // Fetch and forward bytes. Forward Range for streaming.
     try { console.log('[api/img] fetch', { host: new URL(target).hostname, pathPrefix: new URL(target).pathname.slice(0, 64) }); } catch {}
     const upstream = await fetch(target, {
-      redirect: 'follow',
+      // Pass through conditional headers for 304 reuse
       headers: {
         ...(req.headers.get('range') ? { range: req.headers.get('range') as string } : {}),
       },
+      cache: 'no-store',
     });
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => '');
-      return NextResponse.json({ error: 'Upstream error', status: upstream.status, body: text.slice(0, 2048) }, { status: 502 });
-    }
-    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
-    const cache = upstream.headers.get('cache-control') || 'public, max-age=300';
-    const status = upstream.status; // could be 200 or 206
-    const headers: Record<string, string> = {
-      'content-type': contentType,
-      'cache-control': cache,
-      'Access-Control-Allow-Origin': '*',
-      'x-img-mode': 'fallback-stream',
-    };
-    const contentRange = upstream.headers.get('content-range');
-    const acceptRanges = upstream.headers.get('accept-ranges') || 'bytes';
-    if (contentRange) headers['content-range'] = contentRange;
-    if (acceptRanges) headers['accept-ranges'] = acceptRanges;
-    const contentLength = upstream.headers.get('content-length');
-    if (contentLength) headers['content-length'] = contentLength;
-    return new NextResponse(upstream.body as any, {
-      status,
-      headers,
-    });
+
+    const status = upstream.status;
+    const body = upstream.body;
+
+    // Forward content-type and etag/last-modified if present
+    const ct = upstream.headers.get('content-type') || 'application/octet-stream';
+    const etag = upstream.headers.get('etag');
+    const lm = upstream.headers.get('last-modified');
+
+    const headers = new Headers();
+    headers.set('content-type', ct);
+    if (etag) headers.set('etag', etag);
+    if (lm) headers.set('last-modified', lm);
+
+    // Long cache for immutable image URLs; clients can revalidate via ETag
+    headers.set('cache-control', 'public, max-age=604800, s-maxage=604800');
+    headers.set('x-proxy', 'img');
+    headers.set('vary', 'accept');
+
+    return new NextResponse(body, { status, headers });
   } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    return new NextResponse(`img proxy error: ${e?.message || e}`, { status: 500 });
+  }
+}
+
+const ALLOW_HOSTS = new Set([
+  'firebasestorage.googleapis.com',
+  'storage.googleapis.com',
+  'images.unsplash.com',
+  'lh3.googleusercontent.com',
+  'lh4.googleusercontent.com',
+  'lh5.googleusercontent.com',
+  'lh6.googleusercontent.com',
+]);
+
+export async function GETImageProxy(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const rawUrl = searchParams.get('url');
+    if (!rawUrl) {
+      return new NextResponse('Missing url', { status: 400 });
+    }
+    let target: URL;
+    try { target = new URL(rawUrl); } catch { return new NextResponse('Bad url', { status: 400 }); }
+    if (!ALLOW_HOSTS.has(target.hostname)) {
+      return new NextResponse('Host not allowed', { status: 400 });
+    }
+
+    const upstream = await fetch(target.toString(), {
+      // Pass through conditional headers for 304 reuse
+      headers: {
+        ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
+        ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
+        // Hint preferred formats
+        accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
+      },
+      cache: 'no-store',
+    });
+
+    const status = upstream.status;
+    const body = upstream.body;
+
+    // Forward content-type and etag/last-modified if present
+    const ct = upstream.headers.get('content-type') || 'image/*';
+    const etag = upstream.headers.get('etag');
+    const lm = upstream.headers.get('last-modified');
+
+    const headers = new Headers();
+    headers.set('content-type', ct);
+    if (etag) headers.set('etag', etag);
+    if (lm) headers.set('last-modified', lm);
+
+    // Long cache for immutable image URLs; clients can revalidate via ETag
+    headers.set('cache-control', 'public, max-age=604800, s-maxage=604800');
+    headers.set('x-proxy', 'img');
+    headers.set('vary', 'accept');
+
+    return new NextResponse(body, { status, headers });
+  } catch (e: any) {
+    return new NextResponse(`img proxy error: ${e?.message || e}`, { status: 500 });
   }
 }

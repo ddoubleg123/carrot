@@ -451,7 +451,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     const load = async () => {
       if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return; // skip API in mock mode
       try {
-        const res = await fetch('/api/posts', { cache: 'no-store' });
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch('/api/posts', { cache: 'no-cache', signal: controller.signal });
+        clearTimeout(t);
         if (!res.ok) return;
         const posts = await res.json();
         const mapped = posts.map(mapServerPostToCard);
