@@ -211,12 +211,12 @@ export default function RabbitAIPage() {
               {/* Canvas Area */}
               <div className="flex-1 flex items-center justify-center bg-gray-50 relative">
                 {selectedMedia ? (
-                  <div className="max-w-full max-h-full">
+                  <div className="w-full max-w-3xl" style={{ aspectRatio: '16 / 9' }}>
                     {selectedMedia.type === 'video' ? (
                       <video
                         src={selectedMedia.url}
                         controls
-                        className="max-w-full max-h-full rounded-lg"
+                        className="w-full h-full object-contain rounded-lg"
                       />
                     ) : (
                       <img
@@ -224,7 +224,9 @@ export default function RabbitAIPage() {
                         alt="Uploaded content"
                         loading="lazy"
                         decoding="async"
-                        className="max-w-full max-h-full rounded-lg"
+                        width={1280}
+                        height={720}
+                        className="w-full h-full object-contain rounded-lg"
                       />
                     )}
                   </div>
@@ -333,6 +335,8 @@ export default function RabbitAIPage() {
                       <img
                         src={agent.avatar}
                         alt={`${agent.name} avatar`}
+                        width={32}
+                        height={32}
                         loading="lazy"
                         decoding="async"
                         className="w-8 h-8 rounded-full mx-auto mb-2"
@@ -361,6 +365,8 @@ export default function RabbitAIPage() {
                     <img
                       src={selectedAgent.avatar}
                       alt={`${selectedAgent.name} avatar`}
+                      width={40}
+                      height={40}
                       loading="lazy"
                       decoding="async"
                       className="w-10 h-10 rounded-full"

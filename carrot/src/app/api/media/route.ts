@@ -163,6 +163,29 @@ export async function GET(req: Request) {
       }
     }
 
+    // If any video assets are missing thumbUrl, try enriching from Posts table by matching videoUrl
+    try {
+      const missingVideo = rows.filter((r: any) => String(r.type || '').toLowerCase() === 'video' && !r.thumbUrl && !!r.url);
+      const urls = Array.from(new Set(missingVideo.map((r: any) => r.url))).filter(Boolean);
+      if (urls.length > 0) {
+        const postThumbs = await prisma.post.findMany({
+          where: { videoUrl: { in: urls } },
+          select: { videoUrl: true, thumbnailUrl: true },
+        });
+        const map = new Map<string, string>();
+        for (const p of postThumbs) {
+          if (p.videoUrl && p.thumbnailUrl) map.set(p.videoUrl, p.thumbnailUrl);
+        }
+        if (map.size > 0) {
+          for (const r of rows) {
+            if (String(r.type || '').toLowerCase() === 'video' && !r.thumbUrl && r.url && map.has(r.url)) {
+              r.thumbUrl = map.get(r.url);
+            }
+          }
+        }
+      }
+    } catch {}
+
     // Map to client DTO
     let items = rows.map((r: any) => ({
       id: r.id,

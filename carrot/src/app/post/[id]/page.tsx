@@ -57,17 +57,19 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
       {proxiedMedia ? (
         <div style={{marginTop: '1rem'}}>
           {/* Prefer video if present */}
-          <video
-            src={proxiedMedia}
-            controls
-            preload="metadata"
-            poster={proxiedThumb || undefined}
-            style={{width: '100%', maxHeight: 420, background: '#000'}}
-          />
+          <div style={{ width: '100%', aspectRatio: '16 / 9', background: '#000', borderRadius: 8, overflow: 'hidden' }}>
+            <video
+              src={proxiedMedia}
+              controls
+              preload="metadata"
+              poster={proxiedThumb || undefined}
+              style={{width: '100%', height: '100%', objectFit: 'contain'}}
+            />
+          </div>
         </div>
       ) : proxiedThumb ? (
         <div style={{marginTop: '1rem'}}>
-          <img src={proxiedThumb} alt={post?.content ? `${String(post.content).slice(0,60)} (thumbnail)` : 'Post thumbnail'} loading="lazy" decoding="async" style={{maxWidth: '100%'}} />
+          <img src={proxiedThumb} alt={post?.content ? `${String(post.content).slice(0,60)} (thumbnail)` : 'Post thumbnail'} width={1280} height={720} loading="lazy" decoding="async" style={{maxWidth: '100%', height: 'auto', borderRadius: 8}} />
         </div>
       ) : null}
 
@@ -81,9 +83,11 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
                   key={idx}
                   src={`/api/img?url=${encodeURIComponent(u)}`}
                   alt={post?.content ? `${String(post.content).slice(0, 40)} (image ${idx+1})` : `Post image ${idx+1}`}
+                  width={640}
+                  height={360}
                   loading="lazy"
                   decoding="async"
-                  style={{maxWidth: '48%'}}
+                  style={{maxWidth: '48%', height: 'auto', borderRadius: 8}}
                 />
               ));
             } catch {

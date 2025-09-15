@@ -19,6 +19,8 @@ export function Thumb({ src, type, alt = "media", className, placeholder }: Thum
           alt={alt}
           loading="lazy"
           decoding="async"
+          width={640}
+          height={360}
           onError={() => setFailed(true)}
           className="h-full w-full object-cover"
           style={placeholder ? { backgroundImage: `url(${placeholder})`, backgroundSize: "cover" } : undefined}

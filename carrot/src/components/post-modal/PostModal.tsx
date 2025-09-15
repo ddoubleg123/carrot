@@ -147,6 +147,8 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
                   alt={username ? `${username}'s avatar` : 'User avatar'}
                   loading="lazy"
                   decoding="async"
+                  width={36}
+                  height={36}
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -176,7 +178,9 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
                 background: `linear-gradient(135deg, ${data?.gradientFromColor || '#0f172a'}, ${data?.gradientViaColor || data?.gradientFromColor || '#1f2937'}, ${data?.gradientToColor || '#0f172a'})`
               }}
             >
-              <div className="w-full h-[360px] flex items-center justify-center">{renderMedia()}</div>
+              <div className="w-full" style={{ aspectRatio: '16 / 9' }}>
+                <div className="w-full h-full flex items-center justify-center">{renderMedia()}</div>
+              </div>
             </div>
             {data?.content ? (
               <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words">{data.content}</div>

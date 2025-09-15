@@ -125,6 +125,31 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     return () => clearTimeout(t);
   }, [isOpen, activeTab]);
 
+  // Healer: if many items lack thumbnails, trigger a thumb sync backfill once and refresh
+  const triedThumbsRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (activeTab !== 'gallery') return;
+    if (loading) return;
+    if (!serverItems || serverItems.length === 0) return;
+    if (triedThumbsRef.current) return;
+    const missing = serverItems.filter((it) => it.type === 'video' && !it.thumbUrl).length;
+    const ratio = missing / serverItems.length;
+    if (missing > 0 && ratio >= 0.3) {
+      triedThumbsRef.current = true;
+      (async () => {
+        try {
+          await fetch('/api/media/backfill?mode=thumbs&limit=200', { method: 'POST' });
+        } catch {}
+        // Optional second attempt to ensure assets exist (for posts-only sources)
+        try {
+          await fetch('/api/media/backfill?mode=postAssets&limit=200', { method: 'POST' });
+        } catch {}
+        setRefreshNonce((n) => n + 1);
+      })();
+    }
+  }, [isOpen, activeTab, loading, serverItems]);
+
   // Cmd/Ctrl+K to focus search
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -7,13 +7,39 @@ import { headers } from 'next/headers';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
-import PostModalController from '../../../components/post-modal/PostModalController';
+import dynamic from 'next/dynamic';
 import ClientSessionProvider from './components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
-import Widgets from './components/Widgets';
 import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
+
+// Lightweight skeletons to reserve layout and reduce CLS during client-only hydration
+function SkeletonBlock({ height = 240 }: { height?: number }) {
+  return (
+    <div
+      className="rounded-2xl border border-gray-200 bg-white/60 animate-pulse"
+      style={{ minHeight: height }}
+      aria-hidden
+    />
+  );
+}
+
+// Client-only heavy components loaded lazily to reduce TBT
+const DashboardClientDynamic = dynamic(() => import('./DashboardClient'), {
+  ssr: false,
+  loading: () => <SkeletonBlock height={320} />,
+});
+
+const PostModalControllerDynamic = dynamic(() => import('../../../components/post-modal/PostModalController'), {
+  ssr: false,
+  loading: () => null,
+});
+
+const WidgetsDynamic = dynamic(() => import('./components/Widgets'), {
+  ssr: false,
+  loading: () => <SkeletonBlock height={420} />,
+});
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
@@ -126,15 +152,16 @@ export default async function DashboardPage() {
           <div className="w-full min-w-[320px] max-w-[720px] px-6">
             <FirebaseClientInit />
             <ClientSessionProvider>
-              <DashboardClient initialCommitments={commitments} isModalComposer={true} />
+              {/* Reserve space then hydrate DashboardClient lazily */}
+              <DashboardClientDynamic initialCommitments={commitments} isModalComposer={true} />
               {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
-              <PostModalController />
+              <PostModalControllerDynamic />
             </ClientSessionProvider>
           </div>
           
           {/* Right rail / Third column (hidden on small screens) */}
           <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-            <Widgets />
+            <WidgetsDynamic />
           </aside>
         </main>
       </div>

@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
 import COLOR_SCHEMES from '../../../config/colorSchemes';
-import CommitmentComposer from './components/CommitmentComposer';
+import dynamic from 'next/dynamic';
 import ComposerTrigger from '../../../components/ComposerTrigger';
-import ComposerModal from '../../../components/ComposerModal';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
 import FeedMediaManager from '../../../components/video/FeedMediaManager';
@@ -25,6 +24,23 @@ interface DashboardClientProps {
 
 
 import { useSyncFirebaseAuth } from '../../../lib/useSyncFirebaseAuth';
+
+// Minimal skeletons to reserve space during client-only hydration
+function SkeletonComposer() {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white/70 animate-pulse" style={{ minHeight: 220 }} aria-hidden />
+  );
+}
+
+const ComposerDynamic = dynamic(() => import('./components/CommitmentComposer'), {
+  ssr: false,
+  loading: () => <SkeletonComposer />,
+});
+
+const ComposerModalDynamic = dynamic(() => import('../../../components/ComposerModal'), {
+  ssr: false,
+  loading: () => null,
+});
 
 export default function DashboardClient({ initialCommitments, isModalComposer = false, serverPrefs }: DashboardClientProps) {
   useSyncFirebaseAuth();
@@ -590,7 +606,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           {isModalComposer ? (
             <ComposerTrigger onOpenModal={() => setIsModalOpen(true)} />
           ) : (
-            <CommitmentComposer onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
+            <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
           )}
           {/* Professional compact spacing for social media feed */}
           <div className="space-y-3 mt-6">
@@ -609,7 +625,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       </div>
       
       {isModalComposer && (
-        <ComposerModal
+        <ComposerModalDynamic
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onPost={handlePost}

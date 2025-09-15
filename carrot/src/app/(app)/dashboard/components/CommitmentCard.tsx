@@ -5,9 +5,7 @@ import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizo
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
 import AudioHero from "../../../../components/audio/AudioHero";
 import { createAnalyserFromMedia } from "../../../../components/audio/AudioAnalyser";
-import CFVideoPlayer from "../../../../components/CFVideoPlayer";
-import HlsFeedPlayer from "../../../../components/video/HlsFeedPlayer";
-import VideoPlayer from "./VideoPlayer";
+import dynamic from "next/dynamic";
 import EditPostModal from "../../../../components/EditPostModal";
 import FlagChip from "../../../../components/flags/FlagChip";
 import { useModalRoute } from "../../../../hooks/useModalRoute";
@@ -94,6 +92,28 @@ const isDev = process.env.NODE_ENV !== 'production';
 const ALLOWED_DIV_KEYS = new Set([
   'id','className','style','role','tabIndex','title','draggable','hidden','dir','lang'
 ]);
+
+// Skeleton to reserve media area and avoid CLS during client hydration
+function MediaSkeleton() {
+  return (
+    <div className="rounded-xl overflow-hidden bg-white" style={{ aspectRatio: '16 / 9' }} aria-hidden />
+  );
+}
+
+const CFVideoPlayer = dynamic(() => import('../../../../components/CFVideoPlayer'), {
+  ssr: false,
+  loading: () => <MediaSkeleton />,
+});
+
+const HlsFeedPlayer = dynamic(() => import('../../../../components/video/HlsFeedPlayer'), {
+  ssr: false,
+  loading: () => <MediaSkeleton />,
+});
+
+const VideoPlayer = dynamic(() => import('./VideoPlayer'), {
+  ssr: false,
+  loading: () => <MediaSkeleton />,
+});
 
 function isDomEventKey(k: string) {
   return /^on[A-Z]/.test(k);
@@ -490,14 +510,18 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {/* Images / GIF */}
         {gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
-              alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
-              loading="lazy"
-              decoding="async"
-              className="w-full rounded-xl"
-            />
+            <div className="w-full rounded-xl overflow-hidden bg-white" style={{ aspectRatio: '16 / 9' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
+                alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
+                loading="lazy"
+                decoding="async"
+                width={1280}
+                height={720}
+                className="w-full h-full object-cover"
+              />
+            </div>
           </div>
         ) : imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
@@ -508,14 +532,18 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             >
               {imageUrls.length === 1 ? (
                 <div className="cursor-pointer bg-white rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/img?url=${encodeURIComponent(imageUrls[0])}`}
-                    alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full max-h-[520px] object-contain mx-auto"
-                  />
+                  <div className="w-full" style={{ aspectRatio: '16 / 9' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/img?url=${encodeURIComponent(imageUrls[0])}`}
+                      alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
+                      loading="lazy"
+                      decoding="async"
+                      width={1280}
+                      height={720}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
@@ -527,6 +555,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
                       loading="lazy"
                       decoding="async"
+                      width={640}
+                      height={360}
                       className="w-full h-48 object-cover rounded-lg bg-white"
                     />
                   ))}
