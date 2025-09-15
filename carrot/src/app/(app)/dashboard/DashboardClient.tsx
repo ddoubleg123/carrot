@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
-import { VideoProvider } from '../../context/VideoContext';
+import { VideoProvider } from '../../../context/VideoContext';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -520,7 +520,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }, 30000);
       inflight.set(id, { url, start, timeout });
       try {
-        const res = await origFetch(...args);
+        const res = await (origFetch as any)(...args);
         return res;
       } finally {
         const entry = inflight.get(id);
