@@ -17,15 +17,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(req.url);
     const urlRaw = searchParams.get('url');
-    // Safely decode up to 2 times to normalize %252F, %2540, etc.
+    // Safely decode up to 2 times, but only if double-encoded markers exist (%25)
     const urlParam = (() => {
       if (!urlRaw) return urlRaw;
       try {
         let d = urlRaw;
         for (let i = 0; i < 2; i++) {
-          const n = decodeURIComponent(d);
-          if (n === d) break;
-          d = n;
+          if (!/%25/i.test(d)) break;
+          d = decodeURIComponent(d);
         }
         return d;
       } catch {
@@ -128,25 +127,49 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
       })();
       const pathOnly = urlParam.match(/\/o\/([^?]+)(?:\?|$)/);
       if (m && m[1] && m[2]) {
-        const urlBucket = decodeURIComponent(m[1]);
-        const safePath = decodeURIComponent(decodeURIComponent(m[2])).replace(/^\/+/, '');
-        try {
-          const bucketName = urlBucket; // trust bucket from URL
-          return await adminDownload(bucketName, safePath);
-        } catch (e) {
-          if (!allowUrlFallback) {
-            return NextResponse.json({ error: 'Admin download failed', bucketTried: urlBucket, path: safePath }, { status: 502 });
-          }
-          target = urlParam; // fallback during cutover
+        const urlBucketRaw = decodeURIComponent(m[1]);
+        const candidates: string[] = [];
+        if (urlBucketRaw.endsWith('.firebasestorage.app')) {
+          candidates.push(urlBucketRaw);
+          candidates.push(`${urlBucketRaw.replace(/\.firebasestorage\.app$/i, '')}.appspot.com`);
+        } else {
+          candidates.push(urlBucketRaw);
         }
+        const safePath = decodeURIComponent(decodeURIComponent(m[2])).replace(/^\/+/, '');
+        for (const bucketName of candidates) {
+          try {
+            const resp = await adminDownload(bucketName, safePath);
+            const h = new Headers(resp.headers);
+            h.set('x-img-bucket-final', bucketName);
+            return new NextResponse(resp.body as any, { status: resp.status, headers: h });
+          } catch {}
+        }
+        if (!allowUrlFallback) {
+          return NextResponse.json({ error: 'Admin download failed', triedBuckets: candidates, path: safePath }, { status: 502 });
+        }
+        target = urlParam; // fallback during cutover
       } else if (gcsAlt && gcsAlt.object) {
         // storage.googleapis.com/<bucket>.firebasestorage.app/<object>
         const safePath = decodeURIComponent(decodeURIComponent(gcsAlt.object)).replace(/^\/+/, '');
         try {
           const project = (gcsAlt as any).bucket as string | undefined;
-          const bucketName = project ? `${project}.appspot.com` : (process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
-          if (!bucketName) throw new Error('Missing FIREBASE_STORAGE_BUCKET');
-          return await adminDownload(bucketName, safePath);
+          const candidates: string[] = [];
+          if (project) {
+            candidates.push(`${project}.firebasestorage.app`);
+            candidates.push(`${project}.appspot.com`);
+          } else {
+            const envBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+            if (envBucket) candidates.push(envBucket);
+          }
+          for (const bucketName of candidates) {
+            try {
+              const resp = await adminDownload(bucketName, safePath);
+              const h = new Headers(resp.headers);
+              h.set('x-img-bucket-final', bucketName);
+              return new NextResponse(resp.body as any, { status: resp.status, headers: h });
+            } catch {}
+          }
+          throw new Error('admin candidates exhausted');
         } catch (e) {
           if (!allowUrlFallback) {
             return NextResponse.json({ error: 'Admin download failed', path: safePath }, { status: 502 });
