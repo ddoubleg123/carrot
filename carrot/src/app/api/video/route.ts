@@ -123,12 +123,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       target.searchParams.set('alt', 'media');
     }
 
-    // Fast-path: for signed storage.googleapis.com URLs, avoid proxying and redirect the client directly.
-    // This bypasses potential HTTP/3/QUIC flakiness between our origin and GCS and preserves signatures.
+    // Optional fast-path: allow redirect only when explicitly enabled.
+    // WARNING: Redirecting can trigger CORS blocks if the bucket doesn't allow your origin.
     try {
+      const allowRedirect = process.env.VIDEO_PROXY_ALLOW_REDIRECT === '1';
       const isGcs = target.hostname === 'storage.googleapis.com';
       const hasSignedParams = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires');
-      if (isGcs && hasSignedParams) {
+      if (allowRedirect && isGcs && hasSignedParams) {
         const res = NextResponse.redirect(target.toString(), 302);
         res.headers.set('Access-Control-Allow-Origin', '*');
         res.headers.set('Cache-Control', 'public, max-age=300');
