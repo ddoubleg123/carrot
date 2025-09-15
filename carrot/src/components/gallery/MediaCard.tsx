@@ -1,8 +1,8 @@
 import React from "react";
 import { EyeOff, Check, MoreHorizontal, Film, Image as ImageIcon } from "lucide-react";
 import { Thumb } from "./Thumb";
-import { formatDuration } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { formatDuration } from "../../lib/format";
+import { cn } from "../../lib/utils";
 
 export type GalleryAsset = {
   id: string;
@@ -31,7 +31,12 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
   const src = (() => {
     const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || undefined)
                         : (asset.thumbUrl || asset.url || undefined);
-    return raw ? `/api/img?url=${encodeURIComponent(raw)}` : undefined;
+    if (!raw) return undefined;
+    // If already proxied or a data/blob URL, pass through unchanged
+    if (raw.startsWith('/api/img') || raw.startsWith('data:') || raw.startsWith('blob:')) {
+      return raw;
+    }
+    return `/api/img?url=${encodeURIComponent(raw)}`;
   })();
 
   return (
