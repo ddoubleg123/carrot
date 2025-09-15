@@ -7,9 +7,10 @@ import { headers } from 'next/headers';
 import type { CommitmentCardProps } from './components/CommitmentCard';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
-import dynamic from 'next/dynamic';
 import ClientSessionProvider from './components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
+import PostModalController from '../../../components/post-modal/PostModalController';
+import Widgets from './components/Widgets';
 import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -25,21 +26,8 @@ function SkeletonBlock({ height = 240 }: { height?: number }) {
   );
 }
 
-// Client-only heavy components loaded lazily to reduce TBT
-const DashboardClientDynamic = dynamic(() => import('./DashboardClient'), {
-  ssr: false,
-  loading: () => <SkeletonBlock height={320} />,
-});
-
-const PostModalControllerDynamic = dynamic(() => import('../../../components/post-modal/PostModalController'), {
-  ssr: false,
-  loading: () => null,
-});
-
-const WidgetsDynamic = dynamic(() => import('./components/Widgets'), {
-  ssr: false,
-  loading: () => <SkeletonBlock height={420} />,
-});
+// Note: dynamic imports with ssr:false are not allowed in Server Components.
+// Heavy client components are already split internally where appropriate.
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
