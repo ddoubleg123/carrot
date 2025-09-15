@@ -7,14 +7,34 @@ import { useSession } from 'next-auth/react';
 import { uploadFilesToFirebase, uploadFileToFirebase } from '../../../../lib/uploadToFirebase';
 import COLOR_SCHEMES from '../../../../config/colorSchemes';
 import { uploadToCloudflareStream } from '../../../../lib/cfStreamUpload';
+import dynamic from 'next/dynamic';
 
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
 import Toast from './Toast';
-import MediaLibraryModal from '../../../../components/media/MediaLibraryModal';
-import GifPicker from './GifPicker';
-import AudioRecorder from '../../../../components/AudioRecorder';
 import AudioPlayer from '../../../../components/AudioPlayer';
-import ColorPickerModal from '../../../../components/composer/ColorPickerModal';
+
+// Lightweight placeholders to avoid CLS and hydrate only when needed
+function InlineLoader() { return null; }
+
+const MediaLibraryModalDynamic = dynamic(() => import('../../../../components/media/MediaLibraryModal'), {
+  ssr: false,
+  loading: () => <InlineLoader />,
+});
+
+const GifPickerDynamic = dynamic(() => import('./GifPicker'), {
+  ssr: false,
+  loading: () => <InlineLoader />,
+});
+
+const AudioRecorderDynamic = dynamic(() => import('../../../../components/AudioRecorder'), {
+  ssr: false,
+  loading: () => <InlineLoader />,
+});
+
+const ColorPickerModalDynamic = dynamic(() => import('../../../../components/composer/ColorPickerModal'), {
+  ssr: false,
+  loading: () => <InlineLoader />,
+});
 
 interface CommitmentComposerProps {
   onPost: (post: any) => void;
@@ -785,7 +805,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       
 
       {/* Media Library Modal (root-level) */}
-      <MediaLibraryModal
+      <MediaLibraryModalDynamic
         open={showMediaLibrary}
         onClose={() => setShowMediaLibrary(false)}
         onInsert={handleInsertFromLibrary}
@@ -804,16 +824,16 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
           >
             <div className="p-4 sm:p-8">
               {/* Modal Header */}
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-800">Create Post</h2>
-                <button
-                  onClick={cancelUpload}
-                  className="w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-gray-600 hover:text-gray-800 transition-all duration-200 shadow-md hover:shadow-lg"
-                  aria-label="Close modal"
-                >
-                  <span className="text-lg font-bold leading-none">&times;</span>
-                </button>
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">Create Post</h2>
+              <button
+                onClick={cancelUpload}
+                className="w-10 h-10 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-gray-600 hover:text-gray-800 transition-all duration-200 shadow-md hover:shadow-lg"
+                aria-label="Close modal"
+              >
+                <span className="text-lg font-bold leading-none">&times;</span>
+              </button>
+            </div>
 
 
             {/* Media Preview */}
@@ -1281,7 +1301,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       ) : null}
 
       {/* Color Scheme Picker */}
-      <ColorPickerModal
+      <ColorPickerModalDynamic
         open={showColorPicker}
         schemes={colorSchemes}
         currentIndex={currentColorScheme}
@@ -1819,7 +1839,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
         </div>
       </div>
 
-      <GifPicker
+      <GifPickerDynamic
         isOpen={showGifPicker}
         onClose={handleGifPickerClose}
         onSelectGif={handleGifSelect}
@@ -1829,11 +1849,10 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       {showAudioRecorder ? createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md">
-            <AudioRecorder
+            <AudioRecorderDynamic
               onAudioRecorded={onAudioRecorded}
               onCancel={onAudioCancel}
               maxDuration={300} // 5 minutes
-              className="w-full"
             />
           </div>
         </div>,

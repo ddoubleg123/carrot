@@ -1,9 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useUserVideos, useVideoVariants, getVideoThumbnail, getPlatformDisplayName, formatDuration } from '@/lib/videoDeduplicationClient';
 import { VideoIngestModal } from './VideoIngestModal';
-import { VideoVariantEditor } from './VideoVariantEditor';
+
+const VideoVariantEditorDynamic = dynamic(() => import('./VideoVariantEditor').then(m => m.VideoVariantEditor), {
+  ssr: false,
+  loading: () => null,
+});
 
 export function VideoLibrary() {
   const { videos, isLoading, error, refreshVideos } = useUserVideos();
@@ -86,7 +91,7 @@ export function VideoLibrary() {
       />
 
       {selectedVideo && (
-        <VideoVariantEditor
+        <VideoVariantEditorDynamic
           isOpen={showVariantEditor}
           onClose={() => {
             setShowVariantEditor(false);
