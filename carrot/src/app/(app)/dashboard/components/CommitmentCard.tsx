@@ -346,6 +346,9 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     ? `linear-gradient(135deg, ${props.gradientFromColor}, ${props.gradientViaColor || props.gradientFromColor}, ${props.gradientToColor})`
     : undefined;
 
+  // Detect presence of any video media to avoid rendering images/GIF alongside video
+  const hasVideoMedia = Boolean(cfUid || cfPlaybackUrlHls || videoUrl);
+
   return (
     <div
       ref={ref}
@@ -543,7 +546,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         ) : null}
 
         {/* Images / GIF */}
-        {gifUrl ? (
+        {!hasVideoMedia && gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             <div className="w-full rounded-xl overflow-hidden bg-white relative" style={{ aspectRatio: '16 / 9' }}>
               <Image
@@ -557,7 +560,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               />
             </div>
           </div>
-        ) : imageUrls && imageUrls.length > 0 ? (
+        ) : !hasVideoMedia && imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
             {/* Wrap media in gradient even when images exist so color passes over */}
             <div
