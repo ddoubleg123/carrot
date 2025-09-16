@@ -106,10 +106,11 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     // Resolve avatar with preference: user.profilePhotoPath -> user.profilePhoto URL -> session user avatar -> placeholder
     const userObj = post?.User || {};
+    // For avatars, avoid proxying Google-hosted URLs via /api/img to prevent host allowlist blocks
     const avatarFromPath = proxPath(userObj.profilePhotoPath);
-    const avatarFromUrl = userObj.profilePhoto ? prox(String(userObj.profilePhoto)) : (userObj.image ? prox(String(userObj.image)) : null);
-    const sessionAvatar = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || null;
-    const finalAvatar = avatarFromPath || avatarFromUrl || (sessionAvatar ? prox(String(sessionAvatar)) : null) || '/avatar-placeholder.svg';
+    const avatarFromUrlRaw = userObj.profilePhoto ? String(userObj.profilePhoto) : (userObj.image ? String(userObj.image) : null);
+    const sessionAvatarRaw = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || null;
+    const finalAvatar = avatarFromPath || avatarFromUrlRaw || sessionAvatarRaw || '/avatar-placeholder.svg';
 
     // Username: prefer DB user.username, else session username/email local-part, else 'user'
     const sessionUsername = (session?.user as any)?.username || ((session?.user as any)?.email ? String((session?.user as any).email).split('@')[0] : null);

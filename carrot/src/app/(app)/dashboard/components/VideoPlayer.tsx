@@ -81,6 +81,8 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   // since the server now supports Admin SDK streaming with Range for private objects. Fallback to url-mode only if needed.
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
+    // If caller already supplied a proxied/path-mode URL, use it as-is to avoid double-wrapping
+    try { if (videoUrl.startsWith('/api/video')) return videoUrl; } catch {}
     const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
       try {
         const url = new URL(u);
@@ -114,7 +116,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
       return {};
     };
 
-    const looksLikeStorage = videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app');
+    const looksLikeStorage = !videoUrl.startsWith('/api/video') && (videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app'));
     if (looksLikeStorage) {
       const { bucket, path } = tryExtractBucketAndPath(videoUrl);
       const finalBucket = bucket || PUBLIC_BUCKET;
