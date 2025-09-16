@@ -145,7 +145,8 @@ export async function GET(req: NextRequest) {
   headers.set('vary', 'accept');
   headers.set('x-proxy', 'img-sharp');
 
-  // Next.js 15: return ArrayBuffer, not Node Buffer/Blob
-  const ab = out.buffer.slice(out.byteOffset, out.byteLength + out.byteOffset);
-  return new NextResponse(ab, { status: 200, headers });
+  // Next.js 15: return a Uint8Array (ArrayBufferView) to avoid SharedArrayBuffer unions
+  const view = new Uint8Array(out.byteLength);
+  view.set(out);
+  return new NextResponse(view, { status: 200, headers });
 }
