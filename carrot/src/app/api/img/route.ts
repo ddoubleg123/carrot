@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
   headers.set('vary', 'accept');
   headers.set('x-proxy', 'img-sharp');
 
-  // Wrap Node Buffer in a Blob to satisfy Next.js Response body types
-  const blob = new Blob([out], { type: contentType });
-  return new NextResponse(blob, { status: 200, headers });
+  // Next.js 15: return ArrayBuffer, not Node Buffer/Blob
+  const ab = out.buffer.slice(out.byteOffset, out.byteLength + out.byteOffset);
+  return new NextResponse(ab, { status: 200, headers });
 }
