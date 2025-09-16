@@ -84,6 +84,13 @@ export default function TestFeedClient() {
 
         // Warm logic (next by scroll direction)
         if (!fastScrollRef.v && activeEl) {
+          // Double-check: recompute velocity right before warm decision
+          const nowCheck = performance.now();
+          const dyCheck = Math.abs(window.scrollY - lastY);
+          const dtCheck = Math.max(1, nowCheck - lastT);
+          const currentSpeed = (dyCheck / Math.max(1, window.innerHeight)) / (dtCheck / 1000);
+          if (currentSpeed > 1.2) return; // Skip warm if still moving fast
+
           const idx = observed.indexOf(activeEl);
           const dir = (window.scrollY - lastY) >= 0 ? 1 : -1;
           const warmIdx = Math.max(0, Math.min(observed.length - 1, idx + dir));
