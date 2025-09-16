@@ -194,7 +194,7 @@ export default function Sidebar() {
           <div className="w-[50px] h-[50px] rounded-full bg-white/20 mb-1.5 flex items-center justify-center max-lg:w-10 max-lg:h-10">
             {user?.image ? (
               <img
-                src={`/api/img?url=${encodeURIComponent(user.image)}`}
+                src={`/api/img?url=${encodeURIComponent(user.image)}&w=56&h=56&format=webp&q=70`}
                 alt={user?.name || 'Profile'}
                 loading="lazy"
                 decoding="async"

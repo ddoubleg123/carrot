@@ -9,6 +9,7 @@ import AudioHero from "../../../../components/audio/AudioHero";
 import { createAnalyserFromMedia } from "../../../../components/audio/AudioAnalyser";
 import dynamic from "next/dynamic";
 import EditPostModal from "../../../../components/EditPostModal";
+import VideoPlayerManager from "../../../../lib/VideoPlayerManager";
 import FlagChip from "../../../../components/flags/FlagChip";
 import { useModalRoute } from "../../../../hooks/useModalRoute";
 import PostActionBar from "../../../../components/post/PostActionBar";
@@ -199,6 +200,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const [playing, setPlaying] = useState(false);
   const attachVideoRef = (el: HTMLVideoElement | null) => {
     videoElRef.current = el;
+    try { VideoPlayerManager.inst.adopt(el); } catch {}
     try {
       if (!el) return;
       try { el.setAttribute('data-post-video-id', id); } catch {}
@@ -239,13 +241,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       }
       if (showLightbox) {
         if (lightTarget && video.parentElement !== lightTarget) {
-          lightTarget.appendChild(video);
-          video.controls = true;
+          VideoPlayerManager.inst.mount(lightTarget);
+          try { video.controls = true; } catch {}
         }
       } else {
         const originalParent = originalParentRef.current;
         if (originalParent && video.parentElement !== originalParent) {
-          originalParent.appendChild(video);
+          VideoPlayerManager.inst.unmount(originalParent);
         }
       }
     } catch {}
@@ -258,8 +260,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         const v = videoElRef.current; if (!v) return;
         if (!originalParentRef.current) originalParentRef.current = v.parentElement as HTMLElement | null;
         if (v.parentElement !== mount) {
-          mount.appendChild(v);
-          v.controls = true;
+          VideoPlayerManager.inst.mount(mount);
+          try { v.controls = true; } catch {}
         }
       } catch {}
     };
@@ -267,7 +269,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       try {
         const v = videoElRef.current; if (!v) return;
         const parent = originalParentRef.current; if (!parent) return;
-        if (v.parentElement !== parent) parent.appendChild(v);
+        if (v.parentElement !== parent) VideoPlayerManager.inst.unmount(parent);
       } catch {}
     };
     const onReady = (e: any) => {

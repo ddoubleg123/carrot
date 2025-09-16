@@ -139,8 +139,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       timestamp: post.createdAt,
       imageUrls: imageUrlsFinal,
       gifUrl: prox(post.gifUrl) || null,
-      // IMPORTANT: do NOT proxy video URLs through /api/img; use raw URL
-      videoUrl: post.videoUrl || null,
+      // Prefer durable path-mode if server provided bucket+path, else fallback to URL
+      videoUrl: (post?.videoBucket && post?.videoPath)
+        ? `/api/video?path=${encodeURIComponent(String(post.videoPath))}&bucket=${encodeURIComponent(String(post.videoBucket))}`
+        : (post.videoUrl || null),
       thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
@@ -453,55 +455,16 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       try {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), 15000);
-        const res = await fetch('/api/posts', { cache: 'no-cache', signal: controller.signal });
+        const res = await fetch('/api/posts', { cache: 'no-cache', signal: controller.signal, keepalive: false });
         clearTimeout(t);
         if (!res.ok) return;
         const posts = await res.json();
         const mapped = posts.map(mapServerPostToCard);
         if (cancelled) return;
-        setCommitments((prev) => {
-          const byId = new Map(prev.map((p) => [p.id, p]));
-          for (const m of mapped) {
-            const existing = byId.get(m.id) as any;
-            if (!existing) {
-              byId.set(m.id, m);
-            } else {
-              // Merge while preserving existing non-null CF fields if server has null/undefined
-              const merged: any = {
-                ...existing,
-                ...m,
-              };
-              // Preserve avatar from server-side rendering if it exists
-              if (existing.author?.avatar && existing.author.avatar !== '/avatar-placeholder.svg') {
-                merged.author = { ...m.author, avatar: existing.author.avatar };
-              }
-              // Preserve CF identifiers/playback when server lacks them
-              if (!m.cfUid && existing.cfUid) merged.cfUid = existing.cfUid;
-              if (!m.cfPlaybackUrlHls && existing.cfPlaybackUrlHls) merged.cfPlaybackUrlHls = existing.cfPlaybackUrlHls;
-              if (!m.thumbnailUrl && existing.thumbnailUrl) merged.thumbnailUrl = existing.thumbnailUrl;
-              // Preserve optimistic upload states but allow transcription status updates
-              merged.uploadStatus = existing.uploadStatus ?? m.uploadStatus ?? null;
-              merged.transcriptionStatus = m.transcriptionStatus ?? existing.transcriptionStatus ?? null;
-              // Preserve homeCountry if server doesn't provide it
-              if (!m.homeCountry && (existing as any).homeCountry) {
-                (merged as any).homeCountry = (existing as any).homeCountry;
-              }
-              // Preserve gradient fields if server omits them
-              const gf = ['gradientFromColor','gradientToColor','gradientViaColor','gradientDirection'] as const;
-              for (const key of gf) {
-                if (!(key in m) || (m as any)[key] == null) {
-                  if ((existing as any)[key] != null) (merged as any)[key] = (existing as any)[key];
-                }
-              }
-              byId.set(m.id, merged);
-            }
-          }
-          // Return newest-first order by timestamp if available
-          const arr = Array.from(byId.values());
-          arr.sort((a: any, b: any) => new Date(b.timestamp as any).getTime() - new Date(a.timestamp as any).getTime());
-          return arr as any;
-        });
-      } catch {}
+        setCommitments(mapped);
+      } catch (e) {
+        console.warn('Feed load error', e);
+      }
     };
     load();
     return () => { cancelled = true; };
@@ -524,6 +487,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }, 30000);
       inflight.set(id, { url, start, timeout });
       try {
+        // Force keepalive:false by default unless explicitly passed
+        if (typeof args[1] === 'object') {
+          args[1] = { keepalive: false, ...(args[1] || {}) };
+        } else {
+          args[1] = { keepalive: false };
+        }
         const res = await (origFetch as any)(...args);
         return res;
       } finally {
@@ -531,6 +500,15 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         if (entry) { clearTimeout(entry.timeout); inflight.delete(id); }
       }
     };
+    // beforeunload: dump pending requests (dev/perf mode only)
+    const onBeforeUnload = () => {
+      try {
+        if (inflight.size > 0) {
+          console.warn('[beforeunload] pending fetches:', Array.from(inflight.values()).map(v => ({ url: v.url, ageMs: Date.now() - v.start })));
+        }
+      } catch {}
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
     // Page-load guard: after 5s, report any inflight fetches
     const fiveSec = window.setTimeout(() => {
       try {
@@ -562,7 +540,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       };
       if ('PerformanceObserver' in window) observePerf();
     } catch {}
-    return () => { (window as any).fetch = origFetch; inflight.forEach(e => clearTimeout(e.timeout)); inflight.clear(); };
+    return () => { (window as any).fetch = origFetch; window.removeEventListener('beforeunload', onBeforeUnload); inflight.forEach(e => clearTimeout(e.timeout)); inflight.clear(); };
   }, []);
 
   const handleUpdateCommitment = useCallback((tempId: string, updatedPost: any) => {
@@ -615,7 +593,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           
           // Merge mapped server fields to normalize proxies, then layer preserved fields
           const merged: any = { ...commitment, ...mappedFromServer, ...preservedMediaData };
-          // Preserve homeCountry from optimistic if server omitted it
+          // Preserve homeCountry from optimistic if server doesn't provide it
           if (!mappedFromServer.homeCountry && (commitment as any).homeCountry) {
             merged.homeCountry = (commitment as any).homeCountry;
           }

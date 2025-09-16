@@ -65,12 +65,12 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
       const bucket = admin.storage().bucket(bucketName);
       const file = bucket.file(objectPath.replace(/^\/+/, ''));
-      const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public,max-age=86400' }]);
+      const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
 
       const range = req.headers.get('range');
       const size = Number(meta?.size || 0);
       const contentType = meta?.contentType || 'application/octet-stream';
-      const cacheControl = meta?.cacheControl || 'public, max-age=86400';
+      const cacheControl = meta?.cacheControl || 'public, max-age=604800, immutable';
       if (range && size > 0) {
         const m = /bytes=(\d+)-(\d*)/.exec(range);
         const start = m ? parseInt(m[1], 10) : 0;
@@ -270,8 +270,10 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     if (status === 404 || status === 410 || status === 403) {
       headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
     } else if (!headers.has('cache-control')) {
-      headers.set('Cache-Control', 'public, max-age=86400');
+      headers.set('Cache-Control', 'public, max-age=604800, immutable');
     }
+    // Ensure Accept-Ranges present for seekability
+    if (!headers.has('accept-ranges')) headers.set('accept-ranges', 'bytes');
 
     // Debug headers (do not leak full URL)
     headers.set('x-video-proxy-host', target.hostname);
@@ -281,6 +283,10 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         target.searchParams.has('X-Goog-Algorithm');
       headers.set('x-video-proxy-decoded', decodedOnce ? '1' : '0');
       headers.set('x-video-proxy-signed', isSignedFinal ? '1' : '0');
+      // For unsigned URLs, prefer a strong immutable cache
+      if (!isSignedFinal && status >= 200 && status < 300) {
+        headers.set('Cache-Control', 'public, max-age=604800, immutable');
+      }
     } catch {}
 
     // On errors, log a small snippet of the upstream body to aid diagnosis

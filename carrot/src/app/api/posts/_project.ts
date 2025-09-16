@@ -26,6 +26,8 @@ export function projectPost(row: any) {
     imageUrls: row.imageUrls || null,
     gifUrl: row.gifUrl || null,
     videoUrl: row.videoUrl || null,
+    videoBucket: (row as any).videoBucket || null,
+    videoPath: (row as any).videoPath || null,
     thumbnailUrl: row.thumbnailUrl || null,
     audioUrl: row.audioUrl || null,
 

@@ -7,6 +7,13 @@ import FlagChip from "../flags/FlagChip";
 import CommentsDrawer from "./CommentsDrawer";
 import VideoPortalMount from "../video/VideoPortalMount";
 
+// Resolve bucket at build time for client fallback path mode
+const PUBLIC_BUCKET =
+  process.env.NEXT_PUBLIC_FIREBASE_BUCKET ||
+  process.env.FIREBASE_STORAGE_BUCKET ||
+  process.env.FIREBASE_BUCKET ||
+  '';
+
 type PostModalData = {
   id: string;
   content?: string | null;
@@ -36,18 +43,18 @@ function usePost(id?: string | null) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
+    const ac = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`/api/posts/${id}`)
+    fetch(`/api/posts/${id}`, { signal: ac.signal, keepalive: false, cache: 'no-cache' })
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
-      .then((j) => { if (!cancelled) setData(j); })
-      .catch((e) => { if (!cancelled) setError(String(e?.message || e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((j) => { if (!ac.signal.aborted) setData(j); })
+      .catch((e) => { if (!ac.signal.aborted) setError(String(e?.message || e)); })
+      .finally(() => { if (!ac.signal.aborted) setLoading(false); });
+    return () => { ac.abort(); };
   }, [id]);
   return { data, loading, error };
 }
@@ -59,6 +66,7 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
   const [showComments, setShowComments] = useState(initialPanel === 'comments');
   const [mediaEl, setMediaEl] = useState<HTMLVideoElement | HTMLAudioElement | null>(null);
   const [adopted, setAdopted] = useState(false);
+  const [fadeIn, setFadeIn] = useState(false);
   type Seg = { start: number; end?: number; text: string };
   const [segments, setSegments] = useState<Seg[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
@@ -88,34 +96,72 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
     if (data?.videoUrl) {
       const url = data.videoUrl;
-      const needsProxy = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
-      const withAlt = url.includes('firebasestorage.googleapis.com') && !url.includes('alt=media')
-        ? `${url}${url.includes('?') ? '&' : '?'}alt=media`
-        : url;
-      // Prefer path-mode when possible (server supports Admin SDK streaming)
-      let resolved = withAlt;
+      const needsProxy = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com') || url.includes('firebasestorage.app');
+      // Prefer durable path-mode when server sent bucket+path
+      if ((data as any)?.videoBucket && (data as any)?.videoPath) {
+        const b = String((data as any).videoBucket);
+        const p = String((data as any).videoPath);
+        const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
+        return (
+          <video
+            controls
+            playsInline
+            poster={poster}
+            className="w-full h-full object-contain bg-black"
+            ref={(el) => setMediaEl(el)}
+          >
+            <source src={`/api/video?path=${encodeURIComponent(p)}&bucket=${encodeURIComponent(b)}`} />
+          </video>
+        );
+      }
+      // Prefer path-mode extraction like feed player to avoid expired tokens
+      let resolved = url;
       try {
-        const u = new URL(withAlt);
-        if (needsProxy) {
-          // Try extract bucket+path
-          const host = u.hostname;
-          const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+        const u = new URL(url);
+        const host = u.hostname;
+        let bucket: string | undefined; let path: string | undefined;
+        // firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
+        const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+        if (host === 'firebasestorage.googleapis.com' && m1) {
+          bucket = decodeURIComponent(m1[1]);
+          path = decodeURIComponent(m1[2]);
+        }
+        // storage.googleapis.com/<bucket>/<path>
+        if (!path) {
           const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/);
-          let bucket: string | undefined; let path: string | undefined;
-          if (host === 'firebasestorage.googleapis.com' && m1) { bucket = decodeURIComponent(m1[1]); path = decodeURIComponent(m1[2]); }
-          else if (host === 'storage.googleapis.com' && m2) { bucket = decodeURIComponent(m2[1]); path = decodeURIComponent(m2[2]); }
-          else {
-            const m4 = u.pathname.match(/^\/o\/([^?]+)$/);
-            if (host.endsWith('.firebasestorage.app') && m4) { bucket = process.env.NEXT_PUBLIC_FIREBASE_BUCKET as string; path = decodeURIComponent(m4[1]); }
-          }
-          if (bucket && path) {
-            resolved = `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(bucket)}`;
-          } else {
-            resolved = `/api/video?url=${encodeURIComponent(withAlt)}`;
+          if (host === 'storage.googleapis.com' && m2) {
+            bucket = decodeURIComponent(m2[1]);
+            path = decodeURIComponent(m2[2]);
           }
         }
+        // <project>.firebasestorage.app/o/<ENCODED_PATH>
+        if (!path) {
+          const m4 = u.pathname.match(/^\/o\/([^?]+)$/);
+          if (host.endsWith('.firebasestorage.app') && m4) {
+            bucket = PUBLIC_BUCKET || undefined;
+            path = decodeURIComponent(m4[1]);
+          }
+        }
+        if (path) {
+          const finalBucket = (bucket || PUBLIC_BUCKET || '').trim();
+          if (finalBucket) {
+            resolved = `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
+          }
+        }
+        // Fallback to url-mode via proxy if we couldn't extract safely
+        if (!resolved.startsWith('/api/video')) {
+          let u2 = url;
+          if (needsProxy && u2.includes('firebasestorage.googleapis.com') && !u2.includes('alt=media')) {
+            u2 = `${u2}${u2.includes('?') ? '&' : '?'}alt=media`;
+          }
+          resolved = needsProxy ? `/api/video?url=${encodeURIComponent(u2)}` : url;
+        }
       } catch {
-        resolved = needsProxy ? `/api/video?url=${encodeURIComponent(withAlt)}` : withAlt;
+        let u2 = url;
+        if (needsProxy && u2.includes('firebasestorage.googleapis.com') && !u2.includes('alt=media')) {
+          u2 = `${u2}${u2.includes('?') ? '&' : '?'}alt=media`;
+        }
+        resolved = needsProxy ? `/api/video?url=${encodeURIComponent(u2)}` : url;
       }
       // Proxy poster image to avoid CORS
       const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
@@ -174,6 +220,13 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     return () => { window.removeEventListener('carrot-video-portal-ready', onReady as any); window.removeEventListener('carrot-video-portal-dismiss', onDismiss as any); clearInterval(t); };
   }, [id]);
 
+  // Small fade-in to smooth the handoff/hydration
+  useEffect(() => {
+    let raf = 0;
+    raf = requestAnimationFrame(() => setFadeIn(true));
+    return () => { cancelAnimationFrame(raf); setFadeIn(false); };
+  }, []);
+
   const body = (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -220,7 +273,7 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
                 background: `linear-gradient(135deg, ${data?.gradientFromColor || '#0f172a'}, ${data?.gradientViaColor || data?.gradientFromColor || '#1f2937'}, ${data?.gradientToColor || '#0f172a'})`
               }}
             >
-              <div className="w-full" style={{ aspectRatio: '16 / 9' }}>
+              <div className="w-full transition-opacity duration-150" style={{ aspectRatio: '16 / 9', opacity: fadeIn ? 1 : 0.01 }}>
                 {/* Primary: DOM transfer mount */}
                 <VideoPortalMount postId={id} className="w-full h-full" />
                 {/* Fallback: render a separate element only if we have not adopted the feed element */}

@@ -127,6 +127,9 @@ model Post {
   lastEditedBy        String?
   thumbnailUrl        String?
   videoUrl            String?
+  /// Durable Firebase Storage location for path-mode playback (avoids signed URL expiry)
+  videoBucket         String?   @db.VarChar(191)
+  videoPath           String?
   /// Cloudflare Stream fields
   cfUid               String?  @map("cf_uid")
   cfStatus            String?  @map("cf_status")
@@ -143,6 +146,7 @@ model Post {
   saves               PostSave[]
 
   @@map("posts")
+  @@index([videoBucket, videoPath])
 }
 
 model OnboardingQuestion {

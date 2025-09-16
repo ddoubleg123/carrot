@@ -10,22 +10,23 @@ export default function CommentsDrawer({ postId, onClose }: { postId: string; on
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pageAcRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`/api/comments?postId=${encodeURIComponent(postId)}&sort=${sort}`)
+    fetch(`/api/comments?postId=${encodeURIComponent(postId)}&sort=${sort}`, { signal: ac.signal, keepalive: false, cache: 'no-cache' })
       .then(async (r) => (r.ok ? r.json() : Promise.reject(await r.text().catch(() => 'Error'))))
       .then((j) => {
-        if (cancelled) return;
+        if (ac.signal.aborted) return;
         const items = Array.isArray(j) ? j : (Array.isArray(j?.items) ? j.items : []);
         setComments(items);
         setNextCursor(typeof j?.nextCursor === 'string' ? j.nextCursor : undefined);
       })
-      .catch((e) => { if (!cancelled) setError(String(e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .catch((e) => { if (!ac.signal.aborted) setError(String(e)); })
+      .finally(() => { if (!ac.signal.aborted) setLoading(false); });
+    return () => { ac.abort(); pageAcRef.current?.abort(); };
   }, [postId, sort]);
 
   const canPost = text.trim().length > 0 && text.trim().length <= 500;
@@ -33,7 +34,7 @@ export default function CommentsDrawer({ postId, onClose }: { postId: string; on
   async function submit() {
     if (!canPost) return;
     const body = { postId, content: text.trim() };
-    const r = await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: false, cache: 'no-cache' });
     if (r.ok) {
       setText('');
       const created = await r.json().catch(() => null);
@@ -48,17 +49,22 @@ export default function CommentsDrawer({ postId, onClose }: { postId: string; on
     if (!nextCursor || loading) return;
     setLoading(true);
     setError(null);
-    const r = await fetch(`/api/comments?postId=${encodeURIComponent(postId)}&sort=${sort}&cursor=${encodeURIComponent(nextCursor)}`);
+    try { pageAcRef.current?.abort(); } catch {}
+    const ac = new AbortController();
+    pageAcRef.current = ac;
+    const r = await fetch(`/api/comments?postId=${encodeURIComponent(postId)}&sort=${sort}&cursor=${encodeURIComponent(nextCursor)}`, { signal: ac.signal, keepalive: false, cache: 'no-cache' });
     if (!r.ok) {
-      setLoading(false);
+      if (!ac.signal.aborted) setLoading(false);
       try { setError((await r.json())?.error || 'Failed to load more'); } catch { setError('Failed to load more'); }
       return;
     }
-    const j = await r.json().catch(() => ({} as any));
-    const items: Comment[] = Array.isArray(j?.items) ? j.items : [];
-    setComments((prev) => [...prev, ...items]);
-    setNextCursor(typeof j?.nextCursor === 'string' ? j.nextCursor : undefined);
-    setLoading(false);
+    if (!ac.signal.aborted) {
+      const j = await r.json().catch(() => ({} as any));
+      const items: Comment[] = Array.isArray(j?.items) ? j.items : [];
+      setComments((prev) => [...prev, ...items]);
+      setNextCursor(typeof j?.nextCursor === 'string' ? j.nextCursor : undefined);
+      setLoading(false);
+    }
   }
 
   return (

@@ -118,6 +118,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     if (looksLikeStorage) {
       const { bucket, path } = tryExtractBucketAndPath(videoUrl);
       const finalBucket = bucket || PUBLIC_BUCKET;
+      // Prefer path-mode whenever we can derive object path to avoid expired tokens
       if (path && finalBucket) {
         return `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
       }

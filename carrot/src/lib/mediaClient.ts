@@ -32,7 +32,7 @@ export type MediaQueryClient = {
   t?: number
 }
 
-export async function fetchMedia(params: MediaQueryClient): Promise<MediaAssetDTO[]> {
+export async function fetchMedia(params: MediaQueryClient, opts?: { signal?: AbortSignal }) : Promise<MediaAssetDTO[]> {
   const qs = new URLSearchParams()
   if (params.q) qs.set('q', params.q)
   if (params.includeHidden) qs.set('includeHidden', '1')
@@ -40,7 +40,7 @@ export async function fetchMedia(params: MediaQueryClient): Promise<MediaAssetDT
   if (params.sort) qs.set('sort', params.sort)
   if (params.limit) qs.set('limit', String(params.limit))
   if (typeof params.t === 'number') qs.set('t', String(params.t))
-  const resp = await fetch('/api/media?' + qs.toString(), { cache: 'no-store' })
+  const resp = await fetch('/api/media?' + qs.toString(), { cache: 'no-cache', keepalive: false, signal: opts?.signal })
   if (!resp.ok) throw new Error('Failed to fetch media')
   return resp.json()
 }
@@ -50,6 +50,8 @@ export async function patchMedia(id: string, patch: { title?: string; hidden?: b
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, patch }),
+    keepalive: false,
+    cache: 'no-cache',
   })
   if (!resp.ok) throw new Error('Failed to update media')
   return resp.json()
@@ -62,13 +64,13 @@ export function useServerMedia(params: MediaQueryClient) {
   const [loading, setLoading] = React.useState<boolean>(true)
 
   React.useEffect(() => {
-    let cancel = false
+    const ac = new AbortController()
     setLoading(true)
-    fetchMedia(params)
-      .then((r) => { if (!cancel) { setItems(r); setError(null) } })
-      .catch((e) => { if (!cancel) setError(e as Error) })
-      .finally(() => { if (!cancel) setLoading(false) })
-    return () => { cancel = true }
+    fetchMedia(params, { signal: ac.signal })
+      .then((r) => { if (!ac.signal.aborted) { setItems(r); setError(null) } })
+      .catch((e) => { if (!ac.signal.aborted) setError(e as Error) })
+      .finally(() => { if (!ac.signal.aborted) setLoading(false) })
+    return () => { ac.abort() }
   }, [JSON.stringify(params)])
 
   return { items: items ?? [], loading, error }
