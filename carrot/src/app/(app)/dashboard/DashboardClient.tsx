@@ -343,6 +343,20 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     const root = document;
     const ENTER_ACTIVE = 0.75, ENTER_WARM = 0.60, EXIT_IDLE = 0.40;
     const pending = new Map<Element, number>();
+    // Debug ring buffer for tests/e2e assertions
+    const debug = {
+      push(evt: any) {
+        try {
+          const w: any = window as any;
+          if (!w.__carrot_feed_log) w.__carrot_feed_log = [];
+          const buf = w.__carrot_feed_log as any[];
+          const entry = { ts: Date.now(), ...evt };
+          buf.push(entry);
+          if (buf.length > 500) buf.shift();
+          w.dispatchEvent(new CustomEvent('carrot-feed-log', { detail: entry }));
+        } catch {}
+      }
+    };
     // Fast-scroll guard: if scrolling faster than ~1.5 screens/s, skip warming
     const fastScrollRef = { v: false } as { v: boolean };
     let lastY = window.scrollY, lastT = performance.now();
@@ -395,7 +409,14 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         }
         if (activeEl) {
           const handle = FMM.inst.getHandleByElement(activeEl);
-          if (handle) FMM.inst.setActive(handle);
+          if (handle) {
+            FMM.inst.setActive(handle);
+            try {
+              const idx = observed.indexOf(activeEl);
+              const id = activeEl.getAttribute('data-commitment-id');
+              debug.push({ type: 'active', index: idx, id });
+            } catch {}
+          }
           // Choose Warm deterministically: next index by scroll direction
           if (!fastScrollRef.v) {
             const idx = observed.indexOf(activeEl);
@@ -407,7 +428,13 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               // Only warm when it’s at least somewhat in/near view to avoid waste
               if (warmEl && warmRatio >= ENTER_IDLE_SAFE) {
                 const handleW = FMM.inst.getHandleByElement(warmEl);
-                if (handleW) FMM.inst.setWarm(handleW);
+                if (handleW) {
+                  FMM.inst.setWarm(handleW);
+                  try {
+                    const id = warmEl.getAttribute('data-commitment-id');
+                    debug.push({ type: 'warm', index: warmIdx, id });
+                  } catch {}
+                }
               }
             }
           }
@@ -417,6 +444,11 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             const ratio = ratios.get(el) || 0;
             if (ratio <= EXIT_IDLE) {
               const h = FMM.inst.getHandleByElement(el); if (h) FMM.inst.setIdle(h);
+              try {
+                const idx = observed.indexOf(el);
+                const id = el.getAttribute('data-commitment-id');
+                debug.push({ type: 'idle', index: idx, id });
+              } catch {}
             }
           }
         }

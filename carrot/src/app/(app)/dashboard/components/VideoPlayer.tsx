@@ -82,58 +82,23 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   // since the server now supports Admin SDK streaming with Range for private objects. Fallback to url-mode only if needed.
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
-    // If caller already supplied a proxied/path-mode URL, use it as-is to avoid double-wrapping
-    try { if (videoUrl.startsWith('/api/video')) return videoUrl; } catch {}
-    const tryExtractBucketAndPath = (u: string): { bucket?: string; path?: string } => {
-      try {
-        const url = new URL(u);
-        const host = url.hostname;
-        // Pattern: firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
-        const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
-        if (host === 'firebasestorage.googleapis.com' && m1) {
-          return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]) };
+    try {
+      // Prefer durable path-mode via /api/video when available
+      const u = new URL(videoUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      // If already pointing at our proxy, just return it (and add pid if provided)
+      if (u.pathname.startsWith('/api/video')) {
+        // Append pid for debugging attribution in tests (ignored by server)
+        if (postId && !u.searchParams.has('pid')) {
+          u.searchParams.set('pid', String(postId));
+          return u.pathname + '?' + u.searchParams.toString();
         }
-        // Pattern: storage.googleapis.com/<bucket>/<path>
-        const m2 = url.pathname.match(/^\/([^/]+)\/(.+)$/);
-        if (host === 'storage.googleapis.com' && m2) {
-          return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]) };
-        }
-        // Pattern: <subdomain>.firebasestorage.app/o/<ENCODED_PATH>
-        const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
-        if (host.endsWith('.firebasestorage.app') && m4) {
-          // We need a bucket; use PUBLIC_BUCKET fallback or infer nothing (url-mode fallback will handle auth)
-          return { bucket: PUBLIC_BUCKET || undefined, path: decodeURIComponent(m4[1]) };
-        }
-        // Generic: any \/o\/<ENCODED_PATH> segment (bucket unknown)
-        const m3 = url.pathname.match(/\/o\/([^?]+)$/);
-        if (m3) {
-          // Try to infer bucket from GoogleAccessId (project-id)
-          const ga = url.searchParams.get('GoogleAccessId') || '';
-          const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
-          const inferredBucket = projectMatch ? `${projectMatch[1]}.appspot.com` : undefined;
-          return { bucket: inferredBucket, path: decodeURIComponent(m3[1]) };
-        }
-      } catch {}
-      return {};
-    };
-
-    const looksLikeStorage = !videoUrl.startsWith('/api/video') && (videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com') || videoUrl.includes('firebasestorage.app'));
-    if (looksLikeStorage) {
-      const { bucket, path } = tryExtractBucketAndPath(videoUrl);
-      const finalBucket = bucket || PUBLIC_BUCKET;
-      // Prefer path-mode whenever we can derive object path to avoid expired tokens
-      if (path && finalBucket) {
-        return `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
+        return videoUrl;
       }
-      // Fallback to url mode; ensure alt=media for Firebase endpoint
-      let u = videoUrl;
-      if (u.includes('firebasestorage.googleapis.com') && !u.includes('alt=media')) {
-        u = `${u}${u.includes('?') ? '&' : '?'}alt=media`;
-      }
-      return `/api/video?url=${encodeURIComponent(u)}`;
+      return videoUrl;
+    } catch {
+      return videoUrl;
     }
-    return videoUrl;
-  }, [videoUrl]);
+  }, [videoUrl, postId]);
 
   // Proxy poster thumbnail via /api/img to avoid CORS on Firebase/Storage URLs
   const resolvedPoster = React.useMemo(() => {
