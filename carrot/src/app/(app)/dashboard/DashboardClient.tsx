@@ -336,12 +336,25 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     } catch {}
   }, [serverPrefs]);
 
-  // Feature-flagged viewport-driven Warm/Active state with hysteresis + debounce
+  // Viewport-driven Warm/Active state with hysteresis + debounce
+  // Default: enabled unless explicitly disabled via NEXT_PUBLIC_FEED_HLS=0
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_FEED_HLS !== '1') return;
+    if (process.env.NEXT_PUBLIC_FEED_HLS === '0') return;
     const root = document;
     const ENTER_ACTIVE = 0.75, ENTER_WARM = 0.60, EXIT_IDLE = 0.40;
     const pending = new Map<Element, number>();
+    // Fast-scroll guard: if scrolling faster than ~1.5 screens/s, skip warming
+    const fastScrollRef = { v: false } as { v: boolean };
+    let lastY = window.scrollY, lastT = performance.now();
+    const onScroll = () => {
+      const now = performance.now();
+      const dy = Math.abs(window.scrollY - lastY);
+      const dt = Math.max(1, now - lastT);
+      const screensPerSec = (dy / Math.max(1, window.innerHeight)) / (dt / 1000);
+      fastScrollRef.v = screensPerSec > 1.5;
+      lastY = window.scrollY; lastT = now;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
 
     // Lazily load FeedMediaManager only if/when needed
     let FMM: any = null;
@@ -368,6 +381,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               const handle = FMM.inst.getHandleByElement(el);
               if (handle) FMM.inst.setActive(handle);
             } else if (ratio >= ENTER_WARM) {
+              // Skip warming while the user is flinging quickly
+              if (fastScrollRef.v) return;
               const handle = FMM.inst.getHandleByElement(el);
               if (handle) FMM.inst.setWarm(handle);
             } else if (ratio <= EXIT_IDLE) {
@@ -387,7 +402,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     const t = setTimeout(attach, 0);
     window.addEventListener('resize', attach);
-    return () => { clearTimeout(t); window.removeEventListener('resize', attach); detach(); };
+    return () => { clearTimeout(t); window.removeEventListener('resize', attach); window.removeEventListener('scroll', onScroll); detach(); };
   }, []);
 
   // Poll background trim jobs and update posts when they complete (with simple backoff)

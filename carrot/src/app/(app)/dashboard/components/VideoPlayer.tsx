@@ -32,6 +32,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   // Upload and video state
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing');
+  const [showInitialPoster, setShowInitialPoster] = useState(true);
   
   // Autoplay state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -296,6 +297,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         const forceAutoplay = () => { if (isInView) safePlay(); };
         el.addEventListener('loadedmetadata', forceAutoplay, { once: true });
         el.addEventListener('canplay', forceAutoplay, { once: true });
+        const hidePoster = () => setShowInitialPoster(false);
+        el.addEventListener('loadeddata', hidePoster, { once: true });
+        el.addEventListener('canplay', hidePoster, { once: true });
       } catch {}
     } else {
       // Delay pause slightly to avoid rapid flicker at threshold
@@ -466,7 +470,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           loop
           playsInline
           autoPlay
-          preload="metadata"
+          preload={process.env.NEXT_PUBLIC_FEED_HLS === '0' ? 'metadata' : 'none'}
           crossOrigin="anonymous"
           poster={resolvedPoster}
           src={resolvedSrc}
@@ -489,6 +493,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
             if (uploadStatus === 'ready' || !uploadStatus) {
               setShowThumbnailOverlay(false);
             }
+            setShowInitialPoster(false);
           }}
           onLoadedMetadata={() => {
             // Attempt to begin playback as soon as metadata is available and element is in view
@@ -501,6 +506,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
                 safePlay();
               }
             }, 100);
+            setShowInitialPoster(false);
           }}
           onCanPlay={() => {
             if (videoRef.current && isInView) {
@@ -512,6 +518,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
                 safePlay();
               }
             }, 200);
+            setShowInitialPoster(false);
           }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
@@ -521,6 +528,27 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           {/* Add auth parameters for Firebase Storage URLs */}
           <source src={resolvedSrc} type={getMimeType(videoUrl)} />
         </video>
+        
+        {/* Initial Poster/Thumbnail Overlay to avoid black box before readiness */}
+        {showInitialPoster && (
+          <div className="absolute inset-0 rounded-lg overflow-hidden" aria-hidden>
+            {resolvedPoster ? (
+              // Use the resolved poster image if present
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolvedPoster}
+                alt="video thumbnail"
+                className="w-full h-full object-cover"
+                style={{ filter: 'brightness(0.9)' }}
+                loading="eager"
+                decoding="async"
+              />
+            ) : (
+              // Fallback gradient skeleton when no thumbnail is available
+              <div className="w-full h-full bg-gradient-to-br from-gray-800 via-gray-900 to-black" />
+            )}
+          </div>
+        )}
         
         {/* Upload Progress Overlay - Only show during actual upload, not after completion */}
         {showThumbnailOverlay && uploadStatus !== 'ready' && (
