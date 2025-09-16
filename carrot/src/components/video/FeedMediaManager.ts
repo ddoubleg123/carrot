@@ -35,8 +35,9 @@ class FeedMediaManager {
 
   setActive(next?: VideoHandle) {
     if (this._active && this._active !== next) {
+      // Only pause the previous active; do NOT release here.
+      // Release will be handled by setIdle() when the tile is sufficiently off-screen.
       try { this._active.pause(); } catch {}
-      try { this._active.release(); } catch {}
     }
     this._active = next;
     if (next) {

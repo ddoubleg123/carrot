@@ -208,41 +208,87 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
 
   // Map DTOs to GalleryAsset shape for the new MediaGrid/MediaCard components
   const galleryAssets = React.useMemo(() => {
-    const derivePathFromUrl = (u?: string | null): string | undefined => {
-      if (!u) return undefined;
+    const deriveBucketAndPath = (u?: string | null): { bucket?: string; path?: string } => {
+      if (!u) return {};
       try {
-        const m = u.match(/\/o\/([^?]+)(?:\?|$)/);
-        if (m && m[1]) return decodeURIComponent(m[1]);
+        const url = new URL(u);
+        const host = url.hostname;
+        // Firebase REST: firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
+        const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+        if (host === 'firebasestorage.googleapis.com' && m1) {
+          return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]) };
+        }
+        // GCS XML-style: storage.googleapis.com/<bucket>/<path>
+        const m2 = url.pathname.match(/^\/([^/]+)\/(.+)$/);
+        if (host === 'storage.googleapis.com' && m2) {
+          return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]) };
+        }
+        // App domain: <sub>.firebasestorage.app/o/<ENCODED_PATH>
+        const m3 = url.pathname.match(/^\/o\/([^?]+)$/);
+        if (host.endsWith('.firebasestorage.app') && m3) {
+          // Best-effort bucket from env fallback
+          const envBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+          return { bucket: envBucket || undefined, path: decodeURIComponent(m3[1]) };
+        }
+        // Generic /o/<ENCODED_PATH>
+        const m4 = url.pathname.match(/\/o\/([^?]+)$/);
+        if (m4) {
+          const envBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+          return { bucket: envBucket || undefined, path: decodeURIComponent(m4[1]) };
+        }
       } catch {}
-      return undefined;
+      return {};
     };
 
     const toProxyUrl = (dto: MediaAssetDTO) => {
       // Prefer stable image paths first
-      if (dto.thumbPath) return `/api/img?path=${encodeURIComponent(dto.thumbPath)}`;
-      // Only use storagePath directly for images (video storagePath points to .mp4 which <img> can't render)
-      if (dto.storagePath && dto.type === 'image') return `/api/img?path=${encodeURIComponent(dto.storagePath)}`;
+      if (dto.thumbPath && (dto as any).thumbBucket) {
+        return `/api/img?bucket=${encodeURIComponent((dto as any).thumbBucket)}&path=${encodeURIComponent(dto.thumbPath)}&w=320&h=180&format=webp`;
+      }
+      if (dto.thumbPath) {
+        const envBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+        return envBucket
+          ? `/api/img?bucket=${encodeURIComponent(envBucket)}&path=${encodeURIComponent(dto.thumbPath)}&w=320&h=180&format=webp`
+          : `/api/img?path=${encodeURIComponent(dto.thumbPath)}&w=320&h=180&format=webp`;
+      }
+      if (dto.storagePath && dto.type === 'image') {
+        const envBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+        return envBucket
+          ? `/api/img?bucket=${encodeURIComponent(envBucket)}&path=${encodeURIComponent(dto.storagePath)}&w=320&h=180&format=webp`
+          : `/api/img?path=${encodeURIComponent(dto.storagePath)}&w=320&h=180&format=webp`;
+      }
       // Try deriving a path from Firebase-style URLs as a last resort
       if (dto.type === 'image') {
-        const derivedFromThumb = derivePathFromUrl(dto.thumbUrl);
-        if (derivedFromThumb) return `/api/img?path=${encodeURIComponent(derivedFromThumb)}`;
-        const derivedFromUrl = derivePathFromUrl(dto.url);
-        if (derivedFromUrl) return `/api/img?path=${encodeURIComponent(derivedFromUrl)}`;
+        const d1 = deriveBucketAndPath(dto.thumbUrl);
+        if (d1.path) {
+          const b = d1.bucket || (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+          return b
+            ? `/api/img?bucket=${encodeURIComponent(b)}&path=${encodeURIComponent(d1.path)}&w=320&h=180&format=webp`
+            : `/api/img?path=${encodeURIComponent(d1.path)}&w=320&h=180&format=webp`;
+        }
+        const d2 = deriveBucketAndPath(dto.url);
+        if (d2.path) {
+          const b = d2.bucket || (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+          return b
+            ? `/api/img?bucket=${encodeURIComponent(b)}&path=${encodeURIComponent(d2.path)}&w=320&h=180&format=webp`
+            : `/api/img?path=${encodeURIComponent(d2.path)}&w=320&h=180&format=webp`;
+        }
       }
       // Fallback to URLs via proxy (may still be video poster/thumb URLs)
-      if (dto.thumbUrl) return `/api/img?url=${encodeURIComponent(dto.thumbUrl)}`;
-      if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}`;
+      if (dto.thumbUrl) return `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=320&h=180&format=webp`;
+      if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}&w=320&h=180&format=webp`;
       return undefined;
     };
+
     const list = (serverItems || []).map((dto) => ({
       id: dto.id,
       type: dto.type, // 'image' | 'video' | 'gif' | 'audio'
       // Important: gallery never loads video sources; only images are proxied for thumbs
-      url: dto.type === 'image' && dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}` : undefined,
+      url: dto.type === 'image' && dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}&w=1440&h=810&format=webp` : undefined,
       title: dto.title || null,
       // For thumbnails/posters, try to use a proxied image path if possible
       thumbUrl: toProxyUrl(dto) || null,
-      posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}` : null),
+      posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}&w=640&h=360&format=webp` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp` : null),
       durationSec: dto.durationSec ?? null,
       hidden: !!dto.hidden,
       inUseCount: (dto as any).inUseCount ?? null,
