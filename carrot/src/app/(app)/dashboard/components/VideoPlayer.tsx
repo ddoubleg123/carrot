@@ -34,6 +34,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing');
   const [showInitialPoster, setShowInitialPoster] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   
   // Autoplay state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -543,6 +544,18 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
               // Fallback gradient skeleton when no thumbnail is available
               <div className="w-full h-full bg-gradient-to-br from-gray-800 via-gray-900 to-black" />
             )}
+            {isBuffering && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {isPaused && !isBuffering && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                  <div className="w-0 h-0 border-l-[8px] border-l-white border-y-[6px] border-y-transparent ml-1" />
+                </div>
+              </div>
+            )}
           </div>
         )}
         
@@ -576,13 +589,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
                   <p className="text-sm font-medium">Finalizing video...</p>
                 </>
               )}
-            </div>
-          </div>
-        )}
-        {isPaused && !isBuffering && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-              <div className="w-0 h-0 border-l-[8px] border-l-white border-y-[6px] border-y-transparent ml-1" />
             </div>
           </div>
         )}
