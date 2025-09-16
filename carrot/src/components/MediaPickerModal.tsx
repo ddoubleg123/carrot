@@ -113,10 +113,9 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
   React.useEffect(() => {
     if (!isOpen) return;
     if (activeTab !== 'gallery') return;
-    // Delay a tick to let initial fetch happen
+    const ac = new AbortController();
     const t = setTimeout(() => {
       if (!serverItems || serverItems.length === 0) {
-        const ac = new AbortController();
         (async () => {
           try {
             await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST', signal: ac.signal, keepalive: false, cache: 'no-cache' });
@@ -125,10 +124,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
         })();
       }
     }, 300);
-    return () => {
-      clearTimeout(t);
-      ac.abort();
-    };
+    return () => { clearTimeout(t); ac.abort(); };
   }, [isOpen, activeTab]);
 
   // Healer: if many items lack thumbnails, trigger a thumb sync backfill once and refresh
