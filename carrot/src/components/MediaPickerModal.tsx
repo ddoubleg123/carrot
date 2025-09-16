@@ -99,12 +99,14 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     if (serverItems && serverItems.length > 0) return;
     if (triedBackfillRef.current) return;
     triedBackfillRef.current = true;
+    const ac = new AbortController();
     (async () => {
       try {
-        await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST' });
+        await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST', signal: ac.signal, keepalive: false, cache: 'no-cache' });
       } catch {}
       setRefreshNonce((n) => n + 1);
     })();
+    return () => ac.abort();
   }, [isOpen, activeTab, loading, serverItems]);
 
   // One-shot backfill attempt when opening the modal on the Gallery tab
@@ -114,15 +116,19 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     // Delay a tick to let initial fetch happen
     const t = setTimeout(() => {
       if (!serverItems || serverItems.length === 0) {
+        const ac = new AbortController();
         (async () => {
           try {
-            await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST' });
+            await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST', signal: ac.signal, keepalive: false, cache: 'no-cache' });
           } catch {}
           setRefreshNonce((n) => n + 1);
         })();
       }
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
   }, [isOpen, activeTab]);
 
   // Healer: if many items lack thumbnails, trigger a thumb sync backfill once and refresh
@@ -137,16 +143,22 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     const ratio = missing / serverItems.length;
     if (missing > 0 && ratio >= 0.3) {
       triedThumbsRef.current = true;
+      const ac1 = new AbortController();
+      const ac2 = new AbortController();
       (async () => {
         try {
-          await fetch('/api/media/backfill?mode=thumbs&limit=200', { method: 'POST' });
+          await fetch('/api/media/backfill?mode=thumbs&limit=200', { method: 'POST', signal: ac1.signal, keepalive: false, cache: 'no-cache' });
         } catch {}
         // Optional second attempt to ensure assets exist (for posts-only sources)
         try {
-          await fetch('/api/media/backfill?mode=postAssets&limit=200', { method: 'POST' });
+          await fetch('/api/media/backfill?mode=postAssets&limit=200', { method: 'POST', signal: ac2.signal, keepalive: false, cache: 'no-cache' });
         } catch {}
         setRefreshNonce((n) => n + 1);
       })();
+      return () => {
+        ac1.abort();
+        ac2.abort();
+      };
     }
   }, [isOpen, activeTab, loading, serverItems]);
 
@@ -412,4 +424,3 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     </div>
   );
 }
-
