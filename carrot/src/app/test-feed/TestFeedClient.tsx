@@ -37,13 +37,15 @@ export default function TestFeedClient() {
     };
 
     let lastY = window.scrollY, lastT = performance.now();
-    const fastScrollRef = { v: false } as { v: boolean };
+    const fastScrollRef = { v: false, lastFastTime: 0 } as { v: boolean; lastFastTime: number };
     const onScroll = () => {
       const now = performance.now();
       const dy = Math.abs(window.scrollY - lastY);
       const dt = Math.max(1, now - lastT);
       const screensPerSec = (dy / Math.max(1, window.innerHeight)) / (dt / 1000);
-      fastScrollRef.v = screensPerSec > 1.5;
+      const isFast = screensPerSec > 1.2; // Lower threshold = more aggressive
+      if (isFast) fastScrollRef.lastFastTime = now;
+      fastScrollRef.v = isFast || (now - fastScrollRef.lastFastTime < 500); // 500ms cooldown
       lastY = window.scrollY; lastT = now;
     };
     window.addEventListener('scroll', onScroll, { passive: true });
