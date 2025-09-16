@@ -137,7 +137,25 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
 
   // Proxy poster thumbnail via /api/img to avoid CORS on Firebase/Storage URLs
   const resolvedPoster = React.useMemo(() => {
-    if (!thumbnailUrl) return undefined;
+    // Provide a deterministic SVG gradient placeholder when no thumbnail is present
+    if (!thumbnailUrl) {
+      const seed = String(postId || 'carrot');
+      let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+      const hueA = (h % 360);
+      const hueB = ((h >> 3) % 360);
+      const svg = encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+          <defs>
+            <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="hsl(${hueA},70%,18%)"/>
+              <stop offset="100%" stop-color="hsl(${hueB},70%,10%)"/>
+            </linearGradient>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#g)"/>
+        </svg>`
+      );
+      return `data:image/svg+xml;charset=utf-8,${svg}`;
+    }
     try {
       // Avoid double-proxying or proxying data/blob URLs
       if (thumbnailUrl.startsWith('/api/img') || thumbnailUrl.startsWith('data:') || thumbnailUrl.startsWith('blob:')) {
@@ -147,7 +165,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     } catch {
       return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
     }
-  }, [thumbnailUrl]);
+  }, [thumbnailUrl, postId]);
 
   // Register this element with FeedMediaManager to enforce one Active + one Warm
   useEffect(() => {
@@ -168,6 +186,18 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
               v.src = resolvedSrc;
               v.load();
             }
+            // Progressive warm priming: once we have a decoded frame, do a quick play→pause
+            // to force the browser to grab the first media range without continuing playback.
+            const onLoadedData = async () => {
+              try {
+                v.muted = true;
+                const p = v.play();
+                // Pause very shortly after to keep it in a primed state at t=0
+                setTimeout(() => { try { v.pause(); v.currentTime = 0; } catch {} }, 40);
+                await p?.catch(() => {});
+              } catch {}
+            };
+            v.addEventListener('loadeddata', onLoadedData, { once: true });
           } catch {}
         },
         release: () => {
@@ -185,7 +215,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         if (entry.intersectionRatio < 0.5) {
           try { v?.pause(); } catch {}
         }
-      }, { threshold: [0, 0.5, 1] });
+      }, { threshold: [0, 0.5, 1], rootMargin: '0px', root: null });
       if (v) io.observe(v);
       return () => {
         try { v?.removeEventListener('play', onPlay); } catch {}
@@ -489,36 +519,36 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           onError={handleError}
           onLoadedData={() => {
             setVideoLoaded(true);
+            setShowInitialPoster(false);
             // Hide overlay when video is ready to play (upload complete)
             if (uploadStatus === 'ready' || !uploadStatus) {
               setShowThumbnailOverlay(false);
             }
-            setShowInitialPoster(false);
           }}
           onLoadedMetadata={() => {
             // Attempt to begin playback as soon as metadata is available and element is in view
             if (videoRef.current && isInView) {
               safePlay();
             }
+            // Do NOT hide initial poster on metadata only; wait for decoded frames
             // Force autoplay for older posts that might not trigger intersection observer
             setTimeout(() => {
               if (videoRef.current && isInView) {
                 safePlay();
               }
             }, 100);
-            setShowInitialPoster(false);
           }}
           onCanPlay={() => {
             if (videoRef.current && isInView) {
               safePlay();
             }
+            setShowInitialPoster(false);
             // Additional autoplay attempt for older posts
             setTimeout(() => {
               if (videoRef.current && isInView) {
                 safePlay();
               }
             }, 200);
-            setShowInitialPoster(false);
           }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}

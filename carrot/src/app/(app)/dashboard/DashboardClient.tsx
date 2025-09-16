@@ -336,7 +336,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     } catch {}
   }, [serverPrefs]);
 
-  // Viewport-driven Warm/Active state with hysteresis + debounce
+  // Deterministic Active/Warm selection for feed tiles
   // Default: enabled unless explicitly disabled via NEXT_PUBLIC_FEED_HLS=0
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_FEED_HLS === '0') return;
@@ -365,38 +365,70 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       return FMM;
     };
 
+    // Track all tiles deterministically by DOM order
+    let observed: HTMLElement[] = [];
+    const refreshObserved = () => {
+      observed = Array.from(root.querySelectorAll('[data-commitment-id]')) as HTMLElement[];
+    };
+    refreshObserved();
+
+    // IO only updates visibility ratios; we pick active/warm deterministically
+    const ratios = new Map<HTMLElement, number>();
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         const el = e.target as HTMLElement;
-        const id = el.getAttribute('data-commitment-id');
-        if (!id) continue;
-        // Debounce transitions to avoid chatter
-        const prev = pending.get(el);
-        if (prev) clearTimeout(prev);
-        const t = window.setTimeout(() => {
-          const ratio = e.intersectionRatio;
-          ensureFMM().then(() => {
-            if (!FMM) return;
-            if (ratio >= ENTER_ACTIVE) {
-              const handle = FMM.inst.getHandleByElement(el);
-              if (handle) FMM.inst.setActive(handle);
-            } else if (ratio >= ENTER_WARM) {
-              // Skip warming while the user is flinging quickly
-              if (fastScrollRef.v) return;
-              const handle = FMM.inst.getHandleByElement(el);
-              if (handle) FMM.inst.setWarm(handle);
-            } else if (ratio <= EXIT_IDLE) {
-              const handle = FMM.inst.getHandleByElement(el);
-              if (handle) FMM.inst.setIdle(handle);
-            }
-          }).catch(() => {});
-        }, 180);
-        pending.set(el, t);
+        ratios.set(el, e.intersectionRatio);
+        const prev = pending.get(el); if (prev) clearTimeout(prev);
       }
-    }, { threshold: [EXIT_IDLE, ENTER_WARM, ENTER_ACTIVE] });
+      const t = window.setTimeout(async () => {
+        await ensureFMM(); if (!FMM) return;
+        // Compute Active: element whose center is nearest viewport center among visible ones
+        const centerY = window.innerHeight / 2;
+        const candidates = observed.filter(el => (ratios.get(el) || 0) > 0);
+        let activeEl: HTMLElement | null = null;
+        let bestDist = Number.POSITIVE_INFINITY;
+        for (const el of candidates) {
+          const r = el.getBoundingClientRect();
+          const elCenter = r.top + r.height / 2;
+          const d = Math.abs(elCenter - centerY);
+          if (d < bestDist) { bestDist = d; activeEl = el; }
+        }
+        if (activeEl) {
+          const handle = FMM.inst.getHandleByElement(activeEl);
+          if (handle) FMM.inst.setActive(handle);
+          // Choose Warm deterministically: next index by scroll direction
+          if (!fastScrollRef.v) {
+            const idx = observed.indexOf(activeEl);
+            const dir = (window.scrollY - lastY) >= 0 ? 1 : -1; // +1 when scrolling down
+            const warmIdx = Math.max(0, Math.min(observed.length - 1, idx + dir));
+            if (warmIdx !== idx) {
+              const warmEl = observed[warmIdx];
+              const warmRatio = ratios.get(warmEl) || 0;
+              // Only warm when it’s at least somewhat in/near view to avoid waste
+              if (warmEl && warmRatio >= ENTER_IDLE_SAFE) {
+                const handleW = FMM.inst.getHandleByElement(warmEl);
+                if (handleW) FMM.inst.setWarm(handleW);
+              }
+            }
+          }
+          // Demote far elements deterministically
+          for (const el of observed) {
+            if (el === activeEl) continue;
+            const ratio = ratios.get(el) || 0;
+            if (ratio <= EXIT_IDLE) {
+              const h = FMM.inst.getHandleByElement(el); if (h) FMM.inst.setIdle(h);
+            }
+          }
+        }
+      }, 180);
+      pending.set(entries[0]?.target as HTMLElement, t);
+    }, { threshold: [EXIT_IDLE, ENTER_WARM, ENTER_ACTIVE] as any });
+
+    const ENTER_IDLE_SAFE = 0.10; // small presence in viewport vicinity
 
     const attach = () => {
-      root.querySelectorAll('[data-commitment-id]')?.forEach((el) => io.observe(el));
+      refreshObserved();
+      observed.forEach((el) => io.observe(el));
     };
     const detach = () => io.disconnect();
 
