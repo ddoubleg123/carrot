@@ -45,7 +45,7 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
     if (host === 'firebasestorage.googleapis.com' && m1) {
       return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]), kind: 'firebase' }
     }
-    // GCS: /<bucket>/<path>
+    // GCS XML-style: /<bucket>/<path>
     const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/)
     if (host === 'storage.googleapis.com' && m2) {
       return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]), kind: 'gcs' }
@@ -53,7 +53,7 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
     // App subdomain: <sub>.firebasestorage.app/o/<ENCODED_PATH>
     const m3 = u.pathname.match(/^\/o\/([^?]+)$/)
     if (host.endsWith('.firebasestorage.app') && m3) {
-      // Try to infer bucket from PUBLIC_BASE fallback if possible
+      // Best-effort: infer bucket from PUBLIC_BASE fallback if configured
       const baseM = PUBLIC_BASE.match(/\/v0\/b\/([^/]+)\/o\//)
       const fallbackBucket = baseM ? baseM[1] : undefined
       return { bucket: fallbackBucket, path: decodeURIComponent(m3[1]), kind: 'firebase' }
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
   // Build target URL from either url or path
   let target: URL | null = null
   if (bucket && path) {
-    // Explicit path-mode has priority; construct Firebase REST URL with alt=media
+    // Explicit path-mode (preferred for durability)
     const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
     const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
     try { target = new URL(constructed) } catch {
@@ -138,17 +138,21 @@ export async function GET(req: NextRequest) {
     // Normalize Firebase/GCS forms and enforce alt=media where applicable
     const ext = tryExtractBucketAndPath(target.toString())
     if (ext.bucket && ext.path) {
-      // Detect malformed hybrids: storage.googleapis.com + /o/<path> (Firebase REST path on GCS host)
+      // Detect malformed hybrids: storage.googleapis.com + /o/<path>
       const isHybrid = target.hostname === 'storage.googleapis.com' && /\/o\//.test(target.pathname)
       if (isHybrid) {
         console.warn('[api/img] malformed hybrid url', { url: target.toString() })
         return new NextResponse('Malformed Firebase/GCS URL. Use /api/img?bucket=...&path=...', { status: 400 })
       }
-      // Reconstruct canonical Firebase REST URL with alt=media (durable form)
-      const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}${target.search && !target.search.includes('alt=media') ? (target.search + '&alt=media') : (target.search || '?alt=media')}`
-      try { target = new URL(constructed) } catch {}
+      if (target.hostname === 'firebasestorage.googleapis.com') {
+        // Ensure alt=media on Firebase REST
+        const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}${target.search && !target.search.includes('alt=media') ? (target.search + '&alt=media') : (target.search || '?alt=media')}`
+        try { target = new URL(constructed) } catch {}
+      } else {
+        // storage.googleapis.com signed URLs: do NOT rewrite; leave as-is
+      }
     } else {
-      // If raw URL is Firebase REST without alt=media, add it
+      // If Firebase REST without alt=media, add it
       if (target.hostname === 'firebasestorage.googleapis.com' && target.pathname.includes('/v0/b/') && !target.search.includes('alt=media')) {
         const appended = target.toString() + (target.search ? '&' : '?') + 'alt=media'
         try { target = new URL(appended) } catch {}
