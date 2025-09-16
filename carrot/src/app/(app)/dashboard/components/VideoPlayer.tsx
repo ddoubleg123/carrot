@@ -33,6 +33,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [showThumbnailOverlay, setShowThumbnailOverlay] = useState(uploadStatus === 'uploading' || uploadStatus === 'uploaded' || uploadStatus === 'processing');
   const [showInitialPoster, setShowInitialPoster] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
   
   // Autoplay state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -163,6 +164,13 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
               } catch {}
             };
             v.addEventListener('loadeddata', onLoadedData, { once: true });
+          } catch {}
+        },
+        setPaused: () => {
+          setIsPaused(true);
+          setShowInitialPoster(true);
+          try {
+            videoRef.current?.pause();
           } catch {}
         },
         release: () => {
@@ -484,7 +492,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           onError={handleError}
           onLoadedData={() => {
             setVideoLoaded(true);
-            setShowInitialPoster(false);
+            if (!isPaused) setShowInitialPoster(false);
             // Hide overlay when video is ready to play (upload complete)
             if (uploadStatus === 'ready' || !uploadStatus) {
               setShowThumbnailOverlay(false);
@@ -495,19 +503,12 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
             if (videoRef.current && isInView) {
               safePlay();
             }
-            // Do NOT hide initial poster on metadata only; wait for decoded frames
-            // Force autoplay for older posts that might not trigger intersection observer
-            setTimeout(() => {
-              if (videoRef.current && isInView) {
-                safePlay();
-              }
-            }, 100);
           }}
           onCanPlay={() => {
             if (videoRef.current && isInView) {
               safePlay();
             }
-            setShowInitialPoster(false);
+            if (!isPaused) setShowInitialPoster(false);
             // Additional autoplay attempt for older posts
             setTimeout(() => {
               if (videoRef.current && isInView) {
@@ -525,7 +526,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         </video>
         
         {/* Initial Poster/Thumbnail Overlay to avoid black box before readiness */}
-        {showInitialPoster && (
+        {(showInitialPoster || isBuffering || isPaused) && (
           <div className="absolute inset-0 rounded-lg overflow-hidden" aria-hidden>
             {resolvedPoster ? (
               // Use the resolved poster image if present
@@ -575,6 +576,13 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
                   <p className="text-sm font-medium">Finalizing video...</p>
                 </>
               )}
+            </div>
+          </div>
+        )}
+        {isPaused && !isBuffering && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+              <div className="w-0 h-0 border-l-[8px] border-l-white border-y-[6px] border-y-transparent ml-1" />
             </div>
           </div>
         )}
