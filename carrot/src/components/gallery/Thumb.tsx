@@ -7,9 +7,12 @@ export type ThumbProps = {
   alt?: string;
   className?: string;
   placeholder?: string; // tiny blurred dataURL if available
+  loading?: 'eager' | 'lazy';
+  decoding?: 'auto' | 'sync' | 'async';
+  fetchPriority?: 'high' | 'low' | 'auto';
 };
 
-export function Thumb({ src, type, alt = "media", className, placeholder }: ThumbProps) {
+export function Thumb({ src, type, alt = "media", className, placeholder, loading = 'lazy', decoding = 'async', fetchPriority = 'auto' }: ThumbProps) {
   const [failed, setFailed] = React.useState(false);
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -17,8 +20,9 @@ export function Thumb({ src, type, alt = "media", className, placeholder }: Thum
         <img
           src={src}
           alt={alt}
-          loading="lazy"
-          decoding="async"
+          loading={loading}
+          decoding={decoding}
+          fetchPriority={fetchPriority as any}
           width={640}
           height={360}
           onError={() => setFailed(true)}

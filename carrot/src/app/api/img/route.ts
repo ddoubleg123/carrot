@@ -35,6 +35,33 @@ function hostAllowed(u: URL) {
   return false
 }
 
+// Extract bucket and object path from various Firebase/GCS URL shapes
+function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string; kind?: 'firebase' | 'gcs' } {
+  try {
+    const u = new URL(raw)
+    const host = u.hostname
+    // Firebase REST: /v0/b/<bucket>/o/<ENCODED_PATH>
+    const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/)
+    if (host === 'firebasestorage.googleapis.com' && m1) {
+      return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]), kind: 'firebase' }
+    }
+    // GCS: /<bucket>/<path>
+    const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/)
+    if (host === 'storage.googleapis.com' && m2) {
+      return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]), kind: 'gcs' }
+    }
+    // App subdomain: <sub>.firebasestorage.app/o/<ENCODED_PATH>
+    const m3 = u.pathname.match(/^\/o\/([^?]+)$/)
+    if (host.endsWith('.firebasestorage.app') && m3) {
+      // Try to infer bucket from PUBLIC_BASE fallback if possible
+      const baseM = PUBLIC_BASE.match(/\/v0\/b\/([^/]+)\/o\//)
+      const fallbackBucket = baseM ? baseM[1] : undefined
+      return { bucket: fallbackBucket, path: decodeURIComponent(m3[1]), kind: 'firebase' }
+    }
+  } catch {}
+  return {}
+}
+
 function chooseFormat(acceptHeader?: string | null, explicit?: string | null) {
   if (explicit) return explicit.toLowerCase()
   const a = (acceptHeader || '').toLowerCase()
@@ -72,6 +99,8 @@ async function passthrough(upstream: Response) {
   headers.set('cache-control', 'public, max-age=604800, s-maxage=604800, immutable')
   headers.set('vary', 'accept')
   headers.set('x-proxy', 'img-pass')
+  // Preserve tokens on passthrough
+  const token = upstream.headers.get('authorization'); if (token) headers.set('authorization', token)
   return new NextResponse(body, { status, headers })
 }
 
@@ -80,10 +109,19 @@ export async function GET(req: NextRequest) {
   const sp = url.searchParams
   const rawUrl = sp.get('url')
   const path = sp.get('path')
+  const bucket = sp.get('bucket')
 
   // Build target URL from either url or path
   let target: URL | null = null
-  if (rawUrl) {
+  if (bucket && path) {
+    // Explicit path-mode has priority; construct Firebase REST URL with alt=media
+    const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
+    const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
+    try { target = new URL(constructed) } catch {
+      console.warn('[api/img] bad bucket/path', { bucket, path })
+      return new NextResponse('Bad bucket/path', { status: 400 })
+    }
+  } else if (rawUrl) {
     try { target = new URL(rawUrl) } catch {
       try {
         // Support relative URL inputs by resolving against origin
@@ -96,6 +134,25 @@ export async function GET(req: NextRequest) {
     if (!hostAllowed(target)) {
       console.warn('[api/img] host not allowed', { host: target.hostname })
       return new NextResponse('Host not allowed', { status: 400 })
+    }
+    // Normalize Firebase/GCS forms and enforce alt=media where applicable
+    const ext = tryExtractBucketAndPath(target.toString())
+    if (ext.bucket && ext.path) {
+      // Detect malformed hybrids: storage.googleapis.com + /o/<path> (Firebase REST path on GCS host)
+      const isHybrid = target.hostname === 'storage.googleapis.com' && /\/o\//.test(target.pathname)
+      if (isHybrid) {
+        console.warn('[api/img] malformed hybrid url', { url: target.toString() })
+        return new NextResponse('Malformed Firebase/GCS URL. Use /api/img?bucket=...&path=...', { status: 400 })
+      }
+      // Reconstruct canonical Firebase REST URL with alt=media (durable form)
+      const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}${target.search && !target.search.includes('alt=media') ? (target.search + '&alt=media') : (target.search || '?alt=media')}`
+      try { target = new URL(constructed) } catch {}
+    } else {
+      // If raw URL is Firebase REST without alt=media, add it
+      if (target.hostname === 'firebasestorage.googleapis.com' && target.pathname.includes('/v0/b/') && !target.search.includes('alt=media')) {
+        const appended = target.toString() + (target.search ? '&' : '?') + 'alt=media'
+        try { target = new URL(appended) } catch {}
+      }
     }
   } else if (path) {
     // Fallback: construct public download URL from configured PUBLIC_BASE

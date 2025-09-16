@@ -58,6 +58,9 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
             type={isVideo ? "VIDEO" : "IMAGE"}
             alt={asset.title || (isVideo ? "video" : "image")}
             className={cn("h-full w-full", asset.hidden && "opacity-60")}
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C]">
