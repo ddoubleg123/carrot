@@ -375,6 +375,12 @@ export default function HlsFeedPlayer({
           stateRef.current = 'warm';
         }
       },
+      setPaused: () => {
+        try { 
+          videoRef.current?.pause(); 
+          hlsRef.current?.stopLoad?.();
+        } catch {}
+      },
       release: () => {
         const from = stateRef.current;
         try {

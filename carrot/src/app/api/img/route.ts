@@ -104,7 +104,7 @@ async function passthrough(upstream: Response) {
   return new NextResponse(body, { status, headers })
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   const url = new URL(req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')
