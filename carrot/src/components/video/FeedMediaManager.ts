@@ -112,12 +112,14 @@ class FeedMediaManager {
   }
 
   setWarm(next?: VideoHandle) {
-    // Recompute velocity at the decision point to avoid race with scroll listeners
     if (isFastScroll()) {
-      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll');
+      console.debug('[FeedMediaManager] Skipping warm due to fast scroll', { id: next?.id });
       return;
     }
-    
+
+    // The only place we ever emit "warm"
+    console.debug('warm', next?.id);
+
     // Release previous warm if different
     if (this._warm && this._warm !== next) {
       try { 
@@ -131,7 +133,6 @@ class FeedMediaManager {
       this._paused.delete(next);
       this._states.set(next, TileState.Warm);
       try { void next.warm(); } catch {}
-      console.debug('warm', next.id);
     }
   }
 
