@@ -111,6 +111,8 @@ class FeedMediaManager {
     const v = getScrollVelocity();
     const now = typeof performance !== 'undefined' ? performance.now() : 0;
 
+    console.debug('[FeedMediaManager] setWarm velocity check', { velocity: v, threshold: FAST_SCROLL_THRESHOLD, sinceMs: now - lastFastTime });
+
     // 500ms cooldown after a detected fast scroll
     if (v > FAST_SCROLL_THRESHOLD || (now - lastFastTime) < 500) {
       console.debug('[FeedMediaManager] Skipping Warm due to fast scroll', { velocity: v, sinceMs: now - lastFastTime });
