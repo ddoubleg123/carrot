@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo } from 'react';
+import FeedMediaManager, { type VideoHandle } from '@/components/video/FeedMediaManager';
 
 // Public GCS sample videos (allowed by our /api/video allowlist)
 const SOURCES = [
@@ -19,7 +20,7 @@ export default function TestFeedClient() {
   })), []);
 
   useEffect(() => {
-    const ENTER_ACTIVE = 0.75, EXIT_IDLE = 0.40;
+    const ENTER_ACTIVE = 0.75, EXIT_IDLE = 0.40, ENTER_IDLE_SAFE = 0.10;
     const observed = Array.from(document.querySelectorAll('[data-test-id]')) as HTMLElement[];
     const ratios = new Map<HTMLElement, number>();
     const pending = new Map<Element, number>();
@@ -36,19 +37,46 @@ export default function TestFeedClient() {
       } catch {}
     };
 
-    let lastY = window.scrollY, lastT = performance.now();
-    const fastScrollRef = { v: false, lastFastTime: 0 } as { v: boolean; lastFastTime: number };
-    const onScroll = () => {
-      const now = performance.now();
-      const dy = Math.abs(window.scrollY - lastY);
-      const dt = Math.max(1, now - lastT);
-      const screensPerSec = (dy / Math.max(1, window.innerHeight)) / (dt / 1000);
-      const isFast = screensPerSec > 1.2; // Lower threshold = more aggressive
-      if (isFast) fastScrollRef.lastFastTime = now;
-      fastScrollRef.v = isFast || (now - fastScrollRef.lastFastTime < 500); // 500ms cooldown
-      lastY = window.scrollY; lastT = now;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    // Register video handles with FeedMediaManager
+    observed.forEach((el, idx) => {
+      const video = el.querySelector('video') as HTMLVideoElement;
+      if (!video) return;
+      
+      const handle: VideoHandle = {
+        id: `test-${idx}`,
+        el,
+        play: async () => {
+          try {
+            await video.play();
+          } catch {}
+        },
+        pause: () => {
+          try {
+            video.pause();
+          } catch {}
+        },
+        warm: async () => {
+          // For progressive video, just preload metadata
+          if (video.preload !== 'metadata') {
+            video.preload = 'metadata';
+          }
+        },
+        setPaused: () => {
+          try {
+            video.pause();
+          } catch {}
+        },
+        release: () => {
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {}
+        },
+      };
+      
+      FeedMediaManager.inst.registerHandle(el, handle);
+    });
 
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
@@ -69,49 +97,46 @@ export default function TestFeedClient() {
           if (d < bestDist) { bestDist = d; activeEl = el; }
         }
         
-        // Play/pause + debug
+        // Use FeedMediaManager for state transitions + debug
         observed.forEach((el, idx) => {
-          const v = el.querySelector('video') as HTMLVideoElement | null;
-          if (!v) return;
+          const handle = FeedMediaManager.inst.getHandleByElement(el);
+          if (!handle) return;
+          const ratio = ratios.get(el) || 0;
           if (activeEl === el && (ratios.get(el) || 0) >= ENTER_ACTIVE) {
-            v.play().catch(() => {});
+            FeedMediaManager.inst.setActive(handle);
             debugPush({ type: 'active', index: idx, id: el.getAttribute('data-test-id') });
-          } else {
-            v.pause();
-            if ((ratios.get(el) || 0) <= EXIT_IDLE) {
+          } else if (ratio <= EXIT_IDLE) {
+            if (ratio <= ENTER_IDLE_SAFE) {
+              FeedMediaManager.inst.setIdle(handle);
               debugPush({ type: 'idle', index: idx, id: el.getAttribute('data-test-id') });
+            } else {
+              FeedMediaManager.inst.setPaused(handle);
+              debugPush({ type: 'paused', index: idx, id: el.getAttribute('data-test-id') });
             }
           }
         });
 
-        // Warm logic (next by scroll direction)
-        if (!fastScrollRef.v && activeEl) {
-          // Double-check: recompute velocity right before warm decision
-          const nowCheck = performance.now();
-          const dyCheck = Math.abs(window.scrollY - lastY);
-          const dtCheck = Math.max(1, nowCheck - lastT);
-          const currentSpeed = (dyCheck / Math.max(1, window.innerHeight)) / (dtCheck / 1000);
-          if (currentSpeed > 1.2) return; // Skip warm if still moving fast
-
+        // Warm logic using FeedMediaManager (includes fast-scroll guard)
+        if (activeEl) {
           const idx = observed.indexOf(activeEl);
-          const dir = (window.scrollY - lastY) >= 0 ? 1 : -1;
-          const warmIdx = Math.max(0, Math.min(observed.length - 1, idx + dir));
+          const warmIdx = Math.min(observed.length - 1, idx + 1); // Always next tile
           if (warmIdx !== idx) {
             const warmEl = observed[warmIdx];
-            const warmRatio = ratios.get(warmEl) || 0;
-            if (warmEl && warmRatio >= 0.10) {
+            const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
+            if (warmHandle && (ratios.get(warmEl) || 0) >= 0.10) {
+              FeedMediaManager.inst.setWarm(warmHandle); // Uses fast-scroll guard
               debugPush({ type: 'warm', index: warmIdx, id: warmEl.getAttribute('data-test-id') });
             }
           }
         }
       }, 180);
       pending.set(entries[0]?.target as HTMLElement, t);
-    }, { threshold: [EXIT_IDLE, 0.60, ENTER_ACTIVE] });
+    }, { threshold: [ENTER_IDLE_SAFE, EXIT_IDLE, 0.60, ENTER_ACTIVE] });
 
     observed.forEach((el) => io.observe(el));
     return () => {
       io.disconnect();
-      window.removeEventListener('scroll', onScroll);
+      observed.forEach((el) => FeedMediaManager.inst.unregisterHandle(el));
     };
   }, []);
 
