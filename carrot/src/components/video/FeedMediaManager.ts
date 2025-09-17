@@ -125,7 +125,7 @@ class FeedMediaManager {
 
     // 🚫 Skip warm entirely if fast scroll detected
     if (velocity > FAST_SCROLL_THRESHOLD || timeSinceFast < FAST_SCROLL_COOLDOWN) {
-      console.debug('[FeedMediaManager] Skipping warm due to fast scroll', { id: next?.id });
+      console.debug('[FeedMediaManager] Skipping preload due to fast scroll', { id: next?.id });
       return;
     }
 
