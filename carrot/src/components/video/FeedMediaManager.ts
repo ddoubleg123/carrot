@@ -17,26 +17,20 @@ enum TileState {
 
 // Track scroll velocity (screens/sec) for fast-scroll guard
 const FAST_SCROLL_THRESHOLD = 1.5; // screens per second
-let lastScrollY = 0;
-let lastTime = 0;
+let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastTime = 0;
 
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
-  if (lastTime === 0) {
-    lastScrollY = window.scrollY;
-    lastTime = performance.now();
-    return 0;
-  }
   const now = performance.now();
   const dy = Math.abs(window.scrollY - lastScrollY);
-  const dt = (now - lastTime) / 1000; // seconds
+  const dt = Math.max(0.001, (now - lastTime) / 1000); // seconds, avoid division by zero
   const screenHeight = Math.max(1, window.innerHeight);
 
   lastScrollY = window.scrollY;
   lastTime = now;
 
-  if (dt <= 0) return 0;
   const v = (dy / screenHeight) / dt;
   if (v > FAST_SCROLL_THRESHOLD) lastFastTime = now;
   return v;
