@@ -15,6 +15,29 @@ enum TileState {
   Active = 'active'
 }
 
+// Track scroll velocity (screens/sec) for fast-scroll guard
+let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
+export let scrollVelocity = 0; // in screens per second
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('scroll', () => {
+    const now = performance.now();
+    const dy = Math.abs(window.scrollY - lastScrollY);
+    const dt = (now - lastTime) / 1000; // seconds
+    const screenHeight = window.innerHeight;
+
+    if (dt > 0) {
+      scrollVelocity = (dy / screenHeight) / dt;
+    }
+
+    lastScrollY = window.scrollY;
+    lastTime = now;
+  }, { passive: true });
+}
+
+const FAST_SCROLL_THRESHOLD = 1.5; // screens per second
+
 // Singleton controller to ensure at most 1 Active and deterministic Warm/Paused states.
 class FeedMediaManager {
   private static _inst: FeedMediaManager | null = null;
@@ -79,7 +102,16 @@ class FeedMediaManager {
     }
   }
 
-  setWarm(next?: VideoHandle) {
+  // Guard Warm transitions during fast scroll
+  private maybeSetWarm(next?: VideoHandle) {
+    if (scrollVelocity > FAST_SCROLL_THRESHOLD) {
+      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll', { scrollVelocity });
+      return; // skip warming
+    }
+    this.setWarmInternal(next);
+  }
+
+  private setWarmInternal(next?: VideoHandle) {
     // Release previous warm if different
     if (this._warm && this._warm !== next) {
       try { 
@@ -94,6 +126,11 @@ class FeedMediaManager {
       this._states.set(next, TileState.Warm);
       try { void next.warm(); } catch {}
     }
+  }
+
+  // Public method that uses the fast-scroll guard
+  setWarm(next?: VideoHandle) {
+    this.maybeSetWarm(next);
   }
 
   setPaused(handle?: VideoHandle) {
