@@ -3,7 +3,7 @@ export type VideoHandle = {
   el?: Element; // associated DOM element for identification
   play: () => Promise<void> | void;
   pause: () => void;
-  warm: () => Promise<void> | void; // attach media, load playlist + first segment
+  warm?: () => Promise<void> | void; // attach media, load playlist + first segment
   setPaused: () => void; // pause but keep attached, show poster
   release: () => void; // detach media/destroy hls, free decoder
 };
@@ -137,7 +137,7 @@ class FeedMediaManager {
     if (next && (!this._active || this._active !== next)) {
       this._paused.delete(next);
       this._states.set(next, TileState.Warm);
-      try { void next.warm(); } catch {}
+      try { void next.warm?.(); } catch {}
     }
   }
 
