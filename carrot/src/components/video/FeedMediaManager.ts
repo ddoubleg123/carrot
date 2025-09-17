@@ -16,10 +16,18 @@ enum TileState {
 }
 
 // Track scroll velocity (screens/sec) for fast-scroll guard
-const FAST_SCROLL_THRESHOLD = 1.5; // screens per second
+const FAST_SCROLL_THRESHOLD = 0.5; // screens per second - very aggressive
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastTime = 0;
+let lastScrollTime = 0;
+
+// Add scroll listener to block warm after ANY scroll activity
+if (typeof window !== 'undefined') {
+  window.addEventListener('scroll', () => {
+    lastScrollTime = performance.now();
+  }, { passive: true });
+}
 
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
@@ -107,9 +115,9 @@ class FeedMediaManager {
 
     console.debug('[FeedMediaManager] setWarm velocity check', { velocity: v, threshold: FAST_SCROLL_THRESHOLD, sinceMs: now - lastFastTime });
 
-    // 500ms cooldown after a detected fast scroll
-    if (v > FAST_SCROLL_THRESHOLD || (now - lastFastTime) < 500) {
-      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll', { velocity: v, sinceMs: now - lastFastTime });
+    // 1000ms cooldown after a detected fast scroll
+    if (v > FAST_SCROLL_THRESHOLD || (now - lastFastTime) < 1000 || (now - lastScrollTime) < 1000) {
+      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll', { velocity: v, sinceMs: now - lastFastTime, sinceScrollMs: now - lastScrollTime });
       return;
     }
     
