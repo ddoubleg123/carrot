@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo } from 'react';
-import FeedMediaManager, { type VideoHandle } from '../../components/video/FeedMediaManager';
+import FeedMediaManager, { type VideoHandle, isFastScroll } from '../../components/video/FeedMediaManager';
 
 // Public GCS sample videos (allowed by our /api/video allowlist)
 const SOURCES = [
@@ -141,8 +141,8 @@ export default function TestFeedClient() {
           if (warmIdx < observed.length) { // Only if next tile exists
             const warmEl = observed[warmIdx];
             const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
-            if (warmHandle) { // Don't check intersection ratio - always warm next tile
-              FeedMediaManager.inst.setWarm(warmHandle); // Uses fast-scroll guard
+            if (warmHandle && !isFastScroll()) { // Fast-scroll guard: don't warm during flings
+              FeedMediaManager.inst.setWarm(warmHandle);
             }
           }
         }

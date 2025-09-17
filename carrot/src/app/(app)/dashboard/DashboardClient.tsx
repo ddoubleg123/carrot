@@ -372,10 +372,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     // Lazily load FeedMediaManager only if/when needed
     let FMM: any = null;
+    let isFastScroll: any = null;
     const ensureFMM = async () => {
       if (FMM) return FMM;
       const mod = await import('../../../components/video/FeedMediaManager');
       FMM = (mod as any).default || mod;
+      isFastScroll = mod.isFastScroll;
       return FMM;
     };
 
@@ -429,7 +431,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               if (warmEl && warmRatio >= ENTER_IDLE_SAFE) {
                 const handleW = FMM.inst.getHandleByElement(warmEl);
                 if (handleW) {
-                  FMM.inst.setWarm(handleW);
+                  // Fast-scroll guard: don't warm if user is flinging
+                  if (!isFastScroll()) {
+                    FMM.inst.setWarm(handleW);
+                  } else {
+                    console.debug('[DashboardClient] Skipped preload due to fast scroll');
+                  }
                 }
               }
             }

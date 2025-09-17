@@ -145,28 +145,6 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         el,
         play: async () => { try { await videoRef.current?.play(); } catch {} },
         pause: () => { try { videoRef.current?.pause(); } catch {} },
-        warm: async () => {
-          // Attach src (if not attached) and load metadata, but do not play
-          const v = videoRef.current; if (!v) return;
-          try {
-            if (!v.currentSrc) {
-              v.src = resolvedSrc;
-              v.load();
-            }
-            // Progressive warm priming: once we have a decoded frame, do a quick play→pause
-            // to force the browser to grab the first media range without continuing playback.
-            const onLoadedData = async () => {
-              try {
-                v.muted = true;
-                const p = v.play();
-                // Pause very shortly after to keep it in a primed state at t=0
-                setTimeout(() => { try { v.pause(); v.currentTime = 0; } catch {} }, 40);
-                await p?.catch(() => {});
-              } catch {}
-            };
-            v.addEventListener('loadeddata', onLoadedData, { once: true });
-          } catch {}
-        },
         setPaused: () => {
           setIsPaused(true);
           setShowInitialPoster(true);
@@ -178,7 +156,7 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
           const v = videoRef.current; if (!v) return;
           try { v.pause(); } catch {}
           try { v.removeAttribute('src'); v.load(); } catch {}
-        },
+        }
       } as any;
       FeedMediaManager.inst.registerHandle(el, handle);
       const onPlay = () => { try { FeedMediaManager.inst.setActive(handle); } catch {} };
