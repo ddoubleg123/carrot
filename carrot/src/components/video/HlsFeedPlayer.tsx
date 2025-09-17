@@ -366,9 +366,6 @@ export default function HlsFeedPlayer({
         }
       },
       pause: () => { try { videoRef.current?.pause(); } catch {} },
-      warm: async () => {
-        return;
-      },
       setPaused: () => {
         try { 
           videoRef.current?.pause(); 
