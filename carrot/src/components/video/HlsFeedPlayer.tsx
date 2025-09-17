@@ -18,8 +18,8 @@ export type HlsFeedPlayerProps = {
 
 // Lightweight HLS player for feed tiles.
 // - Uses native HLS on Safari.
-// - Attempts to dynamically import hls.js for non-Safari; if unavailable, falls back to native/video tag (progressive URLs).
-// - Keeps teardown simple to free the decoder quickly.
+// - Dynamically imports hls.js elsewhere; if unsupported, falls back to <video> direct attach.
+// - Teardowns aggressively to free decoder.
 export default function HlsFeedPlayer({
   assetId,
   hlsMasterUrl,
@@ -37,16 +37,20 @@ export default function HlsFeedPlayer({
     videoRef.current = el;
     try { onVideoRef?.(el); } catch {}
   };
+
   const [ready, setReady] = useState(false);
   const startedAtRef = useRef<number | null>(null);
   const firstFrameSentRef = useRef<boolean>(false);
+
+  // Warm control: when FeedMediaManager calls handle.warm(), we set this true
   const [shouldWarm, setShouldWarm] = useState(false);
+
   const hlsRef = useRef<any>(null);
   const myHandleRef = useRef<VideoHandle | null>(null);
-  const stateRef = useRef<'idle' | 'warm' | 'active'>('idle');
+  const stateRef = useRef<'idle' | 'warm' | 'active' | 'paused'>('idle');
   const lastDroppedRef = useRef<number>(0);
 
-  // Read preferences from localStorage (reduced motion, captions default, network profile)
+  // Prefs
   const getReducedMotion = () => {
     try { return localStorage.getItem('carrot_reduced_motion') === '1'; } catch { return false; }
   };
@@ -61,6 +65,8 @@ export default function HlsFeedPlayer({
   const getCaptionsDefault = () => {
     try { return (localStorage.getItem('carrot_captions_default') || 'off') === 'on'; } catch { return false; }
   };
+
+  // Rolling network profile (simple)
   const getStartLevelPref = (): number => {
     try {
       const raw = localStorage.getItem('carrot_net_profile');
@@ -76,19 +82,12 @@ export default function HlsFeedPlayer({
       localStorage.setItem('carrot_net_profile', JSON.stringify(obj));
     } catch {}
   };
-
-  // Rolling 7-day profile helpers
   type NetProfile = {
-    updatedAt: number; // ms epoch
-    ttl: number; // ms
-    avgDownlinkMbps: number; // ewma
-    startupP95msApprox: number; // ewma approximation
-    rebufferMs: number; // accumulated stall
-    watchMs: number; // accumulated watch time
-    plays: number; // count of plays sampled
-    lastStartLevel: number; // 0|1
+    updatedAt: number; ttl: number;
+    avgDownlinkMbps: number; startupP95msApprox: number;
+    rebufferMs: number; watchMs: number; plays: number; lastStartLevel: number;
   };
-  const NET_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const NET_TTL = 7 * 24 * 60 * 60 * 1000;
   const NP_KEY = 'carrot_net_profile_ext_v1';
   const loadNetProfile = (): NetProfile | null => {
     try {
@@ -100,9 +99,7 @@ export default function HlsFeedPlayer({
       return obj;
     } catch { return null; }
   };
-  const saveNetProfile = (np: NetProfile) => {
-    try { localStorage.setItem(NP_KEY, JSON.stringify(np)); } catch {}
-  };
+  const saveNetProfile = (np: NetProfile) => { try { localStorage.setItem(NP_KEY, JSON.stringify(np)); } catch {} };
   const ewma = (prev: number, next: number, alpha = 0.2) => (prev === 0 ? next : (alpha * next + (1 - alpha) * prev));
   const updateNetProfile = (startupMs?: number, startLevel?: number, deltaRebufferMs?: number, deltaWatchMs?: number) => {
     try {
@@ -136,24 +133,21 @@ export default function HlsFeedPlayer({
     } catch {}
   };
 
-  // Helper to detect native HLS support (Safari)
+  // Safari native HLS?
   const canUseNativeHls = () => {
     try {
       const v = document.createElement("video") as any;
       return Boolean(v.canPlayType && v.canPlayType("application/vnd.apple.mpegurl"));
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   };
 
   useEffect(() => {
     let destroyed = false;
     const video = videoRef.current;
     if (!video) return;
-    let stallStart: number | null = null;
+
     let lastWatchTick = performance.now();
 
-    // Basic attributes for feed UX
     video.playsInline = true;
     video.muted = muted;
     video.preload = "none";
@@ -165,15 +159,12 @@ export default function HlsFeedPlayer({
       if (canUseNativeHls()) {
         try {
           const el = videoRef.current; if (!el) return;
-          // Tiny jitter to avoid bursty loads when many tiles enter view simultaneously
           try { await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80))); } catch {}
           el.src = hlsMasterUrl;
           setReady(true);
           const honorAutoPlay = autoPlay && !getReducedMotion() && getAutoplayDefault();
-          if (honorAutoPlay) {
-            await el.play().catch(() => {});
-          }
-          // rVFC-based first frame timing for native path
+          if (honorAutoPlay) { await el.play().catch(() => {}); }
+
           const onFrame = () => {
             if (!firstFrameSentRef.current) {
               firstFrameSentRef.current = true;
@@ -193,7 +184,7 @@ export default function HlsFeedPlayer({
         return;
       }
 
-      // Try dynamic import of hls.js (now installed)
+      // Import hls.js dynamically
       let Hls: any = null;
       try {
         const mod: any = await import('hls.js');
@@ -203,16 +194,13 @@ export default function HlsFeedPlayer({
       }
 
       if (!Hls || !Hls.isSupported?.()) {
-        // Fallback: try direct assignment (works for progressive URLs)
         try {
           const el2 = videoRef.current; if (!el2) return;
           try { await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80))); } catch {}
           el2.src = hlsMasterUrl;
           setReady(true);
           const honorAutoPlay = autoPlay && !getReducedMotion();
-          if (honorAutoPlay) {
-            await el2.play().catch(() => {});
-          }
+          if (honorAutoPlay) { await el2.play().catch(() => {}); }
         } catch (e: any) {
           onError?.(e);
           sendRum({ type: 'error', value: { message: e?.message || 'fallback attach error' } });
@@ -231,51 +219,50 @@ export default function HlsFeedPlayer({
 
       const el = videoRef.current; if (!el) return;
       hls.attachMedia(el);
+
       hls.on(Hls.Events.MEDIA_ATTACHED, async () => {
         try {
-          // Jitter before starting load to smooth multi-tile attach
           await new Promise(r => setTimeout(r, Math.floor(Math.random() * 80)));
           hls.loadSource(hlsMasterUrl);
         } catch {}
       });
+
       hls.on(Hls.Events.MANIFEST_PARSED, async () => {
-        // Resolution-aware start: choose the largest level not exceeding container size
+        // Resolution-aware start: cap to container size
         try {
           const rect = videoRef.current?.getBoundingClientRect();
           const cw = Math.max(1, Math.floor(rect?.width || 320));
           const ch = Math.max(1, Math.floor(rect?.height || 180));
           const levels = (hls as any)?.levels || [];
           if (levels.length > 0) {
-            let bestIdx = 0;
-            let bestW = 0;
+            let bestIdx = 0, bestW = 0;
             for (let i = 0; i < levels.length; i++) {
               const L = levels[i];
-              const w = L?.width || 0;
-              const h = L?.height || 0;
+              const w = L?.width || 0, h = L?.height || 0;
               if (w <= cw + 8 && h <= ch + 8 && w >= bestW) { bestW = w; bestIdx = i; }
-            }
-            if (bestW === 0) {
-              // fallback: lowest bandwidth index
-              bestIdx = levels.reduce((m: number, _l: any, i: number) => i < m ? i : m, 0);
             }
             try { (hls as any).currentLevel = bestIdx; } catch {}
             try { (hls as any).autoLevelCapping = bestIdx; } catch {}
           }
         } catch {}
+
         setReady(true);
         const honorAutoPlay = autoPlay && !getReducedMotion() && getAutoplayDefault();
-        if (honorAutoPlay) {
-          try { await el.play(); } catch {}
-        }
-        // If this tile is in Warm state, pull some data then park
+        if (honorAutoPlay) { try { await el.play(); } catch {} }
+
+        // If warmed, prefetch ~1–2 segments, then stop
         if (shouldWarm) {
           try {
             (hls as any).startLoad?.();
-            setTimeout(() => { try { (hls as any).stopLoad?.(); } catch {} }, 800);
+            setTimeout(() => {
+              try { (hls as any).stopLoad?.(); } catch {}
+              setShouldWarm(false);
+            }, 1000);
           } catch {}
         }
       });
-      // RUM hook for first frame heuristic
+
+      // rVFC for first frame
       const onFrame = () => {
         if (!firstFrameSentRef.current) {
           firstFrameSentRef.current = true;
@@ -288,6 +275,7 @@ export default function HlsFeedPlayer({
         el.requestVideoFrameCallback?.(() => {});
       };
       try { el.requestVideoFrameCallback?.(onFrame); } catch {}
+
       hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
         console.warn("HLS error", data);
         if (data?.fatal) {
@@ -298,7 +286,7 @@ export default function HlsFeedPlayer({
         }
       });
 
-      // Teardown
+      // Teardown (HLS path)
       return () => {
         try {
           hls.stopLoad();
@@ -309,20 +297,22 @@ export default function HlsFeedPlayer({
     }
 
     startedAtRef.current = performance.now();
-    // Stall/waiting tracking
-    const onWaiting = () => { stallStart = performance.now(); };
+
+    // RUM: stall/rebuffer tracking + watch time
+    let rebufferStart: number | null = null;
+    const onWaiting = () => { rebufferStart = performance.now(); };
     const onPlaying = () => {
-      if (stallStart != null) {
-        const delta = performance.now() - stallStart;
+      if (rebufferStart != null) {
+        const delta = performance.now() - rebufferStart;
         try { updateNetProfile(undefined, undefined, delta, 0); } catch {}
         try { sendRum({ type: 'rebuffer_ms', value: Math.round(delta) }); } catch {}
         try { sendRum({ type: 'rebuffer_count', value: 1 }); } catch {}
-        stallStart = null;
+        rebufferStart = null;
       }
     };
     const onTimeUpdate = () => {
       const now = performance.now();
-      const dt = now - lastWatchTick;
+      const dt = now - (lastWatchTick || now);
       lastWatchTick = now;
       if (!video.paused && !video.seeking) {
         try { updateNetProfile(undefined, undefined, 0, dt); } catch {}
@@ -335,7 +325,6 @@ export default function HlsFeedPlayer({
     const cleanup: any = attach();
 
     return () => {
-      destroyed = true;
       const el2 = videoRef.current;
       try { el2?.pause(); } catch {}
       try { el2?.removeAttribute("src"); el2?.load(); } catch {}
@@ -353,6 +342,7 @@ export default function HlsFeedPlayer({
   useEffect(() => {
     const el = (videoRef.current as unknown as Element) || undefined;
     if (!el) return;
+
     const handle: VideoHandle = {
       id: assetId,
       el,
@@ -361,16 +351,17 @@ export default function HlsFeedPlayer({
         try { hlsRef.current?.startLoad?.(); } catch {}
         try { await videoRef.current?.play(); } catch {}
         if (from !== 'active') {
-          try { sendRum({ type: 'state_transition', value: { from, to: 'active' } }); } catch {}
+          try { onQoE?.({ type: 'state_transition', value: { from, to: 'active' } }); } catch {}
           stateRef.current = 'active';
         }
       },
       pause: () => { try { videoRef.current?.pause(); } catch {} },
       setPaused: () => {
-        try { 
-          videoRef.current?.pause(); 
+        try {
+          videoRef.current?.pause();
           hlsRef.current?.stopLoad?.();
         } catch {}
+        stateRef.current = 'paused';
       },
       release: () => {
         const from = stateRef.current;
@@ -384,17 +375,23 @@ export default function HlsFeedPlayer({
           try { hlsRef.current?.destroy?.(); hlsRef.current = null; } catch {}
         } catch {}
         if (from !== 'idle') {
-          try { sendRum({ type: 'state_transition', value: { from, to: 'idle' } }); } catch {}
+          try { onQoE?.({ type: 'state_transition', value: { from, to: 'idle' } }); } catch {}
           stateRef.current = 'idle';
         }
-      }
+      },
+      // Warm is invoked ONLY by FeedMediaManager (which applies the fast-scroll guard + logs "warm")
+      warm: async () => {
+        setShouldWarm(true);
+        stateRef.current = 'warm';
+      },
     };
+
     FeedMediaManager.inst.registerHandle(el, handle);
     myHandleRef.current = handle;
     return () => { FeedMediaManager.inst.unregisterHandle(el); };
   }, [assetId, hlsMasterUrl]);
 
-  // Sample dropped frames periodically for RUM
+  // Sample dropped frames for RUM
   useEffect(() => {
     const v = videoRef.current as any;
     if (!v) return;
@@ -406,7 +403,7 @@ export default function HlsFeedPlayer({
         if (dropped > lastDroppedRef.current) {
           const delta = dropped - lastDroppedRef.current;
           lastDroppedRef.current = dropped;
-          try { sendRum({ type: 'dropped_frames', value: delta }); } catch {}
+          try { onQoE?.({ type: 'dropped_frames', value: delta }); } catch {}
         }
       } catch {}
       timer = setTimeout(sample, 2000);
@@ -415,10 +412,11 @@ export default function HlsFeedPlayer({
     return () => { try { clearTimeout(timer); } catch {} };
   }, [assetId]);
 
-  // Ensure only one video plays at a time; pause when scrolled away
+  // Ensure manager marks Active on user play; pause when <50% visible
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+
     const onPlay = () => {
       const h = myHandleRef.current || (el ? FeedMediaManager.inst.getHandleByElement(el as any) : undefined);
       if (h) FeedMediaManager.inst.setActive(h);
@@ -434,6 +432,7 @@ export default function HlsFeedPlayer({
       }
     }, { threshold: [0, 0.5, 1] });
     io.observe(el);
+
     return () => {
       try { el.removeEventListener('play', onPlay); } catch {}
       try { io.disconnect(); } catch {}
