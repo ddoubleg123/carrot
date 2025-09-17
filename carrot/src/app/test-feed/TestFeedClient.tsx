@@ -137,11 +137,11 @@ export default function TestFeedClient() {
         // Warm logic using FeedMediaManager (includes fast-scroll guard)
         if (activeEl) {
           const idx = observed.indexOf(activeEl);
-          const warmIdx = Math.min(observed.length - 1, idx + 1); // Always next tile
-          if (warmIdx !== idx) {
+          const warmIdx = idx + 1; // Deterministic: always next tile
+          if (warmIdx < observed.length) { // Only if next tile exists
             const warmEl = observed[warmIdx];
             const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
-            if (warmHandle && (ratios.get(warmEl) || 0) >= 0.10) {
+            if (warmHandle) { // Don't check intersection ratio - always warm next tile
               FeedMediaManager.inst.setWarm(warmHandle); // Uses fast-scroll guard
             }
           }
