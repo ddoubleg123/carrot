@@ -22,6 +22,22 @@ let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
 
+// Track scroll velocity in real-time
+if (typeof window !== 'undefined') {
+  let scrollTimeout: NodeJS.Timeout | null = null;
+  window.addEventListener('scroll', () => {
+    getScrollVelocity(); // Update velocity tracking
+    
+    // Clear any existing timeout and set a new one
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      // Reset velocity after scroll stops
+      lastScrollY = window.scrollY;
+      lastTime = performance.now();
+    }, 50);
+  }, { passive: true });
+}
+
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
   const now = performance.now();
