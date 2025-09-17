@@ -124,8 +124,11 @@ export default function TestFeedClient() {
             const warmEl = observed[warmIdx];
             const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
             if (warmHandle && (ratios.get(warmEl) || 0) >= 0.10) {
+              const prevWarm = FeedMediaManager.inst.warm;
               FeedMediaManager.inst.setWarm(warmHandle); // Uses fast-scroll guard
-              debugPush({ type: 'warm', index: warmIdx, id: warmEl.getAttribute('data-test-id') });
+              if (FeedMediaManager.inst.warm === warmHandle && FeedMediaManager.inst.warm !== prevWarm) {
+                debugPush({ type: 'warm', index: warmIdx, id: warmEl.getAttribute('data-test-id') });
+              }
             }
           }
         }
