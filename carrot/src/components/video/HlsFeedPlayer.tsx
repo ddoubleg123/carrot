@@ -367,7 +367,6 @@ export default function HlsFeedPlayer({
       },
       pause: () => { try { videoRef.current?.pause(); } catch {} },
       warm: async () => {
-        // Trigger warming path; will attach HLS without autoplay
         const from = stateRef.current;
         try { setShouldWarm(true); } catch {}
         if (from !== 'warm') {
