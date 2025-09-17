@@ -17,9 +17,10 @@ enum TileState {
 
 // Track scroll velocity (screens/sec) for fast-scroll guard
 const FAST_SCROLL_THRESHOLD = 1.2; // screens per second
+const FAST_SCROLL_COOLDOWN = 300; // ms
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
-let lastFastTime = 0;
+let lastFastScroll = 0;
 
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
@@ -32,8 +33,18 @@ function getScrollVelocity(): number {
   lastTime = now;
 
   const v = (dy / screenHeight) / dt;
-  if (v > FAST_SCROLL_THRESHOLD) lastFastTime = now;
+  if (v > FAST_SCROLL_THRESHOLD) lastFastScroll = now;
   return v;
+}
+
+function isFastScroll(): boolean {
+  const now = typeof performance !== 'undefined' ? performance.now() : 0;
+  const velocity = getScrollVelocity();
+  if (velocity > FAST_SCROLL_THRESHOLD) {
+    lastFastScroll = now;
+    return true;
+  }
+  return (now - lastFastScroll) < FAST_SCROLL_COOLDOWN;
 }
 
 // Singleton controller to ensure at most 1 Active and deterministic Warm/Paused states.
@@ -102,15 +113,8 @@ class FeedMediaManager {
 
   setWarm(next?: VideoHandle) {
     // Recompute velocity at the decision point to avoid race with scroll listeners
-    const v = getScrollVelocity();
-    const now = typeof performance !== 'undefined' ? performance.now() : 0;
-
-    console.debug('[FeedMediaManager] setWarm velocity check', { velocity: v, threshold: FAST_SCROLL_THRESHOLD, sinceMs: now - lastFastTime });
-
-    // Longer cooldown in test mode to ensure guard stays active during test window
-    const cooldownMs = 100;
-    if (v > FAST_SCROLL_THRESHOLD || (now - lastFastTime) < cooldownMs) {
-      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll', { velocity: v, sinceMs: now - lastFastTime });
+    if (isFastScroll()) {
+      console.debug('[FeedMediaManager] Skipping Warm due to fast scroll');
       return;
     }
     

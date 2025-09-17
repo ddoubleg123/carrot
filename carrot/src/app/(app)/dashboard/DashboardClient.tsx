@@ -430,10 +430,6 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
                 const handleW = FMM.inst.getHandleByElement(warmEl);
                 if (handleW) {
                   FMM.inst.setWarm(handleW);
-                  try {
-                    const id = warmEl.getAttribute('data-commitment-id');
-                    debug.push({ type: 'warm', index: warmIdx, id });
-                  } catch {}
                 }
               }
             }
