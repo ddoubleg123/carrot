@@ -367,12 +367,7 @@ export default function HlsFeedPlayer({
       },
       pause: () => { try { videoRef.current?.pause(); } catch {} },
       warm: async () => {
-        const from = stateRef.current;
-        try { setShouldWarm(true); } catch {}
-        if (from !== 'warm') {
-          try { sendRum({ type: 'state_transition', value: { from, to: 'warm' } }); } catch {}
-          stateRef.current = 'warm';
-        }
+        return;
       },
       setPaused: () => {
         try { 
