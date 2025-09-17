@@ -25,6 +25,7 @@ export default function TestFeedClient() {
     const ratios = new Map<HTMLElement, number>();
     const pending = new Map<Element, number>();
 
+    const originalDebug = console.debug;
     const debugPush = (evt: any) => {
       try {
         const w: any = window as any;
@@ -124,11 +125,7 @@ export default function TestFeedClient() {
             const warmEl = observed[warmIdx];
             const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
             if (warmHandle && (ratios.get(warmEl) || 0) >= 0.10) {
-              const prevWarm = FeedMediaManager.inst.warm;
               FeedMediaManager.inst.setWarm(warmHandle); // Uses fast-scroll guard
-              if (FeedMediaManager.inst.warm === warmHandle && FeedMediaManager.inst.warm !== prevWarm) {
-                debugPush({ type: 'warm', index: warmIdx, id: warmEl.getAttribute('data-test-id') });
-              }
             }
           }
         }
@@ -140,6 +137,7 @@ export default function TestFeedClient() {
     return () => {
       io.disconnect();
       observed.forEach((el) => FeedMediaManager.inst.unregisterHandle(el));
+      console.debug = originalDebug; // Restore original console.debug
     };
   }, []);
 
