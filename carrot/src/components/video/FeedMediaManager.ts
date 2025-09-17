@@ -37,7 +37,7 @@ function getScrollVelocity(): number {
   return v;
 }
 
-function isFastScroll(): boolean {
+export function isFastScroll(): boolean {
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const velocity = getScrollVelocity();
   if (velocity > FAST_SCROLL_THRESHOLD) {
