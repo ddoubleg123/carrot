@@ -111,12 +111,25 @@ class FeedMediaManager {
     }
   }
 
-      setWarm(next?: VideoHandle) {
-    if (isFastScroll()) {
+  setWarm(next?: VideoHandle) {
+    const velocity = getScrollVelocity();
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const timeSinceFast = now - lastFastScroll;
+
+    console.log('[DEBUG] setWarm called:', {
+      velocity,
+      threshold: FAST_SCROLL_THRESHOLD,
+      timeSinceFast,
+      cooldown: FAST_SCROLL_COOLDOWN,
+    });
+
+    // 🚫 Skip warm entirely if fast scroll detected
+    if (velocity > FAST_SCROLL_THRESHOLD || timeSinceFast < FAST_SCROLL_COOLDOWN) {
+      console.debug('[FeedMediaManager] Skipping warm due to fast scroll', { id: next?.id });
       return;
     }
 
-    // The only place we ever emit "warm"
+    // ✅ Only log "warm" if the guard passes
     console.debug('warm', next?.id);
 
     // Release previous warm if different
