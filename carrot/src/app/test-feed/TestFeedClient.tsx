@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo } from 'react';
-import FeedMediaManager, { type VideoHandle } from '@/components/video/FeedMediaManager';
+import FeedMediaManager, { type VideoHandle } from '../../components/video/FeedMediaManager';
 
 // Public GCS sample videos (allowed by our /api/video allowlist)
 const SOURCES = [
@@ -25,7 +25,6 @@ export default function TestFeedClient() {
     const ratios = new Map<HTMLElement, number>();
     const pending = new Map<Element, number>();
 
-    const originalDebug = console.debug;
     const debugPush = (evt: any) => {
       try {
         const w: any = window as any;
@@ -36,6 +35,24 @@ export default function TestFeedClient() {
         if (buf.length > 500) buf.shift();
         w.dispatchEvent(new CustomEvent('carrot-feed-log', { detail: entry }));
       } catch {}
+    };
+
+    // Listen for warm events from FeedMediaManager console.debug
+    const originalDebug = console.debug;
+    console.debug = (...args: any[]) => {
+      if (args[0] === 'warm' && args[1]) {
+        // Convert FeedMediaManager warm log to test format
+        const handleId = args[1];
+        const el = observed.find(el => {
+          const handle = FeedMediaManager.inst.getHandleByElement(el);
+          return handle && handle.id === handleId;
+        });
+        if (el) {
+          const idx = observed.indexOf(el);
+          debugPush({ type: 'warm', index: idx, id: el.getAttribute('data-test-id') });
+        }
+      }
+      originalDebug.apply(console, args);
     };
 
     // Register video handles with FeedMediaManager
@@ -142,36 +159,33 @@ export default function TestFeedClient() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {tiles.map((tile, i) => (
-        <div
-          key={tile.id}
-          data-test-id={tile.id}
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: 8,
-            padding: 16,
-            backgroundColor: '#f9f9f9',
-          }}
-        >
-          <h3 style={{ margin: '0 0 12px 0', fontSize: 18 }}>{tile.title}</h3>
-          <video
-            src={tile.src}
-            controls
-            muted
-            style={{
-              width: '100%',
-              maxWidth: 640,
-              height: 'auto',
-              borderRadius: 4,
-            }}
-            preload="metadata"
-          />
-          <p style={{ margin: '8px 0 0 0', fontSize: 14, color: '#666' }}>
-            Index: {i} | ID: {tile.id}
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-md mx-auto bg-white min-h-screen">
+        <div className="p-4 border-b">
+          <h1 className="text-lg font-semibold">Test Feed</h1>
+          <p className="text-sm text-gray-600">For E2E testing feed prioritization</p>
         </div>
-      ))}
+        
+        <div className="space-y-4 p-4">
+          {tiles.map((tile, i) => (
+            <div key={tile.id} className="bg-gray-100 rounded-lg overflow-hidden" data-test-id={tile.id}>
+              <div className="aspect-video bg-black">
+                <video
+                  className="w-full h-full object-cover"
+                  src={tile.src}
+                  muted
+                  playsInline
+                  preload="none"
+                />
+              </div>
+              <div className="p-3">
+                <h3 className="font-medium">{tile.title}</h3>
+                <p className="text-sm text-gray-500">Test video {i + 1}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
