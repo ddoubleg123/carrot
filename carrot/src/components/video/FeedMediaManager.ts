@@ -112,6 +112,11 @@ class FeedMediaManager {
   }
 
   setWarm(next?: VideoHandle) {
+    const velocity = getScrollVelocity();
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const timeSinceFast = now - lastFastScroll;
+    console.log('[DEBUG] setWarm called:', { velocity, threshold: FAST_SCROLL_THRESHOLD, timeSinceFast, cooldown: FAST_SCROLL_COOLDOWN });
+    
     if (isFastScroll()) {
       console.debug('[FeedMediaManager] Skipping warm due to fast scroll', { id: next?.id });
       return;
