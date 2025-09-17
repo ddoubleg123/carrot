@@ -143,6 +143,8 @@ export default function TestFeedClient() {
             const warmHandle = FeedMediaManager.inst.getHandleByElement(warmEl);
             if (warmHandle && !isFastScroll()) { // Fast-scroll guard: don't warm during flings
               FeedMediaManager.inst.setWarm(warmHandle);
+            } else if (warmHandle) {
+              console.debug('[TestFeedClient] Blocked warm due to fast scroll');
             }
           }
         }

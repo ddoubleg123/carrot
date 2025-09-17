@@ -40,11 +40,22 @@ function getScrollVelocity(): number {
 export function isFastScroll(): boolean {
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const velocity = getScrollVelocity();
+  const timeSinceFast = now - lastFastScroll;
+  const result = velocity > FAST_SCROLL_THRESHOLD || timeSinceFast < FAST_SCROLL_COOLDOWN;
+  
+  console.debug('[isFastScroll]', { 
+    velocity, 
+    threshold: FAST_SCROLL_THRESHOLD, 
+    timeSinceFast, 
+    cooldown: FAST_SCROLL_COOLDOWN, 
+    result 
+  });
+  
   if (velocity > FAST_SCROLL_THRESHOLD) {
     lastFastScroll = now;
     return true;
   }
-  return (now - lastFastScroll) < FAST_SCROLL_COOLDOWN;
+  return timeSinceFast < FAST_SCROLL_COOLDOWN;
 }
 
 // Singleton controller to ensure at most 1 Active and deterministic Warm/Paused states.
