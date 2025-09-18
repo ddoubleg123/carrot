@@ -22,22 +22,6 @@ let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
 
-// Track scroll velocity in real-time
-if (typeof window !== 'undefined') {
-  let scrollTimeout: NodeJS.Timeout | null = null;
-  window.addEventListener('scroll', () => {
-    getScrollVelocity(); // Update velocity tracking
-    
-    // Clear any existing timeout and set a new one
-    if (scrollTimeout) clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-      // Reset velocity after scroll stops
-      lastScrollY = window.scrollY;
-      lastTime = performance.now();
-    }, 50);
-  }, { passive: true });
-}
-
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
   const now = performance.now();
@@ -54,24 +38,23 @@ function getScrollVelocity(): number {
 }
 
 export function isFastScroll(): boolean {
-  const now = typeof performance !== 'undefined' ? performance.now() : 0;
-  const velocity = getScrollVelocity();
-  const timeSinceFast = now - lastFastScroll;
-  const result = velocity > FAST_SCROLL_THRESHOLD || timeSinceFast < FAST_SCROLL_COOLDOWN;
-  
-  console.debug('[isFastScroll]', { 
-    velocity, 
-    threshold: FAST_SCROLL_THRESHOLD, 
-    timeSinceFast, 
-    cooldown: FAST_SCROLL_COOLDOWN, 
-    result 
-  });
-  
-  if (velocity > FAST_SCROLL_THRESHOLD) {
+  if (typeof window === 'undefined' || typeof performance === 'undefined') return false;
+
+  const prevY = lastScrollY;
+  const prevT = lastTime;
+
+  const velocity = getScrollVelocity(); // updates lastScrollY/lastTime
+  const dyScreens = Math.abs(window.scrollY - prevY) / Math.max(1, window.innerHeight);
+  const dtSec = Math.max(0.001, (lastTime - prevT) / 1000);
+
+  // Treat as fast if velocity exceeds threshold or a large jump (>=1.5 screens) happens within 250ms
+  const now = performance.now();
+  const isFling = velocity > FAST_SCROLL_THRESHOLD || (dyScreens >= 1.5 && dtSec <= 0.25);
+  if (isFling) {
     lastFastScroll = now;
     return true;
   }
-  return timeSinceFast < FAST_SCROLL_COOLDOWN;
+  return (now - lastFastScroll) < FAST_SCROLL_COOLDOWN;
 }
 
 // Singleton controller to ensure at most 1 Active and deterministic Warm/Paused states.
