@@ -17,7 +17,7 @@ enum TileState {
 
 // Track scroll velocity (screens/sec) for fast-scroll guard
 const FAST_SCROLL_THRESHOLD = 1.2; // screens per second
-const FAST_SCROLL_COOLDOWN = 650; // ms
+const FAST_SCROLL_COOLDOWN = 700; // ms
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
