@@ -41,6 +41,8 @@ export default function TestFeedClient() {
     const originalDebug = console.debug;
     console.debug = (...args: any[]) => {
       if (args[0] === 'warm' && args[1]) {
+        // Suppress warm capture during fast scroll window
+        try { if (isFastScroll && isFastScroll()) { return; } } catch {}
         // Convert FeedMediaManager warm log to test format
         const handleId = args[1];
         const el = observed.find(el => {
