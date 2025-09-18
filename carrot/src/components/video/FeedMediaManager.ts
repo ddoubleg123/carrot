@@ -22,6 +22,20 @@ let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
 
+// Immediately mark flings on wheel to ensure cooldown starts at scroll time
+if (typeof window !== 'undefined' && typeof performance !== 'undefined') {
+  window.addEventListener('wheel', (e: WheelEvent) => {
+    try {
+      const screenHeight = Math.max(1, window.innerHeight);
+      const dyScreens = Math.abs(e.deltaY) / screenHeight;
+      // Treat >=1.5 screens in a single wheel event as a fling
+      if (dyScreens >= 1.5) {
+        lastFastScroll = performance.now();
+      }
+    } catch {}
+  }, { passive: true });
+}
+
 function getScrollVelocity(): number {
   if (typeof window === 'undefined' || typeof performance === 'undefined') return 0;
   const now = performance.now();

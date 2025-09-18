@@ -37,12 +37,33 @@ export default function TestFeedClient() {
       } catch {}
     };
 
+    // Mark flings immediately and clear previous logs so subsequent collections don't include stale warms
+    const onWheel = (e: WheelEvent) => {
+      try {
+        const screenHeight = Math.max(1, window.innerHeight);
+        const dyScreens = Math.abs(e.deltaY) / screenHeight;
+        if (dyScreens >= 1.5) {
+          const w: any = window as any;
+          w.__carrot_last_fling = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+          if (Array.isArray(w.__carrot_feed_log)) w.__carrot_feed_log.length = 0; // clear buffer
+        }
+      } catch {}
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+
     // Listen for warm events from FeedMediaManager console.debug
     const originalDebug = console.debug;
     console.debug = (...args: any[]) => {
       if (args[0] === 'warm' && args[1]) {
         // Suppress warm capture during fast scroll window
         try { if (isFastScroll && isFastScroll()) { return; } } catch {}
+        try {
+          const w: any = window as any;
+          const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+          const lastFling = w.__carrot_last_fling || 0;
+          // Mirror FeedMediaManager cooldown (700ms) to avoid counting warms right after a fling
+          if (lastFling && (now - lastFling) < 700) return;
+        } catch {}
         // Convert FeedMediaManager warm log to test format
         const handleId = args[1];
         const el = observed.find(el => {
@@ -158,7 +179,8 @@ export default function TestFeedClient() {
     return () => {
       io.disconnect();
       observed.forEach((el) => FeedMediaManager.inst.unregisterHandle(el));
-      console.debug = originalDebug; // Restore original console.debug
+      try { window.removeEventListener('wheel', onWheel as any); } catch {}
+      try { console.debug = originalDebug; } catch {}
     };
   }, []);
 
