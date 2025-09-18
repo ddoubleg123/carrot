@@ -341,8 +341,15 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_FEED_HLS === '0') return;
     const root = document;
-    const ENTER_ACTIVE = 0.75, ENTER_WARM = 0.60, EXIT_IDLE = 0.40;
+    // Hysteresis thresholds to avoid flip-flop
+    const ENTER_ACTIVE = 0.65;
+    const EXIT_ACTIVE = 0.50;
+    const ENTER_WARM = 0.55;
+    const EXIT_WARM = 0.35;
+    const EXIT_IDLE = 0.25;
+    const DOWNGRADE_DEBOUNCE_MS = 350; // delay before demoting to Idle
     const pending = new Map<Element, number>();
+    const demoteTimers = new Map<Element, number>();
     // Debug ring buffer for tests/e2e assertions
     const debug = {
       push(evt: any) {
@@ -428,7 +435,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               const warmEl = observed[warmIdx];
               const warmRatio = ratios.get(warmEl) || 0;
               // Only warm when it’s at least somewhat in/near view to avoid waste
-              if (warmEl && warmRatio >= ENTER_IDLE_SAFE) {
+              if (warmEl && warmRatio >= ENTER_WARM) {
                 const handleW = FMM.inst.getHandleByElement(warmEl);
                 if (handleW) {
                   // Fast-scroll guard: don't warm if user is flinging
@@ -446,20 +453,31 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             if (el === activeEl) continue;
             const ratio = ratios.get(el) || 0;
             if (ratio <= EXIT_IDLE) {
-              const h = FMM.inst.getHandleByElement(el); if (h) FMM.inst.setIdle(h);
-              try {
-                const idx = observed.indexOf(el);
-                const id = el.getAttribute('data-commitment-id');
-                debug.push({ type: 'idle', index: idx, id });
-              } catch {}
+              const h = FMM.inst.getHandleByElement(el);
+              if (h) {
+                const prev = demoteTimers.get(el); if (prev) clearTimeout(prev);
+                const t2 = window.setTimeout(() => {
+                  const nowRatio = ratios.get(el) || 0;
+                  if (nowRatio <= EXIT_IDLE) {
+                    FMM.inst.setIdle(h);
+                    try {
+                      const idx = observed.indexOf(el);
+                      const id = el.getAttribute('data-commitment-id');
+                      debug.push({ type: 'idle', index: idx, id });
+                    } catch {}
+                  }
+                  demoteTimers.delete(el);
+                }, DOWNGRADE_DEBOUNCE_MS);
+                demoteTimers.set(el, t2);
+              }
             }
           }
         }
       }, 180);
       pending.set(entries[0]?.target as HTMLElement, t);
-    }, { threshold: [EXIT_IDLE, ENTER_WARM, ENTER_ACTIVE] as any });
+    }, { threshold: [0, EXIT_IDLE, EXIT_WARM, EXIT_ACTIVE, ENTER_WARM, ENTER_ACTIVE, 1] as any });
 
-    const ENTER_IDLE_SAFE = 0.10; // small presence in viewport vicinity
+    const ENTER_IDLE_SAFE = 0.10; // small presence in viewport vicinity (kept for safety)
 
     const attach = () => {
       refreshObserved();
@@ -469,7 +487,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     const t = setTimeout(attach, 0);
     window.addEventListener('resize', attach);
-    return () => { clearTimeout(t); window.removeEventListener('resize', attach); window.removeEventListener('scroll', onScroll); detach(); };
+    return () => { clearTimeout(t); window.removeEventListener('resize', attach); window.removeEventListener('scroll', onScroll); detach(); demoteTimers.forEach(id => clearTimeout(id)); demoteTimers.clear(); };
   }, []);
 
   // Poll background trim jobs and update posts when they complete (with simple backoff)
