@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { StorageOptions } from '@google-cloud/storage'
+let GCS: any = null; // lazy import to avoid bundling when unused
 
 // Image proxy: fetches bytes server-side and streams to the client.
 // Supports either:
@@ -8,6 +10,12 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const PUBLIC_BASE = process.env.STORAGE_PUBLIC_BASE
   || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/';
+
+const SIGN_TTL_SECONDS = (() => {
+  const v = parseInt(process.env.STORAGE_SIGN_TTL_SECONDS || '', 10);
+  if (Number.isFinite(v) && v > 0 && v <= 24 * 60 * 60) return v; // up to 24h
+  return 60 * 60; // default 1h
+})();
 
 // Image proxy + optional transform with long cache
 // Usage: /api/img?url=<encoded>&w=400&h=300&q=75&format=webp
@@ -62,6 +70,52 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
   return {}
 }
 
+// Lazy-init GCS Storage client from either GOOGLE_APPLICATION_CREDENTIALS (file) or GCS_SA_JSON env
+let storageClient: any = null;
+function ensureStorage(): any | null {
+  try {
+    if (storageClient) return storageClient;
+    // Prefer explicit inline JSON if provided
+    const json = process.env.GCS_SA_JSON;
+    if (json) {
+      const creds = JSON.parse(json);
+      const opts: StorageOptions = {
+        projectId: creds.project_id,
+        credentials: {
+          client_email: creds.client_email,
+          private_key: creds.private_key,
+        },
+      } as any;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      GCS = GCS || require('@google-cloud/storage');
+      storageClient = new GCS.Storage(opts);
+      return storageClient;
+    }
+    // Else rely on GOOGLE_APPLICATION_CREDENTIALS or default ADC
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    GCS = GCS || require('@google-cloud/storage');
+    storageClient = new GCS.Storage();
+    return storageClient;
+  } catch (e) {
+    console.warn('[api/img] GCS client init failed; falling back to public URLs', (e as any)?.message);
+    return null;
+  }
+}
+
+async function getFreshSignedUrl(bucket: string, path: string, ttlSec = SIGN_TTL_SECONDS): Promise<string | null> {
+  const client = ensureStorage();
+  if (!client) return null;
+  try {
+    const b = client.bucket(bucket);
+    const f = b.file(path);
+    const [url] = await f.getSignedUrl({ action: 'read', expires: Date.now() + ttlSec * 1000 });
+    return url;
+  } catch (e) {
+    console.warn('[api/img] getSignedUrl failed; falling back', { bucket, path, msg: (e as any)?.message });
+    return null;
+  }
+}
+
 function chooseFormat(acceptHeader?: string | null, explicit?: string | null) {
   if (explicit) return explicit.toLowerCase()
   const a = (acceptHeader || '').toLowerCase()
@@ -114,12 +168,18 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   // Build target URL from either url or path
   let target: URL | null = null
   if (bucket && path) {
-    // Explicit path-mode (preferred for durability)
+    // Explicit path-mode (preferred): try to sign; fallback to public REST
     const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
-    const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
-    try { target = new URL(constructed) } catch {
-      console.warn('[api/img] bad bucket/path', { bucket, path })
-      return new NextResponse('Bad bucket/path', { status: 400 })
+    const signed = await getFreshSignedUrl(bucket, safe).catch(() => null)
+    if (signed) {
+      try { target = new URL(signed) } catch {}
+    }
+    if (!target) {
+      const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
+      try { target = new URL(constructed) } catch {
+        console.warn('[api/img] bad bucket/path', { bucket, path })
+        return new NextResponse('Bad bucket/path', { status: 400 })
+      }
     }
   } else if (rawUrl) {
     try { target = new URL(rawUrl) } catch {
@@ -144,13 +204,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
         console.warn('[api/img] malformed hybrid url', { url: target.toString() })
         return new NextResponse('Malformed Firebase/GCS URL. Use /api/img?bucket=...&path=...', { status: 400 })
       }
-      if (target.hostname === 'firebasestorage.googleapis.com') {
-        // Ensure alt=media on Firebase REST
+      // If we have a storage client, try to re-sign to avoid ExpiredToken
+      const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch(() => null)
+      if (resigned) {
+        try { target = new URL(resigned) } catch {}
+      } else if (target.hostname === 'firebasestorage.googleapis.com') {
+        // Ensure alt=media on Firebase REST (unsigned)
         const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}${target.search && !target.search.includes('alt=media') ? (target.search + '&alt=media') : (target.search || '?alt=media')}`
         try { target = new URL(constructed) } catch {}
-      } else {
-        // storage.googleapis.com signed URLs: do NOT rewrite; leave as-is
       }
+      // else: storage.googleapis.com signed URLs: keep as-is if we couldn't re-sign
     } else {
       // If Firebase REST without alt=media, add it
       if (target.hostname === 'firebasestorage.googleapis.com' && target.pathname.includes('/v0/b/') && !target.search.includes('alt=media')) {
