@@ -121,7 +121,7 @@ const MENU_ITEMS = [
     label: 'Messages',
   },
   {
-    href: '/dashboard/rabbit',
+    href: '/rabbit',
     icon: NavIcons.Rabbit,
     label: 'Rabbit (AI)',
   },

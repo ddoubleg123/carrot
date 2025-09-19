@@ -31,7 +31,7 @@ const MENU = [
     label: 'Messages',
   },
   {
-    href: '/dashboard/rabbit',
+    href: '/rabbit',
     icon: <SidebarIcons.Rabbit />,
     label: 'Rabbit (AI)',
   },
