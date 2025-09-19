@@ -125,7 +125,7 @@ export default function NeverBlackVideo({
     
     // Track poster load failure
     metricsRef.current.endPosterLoad(postId, false, false, 'Poster load failed');
-    metricsRef.current.recordError('PosterError', 'Failed to load poster image', postId, posterUrl);
+    metricsRef.current.recordError('PosterError', 'Failed to load poster image', postId, posterUrl || undefined);
   };
 
   const handleVideoLoadedMetadata = () => {
@@ -206,7 +206,7 @@ export default function NeverBlackVideo({
     console.error('[NeverBlackVideo] Video error', { postId, src: videoUrl, error });
     
     // Track video error
-    metricsRef.current.recordError('VideoError', error.message, postId, videoUrl);
+    metricsRef.current.recordError('VideoError', error.message, postId, videoUrl || undefined);
     
     // End TTFF tracking with error
     if (ttffStarted) {
