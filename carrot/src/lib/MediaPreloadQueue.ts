@@ -327,18 +327,6 @@ class MediaPreloadQueue {
     };
   }
 
-  // Clean up old completed tasks
-  cleanup(): void {
-    const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // 5 minutes
-    
-    for (const [taskId, result] of this.completedTasks) {
-      if (now - result.completedAt > maxAge) {
-        this.completedTasks.delete(taskId);
-      }
-    }
-  }
-
   private processQueue(): void {
     // Start tasks that can be started
     for (const task of this.tasks.values()) {
@@ -588,27 +576,6 @@ class MediaPreloadQueue {
     }
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing) return;
-    this.isProcessing = true;
-
-    try {
-      while (this.tasks.size > 0) {
-        const nextTask = this.selectNextTask();
-        if (!nextTask) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          continue;
-        }
-
-        await this.executeTask(nextTask);
-        
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-    } finally {
-      this.isProcessing = false;
-    }
-  }
-
   getSequentialStats() {
     return {
       lastCompletedPosterIndex: this.lastCompletedPosterIndex,
@@ -620,58 +587,18 @@ class MediaPreloadQueue {
     };
   }
 
-  getStats() {
-    const byType = new Map<TaskType, { queued: number; active: number; completed: number; blocked: number }>();
-    
-    Object.values(TaskType).forEach(type => {
-      byType.set(type, {
-        queued: 0,
-        active: this.activeTasks.get(type)?.size || 0,
-        completed: 0,
-        blocked: 0
-      });
-    });
-
-    for (const task of this.tasks.values()) {
-      const stats = byType.get(task.type)!;
-      stats.queued++;
-      if (this.blockedTasks.has(task.id)) {
-        stats.blocked++;
-      }
-    }
-
-    for (const result of this.completedTasks.values()) {
-      const stats = byType.get(result.type)!;
-      stats.completed++;
-    }
-
-    return {
-      byType: Object.fromEntries(byType),
-      globalBudgetUsed: this.globalBudgetUsed,
-      globalBudgetMB: this.GLOBAL_BUDGET_MB,
-      isProcessing: this.isProcessing,
-      sequential: this.getSequentialStats()
-    };
-  }
-
-  // Clear old completed tasks to prevent memory leaks
-  cleanup(maxAge = 5 * 60 * 1000): number { 
-    const cutoff = Date.now() - maxAge;
-    let cleaned = 0;
+  // Clean up old completed tasks
+  cleanup(): void {
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
     
     for (const [taskId, result] of this.completedTasks) {
-      if (result.completedAt && (Date.now() - result.completedAt) > cutoff) {
+      if (now - result.completedAt > maxAge) {
         this.completedTasks.delete(taskId);
-        cleaned++;
       }
     }
-    
-    if (cleaned > 0) {
-      console.log('[MediaPreloadQueue] Cleaned up old results', { count: cleaned });
-    }
-    
-    return cleaned;
   }
+
 }
 
 export default MediaPreloadQueue.instance;
