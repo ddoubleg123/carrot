@@ -33,6 +33,7 @@ const FAST_SCROLL_THRESHOLD = 1.2;
 const FAST_SCROLL_COOLDOWN = 700;
 const IDLE_RELEASE_GRACE_MS = 5000;
 const SCREEN_TEARDOWN_DISTANCE = 3;
+const STICKY_POST_WINDOW = 10; // ±10 posts from viewport stay sticky
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
@@ -101,7 +102,7 @@ class FeedMediaManager {
   private _currentViewportIndex = 0;
   private _screenHeight = 0;
   
-  private preloadQueue = MediaPreloadQueue.instance;
+  private preloadQueue = MediaPreloadQueue;
   private stateCache = MediaStateCache.instance;
 
   get active() { return this._active; }
@@ -238,15 +239,48 @@ class FeedMediaManager {
         distanceBelow > 0 ? distanceBelow : Infinity
       );
 
-      if (minDistance > teardownDistance) {
+      const shouldRelease = this.shouldReleaseHandle(handle, minDistance, teardownDistance);
+      
+      if (shouldRelease) {
         const isActive = this._active === handle;
         const isWarm = this._warm === handle;
         
         if (!isActive && !isWarm) {
+          console.log('[FeedMediaManager] Releasing distant video', { 
+            id: handle.id, 
+            minDistance: Math.round(minDistance),
+            teardownDistance: Math.round(teardownDistance)
+          });
           this.setIdle(handle);
         }
       }
     });
+  }
+
+  private shouldReleaseHandle(handle: VideoHandle, minDistance: number, teardownDistance: number): boolean {
+    if (minDistance <= teardownDistance) {
+      return false; // Keep videos within screen distance
+    }
+
+    const handlePostIndex = this.getPostIndexForHandle(handle);
+    if (handlePostIndex !== -1) {
+      const distanceFromViewport = Math.abs(handlePostIndex - this._currentViewportIndex);
+      if (distanceFromViewport <= STICKY_POST_WINDOW) {
+        console.log('[FeedMediaManager] Keeping video in sticky window', { 
+          id: handle.id, 
+          postIndex: handlePostIndex,
+          viewportIndex: this._currentViewportIndex,
+          distance: distanceFromViewport
+        });
+        return false; // Keep videos within ±10 posts
+      }
+    }
+
+    return true; // Release videos outside both screen distance and post window
+  }
+
+  private getPostIndexForHandle(handle: VideoHandle): number {
+    return this._posts.findIndex(post => post.id === handle.id);
   }
 
   registerHandle(el: Element, handle: VideoHandle) {
@@ -290,7 +324,6 @@ class FeedMediaManager {
         this._releaseTimers.delete(next);
       }
       
-      // Store state before activation
       const cachedState = this.stateCache.get(next.id);
       if (cachedState) {
         console.log('[FeedMediaManager] Resuming from cache', { 
@@ -305,7 +338,6 @@ class FeedMediaManager {
         this._active.pause(); 
         if (this._active.setPaused) this._active.setPaused();
         
-        // Store current state
         this.storeVideoState(this._active);
         
         this._states.set(this._active, TileState.Paused);
@@ -376,11 +408,21 @@ class FeedMediaManager {
     if (currentState === TileState.Active || currentState === TileState.Warm) {
       try { 
         handle.pause(); 
-        if (handle.setPaused) handle.setPaused();
         
-        // Store state and capture frozen frame
         this.storeVideoState(handle, true);
-      } catch {}
+        
+        if (handle.setPaused) {
+          handle.setPaused();
+        }
+        
+        console.log('[FeedMediaManager] Video paused and state preserved', { 
+          id: handle.id,
+          postIndex: this.getPostIndexForHandle(handle),
+          viewportIndex: this._currentViewportIndex
+        });
+      } catch (e) {
+        console.warn('[FeedMediaManager] Error pausing video', { id: handle.id, error: e });
+      }
       
       this._states.set(handle, TileState.Paused);
       this._paused.add(handle);
@@ -398,16 +440,39 @@ class FeedMediaManager {
       clearTimeout(existingTimer);
     }
     
+    const handlePostIndex = this.getPostIndexForHandle(handle);
+    const distanceFromViewport = handlePostIndex !== -1 ? 
+      Math.abs(handlePostIndex - this._currentViewportIndex) : Infinity;
+    
+    if (distanceFromViewport <= STICKY_POST_WINDOW) {
+      console.log('[FeedMediaManager] Keeping video in sticky state instead of idle', { 
+        id: handle.id, 
+        postIndex: handlePostIndex,
+        distance: distanceFromViewport
+      });
+      
+      this.setPaused(handle);
+      return;
+    }
+    
     const timer = window.setTimeout(() => {
       const currentState = this._states.get(handle);
       if (currentState === TileState.Active || currentState === TileState.Warm) {
         return;
       }
       
+      console.log('[FeedMediaManager] Releasing video outside sticky window', { 
+        id: handle.id,
+        postIndex: handlePostIndex,
+        distance: distanceFromViewport
+      });
+      
       try { 
         handle.pause(); 
         handle.release(); 
-      } catch {}
+      } catch (e) {
+        console.warn('[FeedMediaManager] Error releasing video', { id: handle.id, error: e });
+      }
       
       this._states.set(handle, TileState.Idle);
       this._paused.delete(handle);
@@ -458,6 +523,57 @@ class FeedMediaManager {
         console.warn('[FeedMediaManager] Failed to capture frozen frame', e);
       }
     }
+  }
+
+  restorePausedState(handle: VideoHandle): boolean {
+    const cachedState = this.stateCache.get(handle.id);
+    if (!cachedState) return false;
+
+    try {
+      const video = handle.el?.querySelector('video');
+      if (!video) return false;
+
+      if (cachedState.currentTime > 0) {
+        video.currentTime = cachedState.currentTime;
+      }
+
+      video.pause();
+
+      console.log('[FeedMediaManager] Restored paused state', { 
+        id: handle.id, 
+        currentTime: cachedState.currentTime,
+        hasFrozenFrame: !!cachedState.frozenFrame
+      });
+
+      return true;
+    } catch (e) {
+      console.warn('[FeedMediaManager] Failed to restore paused state', { id: handle.id, error: e });
+      return false;
+    }
+  }
+
+  isInStickyState(handle: VideoHandle): boolean {
+    const state = this._states.get(handle);
+    const handlePostIndex = this.getPostIndexForHandle(handle);
+    const distanceFromViewport = handlePostIndex !== -1 ? 
+      Math.abs(handlePostIndex - this._currentViewportIndex) : Infinity;
+    
+    return state === TileState.Paused && distanceFromViewport <= STICKY_POST_WINDOW;
+  }
+
+  getStickyStats() {
+    const stickyVideos = Array.from(this._allHandles).filter(handle => this.isInStickyState(handle));
+    const totalPaused = this._paused.size;
+    const totalHandles = this._allHandles.size;
+    
+    return {
+      stickyVideos: stickyVideos.length,
+      totalPaused,
+      totalHandles,
+      viewportIndex: this._currentViewportIndex,
+      stickyWindow: STICKY_POST_WINDOW,
+      stickyVideoIds: stickyVideos.map(h => h.id)
+    };
   }
 
   clearAll() {

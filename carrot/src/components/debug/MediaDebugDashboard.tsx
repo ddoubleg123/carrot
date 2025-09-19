@@ -12,7 +12,7 @@ interface DashboardProps {
 
 const MediaDebugDashboard: React.FC<DashboardProps> = ({ isVisible, onClose }) => {
   const [metrics, setMetrics] = useState(MediaMetrics.instance.getSummary());
-  const [queueStats, setQueueStats] = useState(MediaPreloadQueue.instance.getStats());
+  const [queueStats, setQueueStats] = useState(MediaPreloadQueue.getStats());
   const [cacheStats, setCacheStats] = useState(MediaStateCache.instance.getStats());
   const [refreshInterval, setRefreshInterval] = useState(2000); // 2 seconds
 
@@ -21,7 +21,7 @@ const MediaDebugDashboard: React.FC<DashboardProps> = ({ isVisible, onClose }) =
 
     const interval = setInterval(() => {
       setMetrics(MediaMetrics.instance.getSummary());
-      setQueueStats(MediaPreloadQueue.instance.getStats());
+      setQueueStats(MediaPreloadQueue.getStats());
       setCacheStats(MediaStateCache.instance.getStats());
       
       // Run alert checks

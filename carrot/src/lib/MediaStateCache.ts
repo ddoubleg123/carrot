@@ -1,4 +1,4 @@
-export interface MediaState {
+interface MediaState {
   postId: string;
   currentTime: number;
   isPaused: boolean;
@@ -13,15 +13,24 @@ export interface MediaState {
   frozenFrame?: string; // base64 data URL
 }
 
-export interface CacheStats {
+interface CacheStats {
   totalEntries: number;
   totalSizeMB: number;
   maxSizeMB: number;
   hitRate: number;
   evictions: number;
+  frozenFrameCount: number;
+  frozenFrameSizeMB: number;
 }
 
-// LRU Cache for media states with memory budget tracking
+interface CacheEntry {
+  state: MediaState;
+  lastAccessed: number;
+  size: number; // Size in bytes
+  frozenFrameSize?: number; // Separate tracking for frozen frame size
+}
+
+// Singleton MediaStateCache for video state persistence
 class MediaStateCache {
   private static _instance: MediaStateCache | null = null;
   
@@ -32,28 +41,19 @@ class MediaStateCache {
     return this._instance;
   }
 
-  private cache = new Map<string, MediaState>();
-  private accessOrder: string[] = []; // LRU tracking
-  private totalSize = 0; // bytes
+  private cache = new Map<string, CacheEntry>();
+  private maxSizeMB: number;
+  private maxFrozenFramesMB: number; // PHASE B.2: Separate budget for frozen frames
   private hits = 0;
   private misses = 0;
   private evictions = 0;
 
-  // Configuration
-  private readonly MAX_SIZE_MB = 120; // 120MB budget
-  private readonly MAX_ENTRIES = 50;
-  private readonly POSTER_NEVER_EVICT = true; // Keep posters even when over budget
+  constructor(maxSizeMB = 120, maxFrozenFramesMB = 50) { // PHASE B.2: 50MB for frozen frames
+    this.maxSizeMB = maxSizeMB;
+    this.maxFrozenFramesMB = maxFrozenFramesMB;
+  }
 
-  // Size estimates (conservative)
-  private readonly SIZE_ESTIMATES = {
-    poster: 100 * 1024, // 100KB
-    videoElement: 1024, // 1KB metadata
-    frozenFrame: 200 * 1024, // 200KB JPEG
-    bufferedData: 2 * 1024 * 1024, // 2MB per video with buffered content
-    objectURL: 1024 // 1KB metadata
-  };
-
-  // Store media state
+  // Store media state with size calculation
   set(postId: string, state: Partial<MediaState>): void {
     const existing = this.cache.get(postId);
     const now = Date.now();
@@ -62,7 +62,7 @@ class MediaStateCache {
     if (existing) {
       // Update existing state
       newState = {
-        ...existing,
+        ...existing.state,
         ...state,
         postId,
         lastAccessed: now
@@ -82,264 +82,292 @@ class MediaStateCache {
     }
 
     // Calculate size
-    newState.estimatedSize = this.calculateSize(newState);
+    const size = this.calculateStateSize(newState);
+    const entry: CacheEntry = {
+      state: newState,
+      lastAccessed: now,
+      size,
+      frozenFrameSize: newState.frozenFrame ? this.estimateImageSize(newState.frozenFrame) : 0
+    };
 
-    // Update cache
-    this.cache.set(postId, newState);
-    this.updateAccessOrder(postId);
-    this.updateTotalSize();
+    // Remove existing entry if present
+    if (this.cache.has(postId)) {
+      this.cache.delete(postId);
+    }
 
-    // Enforce budget limits
-    this.enforceLimits();
-
+    this.cache.set(postId, entry);
+    this.enforceMemoryLimits();
+    
     console.log('[MediaStateCache] Stored state', { 
       postId, 
-      currentTime: newState.currentTime,
-      isPaused: newState.isPaused,
-      sizeMB: Math.round(newState.estimatedSize / 1024 / 1024 * 100) / 100
+      sizeMB: Math.round(size / 1024 / 1024 * 100) / 100,
+      hasFrozenFrame: !!newState.frozenFrame,
+      totalEntries: this.cache.size 
     });
   }
 
-  // Get media state
+  // Get media state with hit tracking
   get(postId: string): MediaState | undefined {
-    const state = this.cache.get(postId);
-    if (state) {
-      state.lastAccessed = Date.now();
-      this.updateAccessOrder(postId);
+    const entry = this.cache.get(postId);
+    if (entry) {
+      entry.lastAccessed = Date.now();
       this.hits++;
-      return state;
-    } else {
-      this.misses++;
-      return undefined;
+      return entry.state;
     }
+    
+    this.misses++;
+    return undefined;
   }
 
-  // Check if state exists
-  has(postId: string): boolean {
-    return this.cache.has(postId);
-  }
-
-  // Remove state
-  delete(postId: string): boolean {
-    const state = this.cache.get(postId);
-    if (state) {
-      // Clean up object URLs to prevent memory leaks
-      if (state.objectURL) {
-        try {
-          URL.revokeObjectURL(state.objectURL);
-        } catch (e) {
-          console.warn('[MediaStateCache] Failed to revoke object URL', e);
-        }
-      }
-      
-      this.cache.delete(postId);
-      this.removeFromAccessOrder(postId);
-      this.updateTotalSize();
-      
-      console.log('[MediaStateCache] Deleted state', { postId });
-      return true;
-    }
-    return false;
-  }
-
-  // Update current time for a video
-  updateTime(postId: string, currentTime: number): void {
-    const state = this.cache.get(postId);
-    if (state) {
-      state.currentTime = currentTime;
-      state.lastAccessed = Date.now();
-      this.updateAccessOrder(postId);
-    }
-  }
-
-  // Update pause state
-  updatePauseState(postId: string, isPaused: boolean): void {
-    const state = this.cache.get(postId);
-    if (state) {
-      state.isPaused = isPaused;
-      state.lastAccessed = Date.now();
-      this.updateAccessOrder(postId);
-    }
-  }
-
-  // Store frozen frame for smooth pause experience
+  // PHASE B.2: Enhanced frozen frame storage with size tracking
   storeFrozenFrame(postId: string, frameDataURL: string): void {
-    const state = this.cache.get(postId);
-    if (state) {
-      state.frozenFrame = frameDataURL;
-      state.estimatedSize = this.calculateSize(state);
-      state.lastAccessed = Date.now();
-      this.updateAccessOrder(postId);
-      this.updateTotalSize();
-      this.enforceLimits();
+    const entry = this.cache.get(postId);
+    if (entry) {
+      const oldFrameSize = entry.frozenFrameSize || 0;
+      const newFrameSize = this.estimateImageSize(frameDataURL);
+      
+      entry.state.frozenFrame = frameDataURL;
+      entry.frozenFrameSize = newFrameSize;
+      entry.size = entry.size - oldFrameSize + newFrameSize;
+      entry.lastAccessed = Date.now();
+      
+      console.log('[MediaStateCache] Stored frozen frame', { 
+        postId, 
+        frameSizeMB: Math.round(newFrameSize / 1024 / 1024 * 100) / 100,
+        totalFramesMB: Math.round(this.getTotalFrozenFrameSize() / 1024 / 1024 * 100) / 100
+      });
+      
+      this.enforceMemoryLimits();
+    } else {
+      // Create new entry with just the frozen frame
+      const frameSize = this.estimateImageSize(frameDataURL);
+      const newEntry: CacheEntry = {
+        state: {
+          postId,
+          currentTime: 0,
+          isPaused: true,
+          duration: 0,
+          bufferedRanges: [],
+          posterLoaded: false,
+          frozenFrame: frameDataURL,
+          lastAccessed: Date.now(),
+          estimatedSize: frameSize
+        },
+        lastAccessed: Date.now(),
+        size: frameSize,
+        frozenFrameSize: frameSize
+      };
+      
+      this.cache.set(postId, newEntry);
+      this.enforceMemoryLimits();
+      
+      console.log('[MediaStateCache] Created entry with frozen frame', { 
+        postId, 
+        frameSizeMB: Math.round(frameSize / 1024 / 1024 * 100) / 100
+      });
     }
   }
 
-  // Get all states for debugging
-  getAll(): MediaState[] {
-    return Array.from(this.cache.values());
+  // Update pause state without affecting frozen frame
+  updatePauseState(postId: string, isPaused: boolean): void {
+    const entry = this.cache.get(postId);
+    if (entry) {
+      entry.state.isPaused = isPaused;
+      entry.lastAccessed = Date.now();
+    }
   }
 
-  // Get cache statistics
-  getStats(): CacheStats {
-    const totalRequests = this.hits + this.misses;
-    return {
-      totalEntries: this.cache.size,
-      totalSizeMB: Math.round(this.totalSize / 1024 / 1024 * 100) / 100,
-      maxSizeMB: this.MAX_SIZE_MB,
-      hitRate: totalRequests > 0 ? Math.round(this.hits / totalRequests * 100) / 100 : 0,
-      evictions: this.evictions
-    };
+  // Update current time
+  updateTime(postId: string, currentTime: number): void {
+    const entry = this.cache.get(postId);
+    if (entry) {
+      entry.state.currentTime = currentTime;
+      entry.lastAccessed = Date.now();
+    }
   }
 
-  // Clear all states
-  clear(): void {
-    // Clean up object URLs
-    for (const state of this.cache.values()) {
-      if (state.objectURL) {
-        try {
-          URL.revokeObjectURL(state.objectURL);
-        } catch (e) {
-          console.warn('[MediaStateCache] Failed to revoke object URL during clear', e);
-        }
+  // PHASE B.2: Enhanced memory limit enforcement
+  private enforceMemoryLimits(): void {
+    const totalSize = this.getTotalSize();
+    const frozenFrameSize = this.getTotalFrozenFrameSize();
+    const maxTotalBytes = this.maxSizeMB * 1024 * 1024;
+    const maxFrameBytes = this.maxFrozenFramesMB * 1024 * 1024;
+
+    // Check if we exceed frozen frame budget specifically
+    if (frozenFrameSize > maxFrameBytes) {
+      this.evictOldestFrozenFrames(frozenFrameSize - maxFrameBytes);
+    }
+
+    // Check total size budget
+    if (totalSize > maxTotalBytes) {
+      this.evictOldestEntries(totalSize - maxTotalBytes);
+    }
+  }
+
+  // PHASE B.2: Evict oldest frozen frames specifically
+  private evictOldestFrozenFrames(bytesToFree: number): void {
+    const entriesWithFrames = Array.from(this.cache.entries())
+      .filter(([_, entry]) => entry.state.frozenFrame)
+      .sort(([_, a], [__, b]) => a.lastAccessed - b.lastAccessed);
+
+    let freedBytes = 0;
+    for (const [postId, entry] of entriesWithFrames) {
+      if (freedBytes >= bytesToFree) break;
+
+      const frameSize = entry.frozenFrameSize || 0;
+      
+      // Remove frozen frame but keep the rest of the state
+      entry.state.frozenFrame = undefined;
+      entry.size -= frameSize;
+      entry.frozenFrameSize = 0;
+      freedBytes += frameSize;
+      
+      console.log('[MediaStateCache] Evicted frozen frame', { 
+        postId, 
+        frameSizeMB: Math.round(frameSize / 1024 / 1024 * 100) / 100,
+        freedMB: Math.round(freedBytes / 1024 / 1024 * 100) / 100
+      });
+    }
+  }
+
+  // Enhanced LRU eviction
+  private evictOldestEntries(bytesToFree: number): void {
+    const sortedEntries = Array.from(this.cache.entries())
+      .sort(([_, a], [__, b]) => a.lastAccessed - b.lastAccessed);
+
+    let freedBytes = 0;
+    for (const [postId, entry] of sortedEntries) {
+      if (freedBytes >= bytesToFree) break;
+
+      // Never evict poster-only entries (they're small and important)
+      if (entry.state.posterLoaded && !entry.state.frozenFrame && entry.state.currentTime === 0) {
+        continue;
       }
+
+      freedBytes += entry.size;
+      this.cache.delete(postId);
+      this.evictions++;
+      
+      console.log('[MediaStateCache] Evicted entry', { 
+        postId, 
+        sizeMB: Math.round(entry.size / 1024 / 1024 * 100) / 100,
+        hadFrozenFrame: !!entry.state.frozenFrame
+      });
     }
-    
-    this.cache.clear();
-    this.accessOrder = [];
-    this.totalSize = 0;
-    this.hits = 0;
-    this.misses = 0;
-    this.evictions = 0;
-    
-    console.log('[MediaStateCache] Cleared all states');
   }
 
-  // Calculate estimated size of a media state
-  private calculateSize(state: MediaState): number {
-    let size = this.SIZE_ESTIMATES.videoElement;
+  // Calculate total size of all cached data
+  private getTotalSize(): number {
+    return Array.from(this.cache.values()).reduce((total, entry) => total + entry.size, 0);
+  }
+
+  // PHASE B.2: Calculate total size of frozen frames specifically
+  private getTotalFrozenFrameSize(): number {
+    return Array.from(this.cache.values()).reduce((total, entry) => total + (entry.frozenFrameSize || 0), 0);
+  }
+
+  // Estimate size of media state in bytes
+  private calculateStateSize(state: MediaState): number {
+    let size = 100; // Base size for primitives
     
-    if (state.posterLoaded) {
-      size += this.SIZE_ESTIMATES.poster;
-    }
+    // Buffered ranges
+    size += state.bufferedRanges.length * 16; // ~16 bytes per range
     
+    // Video element reference (minimal)
+    if (state.videoElement) size += 50;
+    
+    // Frozen frame
     if (state.frozenFrame) {
-      size += this.SIZE_ESTIMATES.frozenFrame;
-    }
-    
-    if (state.objectURL) {
-      size += this.SIZE_ESTIMATES.objectURL;
-    }
-    
-    if (state.videoElement || state.mediaSourceRef) {
-      size += this.SIZE_ESTIMATES.bufferedData;
+      size += this.estimateImageSize(state.frozenFrame);
     }
     
     return size;
   }
 
-  // Update LRU access order
-  private updateAccessOrder(postId: string): void {
-    // Remove from current position
-    this.removeFromAccessOrder(postId);
-    // Add to end (most recent)
-    this.accessOrder.push(postId);
-  }
-
-  // Remove from access order
-  private removeFromAccessOrder(postId: string): void {
-    const index = this.accessOrder.indexOf(postId);
-    if (index > -1) {
-      this.accessOrder.splice(index, 1);
-    }
-  }
-
-  // Update total size calculation
-  private updateTotalSize(): void {
-    this.totalSize = 0;
-    for (const state of this.cache.values()) {
-      this.totalSize += state.estimatedSize;
-    }
-  }
-
-  // Enforce cache limits (size and count)
-  private enforceLimits(): void {
-    const maxSizeBytes = this.MAX_SIZE_MB * 1024 * 1024;
-    
-    // First, enforce entry count limit
-    while (this.cache.size > this.MAX_ENTRIES) {
-      this.evictLRU();
-    }
-    
-    // Then, enforce size limit (but preserve posters if configured)
-    while (this.totalSize > maxSizeBytes && this.cache.size > 0) {
-      const evicted = this.evictLRU();
-      if (!evicted) break; // No more evictable items
-    }
-  }
-
-  // Evict least recently used item
-  private evictLRU(): boolean {
-    if (this.accessOrder.length === 0) return false;
-    
-    // Find first evictable item (skip posters if POSTER_NEVER_EVICT is true)
-    let evictIndex = 0;
-    if (this.POSTER_NEVER_EVICT) {
-      while (evictIndex < this.accessOrder.length) {
-        const postId = this.accessOrder[evictIndex];
-        const state = this.cache.get(postId);
-        
-        // Only evict if it's not just a poster (has other data)
-        if (state && (!state.posterLoaded || state.videoElement || state.frozenFrame || state.objectURL)) {
-          break;
-        }
-        evictIndex++;
-      }
+  // PHASE B.2: Improved image size estimation
+  private estimateImageSize(dataURL: string): number {
+    try {
+      // Remove data URL prefix to get base64 data
+      const base64Data = dataURL.split(',')[1] || dataURL;
       
-      // If we couldn't find anything to evict, evict the oldest anyway
-      if (evictIndex >= this.accessOrder.length) {
-        evictIndex = 0;
-      }
-    }
-    
-    const postIdToEvict = this.accessOrder[evictIndex];
-    if (postIdToEvict) {
-      this.delete(postIdToEvict);
-      this.evictions++;
+      // Base64 encoding adds ~33% overhead, so actual size is ~75% of base64 length
+      const estimatedSize = Math.round(base64Data.length * 0.75);
       
-      console.log('[MediaStateCache] Evicted LRU state', { 
-        postId: postIdToEvict,
-        totalSizeMB: Math.round(this.totalSize / 1024 / 1024 * 100) / 100
+      return estimatedSize;
+    } catch {
+      // Fallback: assume 100KB for unknown images
+      return 100 * 1024;
+    }
+  }
+
+  // Get comprehensive stats
+  getStats(): CacheStats {
+    const totalSize = this.getTotalSize();
+    const frozenFrameSize = this.getTotalFrozenFrameSize();
+    const frozenFrameCount = Array.from(this.cache.values())
+      .filter(entry => entry.state.frozenFrame).length;
+    
+    return {
+      totalEntries: this.cache.size,
+      totalSizeMB: Math.round(totalSize / 1024 / 1024 * 100) / 100,
+      maxSizeMB: this.maxSizeMB,
+      hitRate: this.hits + this.misses > 0 ? this.hits / (this.hits + this.misses) : 0,
+      evictions: this.evictions,
+      frozenFrameCount,
+      frozenFrameSizeMB: Math.round(frozenFrameSize / 1024 / 1024 * 100) / 100
+    };
+  }
+
+  // Check if entry exists
+  has(postId: string): boolean {
+    return this.cache.has(postId);
+  }
+
+  // Remove specific entry
+  delete(postId: string): boolean {
+    const entry = this.cache.get(postId);
+    if (entry) {
+      console.log('[MediaStateCache] Deleted entry', { 
+        postId, 
+        sizeMB: Math.round(entry.size / 1024 / 1024 * 100) / 100
       });
-      
-      return true;
     }
-    
-    return false;
+    return this.cache.delete(postId);
   }
 
-  // Clean up old states (called periodically)
-  cleanup(maxAge = 30 * 60 * 1000): number { // 30 minutes default
-    const cutoff = Date.now() - maxAge;
-    let cleaned = 0;
+  // Clear all entries
+  clear(): void {
+    const totalSize = this.getTotalSize();
+    this.cache.clear();
+    this.hits = 0;
+    this.misses = 0;
+    this.evictions = 0;
     
-    const toDelete: string[] = [];
-    for (const [postId, state] of this.cache) {
-      if (state.lastAccessed < cutoff) {
-        toDelete.push(postId);
+    console.log('[MediaStateCache] Cleared all entries', { 
+      freedMB: Math.round(totalSize / 1024 / 1024 * 100) / 100
+    });
+  }
+
+  // Cleanup old entries (older than maxAge)
+  cleanup(maxAge = 30 * 60 * 1000): void { // 30 minutes default
+    const cutoff = Date.now() - maxAge;
+    let cleanedCount = 0;
+    let freedBytes = 0;
+
+    for (const [postId, entry] of this.cache.entries()) {
+      if (entry.lastAccessed < cutoff) {
+        freedBytes += entry.size;
+        this.cache.delete(postId);
+        cleanedCount++;
       }
     }
-    
-    for (const postId of toDelete) {
-      this.delete(postId);
-      cleaned++;
+
+    if (cleanedCount > 0) {
+      console.log('[MediaStateCache] Cleaned up old entries', { 
+        cleanedCount, 
+        freedMB: Math.round(freedBytes / 1024 / 1024 * 100) / 100
+      });
     }
-    
-    if (cleaned > 0) {
-      console.log('[MediaStateCache] Cleaned up old states', { count: cleaned });
-    }
-    
-    return cleaned;
   }
 }
 

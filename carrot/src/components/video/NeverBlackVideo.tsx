@@ -55,7 +55,7 @@ export default function NeverBlackVideo({
   // Metrics tracking
   const metricsRef = useRef(MediaMetrics.instance);
   const stateCacheRef = useRef(MediaStateCache.instance);
-  const preloadQueueRef = useRef(MediaPreloadQueue.instance);
+  const preloadQueueRef = useRef(MediaPreloadQueue);
   
   // PHASE A.1: Guaranteed Poster Fallback Chain
   const getPosterUrl = (): string | null => {

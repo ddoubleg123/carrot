@@ -25,6 +25,8 @@ export interface MediaTask {
   startedAt?: number;
   completedAt?: number;
   error?: Error;
+  isBlocking?: boolean; 
+  dependsOn?: string; 
 }
 
 export interface TaskResult {
@@ -36,6 +38,7 @@ export interface TaskResult {
   size?: number;
   error?: Error;
   duration: number;
+  completedAt: number;
 }
 
 interface ConcurrencyLimits {
@@ -43,6 +46,14 @@ interface ConcurrencyLimits {
   [TaskType.VIDEO_PREROLL_6S]: number;
   [TaskType.IMAGE]: number;
   [TaskType.AUDIO_META]: number;
+}
+
+interface SequentialConfig {
+  maxConcurrentPosters: number;
+  maxConcurrentVideos: number;
+  maxSequentialGap: number; 
+  posterBlocksProgression: boolean;
+  videoBlocksProgression: boolean;
 }
 
 // Singleton MediaPreloadQueue
@@ -59,34 +70,43 @@ class MediaPreloadQueue {
   private tasks = new Map<string, MediaTask>();
   private activeTasks = new Map<TaskType, Set<string>>();
   private completedTasks = new Map<string, TaskResult>();
-  private globalBudgetUsed = 0; // bytes
+  private globalBudgetUsed = 0; 
   private isProcessing = false;
+  
+  private lastCompletedPosterIndex = -1; 
+  private lastCompletedVideoIndex = -1;  
+  private blockedTasks = new Set<string>(); 
 
-  // Configuration
-  private readonly GLOBAL_BUDGET_MB = 8; // 8MB total in-flight budget
+  private readonly GLOBAL_BUDGET_MB = 8; 
+  
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 6,
-    [TaskType.VIDEO_PREROLL_6S]: 2,
+    [TaskType.POSTER]: 6,       
+    [TaskType.VIDEO_PREROLL_6S]: 2, 
     [TaskType.IMAGE]: 4,
     [TaskType.AUDIO_META]: 3
   };
   
-  // Conservative estimates for 6s preload
+  private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
+    maxConcurrentPosters: 6,
+    maxConcurrentVideos: 2,
+    maxSequentialGap: 10,       
+    posterBlocksProgression: true, 
+    videoBlocksProgression: false  
+  };
+  
   private readonly ESTIMATED_SIZES = {
-    [TaskType.POSTER]: 0.1, // 100KB
-    [TaskType.VIDEO_PREROLL_6S]: 1.5, // 1.5MB for 6s at 2Mbps
-    [TaskType.IMAGE]: 0.5, // 500KB
-    [TaskType.AUDIO_META]: 0.5 // 500KB
+    [TaskType.POSTER]: 0.1, 
+    [TaskType.VIDEO_PREROLL_6S]: 1.5, 
+    [TaskType.IMAGE]: 0.5, 
+    [TaskType.AUDIO_META]: 0.5 
   };
 
   constructor() {
-    // Initialize active task sets
     Object.values(TaskType).forEach(type => {
       this.activeTasks.set(type, new Set());
     });
   }
 
-  // Add task to queue with de-duplication
   enqueue(
     postId: string,
     type: TaskType,
@@ -98,7 +118,6 @@ class MediaPreloadQueue {
   ): string {
     const taskId = `${type}:${postId}`;
     
-    // De-duplicate: if task exists, update priority if higher
     const existingTask = this.tasks.get(taskId);
     if (existingTask) {
       if (priority < existingTask.priority) {
@@ -108,7 +127,9 @@ class MediaPreloadQueue {
       return taskId;
     }
 
-    // Create new task
+    const isBlocking = this.isTaskBlocking(type, feedIndex);
+    const dependsOn = this.getDependency(type, feedIndex);
+
     const task: MediaTask = {
       id: taskId,
       postId,
@@ -119,18 +140,63 @@ class MediaPreloadQueue {
       bucket,
       path,
       abortController: new AbortController(),
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      isBlocking,
+      dependsOn
     };
 
     this.tasks.set(taskId, task);
-    console.log('[MediaPreloadQueue] Enqueued task', { taskId, type, priority, feedIndex });
+    
+    if (dependsOn && !this.completedTasks.has(dependsOn)) {
+      this.blockedTasks.add(taskId);
+      console.log('[MediaPreloadQueue] Task blocked by dependency', { 
+        taskId, 
+        dependsOn, 
+        feedIndex,
+        isBlocking 
+      });
+    }
 
-    // Start processing if not already running
+    console.log('[MediaPreloadQueue] Enqueued task', { 
+      taskId, 
+      type, 
+      priority, 
+      feedIndex,
+      isBlocking,
+      dependsOn: dependsOn || 'none'
+    });
+
     if (!this.isProcessing) {
       this.processQueue();
     }
 
     return taskId;
+  }
+
+  private isTaskBlocking(type: TaskType, feedIndex: number): boolean {
+    switch (type) {
+      case TaskType.POSTER:
+        return this.SEQUENTIAL_CONFIG.posterBlocksProgression;
+      case TaskType.VIDEO_PREROLL_6S:
+        return this.SEQUENTIAL_CONFIG.videoBlocksProgression;
+      default:
+        return false;
+    }
+  }
+
+  private getDependency(type: TaskType, feedIndex: number): string | undefined {
+    if (feedIndex === 0) return undefined; 
+
+    switch (type) {
+      case TaskType.POSTER:
+        return `${TaskType.POSTER}:post-${feedIndex - 1}`;
+      
+      case TaskType.VIDEO_PREROLL_6S:
+        return `${TaskType.POSTER}:post-${feedIndex}`;
+      
+      default:
+        return undefined;
+    }
   }
 
   // Remove task from queue and abort if running
@@ -147,6 +213,9 @@ class MediaPreloadQueue {
 
     // Remove from queue
     this.tasks.delete(taskId);
+    
+    // Remove from blocked set if present
+    this.blockedTasks.delete(taskId);
     
     console.log('[MediaPreloadQueue] Cancelled task', { taskId });
     return true;
@@ -190,22 +259,35 @@ class MediaPreloadQueue {
     return this.completedTasks.has(taskId);
   }
 
-  // Get queue stats
+  // Get queue statistics
   getStats() {
-    const byType = new Map<TaskType, { queued: number; active: number; completed: number }>();
+    const activeCounts = new Map<TaskType, number>();
+    for (const [type, tasks] of this.activeTasks) {
+      activeCounts.set(type, tasks.size);
+    }
+
+    // Create byType structure that dashboard expects
+    const byType = new Map<TaskType, { queued: number; active: number; completed: number; blocked: number }>();
     
     Object.values(TaskType).forEach(type => {
       byType.set(type, {
         queued: 0,
         active: this.activeTasks.get(type)?.size || 0,
-        completed: 0
+        completed: 0,
+        blocked: 0
       });
     });
 
     // Count queued tasks
     for (const task of this.tasks.values()) {
       const stats = byType.get(task.type)!;
-      stats.queued++;
+      const isActive = this.activeTasks.get(task.type)?.has(task.id);
+      if (!isActive) {
+        stats.queued++;
+      }
+      if (this.blockedTasks.has(task.id)) {
+        stats.blocked++;
+      }
     }
 
     // Count completed tasks
@@ -214,78 +296,107 @@ class MediaPreloadQueue {
       stats.completed++;
     }
 
+    const queuedByPriority = new Map<Priority, number>();
+    for (const task of this.tasks.values()) {
+      const isActive = this.activeTasks.get(task.type)?.has(task.id);
+      if (!isActive) {
+        queuedByPriority.set(task.priority, (queuedByPriority.get(task.priority) || 0) + 1);
+      }
+    }
+
     return {
+      queued: this.tasks.size - Array.from(activeCounts.values()).reduce((sum, count) => sum + count, 0),
+      active: Array.from(activeCounts.values()).reduce((sum, count) => sum + count, 0),
+      completed: this.completedTasks.size,
+      blocked: this.blockedTasks.size,
+      isProcessing: this.isProcessing,
+      activeCounts: Object.fromEntries(activeCounts),
+      queuedByPriority: Object.fromEntries(queuedByPriority),
       byType: Object.fromEntries(byType),
       globalBudgetUsed: this.globalBudgetUsed,
       globalBudgetMB: this.GLOBAL_BUDGET_MB,
-      isProcessing: this.isProcessing
+      sequentialStats: {
+        lastCompletedPosterIndex: this.lastCompletedPosterIndex,
+        lastCompletedVideoIndex: this.lastCompletedVideoIndex,
+        maxSequentialGap: this.SEQUENTIAL_CONFIG.maxSequentialGap
+      },
+      memoryUsage: {
+        estimatedMB: this.globalBudgetUsed / (1024 * 1024),
+        budgetMB: this.GLOBAL_BUDGET_MB
+      }
     };
   }
 
-  // Main processing loop
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing) return;
-    this.isProcessing = true;
-
-    try {
-      while (this.tasks.size > 0) {
-        const nextTask = this.selectNextTask();
-        if (!nextTask) {
-          // No task can run due to concurrency/budget limits
-          await new Promise(resolve => setTimeout(resolve, 100));
-          continue;
-        }
-
-        // Execute task
-        await this.executeTask(nextTask);
-        
-        // Small delay to prevent overwhelming
-        await new Promise(resolve => setTimeout(resolve, 50));
+  // Clean up old completed tasks
+  cleanup(): void {
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
+    
+    for (const [taskId, result] of this.completedTasks) {
+      if (now - result.completedAt > maxAge) {
+        this.completedTasks.delete(taskId);
       }
-    } finally {
-      this.isProcessing = false;
     }
   }
 
-  // Select next task based on priority and constraints
-  private selectNextTask(): MediaTask | null {
-    // Check global budget
-    if (this.globalBudgetUsed >= this.GLOBAL_BUDGET_MB * 1024 * 1024) {
-      return null;
-    }
+  private processQueue(): void {
+    // Start tasks that can be started
+    for (const task of this.tasks.values()) {
+      const activeSet = this.activeTasks.get(task.type);
+      if (!activeSet || activeSet.has(task.id)) continue; // Skip if already active
 
-    // Sort tasks by priority, then by feed index
-    const sortedTasks = Array.from(this.tasks.values()).sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      return a.feedIndex - b.feedIndex;
-    });
-
-    // Find first task that can run
-    for (const task of sortedTasks) {
-      const activeCount = this.activeTasks.get(task.type)?.size || 0;
-      const limit = this.CONCURRENCY_LIMITS[task.type];
-      
-      if (activeCount < limit) {
-        // Check if we have budget for this task type
-        const estimatedSize = this.ESTIMATED_SIZES[task.type] * 1024 * 1024;
-        if (this.globalBudgetUsed + estimatedSize <= this.GLOBAL_BUDGET_MB * 1024 * 1024) {
-          return task;
-        }
+      // Check if we can start this task
+      if (!this.canStartTask(task)) {
+        this.blockedTasks.add(task.id);
+        continue;
       }
-    }
 
-    return null;
+      // Check concurrency limits
+      if (activeSet.size >= this.CONCURRENCY_LIMITS[task.type]) {
+        continue;
+      }
+
+      // Check memory budget
+      const estimatedTaskSize = this.ESTIMATED_SIZES[task.type] * 1024 * 1024;
+      if (this.globalBudgetUsed + estimatedTaskSize > this.GLOBAL_BUDGET_MB * 1024 * 1024) {
+        continue;
+      }
+
+      // Start the task
+      this.executeTask(task);
+    }
   }
 
-  // Execute a single task
+  private canStartTask(task: MediaTask): boolean {
+    if (task.dependsOn && !this.completedTasks.has(task.dependsOn)) {
+      return false;
+    }
+
+    const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
+    if (task.feedIndex > currentIndex + this.SEQUENTIAL_CONFIG.maxSequentialGap) {
+      return false;
+    }
+
+    const activeCount = this.activeTasks.get(task.type)?.size || 0;
+    const limit = this.CONCURRENCY_LIMITS[task.type];
+    if (activeCount >= limit) {
+      return false;
+    }
+
+    const estimatedSize = this.ESTIMATED_SIZES[task.type] * 1024 * 1024;
+    if (this.globalBudgetUsed + estimatedSize > this.GLOBAL_BUDGET_MB * 1024 * 1024) {
+      return false;
+    }
+
+    return true;
+  }
+
   private async executeTask(task: MediaTask): Promise<void> {
     const { id: taskId, type, url, abortController } = task;
     
-    // Move to active set
     this.tasks.delete(taskId);
     this.activeTasks.get(type)?.add(taskId);
     
-    // Reserve budget
     const estimatedSize = this.ESTIMATED_SIZES[type] * 1024 * 1024;
     this.globalBudgetUsed += estimatedSize;
     
@@ -295,6 +406,8 @@ class MediaPreloadQueue {
       taskId, 
       type, 
       priority: task.priority,
+      feedIndex: task.feedIndex,
+      isBlocking: task.isBlocking,
       budgetUsed: Math.round(this.globalBudgetUsed / 1024 / 1024 * 10) / 10 
     });
 
@@ -318,7 +431,7 @@ class MediaPreloadQueue {
           const videoResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
-              'Range': 'bytes=0-2097152', // First 2MB for ~6s
+              'Range': 'bytes=0-2097152', 
               'Accept': 'video/*'
             }
           });
@@ -331,7 +444,7 @@ class MediaPreloadQueue {
           const audioResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
-              'Range': 'bytes=0-524288', // First 512KB
+              'Range': 'bytes=0-524288', 
               'Accept': 'audio/*'
             }
           });
@@ -344,7 +457,6 @@ class MediaPreloadQueue {
           throw new Error(`Unknown task type: ${type}`);
       }
 
-      // Task completed successfully
       const result: TaskResult = {
         id: taskId,
         postId: task.postId,
@@ -352,40 +464,47 @@ class MediaPreloadQueue {
         success: true,
         data,
         size: actualSize,
-        duration: Date.now() - task.startedAt!
+        duration: Date.now() - task.startedAt!,
+        completedAt: Date.now()
       };
 
       this.completedTasks.set(taskId, result);
       
+      this.handleTaskCompletion(taskId, result);
+      
       console.log('[MediaPreloadQueue] Task completed', { 
         taskId, 
+        feedIndex: task.feedIndex,
         actualSize: Math.round(actualSize / 1024), 
-        duration: result.duration 
+        duration: result.duration,
+        isBlocking: task.isBlocking
       });
 
     } catch (error) {
-      // Task failed
       const result: TaskResult = {
         id: taskId,
         postId: task.postId,
         type,
         success: false,
         error: error as Error,
-        duration: Date.now() - task.startedAt!
+        duration: Date.now() - task.startedAt!,
+        completedAt: Date.now()
       };
 
       this.completedTasks.set(taskId, result);
       
+      this.handleTaskCompletion(taskId, result);
+      
       console.warn('[MediaPreloadQueue] Task failed', { 
         taskId, 
-        error: (error as Error).message 
+        feedIndex: task.feedIndex,
+        error: (error as Error).message,
+        isBlocking: task.isBlocking
       });
 
     } finally {
-      // Clean up
       this.activeTasks.get(type)?.delete(taskId);
       
-      // Adjust budget (use actual size if available, otherwise keep estimate)
       const result = this.completedTasks.get(taskId);
       if (result?.size) {
         this.globalBudgetUsed = this.globalBudgetUsed - estimatedSize + result.size;
@@ -393,13 +512,155 @@ class MediaPreloadQueue {
     }
   }
 
+  private handleTaskCompletion(taskId: string, result: TaskResult): void {
+    const task = this.tasks.get(taskId);
+    if (!task) return;
+
+    if (result.success) {
+      if (task.type === TaskType.POSTER) {
+        this.lastCompletedPosterIndex = Math.max(this.lastCompletedPosterIndex, task.feedIndex);
+        console.log('[MediaPreloadQueue] Poster sequence advanced', { 
+          feedIndex: task.feedIndex,
+          lastCompleted: this.lastCompletedPosterIndex
+        });
+      } else if (task.type === TaskType.VIDEO_PREROLL_6S) {
+        this.lastCompletedVideoIndex = Math.max(this.lastCompletedVideoIndex, task.feedIndex);
+        console.log('[MediaPreloadQueue] Video sequence advanced', { 
+          feedIndex: task.feedIndex,
+          lastCompleted: this.lastCompletedVideoIndex
+        });
+      }
+    }
+
+    this.unblockDependentTasks(taskId);
+  }
+
+  private unblockDependentTasks(completedTaskId: string): void {
+    const unblocked: string[] = [];
+    
+    for (const blockedTaskId of this.blockedTasks) {
+      const task = this.tasks.get(blockedTaskId);
+      if (task?.dependsOn === completedTaskId) {
+        this.blockedTasks.delete(blockedTaskId);
+        unblocked.push(blockedTaskId);
+      }
+    }
+
+    if (unblocked.length > 0) {
+      console.log('[MediaPreloadQueue] Unblocked dependent tasks', { 
+        completedTaskId, 
+        unblocked: unblocked.length 
+      });
+    }
+  }
+
+  private selectNextTask(): MediaTask | null {
+    if (this.globalBudgetUsed >= this.GLOBAL_BUDGET_MB * 1024 * 1024) {
+      return null;
+    }
+
+    const availableTasks = Array.from(this.tasks.values())
+      .filter(task => !this.blockedTasks.has(task.id)) 
+      .filter(task => this.canStartTask(task)) 
+      .sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        
+        const aAdvancesSequence = this.doesTaskAdvanceSequence(a);
+        const bAdvancesSequence = this.doesTaskAdvanceSequence(b);
+        if (aAdvancesSequence !== bAdvancesSequence) {
+          return bAdvancesSequence ? 1 : -1; 
+        }
+        
+        return a.feedIndex - b.feedIndex;
+      });
+
+    return availableTasks[0] || null;
+  }
+
+  private doesTaskAdvanceSequence(task: MediaTask): boolean {
+    switch (task.type) {
+      case TaskType.POSTER:
+        return task.feedIndex === this.lastCompletedPosterIndex + 1;
+      case TaskType.VIDEO_PREROLL_6S:
+        return task.feedIndex === this.lastCompletedVideoIndex + 1;
+      default:
+        return false;
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+
+    try {
+      while (this.tasks.size > 0) {
+        const nextTask = this.selectNextTask();
+        if (!nextTask) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
+
+        await this.executeTask(nextTask);
+        
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  getSequentialStats() {
+    return {
+      lastCompletedPosterIndex: this.lastCompletedPosterIndex,
+      lastCompletedVideoIndex: this.lastCompletedVideoIndex,
+      blockedTasksCount: this.blockedTasks.size,
+      maxSequentialGap: this.SEQUENTIAL_CONFIG.maxSequentialGap,
+      posterBlocksProgression: this.SEQUENTIAL_CONFIG.posterBlocksProgression,
+      videoBlocksProgression: this.SEQUENTIAL_CONFIG.videoBlocksProgression
+    };
+  }
+
+  getStats() {
+    const byType = new Map<TaskType, { queued: number; active: number; completed: number; blocked: number }>();
+    
+    Object.values(TaskType).forEach(type => {
+      byType.set(type, {
+        queued: 0,
+        active: this.activeTasks.get(type)?.size || 0,
+        completed: 0,
+        blocked: 0
+      });
+    });
+
+    for (const task of this.tasks.values()) {
+      const stats = byType.get(task.type)!;
+      stats.queued++;
+      if (this.blockedTasks.has(task.id)) {
+        stats.blocked++;
+      }
+    }
+
+    for (const result of this.completedTasks.values()) {
+      const stats = byType.get(result.type)!;
+      stats.completed++;
+    }
+
+    return {
+      byType: Object.fromEntries(byType),
+      globalBudgetUsed: this.globalBudgetUsed,
+      globalBudgetMB: this.GLOBAL_BUDGET_MB,
+      isProcessing: this.isProcessing,
+      sequential: this.getSequentialStats()
+    };
+  }
+
   // Clear old completed tasks to prevent memory leaks
-  cleanup(maxAge = 5 * 60 * 1000): number { // 5 minutes default
+  cleanup(maxAge = 5 * 60 * 1000): number { 
     const cutoff = Date.now() - maxAge;
     let cleaned = 0;
     
     for (const [taskId, result] of this.completedTasks) {
-      if (result.duration && (Date.now() - result.duration) > cutoff) {
+      if (result.completedAt && (Date.now() - result.completedAt) > cutoff) {
         this.completedTasks.delete(taskId);
         cleaned++;
       }
@@ -413,4 +674,4 @@ class MediaPreloadQueue {
   }
 }
 
-export default MediaPreloadQueue;
+export default MediaPreloadQueue.instance;

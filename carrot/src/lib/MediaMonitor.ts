@@ -45,7 +45,7 @@ class MediaMonitor {
     this.metricsCleanupInterval = window.setInterval(() => {
       MediaMetrics.instance.cleanup();
       MediaStateCache.instance.cleanup();
-      MediaPreloadQueue.instance.cleanup();
+      MediaPreloadQueue.cleanup();
     }, this.METRICS_CLEANUP_INTERVAL);
 
     // Memory usage tracking
@@ -94,7 +94,7 @@ class MediaMonitor {
   }
 
   private trackMemoryUsage(): void {
-    const queueStats = MediaPreloadQueue.instance.getStats();
+    const queueStats = MediaPreloadQueue.getStats();
     const cacheStats = MediaStateCache.instance.getStats();
     
     const preloadQueueMB = queueStats.globalBudgetUsed / 1024 / 1024;
@@ -105,7 +105,7 @@ class MediaMonitor {
 
   getHealthStatus(): HealthStatus {
     const metrics = MediaMetrics.instance.getSummary();
-    const queueStats = MediaPreloadQueue.instance.getStats();
+    const queueStats = MediaPreloadQueue.getStats();
     const cacheStats = MediaStateCache.instance.getStats();
     
     const issues: string[] = [];
