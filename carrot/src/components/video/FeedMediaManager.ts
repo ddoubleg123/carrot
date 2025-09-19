@@ -1,3 +1,5 @@
+import FeedPreloadManager, { PostAsset } from './FeedPreloadManager';
+
 export type VideoHandle = {
   id: string;
   el?: Element; // associated DOM element for identification
@@ -6,6 +8,7 @@ export type VideoHandle = {
   warm?: () => Promise<void> | void; // attach media, load playlist + first segment
   setPaused: () => void; // pause but keep attached, show poster
   release: () => void; // detach media/destroy hls, free decoder
+  getScreenPosition?: () => { top: number; bottom: number; height: number } | null;
 };
 
 enum TileState {
@@ -18,6 +21,8 @@ enum TileState {
 // Track scroll velocity (screens/sec) for fast-scroll guard
 const FAST_SCROLL_THRESHOLD = 1.2; // screens per second
 const FAST_SCROLL_COOLDOWN = 700; // ms
+const IDLE_RELEASE_GRACE_MS = 5000; // delay before teardown to prevent thrash
+const SCREEN_TEARDOWN_DISTANCE = 3; // screens away before teardown
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
 let lastTime = typeof performance !== 'undefined' ? performance.now() : 0;
 let lastFastScroll = 0;
@@ -83,20 +88,102 @@ class FeedMediaManager {
   private _warm?: VideoHandle;
   private _paused = new Set<VideoHandle>();
   private _handles = new WeakMap<Element, VideoHandle>();
+  private _allHandles = new Set<VideoHandle>(); // Track all handles for iteration
   private _states = new WeakMap<VideoHandle, TileState>();
+  private _releaseTimers = new WeakMap<VideoHandle, number>();
+  private _posts: PostAsset[] = [];
+  private _currentViewportIndex = 0;
+  private _screenHeight = 0;
 
   get active() { return this._active; }
   get warm() { return this._warm; }
 
+  // Initialize with posts for preload management
+  setPosts(posts: PostAsset[]): void {
+    this._posts = posts;
+    FeedPreloadManager.instance.setPosts(posts);
+    this.updateScreenHeight();
+  }
+
+  // Update viewport position for preload queue
+  setViewportIndex(index: number): void {
+    this._currentViewportIndex = index;
+    FeedPreloadManager.instance.setViewportIndex(index);
+    this.scheduleDistantCleanup();
+  }
+
+  // Update screen height for distance calculations
+  private updateScreenHeight(): void {
+    if (typeof window !== 'undefined') {
+      this._screenHeight = window.innerHeight;
+    }
+  }
+
+  // Schedule cleanup of videos that are 3+ screens away
+  private scheduleDistantCleanup(): void {
+    setTimeout(() => this.cleanupDistantVideos(), 500);
+  }
+
+  // Clean up videos that are 3+ screens away
+  private cleanupDistantVideos(): void {
+    if (this._screenHeight === 0) {
+      this.updateScreenHeight();
+    }
+    if (this._screenHeight === 0) return;
+
+    const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
+    const viewportTop = currentScrollY;
+    const viewportBottom = currentScrollY + this._screenHeight;
+    const teardownDistance = this._screenHeight * SCREEN_TEARDOWN_DISTANCE;
+
+    // Check all registered handles
+    this._allHandles.forEach(handle => {
+      const position = handle.getScreenPosition?.();
+      if (!position) return;
+
+      const { top, bottom } = position;
+      const distanceAbove = viewportTop - bottom;
+      const distanceBelow = top - viewportBottom;
+      const minDistance = Math.min(
+        distanceAbove > 0 ? distanceAbove : Infinity,
+        distanceBelow > 0 ? distanceBelow : Infinity
+      );
+
+      // If video is more than 3 screens away and not active/warm, schedule teardown
+      if (minDistance > teardownDistance) {
+        const isActive = this._active === handle;
+        const isWarm = this._warm === handle;
+        
+        if (!isActive && !isWarm) {
+          const screens = Math.round(minDistance / this._screenHeight * 10) / 10;
+          console.log('[FeedMediaManager] Scheduling distant video teardown', { 
+            id: handle.id, 
+            screens: screens
+          });
+          this.setIdle(handle);
+        }
+      }
+    });
+  }
+
   registerHandle(el: Element, handle: VideoHandle) {
     handle.el = el;
     this._handles.set(el, handle);
+    this._allHandles.add(handle);
     this._states.set(handle, TileState.Idle);
   }
   
   unregisterHandle(el: Element) {
     const handle = this._handles.get(el);
     if (handle) {
+      // Cancel any pending release timer
+      const timer = this._releaseTimers.get(handle);
+      if (timer) {
+        clearTimeout(timer);
+        this._releaseTimers.delete(handle);
+      }
+      
+      this._allHandles.delete(handle);
       this._states.delete(handle);
       this._paused.delete(handle);
       if (this._active === handle) this._active = undefined;
@@ -114,6 +201,15 @@ class FeedMediaManager {
   }
 
   setActive(next?: VideoHandle) {
+    // Cancel pending teardown for next
+    if (next) {
+      const timer = this._releaseTimers.get(next);
+      if (timer) {
+        clearTimeout(timer);
+        this._releaseTimers.delete(next);
+      }
+    }
+
     // Pause previous active (don't release - move to Paused if still visible)
     if (this._active && this._active !== next) {
       try { 
@@ -132,6 +228,11 @@ class FeedMediaManager {
       
       this._states.set(next, TileState.Active);
       try { void next.play(); } catch {}
+      
+      console.log('[FeedMediaManager] Active set', { 
+        id: next.id, 
+        preloaded: FeedPreloadManager.instance.isPreloaded(next.id) 
+      });
     }
   }
 
@@ -139,6 +240,15 @@ class FeedMediaManager {
     if (isFastScroll()) {
       console.debug('[FeedMediaManager] Skipping preload due to fast scroll', { id: next?.id });
       return;
+    }
+
+    // Cancel pending teardown for next
+    if (next) {
+      const timer = this._releaseTimers.get(next);
+      if (timer) {
+        clearTimeout(timer);
+        this._releaseTimers.delete(next);
+      }
     }
 
     console.debug('warm', next?.id);
@@ -156,11 +266,24 @@ class FeedMediaManager {
       this._paused.delete(next);
       this._states.set(next, TileState.Warm);
       try { void next.warm?.(); } catch {}
+      
+      console.log('[FeedMediaManager] Warm set', { 
+        id: next.id, 
+        preloaded: FeedPreloadManager.instance.isPreloaded(next.id) 
+      });
     }
   }
 
   setPaused(handle?: VideoHandle) {
     if (!handle) return;
+    
+    // Cancel pending teardown
+    const timer = this._releaseTimers.get(handle);
+    if (timer) {
+      clearTimeout(timer);
+      this._releaseTimers.delete(handle);
+    }
+    
     const currentState = this._states.get(handle);
     
     // Only pause if currently Active or Warm
@@ -176,24 +299,58 @@ class FeedMediaManager {
       // Clear from active/warm if it was there
       if (this._active === handle) this._active = undefined;
       if (this._warm === handle) this._warm = undefined;
+      
+      console.log('[FeedMediaManager] Paused set', { id: handle.id });
     }
   }
 
-  // Full teardown for off-screen tiles
+  // Deferred teardown for off-screen tiles with grace period
   setIdle(handle?: VideoHandle) {
     if (!handle) return;
-    try { 
-      handle.pause(); 
-      handle.release(); 
-    } catch {}
     
-    this._states.set(handle, TileState.Idle);
-    this._paused.delete(handle);
-    if (this._active === handle) this._active = undefined;
-    if (this._warm === handle) this._warm = undefined;
+    // Cancel any existing timer
+    const existingTimer = this._releaseTimers.get(handle);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // Schedule deferred teardown with grace period
+    const timer = window.setTimeout(() => {
+      // Double-check if handle was re-promoted during grace period
+      const currentState = this._states.get(handle);
+      if (currentState === TileState.Active || currentState === TileState.Warm) {
+        console.log('[FeedMediaManager] Idle teardown cancelled - handle was re-promoted', { id: handle.id });
+        return;
+      }
+      
+      try { 
+        handle.pause(); 
+        handle.release(); 
+      } catch {}
+      
+      this._states.set(handle, TileState.Idle);
+      this._paused.delete(handle);
+      if (this._active === handle) this._active = undefined;
+      if (this._warm === handle) this._warm = undefined;
+      this._releaseTimers.delete(handle);
+      
+      console.log('[FeedMediaManager] Idle teardown completed', { id: handle.id });
+    }, IDLE_RELEASE_GRACE_MS);
+    
+    this._releaseTimers.set(handle, timer);
+    console.log('[FeedMediaManager] Idle teardown scheduled', { id: handle.id, graceMs: IDLE_RELEASE_GRACE_MS });
   }
 
   clearAll() {
+    // Clear all timers by iterating through handles
+    this._allHandles.forEach((handle: VideoHandle) => {
+      const timer = this._releaseTimers.get(handle);
+      if (timer) {
+        clearTimeout(timer);
+        this._releaseTimers.delete(handle);
+      }
+    });
+    
     if (this._active) { 
       try { this._active.pause(); this._active.release(); } catch {} 
     }
@@ -206,6 +363,7 @@ class FeedMediaManager {
     this._active = undefined;
     this._warm = undefined;
     this._paused.clear();
+    this._allHandles.clear();
   }
 }
 
