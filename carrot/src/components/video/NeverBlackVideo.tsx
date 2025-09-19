@@ -5,6 +5,7 @@ import Image from 'next/image';
 import MediaMetrics from '../../lib/MediaMetrics';
 import MediaStateCache from '../../lib/MediaStateCache';
 import MediaPreloadQueue, { TaskType } from '../../lib/MediaPreloadQueue';
+import VideoPlaceholder from './VideoPlaceholder';
 
 interface NeverBlackVideoProps {
   src?: string;
@@ -24,20 +25,6 @@ interface NeverBlackVideoProps {
   onError?: (error: Error) => void;
   children?: React.ReactNode;
 }
-
-// Neutral placeholder for when poster fails
-const VideoPlaceholder: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={`bg-gray-900 flex items-center justify-center ${className}`}>
-    <div className="text-gray-400 text-center">
-      <div className="w-16 h-16 mx-auto mb-2 opacity-50">
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-      </div>
-      <div className="text-sm">Video</div>
-    </div>
-  </div>
-);
 
 export default function NeverBlackVideo({
   src,
@@ -60,6 +47,7 @@ export default function NeverBlackVideo({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [posterLoaded, setPosterLoaded] = useState(false);
   const [posterError, setPosterError] = useState(false);
+  const [fallbackAttempt, setFallbackAttempt] = useState(0); // Track fallback attempts
   const [videoReady, setVideoReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttffStarted, setTtffStarted] = useState(false);
@@ -69,9 +57,33 @@ export default function NeverBlackVideo({
   const stateCacheRef = useRef(MediaStateCache.instance);
   const preloadQueueRef = useRef(MediaPreloadQueue.instance);
   
+  // PHASE A.1: Guaranteed Poster Fallback Chain
+  const getPosterUrl = (): string | null => {
+    // 1st Priority: Direct poster prop (should be public GCS URL)
+    if (poster) return poster;
+    
+    // 2nd Priority: Public GCS thumbnail URL (no /api/img proxy)
+    if (bucket && path) {
+      // Use direct public GCS URL - no ExpiredToken risk
+      return `https://storage.googleapis.com/${bucket}/${path}/thumb.jpg`;
+    }
+    
+    return null;
+  };
+
+  const getFallbackPosterUrl = (): string | null => {
+    // Fallback: Server-generated poster via /api/img (only if public URL fails)
+    if (bucket && path && fallbackAttempt === 1) {
+      return `/api/img?bucket=${bucket}&path=${path}/thumb.jpg&generatePoster=true`;
+    }
+    
+    return null;
+  };
+  
   // Construct URLs
-  const posterUrl = poster || 
-    (bucket && path ? `/api/img?bucket=${bucket}&path=${path}/thumb.jpg&generatePoster=true` : null);
+  const primaryPosterUrl = getPosterUrl();
+  const fallbackPosterUrl = getFallbackPosterUrl();
+  const currentPosterUrl = fallbackAttempt === 0 ? primaryPosterUrl : fallbackPosterUrl;
   
   const videoUrl = src || 
     (bucket && path ? `/api/video?bucket=${bucket}&path=${path}/video.mp4` : null);
@@ -82,7 +94,7 @@ export default function NeverBlackVideo({
   };
 
   // Check for preloaded content
-  const isPosterPreloaded = posterUrl ? preloadQueueRef.current.isCompleted(postId, TaskType.POSTER) : false;
+  const isPosterPreloaded = currentPosterUrl ? preloadQueueRef.current.isCompleted(postId, TaskType.POSTER) : false;
   const isVideoPreloaded = videoUrl ? preloadQueueRef.current.isCompleted(postId, TaskType.VIDEO_PREROLL_6S) : false;
 
   // Load cached state on mount
@@ -117,15 +129,38 @@ export default function NeverBlackVideo({
     // Track poster load completion
     metricsRef.current.endPosterLoad(postId, true, isPosterPreloaded);
     metricsRef.current.recordCacheHit('poster', isPosterPreloaded);
+    
+    console.log('[NeverBlackVideo] Poster loaded successfully', { 
+      postId, 
+      url: currentPosterUrl,
+      fallbackAttempt,
+      preloaded: isPosterPreloaded 
+    });
   };
 
   const handlePosterError = () => {
+    console.warn('[NeverBlackVideo] Poster load failed', { 
+      postId, 
+      url: currentPosterUrl, 
+      fallbackAttempt 
+    });
+    
+    // Try fallback if available
+    if (fallbackAttempt === 0 && fallbackPosterUrl) {
+      console.log('[NeverBlackVideo] Attempting fallback poster', { postId, fallbackUrl: fallbackPosterUrl });
+      setFallbackAttempt(1);
+      setPosterError(false); // Reset error state to try fallback
+      return;
+    }
+    
+    // All poster attempts failed - will show placeholder
     setPosterError(true);
-    console.warn('[NeverBlackVideo] Poster load failed', { postId, posterUrl });
     
     // Track poster load failure
-    metricsRef.current.endPosterLoad(postId, false, false, 'Poster load failed');
-    metricsRef.current.recordError('PosterError', 'Failed to load poster image', postId, posterUrl || undefined);
+    metricsRef.current.endPosterLoad(postId, false, false, `Poster load failed after ${fallbackAttempt + 1} attempts`);
+    metricsRef.current.recordError('PosterError', 'All poster URLs failed', postId, currentPosterUrl || undefined);
+    
+    console.warn('[NeverBlackVideo] All poster attempts failed, showing placeholder', { postId });
   };
 
   const handleVideoLoadedMetadata = () => {
@@ -219,28 +254,32 @@ export default function NeverBlackVideo({
 
   // Start poster load tracking when poster URL is available
   useEffect(() => {
-    if (posterUrl && !posterLoaded && !posterError) {
-      metricsRef.current.startPosterLoad(postId, posterUrl);
+    if (currentPosterUrl && !posterLoaded && !posterError) {
+      metricsRef.current.startPosterLoad(postId, currentPosterUrl);
     }
-  }, [postId, posterUrl, posterLoaded, posterError]);
+  }, [postId, currentPosterUrl, posterLoaded, posterError, fallbackAttempt]);
 
-  // Show poster until video is playing
-  const showPoster = !isPlaying && (posterLoaded || !posterError);
-  const showPlaceholder = !showPoster && !videoReady;
+  // PHASE A.1: Display Logic - NEVER show black screens
+  const showPoster = !isPlaying && posterLoaded && !posterError;
+  const showPlaceholder = !showPoster && (!currentPosterUrl || posterError);
+  const showLoading = !posterLoaded && !posterError && currentPosterUrl;
 
   // Check if we have a cached frozen frame to show
   const cachedState = stateCacheRef.current.get(postId);
   const frozenFrame = cachedState?.frozenFrame;
   const showFrozenFrame = !isPlaying && frozenFrame && videoReady;
 
+  // GUARANTEE: Always show something - never black
+  const hasVisibleContent = showPoster || showPlaceholder || showLoading || showFrozenFrame;
+
   return (
     <div className={`relative ${className}`} style={{ aspectRatio: '16/9' }}>
-      {/* Video element */}
+      {/* Video element - only show when playing */}
       <video
         ref={setVideoRef}
         className="w-full h-full object-cover"
         src={videoUrl || undefined}
-        poster={posterUrl || undefined}
+        poster={currentPosterUrl || undefined} // Always provide poster if available
         muted={muted}
         playsInline={playsInline}
         controls={controls}
@@ -253,14 +292,14 @@ export default function NeverBlackVideo({
         onCanPlay={handleVideoCanPlay}
         onError={handleVideoError}
         style={{
-          opacity: (showPoster || showPlaceholder || showFrozenFrame) ? 0 : 1,
+          opacity: isPlaying ? 1 : 0,
           transition: 'opacity 0.3s ease'
         }}
       >
         {children}
       </video>
 
-      {/* Frozen frame overlay (highest priority) */}
+      {/* Frozen frame overlay (highest priority when paused) */}
       {showFrozenFrame && (
         <div className="absolute inset-0">
           <img
@@ -281,10 +320,10 @@ export default function NeverBlackVideo({
       )}
 
       {/* Poster overlay */}
-      {posterUrl && showPoster && !showFrozenFrame && (
+      {showPoster && !showFrozenFrame && (
         <div className="absolute inset-0">
           <Image
-            src={posterUrl}
+            src={currentPosterUrl!}
             alt="Video thumbnail"
             fill
             className="object-cover"
@@ -296,24 +335,43 @@ export default function NeverBlackVideo({
         </div>
       )}
 
-      {/* Fallback placeholder */}
+      {/* Loading state */}
+      {showLoading && !showFrozenFrame && (
+        <div className="absolute inset-0">
+          <VideoPlaceholder 
+            className="w-full h-full" 
+            type="loading"
+            showPlayIcon={false}
+          />
+        </div>
+      )}
+
+      {/* Fallback placeholder - NEVER BLACK */}
       {showPlaceholder && !showFrozenFrame && (
         <div className="absolute inset-0">
-          <VideoPlaceholder className="w-full h-full" />
+          <VideoPlaceholder 
+            className="w-full h-full" 
+            type="video"
+            showPlayIcon={true}
+          />
         </div>
       )}
 
-      {/* Loading indicator */}
-      {!videoReady && !posterError && !showFrozenFrame && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-        </div>
-      )}
-
-      {/* Preload status indicator (dev mode only) */}
+      {/* Development indicators */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-2 right-2 text-xs bg-black bg-opacity-75 text-white px-2 py-1 rounded">
-          P:{isPosterPreloaded ? '✓' : '○'} V:{isVideoPreloaded ? '✓' : '○'}
+        <div className="absolute top-2 right-2 text-xs bg-black bg-opacity-75 text-white px-2 py-1 rounded space-y-1">
+          <div>P:{isPosterPreloaded ? '✓' : '○'} V:{isVideoPreloaded ? '✓' : '○'}</div>
+          <div>F:{fallbackAttempt} {posterError ? 'ERR' : posterLoaded ? 'OK' : 'LOAD'}</div>
+        </div>
+      )}
+
+      {/* Emergency fallback - should never be visible */}
+      {!hasVisibleContent && (
+        <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
+          <div className="text-gray-500 text-center">
+            <div className="text-4xl mb-2">📹</div>
+            <div className="text-sm">Media Loading...</div>
+          </div>
         </div>
       )}
     </div>
