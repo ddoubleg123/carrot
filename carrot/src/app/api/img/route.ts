@@ -11,8 +11,13 @@ let GCS: any = null; // lazy import to avoid bundling when unused
 const PUBLIC_BASE = process.env.STORAGE_PUBLIC_BASE
   || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/';
 
+const PUBLIC_THUMBNAIL_BASE = process.env.PUBLIC_THUMBNAIL_BASE
+  || 'https://storage.googleapis.com/carrot-public-thumbnails/';
+
 const SIGN_TTL_SECONDS = (() => {
-  const v = parseInt(process.env.STORAGE_SIGN_TTL_SECONDS || '', 10);
+  const envVal = process.env.STORAGE_SIGN_TTL_SECONDS;
+  if (!envVal) return 60 * 60; // default 1h
+  const v = parseInt(envVal, 10);
   if (Number.isFinite(v) && v > 0 && v <= 24 * 60 * 60) return v; // up to 24h
   return 60 * 60; // default 1h
 })();
@@ -35,11 +40,15 @@ const ALLOW_HOSTS = new Set([
   'lh4.googleusercontent.com',
   'lh5.googleusercontent.com',
   'lh6.googleusercontent.com',
+  'localhost',
+  '127.0.0.1'
 ])
 
 function hostAllowed(u: URL) {
   if (ALLOW_HOSTS.has(u.hostname)) return true
   if (u.hostname.endsWith('.firebasestorage.app')) return true
+  // Allow localhost in development
+  if (process.env.NODE_ENV === 'development' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true
   return false
 }
 
@@ -76,9 +85,15 @@ function ensureStorage(): any | null {
   try {
     if (storageClient) return storageClient;
     // Prefer explicit inline JSON if provided
-    const json = process.env.GCS_SA_JSON;
-    if (json) {
-      const creds = JSON.parse(json);
+    const jsonEnv = process.env.GCS_SA_JSON;
+    if (jsonEnv) {
+      let creds;
+      try {
+        creds = JSON.parse(jsonEnv);
+      } catch (parseError) {
+        console.warn('[api/img] Failed to parse GCS_SA_JSON env var:', (parseError as any)?.message);
+        return null;
+      }
       const opts: StorageOptions = {
         projectId: creds.project_id,
         credentials: {
@@ -112,6 +127,58 @@ async function getFreshSignedUrl(bucket: string, path: string, ttlSec = SIGN_TTL
     return url;
   } catch (e) {
     console.warn('[api/img] getSignedUrl failed; falling back', { bucket, path, msg: (e as any)?.message });
+    return null;
+  }
+}
+
+// Check if path looks like a thumbnail and try public bucket first
+function tryPublicThumbnail(path: string): string | null {
+  if (!path.includes('thumb') && !path.includes('poster')) return null;
+  
+  // Clean path for public bucket
+  const cleanPath = path.replace(/^\/+/, '').replace(/\?.*$/, '');
+  return `${PUBLIC_THUMBNAIL_BASE}${cleanPath}`;
+}
+
+// Generate static poster from video using ffmpeg if thumbnail is missing
+async function generateStaticPoster(bucket: string, videoPath: string): Promise<string | null> {
+  try {
+    // Check if we have ffmpeg available
+    const ffmpeg = await import('fluent-ffmpeg').catch(() => null);
+    if (!ffmpeg) return null;
+    
+    const client = ensureStorage();
+    if (!client) return null;
+    
+    // Get signed URL for source video
+    const videoUrl = await getFreshSignedUrl(bucket, videoPath);
+    if (!videoUrl) return null;
+    
+    // Generate poster at 1 second mark
+    const posterBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const stream = ffmpeg.default(videoUrl)
+        .seekInput(1) // 1 second
+        .frames(1)
+        .format('image2')
+        .outputOptions(['-vf', 'scale=640:360'])
+        .on('error', reject);
+      
+      const chunks: Buffer[] = [];
+      stream.pipe()
+        .on('data', (chunk: Buffer) => chunks.push(chunk))
+        .on('end', () => resolve(Buffer.concat(chunks)))
+        .on('error', reject);
+    });
+    
+    // Upload generated poster back to storage
+    const posterPath = videoPath.replace(/\.(mp4|webm|mov)$/i, '_generated_poster.jpg');
+    const posterFile = client.bucket(bucket).file(posterPath);
+    await posterFile.save(posterBuffer, { metadata: { contentType: 'image/jpeg' } });
+    
+    // Return signed URL for the generated poster
+    return await getFreshSignedUrl(bucket, posterPath);
+  } catch (e) {
+    console.warn('[api/img] generateStaticPoster failed', { bucket, videoPath, msg: (e as any)?.message });
     return null;
   }
 }
@@ -164,16 +231,51 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   const rawUrl = sp.get('url')
   const path = sp.get('path')
   const bucket = sp.get('bucket')
+  const generatePoster = sp.get('generatePoster') === 'true'
+
+  // Prevent double-wrapping: if rawUrl already points to /api/img, reject
+  if (rawUrl && rawUrl.includes('/api/img')) {
+    console.warn('[api/img] Detected double-wrapping, rejecting', { rawUrl });
+    return new NextResponse('Double-wrapping detected. Use direct URLs.', { status: 400 });
+  }
 
   // Build target URL from either url or path
   let target: URL | null = null
   if (bucket && path) {
-    // Explicit path-mode (preferred): try to sign; fallback to public REST
+    // Explicit path-mode (preferred): try public thumbnail first
     const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
-    const signed = await getFreshSignedUrl(bucket, safe).catch(() => null)
-    if (signed) {
-      try { target = new URL(signed) } catch {}
+    
+    // Try public thumbnail bucket first for thumbnails
+    const publicUrl = tryPublicThumbnail(safe);
+    if (publicUrl) {
+      try {
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        if (testResponse.ok) {
+          target = new URL(publicUrl);
+          console.log('[api/img] Using public thumbnail', { path: safe, publicUrl });
+        }
+      } catch {
+        // Fall through to signed URL
+      }
     }
+    
+    // Fallback to signed URL
+    if (!target) {
+      const signed = await getFreshSignedUrl(bucket, safe).catch(() => null)
+      if (signed) {
+        try { target = new URL(signed) } catch {}
+      }
+    }
+    
+    // If signing failed and this looks like a video thumbnail request, try generating poster
+    if (!target && generatePoster && safe.includes('thumb.jpg')) {
+      const videoPath = safe.replace(/thumb\.jpg$/, 'video.mp4');
+      const posterUrl = await generateStaticPoster(bucket, videoPath);
+      if (posterUrl) {
+        try { target = new URL(posterUrl) } catch {}
+      }
+    }
+    
     if (!target) {
       const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
       try { target = new URL(constructed) } catch {
@@ -204,16 +306,38 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
         console.warn('[api/img] malformed hybrid url', { url: target.toString() })
         return new NextResponse('Malformed Firebase/GCS URL. Use /api/img?bucket=...&path=...', { status: 400 })
       }
-      // If we have a storage client, try to re-sign to avoid ExpiredToken
-      const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch(() => null)
-      if (resigned) {
-        try { target = new URL(resigned) } catch {}
+      
+      // Handle ExpiredToken by re-signing or using public thumbnail
+      if (target.hostname === 'storage.googleapis.com' && target.search.includes('GoogleAccessId')) {
+        // This is a signed URL that might be expired
+        const publicUrl = tryPublicThumbnail(ext.path);
+        if (publicUrl) {
+          try {
+            const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+            if (testResponse.ok) {
+              target = new URL(publicUrl);
+              console.log('[api/img] Replaced expired signed URL with public thumbnail', { path: ext.path });
+            }
+          } catch {
+            // Fall through to re-signing
+          }
+        }
+        
+        // If public didn't work, try re-signing
+        if (!publicUrl || target.hostname === 'storage.googleapis.com') {
+          const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch(() => null);
+          if (resigned) {
+            try { 
+              target = new URL(resigned);
+              console.log('[api/img] Re-signed expired URL', { path: ext.path });
+            } catch {}
+          }
+        }
       } else if (target.hostname === 'firebasestorage.googleapis.com') {
         // Ensure alt=media on Firebase REST (unsigned)
         const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}${target.search && !target.search.includes('alt=media') ? (target.search + '&alt=media') : (target.search || '?alt=media')}`
         try { target = new URL(constructed) } catch {}
       }
-      // else: storage.googleapis.com signed URLs: keep as-is if we couldn't re-sign
     } else {
       // If Firebase REST without alt=media, add it
       if (target.hostname === 'firebasestorage.googleapis.com' && target.pathname.includes('/v0/b/') && !target.search.includes('alt=media')) {
@@ -224,11 +348,27 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   } else if (path) {
     // Fallback: construct public download URL from configured PUBLIC_BASE
     const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
-    const base = PUBLIC_BASE.endsWith('/') ? PUBLIC_BASE : PUBLIC_BASE + '/'
-    const constructed = base + encodeURIComponent(safe) + (base.includes('?') ? '&' : '?') + 'alt=media'
-    try { target = new URL(constructed) } catch {
-      console.warn('[api/img] bad constructed path url', { path })
-      return new NextResponse('Bad path', { status: 400 })
+    
+    // Try public thumbnail first
+    const publicUrl = tryPublicThumbnail(safe);
+    if (publicUrl) {
+      try {
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        if (testResponse.ok) {
+          target = new URL(publicUrl);
+        }
+      } catch {
+        // Fall through to PUBLIC_BASE
+      }
+    }
+    
+    if (!target) {
+      const base = PUBLIC_BASE.endsWith('/') ? PUBLIC_BASE : PUBLIC_BASE + '/'
+      const constructed = base + encodeURIComponent(safe) + (base.includes('?') ? '&' : '?') + 'alt=media'
+      try { target = new URL(constructed) } catch {
+        console.warn('[api/img] bad constructed path url', { path })
+        return new NextResponse('Bad path', { status: 400 })
+      }
     }
   } else {
     console.warn('[api/img] missing url or path')
@@ -251,11 +391,13 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   }
 
   if (!upstream.ok) {
-    // Pass through upstream error body with short cache
-    let txt = ''
-    try { txt = await upstream.text() } catch {}
-    console.warn('[api/img] upstream not ok', { host: target.hostname, status: upstream.status, body: txt.slice(0, 256) })
-    return new NextResponse(txt || 'Upstream error', { status: upstream.status, headers: { 'cache-control': 'public, max-age=60', 'x-proxy': 'img-upstream-fail' } })
+    // Don't forward 400 ExpiredToken errors to client
+    if (upstream.status === 400 && upstream.statusText.includes('ExpiredToken')) {
+      console.warn('[api/img] ExpiredToken detected, should have been handled earlier', { url: target.toString() });
+      return new NextResponse('Image temporarily unavailable', { status: 503 });
+    }
+    console.warn('[api/img] upstream not ok', { host: target.hostname, status: upstream.status, body: (await upstream.text()).slice(0, 256) })
+    return new NextResponse((await upstream.text()) || 'Upstream error', { status: upstream.status, headers: { 'cache-control': 'public, max-age=60', 'x-proxy': 'img-upstream-fail' } })
   }
 
   // If no transforms requested, passthrough with long cache
