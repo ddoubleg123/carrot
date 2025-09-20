@@ -1,7 +1,34 @@
 'use client';
 
 import { useState } from 'react';
-import { Filter, Search, MessageSquare, History, Send, Zap, Eye, Settings, Play, CheckCircle, AlertTriangle, ChevronDown, Command, Clock, User, X, ArrowRight, ArrowLeft, Plus, Sparkles, Brain, Target, Palette, Code, FileText, Shield } from 'lucide-react';
+import { 
+  Filter, 
+  Search, 
+  MessageSquare, 
+  History, 
+  Send, 
+  Zap, 
+  Eye, 
+  Settings, 
+  Play, 
+  CheckCircle, 
+  AlertTriangle, 
+  ChevronDown, 
+  Command, 
+  Clock, 
+  User, 
+  X, 
+  ArrowRight, 
+  ArrowLeft, 
+  Plus, 
+  Sparkles, 
+  Brain, 
+  Target, 
+  Palette, 
+  Code, 
+  FileText, 
+  Shield 
+} from 'lucide-react';
 import { AgentOutputDemo } from '@/components/rabbit/AgentOutputDemo';
 
 // Design Tokens
@@ -975,13 +1002,30 @@ export default function RabbitPage() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             🐰 Rabbit - AI Agent Audit System
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
             Comprehensive AI-powered auditing and analysis for your codebase. 
             Get detailed insights, security assessments, and performance recommendations.
           </p>
+          
+          {/* Create Agent Button */}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-lg hover:shadow-xl"
+          >
+            <Plus size={20} />
+            Create New Agent
+          </button>
         </div>
 
         <AgentOutputDemo />
+        
+        {/* Create Agent Modal */}
+        {isModalOpen && (
+          <CreateAgentModal 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
+          />
+        )}
       </div>
     </div>
   );
