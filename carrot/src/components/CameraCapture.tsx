@@ -213,7 +213,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
             <>
               <Button
                 variant="secondary"
-                size="icon"
+                size="sm"
                 onClick={onClose}
                 className="rounded-full w-14 h-14"
                 aria-label="Close camera"
@@ -232,7 +232,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
               
               <Button
                 variant="secondary"
-                size="icon"
+                size="sm"
                 onClick={toggleCamera}
                 disabled={!hasMultipleCameras || isCapturing}
                 className="rounded-full w-14 h-14"
@@ -245,7 +245,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
             <>
               <Button
                 variant="secondary"
-                size="icon"
+                size="sm"
                 onClick={handleRetake}
                 className="rounded-full w-14 h-14"
                 aria-label="Retake photo"

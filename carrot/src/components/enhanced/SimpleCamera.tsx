@@ -112,7 +112,7 @@ export function SimpleCamera({ onCapture, onClose, className = '' }: SimpleCamer
         <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
           <Button
             variant="secondary"
-            size="icon"
+            size="sm"
             onClick={toggleCamera}
             className="rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30"
           >
@@ -121,7 +121,7 @@ export function SimpleCamera({ onCapture, onClose, className = '' }: SimpleCamer
           
           <Button
             onClick={capturePhoto}
-            size="icon"
+            size="sm"
             className="h-12 w-12 rounded-full bg-white hover:bg-gray-200"
           >
             <Camera className="h-6 w-6 text-black" />
@@ -129,7 +129,7 @@ export function SimpleCamera({ onCapture, onClose, className = '' }: SimpleCamer
           
           <Button
             variant="secondary"
-            size="icon"
+            size="sm"
             onClick={onClose}
             className="rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30"
           >
