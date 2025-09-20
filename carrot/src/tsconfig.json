@@ -22,7 +22,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ]
     },
     "types": ["node", "@types/react"],
@@ -33,13 +33,13 @@
     ]
   },
   "include": [
-    "src/types",
+    "types",
     "**/*.tsx",
-    "next-env.d.ts",
-    ".next/types/**/*.ts"
+    "**/*.ts",
+    "../next-env.d.ts",
+    "../.next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
   ]
 }
-
