@@ -84,6 +84,215 @@ type MediaType = 'video' | 'image' | null;
 type CreationMode = 'overlay' | 'frame' | 'meme' | null;
 type Agent = typeof FEATURED_AGENTS[0];
 
+const COLORS = {
+  actionOrange: '#FF6A00',
+  civicBlue: '#0A5AFF',
+  ink: '#0B0B0F',
+  surface: '#FFFFFF',
+  slate: '#64748B'
+};
+
+const AGENT_CATEGORIES = [
+  {
+    id: 'qa-audit',
+    title: ' QA & Audit',
+    agents: [
+      {
+        id: 'design-guardian',
+        name: 'Design Guardian',
+        role: 'Enforcer',
+        avatar: '/agents/design-guardian.png',
+        skills: [' Audit', ' Actions', ' Metrics'],
+        actions: [
+          { label: 'Run Audit', icon: Play, primary: true },
+          { label: 'Check Contrast', icon: Eye },
+          { label: 'Scan A11Y', icon: CheckCircle }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'a11y-auditor',
+        name: 'A11Y Auditor',
+        role: 'Accessibility Specialist',
+        avatar: '/agents/a11y-auditor.png',
+        skills: [' A11Y', ' WCAG', ' Scan'],
+        actions: [
+          { label: 'Audit Page', icon: Play, primary: true },
+          { label: 'Check ARIA', icon: CheckCircle },
+          { label: 'Test Navigation', icon: Eye }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'build-spec',
+    title: ' Build & Spec',
+    agents: [
+      {
+        id: 'spec-generator',
+        name: 'Spec Generator',
+        role: 'System Builder',
+        avatar: '/agents/spec-generator.png',
+        skills: [' Spec', ' Tokens', ' Layout'],
+        actions: [
+          { label: 'Generate Spec', icon: Zap, primary: true },
+          { label: 'Create Tokens', icon: Settings },
+          { label: 'Export CSS', icon: Eye }
+        ],
+        status: 'busy'
+      },
+      {
+        id: 'layout-inspector',
+        name: 'Layout Inspector',
+        role: 'Grid & Spacing Checker',
+        avatar: '/agents/layout-inspector.png',
+        skills: [' Grid', ' Spacing', ' Alignment'],
+        actions: [
+          { label: 'Check Grid', icon: Play, primary: true },
+          { label: 'Measure Spacing', icon: Eye },
+          { label: 'Validate Layout', icon: CheckCircle }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'reviewers',
+    title: ' Reviewers',
+    agents: [
+      {
+        id: 'typographer',
+        name: 'Typographer',
+        role: 'Type & Readability Agent',
+        avatar: '/agents/typographer.png',
+        skills: [' Type', ' Readability', ' Contrast'],
+        actions: [
+          { label: 'Review Type', icon: Eye, primary: true },
+          { label: 'Check Readability', icon: CheckCircle },
+          { label: 'Test Contrast', icon: AlertTriangle }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'motion-moderator',
+        name: 'Motion Moderator',
+        role: 'Microinteractions Review',
+        avatar: '/agents/motion-moderator.png',
+        skills: [' Motion', ' Duration', ' Easing'],
+        actions: [
+          { label: 'Review Motion', icon: Play, primary: true },
+          { label: 'Check Duration', icon: Eye },
+          { label: 'Test Interactions', icon: Zap }
+        ],
+        status: 'offline'
+      }
+    ]
+  }
+];
+
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'online': return 'bg-green-500';
+    case 'busy': return 'bg-orange-500';
+    case 'offline': return 'bg-gray-400';
+    default: return 'bg-gray-400';
+  }
+};
+
+function getStatusText(status: string) {
+  switch (status) {
+    case 'online': return 'Available';
+    case 'busy': return 'Busy';
+    case 'offline': return 'Offline';
+    default: return 'Unknown';
+  }
+};
+
+function AgentTile({ agent }: { agent: any }) {
+  return (
+    <div className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[300px] max-w-[300px]">
+      <div className="flex flex-col items-center text-center">
+        {/* Avatar with status indicator */}
+        <div className="relative mb-4">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+            {agent.name.split(' ').map((n: string) => n[0]).join('')}
+          </div>
+          {/* Status indicator */}
+          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-2 border-white flex items-center justify-center`}>
+            <div className="w-2 h-2 bg-white rounded-full"></div>
+          </div>
+        </div>
+        
+        {/* Agent info */}
+        <h3 className="font-semibold text-gray-900 mb-1 text-lg">{agent.name}</h3>
+        <p className="text-sm text-gray-600 mb-2">{agent.role}</p>
+        <p className="text-xs text-gray-500 mb-4">{getStatusText(agent.status)}</p>
+        
+        {/* Skills badges */}
+        <div className="flex flex-wrap gap-2 mb-6 justify-center">
+          {agent.skills.map((skill: string, index: number) => (
+            <span
+              key={index}
+              className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200 hover:border-blue-300 transition-colors"
+            >
+              {skill}
+            </span>
+          ))}
+        </div>
+        
+        {/* Quick actions */}
+        <div className="flex flex-col gap-2 w-full">
+          {agent.actions.slice(0, 2).map((action: any, index: number) => {
+            const IconComponent = action.icon;
+            return (
+              <button
+                key={index}
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 min-h-[44px] ${
+                  action.primary
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900'
+                }`}
+              >
+                <IconComponent size={16} />
+                {action.label}
+              </button>
+            );
+          })}
+          
+          {/* Chat button */}
+          <button className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors min-h-[44px] border border-blue-200 hover:border-blue-300">
+            <MessageSquare size={16} />
+            Chat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentRow({ category }: { category: any }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold text-gray-900 mb-6 px-6">{category.title}</h2>
+      <div className="flex gap-6 overflow-x-auto px-6 pb-4">
+        {category.agents.map((agent: any) => (
+          <AgentTile key={agent.id} agent={agent} />
+        ))}
+        
+        {/* Add new agent tile */}
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 min-w-[300px] max-w-[300px] flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 cursor-pointer group">
+          <div className="w-20 h-20 bg-gray-200 group-hover:bg-blue-200 rounded-xl mb-4 flex items-center justify-center transition-colors">
+            <span className="text-3xl text-gray-400 group-hover:text-blue-500 transition-colors">+</span>
+          </div>
+          <p className="text-gray-600 font-medium mb-2">Create New Agent</p>
+          <p className="text-sm text-gray-500">Custom specialist for your workflow</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RabbitAIPage() {
   // State management
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'video' | 'image' } | null>(null);
@@ -321,41 +530,9 @@ export default function RabbitAIPage() {
 
               {/* Agent Grid */}
               <div className="flex-1 overflow-y-auto p-4">
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {FEATURED_AGENTS.map((agent) => (
-                    <button
-                      key={agent.id}
-                      onClick={() => setSelectedAgent(agent)}
-                      className={`p-3 rounded-lg border text-left transition-colors ${
-                        selectedAgent?.id === agent.id
-                          ? 'border-purple-500 bg-purple-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <img
-                        src={agent.avatar}
-                        alt={`${agent.name} avatar`}
-                        width={32}
-                        height={32}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-8 h-8 rounded-full mx-auto mb-2"
-                      />
-                      <div className="text-xs font-medium text-gray-900 text-center truncate">
-                        {agent.name}
-                      </div>
-                      <div className="text-xs text-gray-500 text-center truncate">
-                        {agent.domains[0]}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Create Agent Button */}
-                <button className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-purple-400 hover:text-purple-600 transition-colors">
-                  <Plus className="w-5 h-5 mx-auto mb-1" />
-                  <div className="text-sm font-medium">Create Agent</div>
-                </button>
+                {AGENT_CATEGORIES.map((category) => (
+                  <AgentRow key={category.id} category={category} />
+                ))}
               </div>
 
               {/* Selected Agent Details */}
