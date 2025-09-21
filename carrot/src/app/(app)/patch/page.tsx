@@ -56,7 +56,7 @@ const mockGroups: MockGroup[] = [
     slug: 'clean-energy',
     description: 'Sustainable energy solutions, renewable technology, and environmental impact',
     avatar: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=100&h=100&fit=crop',
-    cover: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+    cover: 'https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?w=400&h=200&fit=crop',
     stats: { members: 1240, threads: 89, events: 23 },
     tags: ['renewable', 'solar', 'wind', 'sustainability'],
     latestUpdate: '2 hours ago',
@@ -69,7 +69,7 @@ const mockGroups: MockGroup[] = [
     slug: 'ubi',
     description: 'Exploring UBI implementation, economic models, and social impact studies',
     avatar: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=100&h=100&fit=crop',
-    cover: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+    cover: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=200&fit=crop',
     stats: { members: 980, threads: 156, events: 41 },
     tags: ['economics', 'policy', 'welfare', 'automation'],
     latestUpdate: '5 hours ago',
@@ -82,7 +82,7 @@ const mockGroups: MockGroup[] = [
     slug: 'term-limits', 
     description: 'Political reform, governance, and democratic accountability',
     avatar: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=100&h=100&fit=crop',
-    cover: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    cover: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a89e?w=400&h=200&fit=crop',
     stats: { members: 2110, threads: 203, events: 67 },
     tags: ['politics', 'reform', 'governance', 'democracy'],
     latestUpdate: '1 day ago',
@@ -183,11 +183,10 @@ export default function PatchPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                    <div className="h-32 bg-gray-200"></div>
+                    <div className="h-48 bg-gray-200"></div>
                     <div className="p-6">
                       <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded mb-4"></div>
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
                     </div>
                   </div>
                 ))}
@@ -718,20 +717,6 @@ export default function PatchPage() {
       {/* Main content area */}
       <main className="flex-1 min-w-0">
         <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <span>Carrot Patch</span>
-          <ChevronRight className="w-4 h-4" />
-          {currentGroup ? (
-            <>
-              <span>{currentGroup.name}</span>
-              <ChevronRight className="w-4 h-4" />
-              <span className="text-gray-900 font-medium capitalize">{activeTab}</span>
-            </>
-          ) : (
-            <span className="text-gray-900 font-medium">Groups</span>
-          )}
-        </div>
 
         {currentGroup ? (
           <>
@@ -744,8 +729,7 @@ export default function PatchPage() {
             {/* Groups List Header */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Carrot Patch</h1>
-                <p className="text-gray-600">Public knowledge repositories for collaborative learning and discussion</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">Knowledge shared is knowledge squared</h1>
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -780,65 +764,24 @@ export default function PatchPage() {
                   href={`/patch/${group.slug}`}
                   className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group block"
                 >
-                  <div 
-                    className="h-32 w-full"
-                    style={{ background: group.cover }}
-                  />
+                  {/* Header Image */}
+                  <div className="h-48 w-full overflow-hidden">
+                    <img 
+                      src={group.cover} 
+                      alt={group.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDQwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2QjcyODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZTwvdGV4dD4KPC9zdmc+Cg==';
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Content */}
                   <div className="p-6">
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden -mt-6 flex-shrink-0">
-                        <img 
-                          src={group.avatar} 
-                          alt={group.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjRjNGNEY2Ii8+Cjx0ZXh0IHg9IjUwIiB5PSI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNkI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2U8L3RleHQ+Cjwvc3ZnPgo=';
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1 text-lg">{group.name}</h3>
-                        <p className="text-sm text-gray-600">{group.description}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        <span>{group.stats.members.toLocaleString()}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="w-4 h-4" />
-                        <span>{group.stats.threads}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <History className="w-4 h-4" />
-                        <span>{group.stats.events}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {group.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Updated {group.latestUpdate}</span>
-                      <div className="flex items-center gap-2">
-                        {group.isJoined ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                            Joined
-                          </span>
-                        ) : (
-                          <button className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full hover:bg-orange-200 transition-colors">
-                            Join
-                          </button>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 transition-colors" />
-                      </div>
+                    <h3 className="font-bold text-gray-900 text-xl mb-2">{group.name}</h3>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Users className="w-4 h-4" />
+                      <span className="text-sm">{group.stats.members.toLocaleString()} subscribers</span>
                     </div>
                   </div>
                 </Link>
