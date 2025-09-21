@@ -313,7 +313,7 @@ export default function PatchPage() {
               >
                 <LinkIcon className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 group-hover:text-orange-500 transition-colors" />
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-gray-900 group-hover:text-orange-600 transition-colors line-clamp-2">
+                  <h4 className="font-medium text-gray-900 group-hover:text-orange-600 transition-colors overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {source.title}
                   </h4>
                   <div className="flex items-center gap-2 mt-1">
@@ -541,7 +541,7 @@ export default function PatchPage() {
               </div>
             </div>
             
-            <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">{source.title}</h3>
+            <h3 className="font-semibold text-gray-900 mb-2 overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{source.title}</h3>
             
             <div className="flex flex-wrap gap-1 mb-4">
               {source.tags.map((tag) => (
@@ -723,7 +723,7 @@ export default function PatchPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-900 mb-1">{group.name}</h3>
-                        <p className="text-sm text-gray-600 line-clamp-2">{group.description}</p>
+                        <p className="text-sm text-gray-600 overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{group.description}</p>
                       </div>
                     </div>
                     
