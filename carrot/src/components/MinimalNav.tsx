@@ -60,6 +60,18 @@ const NavIcons = {
       </svg>
     </div>
   ),
+  CarrotPatch: ({ isActive }: { isActive: boolean }) => (
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
+      isActive
+        ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
+        : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
+    }`}>
+      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L2 7l20 5-10-5zm0 12l9.5-4.5L12 5v9zm0 7l-10-5 10-5 10 5-10 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+      </svg>
+    </div>
+  ),
   Rabbit: ({ isActive }: { isActive: boolean }) => (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
       isActive
@@ -111,7 +123,7 @@ const MENU_ITEMS = [
     label: 'Notifications',
   },
   {
-    href: '/dashboard/patch',
+    href: '/patch',
     icon: NavIcons.CarrotPatch,
     label: 'Carrot Patch',
   },
