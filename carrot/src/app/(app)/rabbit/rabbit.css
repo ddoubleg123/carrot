@@ -1,0 +1,84 @@
+/* Rabbit Page Styles */
+
+/* Hide scrollbar for horizontal scrolling agent rows */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+/* Smooth scrolling for agent rows */
+.scrollbar-hide {
+  scroll-behavior: smooth;
+}
+
+/* Agent tile hover effects */
+.agent-tile {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agent-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Status indicator animations */
+.status-indicator {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Chat bar backdrop blur */
+.chat-bar {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Agent category section spacing */
+.agent-category {
+  margin-bottom: 3rem;
+}
+
+/* Responsive grid adjustments */
+@media (max-width: 768px) {
+  .agent-tile {
+    min-width: 280px;
+    max-width: 280px;
+  }
+}
+
+/* Focus states for accessibility */
+.agent-tile:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Loading states */
+.agent-tile.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Status colors */
+.status-online {
+  background-color: #10b981;
+}
+
+.status-busy {
+  background-color: #f59e0b;
+}
+
+.status-offline {
+  background-color: #6b7280;
+}

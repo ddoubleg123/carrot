@@ -11,8 +11,7 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const ProfilePhotoSetup: React.FC<ProfilePhotoSetupProps> = ({ initialImage, onSave }) => {
   // --- State ---
-  // Remove // modal // removed, modal state is obsolete state for upload
-  // const [// modal // removed, modal state is obsolete, setModal] = useState<null | "camera" | "upload">(null);
+  const [modalMode, setModalMode] = useState<"camera" | "upload" | null>(null);
   const [isCaptured, setIsCaptured] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(initialImage || null);
   const [isSaved, setIsSaved] = useState(false);
@@ -22,10 +21,34 @@ const ProfilePhotoSetup: React.FC<ProfilePhotoSetupProps> = ({ initialImage, onS
   // --- Refs ---
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Modal Handlers ---
+  const openCameraModal = useCallback(() => {
+    setModalMode("camera");
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setModalMode(null);
+  }, []);
+
+  const handleModalSave = useCallback((dataUrl: string) => {
+    setCapturedImage(dataUrl);
+    setIsCaptured(true);
+    setError(null);
+    
+    // Call the parent's onSave if provided
+    if (onSave) {
+      onSave(dataUrl);
+    }
+    
+    // Show feedback
+    setShowFeedback(true);
+    setTimeout(() => setShowFeedback(false), 2000);
+  }, [onSave]);
+
   // --- File Upload ---
   function openPicker(e: React.MouseEvent) {
     e.preventDefault();
-    e.stopPropagation(); // block any parent click that opens a // modal // removed, modal state is obsolete
+    e.stopPropagation(); // block any parent click that opens a modal
     fileInputRef.current?.click(); // open OS file picker only
   }
   async function handleFile(file?: File) {
@@ -59,7 +82,7 @@ const ProfilePhotoSetup: React.FC<ProfilePhotoSetupProps> = ({ initialImage, onS
           <button
             type="button"
             className="h-10 px-5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-            // TODO: wire up camera modal if needed
+            onClick={openCameraModal}
           >
             Take Photo
           </button>
@@ -81,8 +104,17 @@ const ProfilePhotoSetup: React.FC<ProfilePhotoSetupProps> = ({ initialImage, onS
         </div>
       </div>
       {error && <div className={styles.errorMsg} role="alert">{error}</div>}
+      {feedbackMsg}
+      
       {/* PhotoModal for camera UI */}
-
+      {modalMode && (
+        <PhotoModal
+          mode={modalMode}
+          onClose={closeModal}
+          onSave={handleModalSave}
+          initialImage={capturedImage}
+        />
+      )}
     </div>
   );
 };

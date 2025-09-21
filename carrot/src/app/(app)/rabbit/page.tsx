@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import './rabbit.css';
 import { 
   Filter, 
   Search, 
@@ -71,6 +72,19 @@ const AGENT_CATEGORIES = [
           { label: 'Test Navigation', icon: Eye }
         ],
         status: 'online'
+      },
+      {
+        id: 'performance-bot',
+        name: 'Performance Bot',
+        role: 'Speed & Web Vitals',
+        avatar: '/agents/performance-bot.png',
+        skills: ['⚡ Speed', '📊 Metrics', '🔍 Analysis'],
+        actions: [
+          { label: 'Run Lighthouse', icon: Play, primary: true },
+          { label: 'Check Core Web Vitals', icon: Eye },
+          { label: 'Optimize Assets', icon: Zap }
+        ],
+        status: 'online'
       }
     ]
   },
@@ -101,6 +115,19 @@ const AGENT_CATEGORIES = [
           { label: 'Check Grid', icon: Play, primary: true },
           { label: 'Measure Spacing', icon: Eye },
           { label: 'Validate Layout', icon: CheckCircle }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'token-builder',
+        name: 'Token Builder',
+        role: 'Design System Expert',
+        avatar: '/agents/token-builder.png',
+        skills: ['🎨 Tokens', '🎯 Consistency', '📐 Scale'],
+        actions: [
+          { label: 'Build Tokens', icon: Zap, primary: true },
+          { label: 'Validate Scale', icon: CheckCircle },
+          { label: 'Export Variables', icon: Settings }
         ],
         status: 'online'
       }
@@ -135,6 +162,51 @@ const AGENT_CATEGORIES = [
           { label: 'Test Interactions', icon: Zap }
         ],
         status: 'offline'
+      },
+      {
+        id: 'copy-guardian',
+        name: 'Copy Guardian',
+        role: 'Plain Language Checker',
+        avatar: '/agents/copy-guardian.png',
+        skills: ['📝 Copy', '📖 Readability', '🎯 Clarity'],
+        actions: [
+          { label: 'Review Copy', icon: Eye, primary: true },
+          { label: 'Check Tone', icon: CheckCircle },
+          { label: 'Improve Clarity', icon: Zap }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'metrics',
+    title: '📈 Metrics Agents',
+    agents: [
+      {
+        id: 'lighthouse-agent',
+        name: 'Lighthouse Agent',
+        role: 'Performance Monitor',
+        avatar: '/agents/lighthouse-agent.png',
+        skills: ['📊 Performance', '⚡ Speed', '🔍 Analysis'],
+        actions: [
+          { label: 'Run Audit', icon: Play, primary: true },
+          { label: 'Check Scores', icon: Eye },
+          { label: 'Generate Report', icon: FileText }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'analytics-bot',
+        name: 'Analytics Bot',
+        role: 'Data Insights',
+        avatar: '/agents/analytics-bot.png',
+        skills: ['📊 Data', '📈 Trends', '🔍 Insights'],
+        actions: [
+          { label: 'Analyze Data', icon: Play, primary: true },
+          { label: 'Generate Report', icon: FileText },
+          { label: 'Track Trends', icon: Eye }
+        ],
+        status: 'online'
       }
     ]
   }
@@ -143,20 +215,24 @@ const AGENT_CATEGORIES = [
 // Header Component
 function Header({ onCreateAgent }: { onCreateAgent: () => void }) {
   const [activeFilter, setActiveFilter] = useState('All');
-  const filters = ['All', 'Design', 'Audit', 'Custom'];
+  const filters = ['All', 'Design Reviewers', 'Spec Generators', 'Builders', 'Researchers', 'Custom'];
 
   return (
-    <div className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="bg-white border-b border-gray-200 px-6 py-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold text-gray-900">Rabbit Workforce</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">🐰 Rabbit Workforce</h1>
+          <p className="text-gray-600">AI-powered agents for design, development, and quality assurance</p>
+        </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {/* Filter Bar */}
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
             {filters.map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeFilter === filter
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
@@ -173,10 +249,10 @@ function Header({ onCreateAgent }: { onCreateAgent: () => void }) {
 
           <button 
             onClick={onCreateAgent}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg font-semibold"
           >
             <Plus size={18} />
-            Create Agent
+            Create New Agent
           </button>
         </div>
       </div>
@@ -205,7 +281,7 @@ function AgentTile({ agent }: { agent: any }) {
   };
 
   return (
-    <div className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[300px] max-w-[300px]">
+    <div className="agent-tile group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[300px] max-w-[300px]">
       <div className="flex flex-col items-center text-center">
         {/* Avatar with status indicator */}
         <div className="relative mb-4">
@@ -213,7 +289,7 @@ function AgentTile({ agent }: { agent: any }) {
             {agent.name.split(' ').map((n: string) => n[0]).join('')}
           </div>
           {/* Status indicator */}
-          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-2 border-white flex items-center justify-center`}>
+          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-2 border-white flex items-center justify-center status-indicator`}>
             <div className="w-2 h-2 bg-white rounded-full"></div>
           </div>
         </div>
@@ -268,9 +344,12 @@ function AgentTile({ agent }: { agent: any }) {
 // Agent Row Component
 function AgentRow({ category }: { category: any }) {
   return (
-    <div className="mb-8">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6 px-6">{category.title}</h2>
-      <div className="flex gap-6 overflow-x-auto px-6 pb-4">
+    <div className="agent-category mb-12">
+      <div className="px-6 mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">{category.title}</h2>
+        <p className="text-gray-600">Specialized agents for {category.title.toLowerCase().replace(/[🧪🛠️👀📈]/g, '').trim()}</p>
+      </div>
+      <div className="flex gap-6 overflow-x-auto px-6 pb-4 scrollbar-hide">
         {category.agents.map((agent: any) => (
           <AgentTile key={agent.id} agent={agent} />
         ))}
@@ -278,7 +357,7 @@ function AgentRow({ category }: { category: any }) {
         {/* Add new agent tile */}
         <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 min-w-[300px] max-w-[300px] flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 cursor-pointer group">
           <div className="w-20 h-20 bg-gray-200 group-hover:bg-blue-200 rounded-xl mb-4 flex items-center justify-center transition-colors">
-            <span className="text-3xl text-gray-400 group-hover:text-blue-500 transition-colors">+</span>
+            <Plus size={32} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
           </div>
           <p className="text-gray-600 font-medium mb-2">Create New Agent</p>
           <p className="text-sm text-gray-500">Custom specialist for your workflow</p>
@@ -385,7 +464,7 @@ function ChatBar() {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg backdrop-blur-sm bg-white/95 z-50">
+    <div className="chat-bar fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg backdrop-blur-sm bg-white/95 z-50">
       {/* Slash Commands Dropdown */}
       {showCommands && filteredCommands.length > 0 && (
         <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg max-w-4xl mx-auto mb-1">
@@ -997,36 +1076,26 @@ export default function RabbitPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            🐰 Rabbit - AI Agent Audit System
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
-            Comprehensive AI-powered auditing and analysis for your codebase. 
-            Get detailed insights, security assessments, and performance recommendations.
-          </p>
-          
-          {/* Create Agent Button */}
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-lg hover:shadow-xl"
-          >
-            <Plus size={20} />
-            Create New Agent
-          </button>
-        </div>
-
-        <AgentOutputDemo />
-        
-        {/* Create Agent Modal */}
-        {isModalOpen && (
-          <CreateAgentModal 
-            isOpen={isModalOpen} 
-            onClose={() => setIsModalOpen(false)} 
-          />
-        )}
+      {/* Header with Filter Bar */}
+      <Header onCreateAgent={() => setIsModalOpen(true)} />
+      
+      {/* Agent Categories Grid */}
+      <div className="py-6">
+        {AGENT_CATEGORIES.map((category) => (
+          <AgentRow key={category.id} category={category} />
+        ))}
       </div>
+
+      {/* Chat Bar at Bottom */}
+      <ChatBar />
+      
+      {/* Create Agent Modal */}
+      {isModalOpen && (
+        <CreateAgentModal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+        />
+      )}
     </div>
   );
 }
