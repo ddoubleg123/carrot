@@ -40,101 +40,307 @@ const COLORS = {
   slate: '#64748B'
 };
 
-// Agent Categories with enhanced data structure
+// Historical AI Agents with their real expertise
 const AGENT_CATEGORIES = [
   {
-    id: 'qa-audit',
-    title: '🧪 QA & Audit',
+    id: 'governance',
+    title: '🏛️ Governance & Democracy',
     agents: [
       {
-        id: 'design-guardian',
-        name: 'Design Guardian',
-        role: 'Enforcer',
-        avatar: '/agents/design-guardian.png',
-        skills: ['🕵️ Audit', '⚡ Actions', '📊 Metrics'],
+        id: 'james-madison',
+        name: 'James Madison',
+        role: 'Democracy Expert',
+        avatar: '/agents/James Madison.png',
+        skills: ['🏛️ Democracy', '📜 Constitution', '⚖️ Governance'],
         actions: [
-          { label: 'Run Audit', icon: Play, primary: true },
-          { label: 'Check Contrast', icon: Eye },
-          { label: 'Scan A11Y', icon: CheckCircle }
+          { label: 'Analyze Policy', icon: Play, primary: true },
+          { label: 'Review Structure', icon: Eye },
+          { label: 'Check Balance', icon: CheckCircle }
         ],
         status: 'online'
       },
       {
-        id: 'a11y-auditor',
-        name: 'A11Y Auditor',
-        role: 'Accessibility Specialist',
-        avatar: '/agents/a11y-auditor.png',
-        skills: ['♿ A11Y', '🎯 WCAG', '🔍 Scan'],
+        id: 'nelson-mandela',
+        name: 'Nelson Mandela',
+        role: 'Anti-Colonialism Leader',
+        avatar: '/agents/Nelson Mandela.png',
+        skills: ['🌍 Liberation', '🤝 Reconciliation', '⚖️ Justice'],
         actions: [
-          { label: 'Audit Page', icon: Play, primary: true },
-          { label: 'Check ARIA', icon: CheckCircle },
-          { label: 'Test Navigation', icon: Eye }
+          { label: 'Guide Liberation', icon: Play, primary: true },
+          { label: 'Promote Unity', icon: Target },
+          { label: 'Fight Injustice', icon: Shield }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'zbigniew-brzezinski',
+        name: 'Zbigniew Brzezinski',
+        role: 'Geopolitics Expert',
+        avatar: '/agents/Zbigniew Brzezinski.png',
+        skills: ['🌍 Geopolitics', '⚖️ Strategy', '🔍 Analysis'],
+        actions: [
+          { label: 'Analyze Geopolitics', icon: Play, primary: true },
+          { label: 'Strategic Planning', icon: Target },
+          { label: 'Risk Assessment', icon: Eye }
         ],
         status: 'online'
       }
     ]
   },
   {
-    id: 'build-spec',
-    title: '🛠️ Build & Spec',
+    id: 'economics',
+    title: '💰 Economics & Finance',
     agents: [
       {
-        id: 'spec-generator',
-        name: 'Spec Generator',
-        role: 'System Builder',
-        avatar: '/agents/spec-generator.png',
-        skills: ['✍️ Spec', '🎨 Tokens', '📐 Layout'],
+        id: 'john-maynard-keynes',
+        name: 'John Maynard Keynes',
+        role: 'Keynesian Economics',
+        avatar: '/agents/John Maynard Keynes.png',
+        skills: ['📈 Macroeconomics', '🏛️ Policy', '💡 Innovation'],
         actions: [
-          { label: 'Generate Spec', icon: Zap, primary: true },
-          { label: 'Create Tokens', icon: Settings },
-          { label: 'Export CSS', icon: Eye }
+          { label: 'Economic Analysis', icon: Play, primary: true },
+          { label: 'Policy Review', icon: Target },
+          { label: 'Market Insights', icon: Eye }
         ],
-        status: 'busy'
+        status: 'online'
       },
       {
-        id: 'layout-inspector',
-        name: 'Layout Inspector',
-        role: 'Grid & Spacing Checker',
-        avatar: '/agents/layout-inspector.png',
-        skills: ['📐 Grid', '📏 Spacing', '🎯 Alignment'],
+        id: 'milton-friedman',
+        name: 'Milton Friedman',
+        role: 'Free Market Economics',
+        avatar: '/agents/Milton Friedman.png',
+        skills: ['📊 Free Markets', '💰 Monetarism', '🎯 Efficiency'],
         actions: [
-          { label: 'Check Grid', icon: Play, primary: true },
-          { label: 'Measure Spacing', icon: Eye },
-          { label: 'Validate Layout', icon: CheckCircle }
+          { label: 'Market Analysis', icon: Play, primary: true },
+          { label: 'Policy Critique', icon: Target },
+          { label: 'Efficiency Review', icon: CheckCircle }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'hal-finney',
+        name: 'Hal Finney',
+        role: 'Cryptocurrency Pioneer',
+        avatar: '/agents/Hal Finney.png',
+        skills: ['₿ Cryptocurrency', '🔐 Security', '💻 Technology'],
+        actions: [
+          { label: 'Crypto Analysis', icon: Play, primary: true },
+          { label: 'Security Review', icon: Shield },
+          { label: 'Tech Innovation', icon: Zap }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'benjamin-graham',
+        name: 'Benjamin Graham',
+        role: 'Value Investing Expert',
+        avatar: '/agents/Benjamin Graham.png',
+        skills: ['📈 Value Investing', '📊 Analysis', '💰 Finance'],
+        actions: [
+          { label: 'Investment Analysis', icon: Play, primary: true },
+          { label: 'Value Assessment', icon: Target },
+          { label: 'Portfolio Review', icon: Eye }
         ],
         status: 'online'
       }
     ]
   },
   {
-    id: 'reviewers',
-    title: '👀 Reviewers',
+    id: 'social-justice',
+    title: '✊ Social Justice & Labor',
     agents: [
       {
-        id: 'typographer',
-        name: 'Typographer',
-        role: 'Type & Readability Agent',
-        avatar: '/agents/typographer.png',
-        skills: ['🔠 Type', '📖 Readability', '🎨 Contrast'],
+        id: 'mlk',
+        name: 'Martin Luther King Jr.',
+        role: 'Civil Rights Leader',
+        avatar: '/agents/MLK.png',
+        skills: ['✊ Civil Rights', '🤝 Nonviolence', '⚖️ Justice'],
         actions: [
-          { label: 'Review Type', icon: Eye, primary: true },
-          { label: 'Check Readability', icon: CheckCircle },
-          { label: 'Test Contrast', icon: AlertTriangle }
+          { label: 'Guide Movement', icon: Play, primary: true },
+          { label: 'Promote Justice', icon: Target },
+          { label: 'Build Unity', icon: Shield }
         ],
         status: 'online'
       },
       {
-        id: 'motion-moderator',
-        name: 'Motion Moderator',
-        role: 'Microinteractions Review',
-        avatar: '/agents/motion-moderator.png',
-        skills: ['🌀 Motion', '⏱️ Duration', '🎭 Easing'],
+        id: 'mother-jones',
+        name: 'Mother Jones',
+        role: 'Labor Rights Advocate',
+        avatar: '/agents/Mother Jones.png',
+        skills: ['👷 Labor Rights', '⚖️ Workers', '📢 Advocacy'],
         actions: [
-          { label: 'Review Motion', icon: Play, primary: true },
-          { label: 'Check Duration', icon: Eye },
-          { label: 'Test Interactions', icon: Zap }
+          { label: 'Labor Analysis', icon: Play, primary: true },
+          { label: 'Rights Review', icon: Target },
+          { label: 'Advocacy Guide', icon: Shield }
         ],
-        status: 'offline'
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'technology',
+    title: '💻 Technology & Science',
+    agents: [
+      {
+        id: 'alan-turing',
+        name: 'Alan Turing',
+        role: 'Computing Pioneer',
+        avatar: '/agents/Alan Turing.png',
+        skills: ['💻 Computing', '🧮 Algorithms', '🔐 Cryptography'],
+        actions: [
+          { label: 'Code Analysis', icon: Play, primary: true },
+          { label: 'Algorithm Review', icon: Target },
+          { label: 'Security Check', icon: Shield }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'john-mccarthy',
+        name: 'John McCarthy',
+        role: 'AI Pioneer',
+        avatar: '/agents/John McCarthy.png',
+        skills: ['🤖 Artificial Intelligence', '🧠 Machine Learning', '💡 Innovation'],
+        actions: [
+          { label: 'AI Analysis', icon: Play, primary: true },
+          { label: 'ML Review', icon: Target },
+          { label: 'Innovation Guide', icon: Zap }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'albert-einstein',
+        name: 'Albert Einstein',
+        role: 'Physics Revolutionary',
+        avatar: '/agents/Albert Einstein.png',
+        skills: ['⚛️ Physics', '🧮 Mathematics', '💡 Innovation'],
+        actions: [
+          { label: 'Physics Analysis', icon: Play, primary: true },
+          { label: 'Math Review', icon: Target },
+          { label: 'Theory Guide', icon: Zap }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'charles-darwin',
+        name: 'Charles Darwin',
+        role: 'Evolution Expert',
+        avatar: '/agents/Charles Darwin.png',
+        skills: ['🧬 Evolution', '🔬 Biology', '📊 Research'],
+        actions: [
+          { label: 'Evolution Analysis', icon: Play, primary: true },
+          { label: 'Biology Review', icon: Target },
+          { label: 'Research Guide', icon: Eye }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'environment-urbanism',
+    title: '🌍 Environment & Urbanism',
+    agents: [
+      {
+        id: 'teddy-roosevelt',
+        name: 'Teddy Roosevelt',
+        role: 'Environmental Conservation',
+        avatar: '/agents/Teddy Roosevelt.png',
+        skills: ['🌲 Conservation', '🏞️ Nature', '⚖️ Policy'],
+        actions: [
+          { label: 'Environmental Analysis', icon: Play, primary: true },
+          { label: 'Conservation Review', icon: Target },
+          { label: 'Policy Guide', icon: Shield }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'frederick-law-olmsted',
+        name: 'Frederick Law Olmsted',
+        role: 'Urban Planning Pioneer',
+        avatar: '/agents/Frederick Law Olmsted.png',
+        skills: ['🏙️ Urban Planning', '🌳 Landscape', '📐 Design'],
+        actions: [
+          { label: 'Urban Analysis', icon: Play, primary: true },
+          { label: 'Planning Review', icon: Target },
+          { label: 'Design Guide', icon: Eye }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'media-psychology',
+    title: '📺 Media & Psychology',
+    agents: [
+      {
+        id: 'edward-murrow',
+        name: 'Edward Murrow',
+        role: 'Broadcast Journalism',
+        avatar: '/agents/Edward Murrow.png',
+        skills: ['📺 Journalism', '📢 Media', '⚖️ Truth'],
+        actions: [
+          { label: 'Media Analysis', icon: Play, primary: true },
+          { label: 'Journalism Review', icon: Target },
+          { label: 'Truth Guide', icon: Shield }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'sigmund-freud',
+        name: 'Sigmund Freud',
+        role: 'Psychology Pioneer',
+        avatar: '/agents/Sigmund Freud.png',
+        skills: ['🧠 Psychology', '🔍 Analysis', '💭 Mind'],
+        actions: [
+          { label: 'Psychological Analysis', icon: Play, primary: true },
+          { label: 'Behavior Review', icon: Target },
+          { label: 'Mind Guide', icon: Eye }
+        ],
+        status: 'online'
+      }
+    ]
+  },
+  {
+    id: 'philosophy-theology',
+    title: '🤔 Philosophy & Theology',
+    agents: [
+      {
+        id: 'socrates',
+        name: 'Socrates',
+        role: 'Philosophy Master',
+        avatar: '/agents/Socrates.png',
+        skills: ['🤔 Philosophy', '❓ Questioning', '💡 Wisdom'],
+        actions: [
+          { label: 'Philosophical Analysis', icon: Play, primary: true },
+          { label: 'Question Review', icon: Target },
+          { label: 'Wisdom Guide', icon: Zap }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'martin-luther',
+        name: 'Martin Luther',
+        role: 'Theology Reformer',
+        avatar: '/agents/Martin Luther.png',
+        skills: ['⛪ Theology', '📖 Scripture', '🔄 Reform'],
+        actions: [
+          { label: 'Theological Analysis', icon: Play, primary: true },
+          { label: 'Scripture Review', icon: Target },
+          { label: 'Reform Guide', icon: Shield }
+        ],
+        status: 'online'
+      },
+      {
+        id: 'mark-twain',
+        name: 'Mark Twain',
+        role: 'Satire & Literature',
+        avatar: '/agents/Mark Twain.png',
+        skills: ['✍️ Literature', '😄 Satire', '📝 Writing'],
+        actions: [
+          { label: 'Literary Analysis', icon: Play, primary: true },
+          { label: 'Writing Review', icon: Target },
+          { label: 'Satire Guide', icon: Zap }
+        ],
+        status: 'online'
       }
     ]
   }
@@ -1013,7 +1219,7 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
 
   return (
     <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105">
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
         {/* Avatar - Main Focus */}
         <div className="aspect-square relative">
           <img
@@ -1022,7 +1228,7 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
             className="w-full h-full object-cover object-top"
           />
           {/* Subtle overlay on hover */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+          <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
         </div>
         
         {/* Agent Info - Minimal */}
@@ -1107,7 +1313,7 @@ function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: bool
                     key={index}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                       action.primary
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        ? 'bg-orange-500 text-white hover:bg-orange-600'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
@@ -1120,7 +1326,7 @@ function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: bool
           </div>
 
           {/* Chat Button */}
-          <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+          <button className="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2">
             <MessageSquare size={20} />
             Start Chat
           </button>
@@ -1132,7 +1338,6 @@ function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: bool
 
 // Main Page Component - Minimalistic Design
 export default function RabbitPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
 
   const handleAgentClick = (agent: any) => {
@@ -1140,11 +1345,11 @@ export default function RabbitPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="bg-white">
       {/* Generous white space and main phrase */}
       <div className="pt-24 pb-12">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-12">Meet Your AI Agents</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
           
           {/* Prominent search box */}
           <div className="max-w-2xl mx-auto px-6">
@@ -1152,10 +1357,18 @@ export default function RabbitPage() {
               <input
                 type="text"
                 placeholder="Search for an AI agent..."
-                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:outline-none transition-colors shadow-sm"
+                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-sm"
               />
               <Search className="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400" size={24} />
             </div>
+          </div>
+          
+          {/* Create Agent Button */}
+          <div className="mt-8">
+            <button className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold rounded-2xl hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+              <Plus size={24} />
+              Create New Agent
+            </button>
           </div>
         </div>
       </div>
