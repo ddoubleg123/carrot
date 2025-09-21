@@ -75,6 +75,13 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
       const fallbackBucket = baseM ? baseM[1] : undefined
       return { bucket: fallbackBucket, path: decodeURIComponent(m3[1]), kind: 'firebase' }
     }
+    // Firebase Storage subdomain: <bucket>.firebasestorage.app/<path>
+    const m4 = u.pathname.match(/^\/(.+)$/)
+    if (host.endsWith('.firebasestorage.app') && m4) {
+      // Extract bucket from hostname
+      const bucket = host.replace('.firebasestorage.app', '')
+      return { bucket, path: decodeURIComponent(m4[1]), kind: 'firebase' }
+    }
   } catch {}
   return {}
 }
@@ -391,42 +398,62 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   }
 
   if (!upstream.ok) {
-    // Handle ExpiredToken by trying to re-sign the URL
-    if (upstream.status === 400) {
-      const errorBody = await upstream.text();
-      if (errorBody.includes('ExpiredToken')) {
-        console.warn('[api/img] ExpiredToken detected, attempting to re-sign URL', { url: target.toString() });
+    const errorBody = await upstream.text();
+    
+    // Check for expired token in any error response
+    const isExpiredToken = errorBody.includes('ExpiredToken') || 
+                          errorBody.includes('expired') || 
+                          errorBody.includes('Invalid argument') ||
+                          target.toString().includes('Expires=');
+    
+    if (isExpiredToken) {
+      console.warn('[api/img] ExpiredToken detected, attempting to re-sign URL', { 
+        url: target.toString(), 
+        status: upstream.status,
+        errorBody: errorBody.slice(0, 256)
+      });
+      
+      // Try to extract bucket and path for re-signing
+      const ext = tryExtractBucketAndPath(target.toString());
+      console.log('[api/img] Extracted bucket/path for re-signing', { 
+        bucket: ext.bucket, 
+        path: ext.path, 
+        kind: ext.kind,
+        originalUrl: target.toString()
+      });
+      
+      if (ext.bucket && ext.path) {
+        const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch((e) => {
+          console.warn('[api/img] getFreshSignedUrl failed', { error: e, bucket: ext.bucket, path: ext.path });
+          return null;
+        });
         
-        // Try to extract bucket and path for re-signing
-        const ext = tryExtractBucketAndPath(target.toString());
-        if (ext.bucket && ext.path) {
-          const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch(() => null);
-          if (resigned) {
-            try {
-              const newTarget = new URL(resigned);
-              const retryUpstream = await fetchUpstream(req, newTarget);
-              if (retryUpstream.ok) {
-                console.log('[api/img] Successfully re-signed expired URL', { path: ext.path });
-                upstream = retryUpstream;
-              } else {
-                console.warn('[api/img] Re-signed URL also failed', { status: retryUpstream.status });
-              }
-            } catch (e) {
-              console.warn('[api/img] Failed to re-sign URL', { error: e });
+        if (resigned) {
+          console.log('[api/img] Generated fresh signed URL', { newUrl: resigned });
+          try {
+            const newTarget = new URL(resigned);
+            const retryUpstream = await fetchUpstream(req, newTarget);
+            if (retryUpstream.ok) {
+              console.log('[api/img] Successfully re-signed expired URL', { path: ext.path });
+              upstream = retryUpstream;
+            } else {
+              console.warn('[api/img] Re-signed URL also failed', { status: retryUpstream.status });
             }
+          } catch (e) {
+            console.warn('[api/img] Failed to re-sign URL', { error: e });
           }
-        }
-        
-        // If re-signing failed, return 503
-        if (!upstream.ok) {
-          return new NextResponse('Image temporarily unavailable', { status: 503 });
+        } else {
+          console.warn('[api/img] Could not generate fresh signed URL', { bucket: ext.bucket, path: ext.path });
         }
       } else {
-        console.warn('[api/img] upstream not ok', { host: target.hostname, status: upstream.status, body: errorBody.slice(0, 256) })
-        return new NextResponse(errorBody || 'Upstream error', { status: upstream.status, headers: { 'cache-control': 'public, max-age=60', 'x-proxy': 'img-upstream-fail' } })
+        console.warn('[api/img] Could not extract bucket/path from URL', { url: target.toString() });
+      }
+      
+      // If re-signing failed, return 503
+      if (!upstream.ok) {
+        return new NextResponse('Image temporarily unavailable', { status: 503 });
       }
     } else {
-      const errorBody = await upstream.text();
       console.warn('[api/img] upstream not ok', { host: target.hostname, status: upstream.status, body: errorBody.slice(0, 256) })
       return new NextResponse(errorBody || 'Upstream error', { status: upstream.status, headers: { 'cache-control': 'public, max-age=60', 'x-proxy': 'img-upstream-fail' } })
     }
