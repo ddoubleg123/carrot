@@ -12,9 +12,10 @@ type Kind = "video" | "image" | "text" | "audio";
 
 function makePosts(): FMPostAsset[] {
   const posts: FMPostAsset[] = [];
+  // First 10 include all types to validate queuing rules across types
   const kinds: Kind[] = [
-    "video", "image", "video", "image", "video",
-    "image", "video", "image", "video", "image", // 0..9
+    "video", "image", "text", "audio", "video",
+    "image", "text", "audio", "video", "image", // 0..9
     "video", "image" // 10..11, outside initial-10 window
   ];
 
@@ -51,12 +52,11 @@ function makePosts(): FMPostAsset[] {
         type: "text",
         feedIndex: i,
       } as FMPostAsset);
-    } else {
+    } else { // audio
       posts.push({
         ...common,
         id: `post-${i}`,
         type: "audio",
-        videoUrl: `/api/video?bucket=test-bucket&path=post-${i}/audio.mp3` as any,
         feedIndex: i,
       } as FMPostAsset);
     }
@@ -73,6 +73,36 @@ export default function TestPreloadClient() {
     const mpq: any = MediaPreloadQueue as any;
     const originalEnqueue = mpq.enqueue.bind(mpq);
     const records: any[] = [];
+
+    // Mock fetch to avoid real network calls from MediaPreloadQueue.executeTask
+    const originalFetch = (window as any).fetch?.bind(window) as typeof fetch | undefined;
+    (window as any).fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : (input as any).url;
+      const isImg = url.includes('/api/img');
+      const isVideo = url.includes('/api/video');
+      const isAudio = url.includes('/api/audio');
+      const isText = url.includes('/api/text');
+
+      if (isImg) {
+        const blob = new Blob([new Uint8Array([137,80,78,71])], { type: 'image/png' });
+        return new Response(blob, { status: 200, headers: { 'Content-Type': 'image/png' } });
+      }
+      if (isVideo) {
+        const size = 64 * 1024; // 64KB mock segment
+        const buf = new Uint8Array(size);
+        return new Response(buf, { status: 200, headers: { 'Content-Type': 'video/mp4' } });
+      }
+      if (isAudio) {
+        const size = 128 * 1024; // 128KB mock audio
+        const buf = new Uint8Array(size);
+        return new Response(buf, { status: 200, headers: { 'Content-Type': 'audio/mpeg' } });
+      }
+      if (isText) {
+        const body = JSON.stringify({ id: 'text', ok: true });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(new Blob(["ok"]), { status: 200 });
+    }) as any;
 
     mpq.enqueue = (
       postId: string,
@@ -104,6 +134,7 @@ export default function TestPreloadClient() {
 
     return () => {
       try { mpq.enqueue = originalEnqueue; } catch {}
+      try { if (originalFetch) (window as any).fetch = originalFetch; } catch {}
       clearTimeout(t);
     };
   }, []);

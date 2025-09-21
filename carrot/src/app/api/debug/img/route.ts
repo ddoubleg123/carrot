@@ -46,3 +46,4 @@ export async function GET(req: NextRequest) {
     message: 'Debug endpoint - check server logs for detailed information'
   });
 }
+

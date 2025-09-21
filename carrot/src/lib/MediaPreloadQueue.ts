@@ -2,7 +2,9 @@ export enum TaskType {
   POSTER = 'POSTER',
   VIDEO_PREROLL_6S = 'VIDEO_PREROLL_6S', 
   IMAGE = 'IMAGE',
-  AUDIO_META = 'AUDIO_META'
+  AUDIO_META = 'AUDIO_META',
+  TEXT_FULL = 'TEXT_FULL',
+  AUDIO_FULL = 'AUDIO_FULL',
 }
 
 export enum Priority {
@@ -34,7 +36,7 @@ export interface TaskResult {
   postId: string;
   type: TaskType;
   success: boolean;
-  data?: Blob | ArrayBuffer;
+  data?: Blob | ArrayBuffer | string;
   size?: number;
   error?: Error;
   duration: number;
@@ -46,6 +48,8 @@ interface ConcurrencyLimits {
   [TaskType.VIDEO_PREROLL_6S]: number;
   [TaskType.IMAGE]: number;
   [TaskType.AUDIO_META]: number;
+  [TaskType.TEXT_FULL]: number;
+  [TaskType.AUDIO_FULL]: number;
 }
 
 interface SequentialConfig {
@@ -83,7 +87,9 @@ class MediaPreloadQueue {
     [TaskType.POSTER]: 6,       
     [TaskType.VIDEO_PREROLL_6S]: 2, 
     [TaskType.IMAGE]: 4,
-    [TaskType.AUDIO_META]: 3
+    [TaskType.AUDIO_META]: 3,
+    [TaskType.TEXT_FULL]: 4,
+    [TaskType.AUDIO_FULL]: 2,
   };
   
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
@@ -98,8 +104,10 @@ class MediaPreloadQueue {
     [TaskType.POSTER]: 0.1, 
     [TaskType.VIDEO_PREROLL_6S]: 1.5, 
     [TaskType.IMAGE]: 0.5, 
-    [TaskType.AUDIO_META]: 0.5 
-  };
+    [TaskType.AUDIO_META]: 0.5, 
+    [TaskType.TEXT_FULL]: 0.2,
+    [TaskType.AUDIO_FULL]: 2.0,
+  } as Record<TaskType, number>;
 
   constructor() {
     Object.values(TaskType).forEach(type => {
@@ -400,22 +408,24 @@ class MediaPreloadQueue {
     });
 
     try {
-      let data: Blob | ArrayBuffer;
+      let data: Blob | ArrayBuffer | string;
       let actualSize = 0;
 
       switch (type) {
         case TaskType.POSTER:
-        case TaskType.IMAGE:
+        case TaskType.IMAGE: {
           const imageResponse = await fetch(url, { 
             signal: abortController.signal,
             headers: { 'Accept': 'image/*' }
           });
           if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
-          data = await imageResponse.blob();
-          actualSize = data.size;
+          const blob = await imageResponse.blob();
+          data = blob;
+          actualSize = blob.size;
           break;
+        }
 
-        case TaskType.VIDEO_PREROLL_6S:
+        case TaskType.VIDEO_PREROLL_6S: {
           const videoResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
@@ -424,11 +434,13 @@ class MediaPreloadQueue {
             }
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
-          data = await videoResponse.arrayBuffer();
-          actualSize = data.byteLength;
+          const buf = await videoResponse.arrayBuffer();
+          data = buf;
+          actualSize = buf.byteLength;
           break;
+        }
 
-        case TaskType.AUDIO_META:
+        case TaskType.AUDIO_META: {
           const audioResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
@@ -437,9 +449,32 @@ class MediaPreloadQueue {
             }
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
-          data = await audioResponse.arrayBuffer();
-          actualSize = data.byteLength;
+          const buf = await audioResponse.arrayBuffer();
+          data = buf;
+          actualSize = buf.byteLength;
           break;
+        }
+
+        case TaskType.AUDIO_FULL: {
+          const audioResponse = await fetch(url, {
+            signal: abortController.signal,
+            headers: { 'Accept': 'audio/*' }
+          });
+          if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
+          const buf = await audioResponse.arrayBuffer();
+          data = buf;
+          actualSize = buf.byteLength;
+          break;
+        }
+
+        case TaskType.TEXT_FULL: {
+          const textResponse = await fetch(url, { signal: abortController.signal, headers: { 'Accept': 'application/json, text/*;q=0.9,*/*;q=0.8' } });
+          if (!textResponse.ok) throw new Error(`HTTP ${textResponse.status}`);
+          const text = await textResponse.text();
+          data = text;
+          actualSize = new Blob([text]).size;
+          break;
+        }
 
         default:
           throw new Error(`Unknown task type: ${type}`);

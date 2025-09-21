@@ -593,7 +593,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {/* Images / GIF */}
         {!hasVideoMedia && gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
-            <div className="w-full rounded-xl overflow-hidden bg-white relative" style={{ aspectRatio: '16 / 9' }}>
+            <div className="w-full rounded-xl overflow-hidden relative" style={{ aspectRatio: '16 / 9' }}>
               <Image
                 src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
                 alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
@@ -613,7 +613,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               style={hasGradient ? { background: gradientCss } : undefined}
             >
               {imageUrls.length === 1 ? (
-                <div className="cursor-pointer bg-white rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
+                <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
                   <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
                     <Image
                       src={imageUrls[0].startsWith('/api/img') ? imageUrls[0] : `/api/img?url=${encodeURIComponent(imageUrls[0])}`}
@@ -622,14 +622,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       sizes="(max-width: 768px) 100vw, 700px"
                       priority={false}
                       loading="lazy"
-                      style={{ objectFit: 'contain' }}
+                      style={{ objectFit: 'cover' }}
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
-                    <div key={i} className="relative w-full h-48 rounded-lg bg-white overflow-hidden">
+                    <div key={i} className="relative w-full h-48 rounded-lg overflow-hidden">
                       <Image
                         src={u.startsWith('/api/img') ? u : `/api/img?url=${encodeURIComponent(u)}`}
                         alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}

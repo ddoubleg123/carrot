@@ -41,30 +41,30 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
     expect(byIndex.has(10)).toBeFalsy();
     expect(byIndex.has(11)).toBeFalsy();
 
-    // For our fixture, even indices are video, odd are image through index 11
-    // Index 0,2,4,6,8 -> expect POSTER and VIDEO_PREROLL_6S
+    // For our updated fixture (0..9):
+    // 0 video, 1 image, 2 text, 3 audio, 4 video, 5 image, 6 text, 7 audio, 8 video, 9 image
     const TYPE = {
       POSTER: 'POSTER',
       VIDEO_PREROLL_6S: 'VIDEO_PREROLL_6S',
       IMAGE: 'IMAGE',
+      TEXT_FULL: 'TEXT_FULL',
+      AUDIO_META: 'AUDIO_META',
     } as const;
 
-    const needPoster = new Set([0, 2, 4, 6, 8]);
-    const needVideo6s = new Set([0, 2, 4, 6, 8]);
-    const needImage = new Set([1, 3, 5, 7, 9]);
+    const needPoster = new Set([0, 4, 8]);
+    const needVideo6s = new Set([0, 4, 8]);
+    const needImage = new Set([1, 5, 9]);
+    const needText = new Set([2, 6]);
+    const needAudioMeta = new Set([3, 7]);
 
     for (let i = 0; i < 10; i++) {
       const recs = byIndex.get(i)!;
       const types = new Set(recs.map(r => r.type));
-      if (needPoster.has(i)) {
-        expect(types.has(TYPE.POSTER)).toBeTruthy();
-      }
-      if (needVideo6s.has(i)) {
-        expect(types.has(TYPE.VIDEO_PREROLL_6S)).toBeTruthy();
-      }
-      if (needImage.has(i)) {
-        expect(types.has(TYPE.IMAGE)).toBeTruthy();
-      }
+      if (needPoster.has(i)) expect(types.has(TYPE.POSTER)).toBeTruthy();
+      if (needVideo6s.has(i)) expect(types.has(TYPE.VIDEO_PREROLL_6S)).toBeTruthy();
+      if (needImage.has(i)) expect(types.has(TYPE.IMAGE)).toBeTruthy();
+      if (needText.has(i)) expect(types.has(TYPE.TEXT_FULL)).toBeTruthy();
+      if (needAudioMeta.has(i)) expect(types.has(TYPE.AUDIO_META)).toBeTruthy();
     }
   });
 });

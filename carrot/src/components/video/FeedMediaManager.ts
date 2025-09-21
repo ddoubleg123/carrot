@@ -184,11 +184,22 @@ class FeedMediaManager {
         break;
 
       case 'audio':
-        const audioUrl = post.videoUrl || 
-          (post.bucket && post.path ? `/api/video?bucket=${post.bucket}&path=${post.path}/audio.mp3` : null);
-        
-        if (audioUrl) {
-          this.preloadQueue.enqueue(post.id, TaskType.AUDIO_META, priority, post.feedIndex, audioUrl, post.bucket, post.path);
+        // Preload only audio shell/metadata (not the full audio)
+        // Prefer explicit URL if provided; otherwise construct /api/audio from bucket/path
+        {
+          const audioMetaUrl = (post.videoUrl && post.videoUrl.includes('/audio')) ? post.videoUrl :
+            (post.bucket && post.path ? `/api/audio?bucket=${post.bucket}&path=${post.path}/audio.mp3` : (post.videoUrl || null));
+          if (audioMetaUrl) {
+            this.preloadQueue.enqueue(post.id, TaskType.AUDIO_META, priority, post.feedIndex, audioMetaUrl, post.bucket, post.path);
+          }
+        }
+        break;
+
+      case 'text':
+        // Load the full text content (shell + gradients, etc.)
+        {
+          const textUrl = (post.bucket && post.path) ? `/api/text?bucket=${post.bucket}&path=${post.path}/content.json` : `/api/text?id=${encodeURIComponent(post.id)}`;
+          this.preloadQueue.enqueue(post.id, TaskType.TEXT_FULL, priority, post.feedIndex, textUrl, post.bucket, post.path);
         }
         break;
     }
