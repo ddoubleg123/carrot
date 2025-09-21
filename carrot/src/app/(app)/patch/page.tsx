@@ -700,6 +700,13 @@ export default function PatchPage() {
               </div>
             </div>
 
+            {/* Debug Info */}
+            <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
+              <p>Debug: Found {mockGroups.length} groups</p>
+              <p>Current group: {currentGroup ? currentGroup.name : 'None'}</p>
+              <p>Selected group: {selectedGroup || 'None'}</p>
+            </div>
+
             {/* Groups Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {mockGroups.map((group) => (
@@ -714,16 +721,19 @@ export default function PatchPage() {
                   />
                   <div className="p-6">
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="w-12 h-12 rounded-xl bg-white/90 backdrop-blur-sm border-2 border-white/50 overflow-hidden -mt-6">
+                      <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden -mt-6 flex-shrink-0">
                         <img 
                           src={group.avatar} 
                           alt={group.name}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjRjNGNEY2Ii8+Cjx0ZXh0IHg9IjUwIiB5PSI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNkI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2U8L3RleHQ+Cjwvc3ZnPgo=';
+                          }}
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1">{group.name}</h3>
-                        <p className="text-sm text-gray-600 overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{group.description}</p>
+                        <h3 className="font-semibold text-gray-900 mb-1 text-lg">{group.name}</h3>
+                        <p className="text-sm text-gray-600">{group.description}</p>
                       </div>
                     </div>
                     
