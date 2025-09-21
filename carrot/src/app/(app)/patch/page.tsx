@@ -715,13 +715,6 @@ export default function PatchPage() {
               </div>
             </div>
 
-            {/* Debug Info */}
-            <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
-              <p>Debug: Found {mockGroups.length} groups</p>
-              <p>Current group: {currentGroup ? currentGroup.name : 'None'}</p>
-              <p>Selected group: {selectedGroup || 'None'}</p>
-            </div>
-
             {/* Groups Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {mockGroups.map((group) => (
