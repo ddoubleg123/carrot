@@ -1,0 +1,63 @@
+import { test, expect, Page } from '@playwright/test';
+
+// Base URL can be overridden via E2E_BASE_URL, default to local dev
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3005';
+
+async function go(page: Page, path: string) {
+  await page.goto(`${BASE}${path}`, { waitUntil: 'load' });
+}
+
+test.describe('Initial preload queuing (first 10 posts)', () => {
+  test('queues only posts 0..9 and uses correct task types', async ({ page }) => {
+    await go(page, '/test-preload');
+
+    // Wait for the harness to mark ready
+    await page.waitForSelector('[data-testid="ready-flag"][data-ready="1"]', { timeout: 5000 });
+
+    // Pull the enqueue records from the harness
+    const records = await page.evaluate(() => (window as any).__mpq_enqueues || []);
+    expect(Array.isArray(records)).toBeTruthy();
+    expect(records.length).toBeGreaterThan(0);
+
+    // Group by feedIndex
+    const byIndex: Map<number, any[]> = new Map();
+    for (const r of records) {
+      const idx = r.feedIndex as number;
+      if (!byIndex.has(idx)) byIndex.set(idx, []);
+      byIndex.get(idx)!.push(r);
+    }
+
+    // Assert indices 0..9 present, >=10 absent at initial queue time
+    for (let i = 0; i < 10; i++) {
+      expect(byIndex.has(i)).toBeTruthy();
+    }
+    expect(byIndex.has(10)).toBeFalsy();
+    expect(byIndex.has(11)).toBeFalsy();
+
+    // For our fixture, even indices are video, odd are image through index 11
+    // Index 0,2,4,6,8 -> expect POSTER and VIDEO_PREROLL_6S
+    const TYPE = {
+      POSTER: 'POSTER',
+      VIDEO_PREROLL_6S: 'VIDEO_PREROLL_6S',
+      IMAGE: 'IMAGE',
+    } as const;
+
+    const needPoster = new Set([0, 2, 4, 6, 8]);
+    const needVideo6s = new Set([0, 2, 4, 6, 8]);
+    const needImage = new Set([1, 3, 5, 7, 9]);
+
+    for (let i = 0; i < 10; i++) {
+      const recs = byIndex.get(i)!;
+      const types = new Set(recs.map(r => r.type));
+      if (needPoster.has(i)) {
+        expect(types.has(TYPE.POSTER)).toBeTruthy();
+      }
+      if (needVideo6s.has(i)) {
+        expect(types.has(TYPE.VIDEO_PREROLL_6S)).toBeTruthy();
+      }
+      if (needImage.has(i)) {
+        expect(types.has(TYPE.IMAGE)).toBeTruthy();
+      }
+    }
+  });
+});
