@@ -8,7 +8,7 @@ async function go(page: Page, path: string) {
 }
 
 test.describe('Initial preload queuing (first 10 posts)', () => {
-  test('queues only posts 0..9 and uses correct task types', async ({ page }) => {
+  test('queues only posts 0..9 and uses correct task types', async ({ page }, testInfo) => {
     await go(page, '/test-preload');
 
     // Wait for the harness flag to be present in the DOM (no visibility requirement)
@@ -22,7 +22,7 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
     await page.waitForFunction(() => Array.isArray((window as any).__mpq_enqueues) && (window as any).__mpq_enqueues.length > 0, { timeout: 10000 });
 
     // Pull the enqueue records from the harness
-    const records = await page.evaluate(() => (window as any).__mpq_enqueues || []);
+    const records: Array<{ postId: string; type: string; priority: number; feedIndex: number; url: string; bucket?: string; path?: string; }> = await page.evaluate(() => (window as any).__mpq_enqueues || []);
     expect(Array.isArray(records)).toBeTruthy();
     expect(records.length).toBeGreaterThan(0);
 
@@ -66,5 +66,30 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
       if (needText.has(i)) expect(types.has(TYPE.TEXT_FULL)).toBeTruthy();
       if (needAudioMeta.has(i)) expect(types.has(TYPE.AUDIO_META)).toBeTruthy();
     }
+
+    // Build and log a concise summary for operator visibility (feedIndex, postId, task types)
+    const maxIndexToShow = 12; // show a bit beyond initial 10
+    const summaryLines: string[] = [];
+    for (let i = 0; i < maxIndexToShow; i++) {
+      const recs = (byIndex.get(i) || []).sort((a, b) => a.type.localeCompare(b.type));
+      if (recs.length === 0) {
+        summaryLines.push(`${i.toString().padStart(2, '0')} | (none)`);
+        continue;
+      }
+      const postId = recs[0].postId;
+      const types = Array.from(new Set(recs.map(r => r.type))).join(',');
+      summaryLines.push(`${i.toString().padStart(2, '0')} | ${postId} | ${types}`);
+    }
+
+    const header = 'feedIndex | postId  | taskTypes';
+    const divider = '---------|---------|-------------------------';
+    const summaryText = [header, divider, ...summaryLines].join('\n');
+
+    // Print to test output
+    // eslint-disable-next-line no-console
+    console.log('\nPreload Summary (first 12 indices):\n' + summaryText + '\n');
+
+    // Attach to report
+    await testInfo.attach('preload-summary.txt', { body: summaryText, contentType: 'text/plain' });
   });
 });

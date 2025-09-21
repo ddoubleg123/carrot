@@ -73,7 +73,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         name: '', // Remove name display per user request
         username: post.User?.username || 'daniel', // FIXED: Use actual username from database, not name
         avatar: post.User?.profilePhoto || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
-        flag: undefined,
+        flag: post.User?.country || null,
         id: post.userId, // Add the author ID for ownership comparison
       },
       homeCountry: post.User?.country || null,

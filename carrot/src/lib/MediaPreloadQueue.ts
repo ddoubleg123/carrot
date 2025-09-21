@@ -174,6 +174,18 @@ class MediaPreloadQueue {
       dependsOn: dependsOn || 'none'
     });
 
+    // Dev/debug: emit a browser event with enqueue info so tests can collect real IDs
+    try {
+      if (typeof window !== 'undefined') {
+        const entry = { postId, type, priority, feedIndex, url, ts: Date.now() };
+        const w: any = window as any;
+        if (!Array.isArray(w.__mpq_log)) w.__mpq_log = [];
+        w.__mpq_log.push(entry);
+        if (w.__mpq_log.length > 600) w.__mpq_log.shift();
+        w.dispatchEvent?.(new CustomEvent('mpq-enqueue', { detail: entry }));
+      }
+    } catch {}
+
     if (!this.isProcessing) {
       this.processQueue();
     }
