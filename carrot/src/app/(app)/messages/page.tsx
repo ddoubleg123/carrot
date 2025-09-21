@@ -41,9 +41,9 @@ const mockThreads = [
     title: 'Clean Energy Discussion',
     isGroup: true,
     participants: [
-      { id: '1', name: 'Sarah Chen', avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=40&h=40&fit=crop', isOnline: true },
-      { id: '2', name: 'Mike Johnson', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop', isOnline: false },
-      { id: '3', name: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop', isOnline: true }
+      { id: '1', name: 'Sarah Chen', avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=40&h=40&fit=crop', isOnline: true, isExternal: false },
+      { id: '2', name: 'Mike Johnson', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop', isOnline: false, isExternal: false },
+      { id: '3', name: 'Alex Rivera', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop', isOnline: true, isExternal: false }
     ],
     lastMessage: {
       text: 'The new solar efficiency breakthrough is really promising for our project timeline.',
@@ -64,7 +64,7 @@ const mockThreads = [
     title: 'Dr. Emily Watson',
     isGroup: false,
     participants: [
-      { id: '4', name: 'Dr. Emily Watson', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=40&h=40&fit=crop', isOnline: false }
+      { id: '4', name: 'Dr. Emily Watson', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=40&h=40&fit=crop', isOnline: false, isExternal: false }
     ],
     lastMessage: {
       text: 'Thanks for sharing the research paper. I\'ll review it and get back to you by tomorrow.',
@@ -83,8 +83,8 @@ const mockThreads = [
     title: 'Policy Research Team',
     isGroup: true,
     participants: [
-      { id: '5', name: 'David Kim', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=40&h=40&fit=crop', isOnline: true },
-      { id: '6', name: 'Lisa Wang', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=40&h=40&fit=crop', isOnline: false },
+      { id: '5', name: 'David Kim', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=40&h=40&fit=crop', isOnline: true, isExternal: false },
+      { id: '6', name: 'Lisa Wang', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=40&h=40&fit=crop', isOnline: false, isExternal: false },
       { id: '7', name: 'external@policy.org', avatar: null, isOnline: false, isExternal: true }
     ],
     lastMessage: {
@@ -104,8 +104,8 @@ const mockThreads = [
     title: 'Marketing Team',
     isGroup: true,
     participants: [
-      { id: '8', name: 'Jennifer Lee', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=40&h=40&fit=crop', isOnline: true },
-      { id: '9', name: 'Tom Wilson', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=40&h=40&fit=crop', isOnline: false }
+      { id: '8', name: 'Jennifer Lee', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=40&h=40&fit=crop', isOnline: true, isExternal: false },
+      { id: '9', name: 'Tom Wilson', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=40&h=40&fit=crop', isOnline: false, isExternal: false }
     ],
     lastMessage: {
       text: 'Can we schedule a meeting to discuss the Q4 campaign strategy?',
