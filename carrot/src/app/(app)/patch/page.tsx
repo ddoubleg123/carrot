@@ -168,26 +168,33 @@ export default function PatchPage() {
   // Don't render until client-side hydration is complete
   if (!isClient) {
     return (
-      <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
-        <MinimalNav />
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded w-96 mb-8"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                  <div className="h-32 bg-gray-200"></div>
-                  <div className="p-6">
-                    <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded mb-4"></div>
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <div className={`min-h-screen flex ${inter.className}`}>
+        {/* Left nav */}
+        <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+          <MinimalNav />
+        </aside>
+
+        {/* Main content area */}
+        <main className="flex-1 min-w-0">
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded w-96 mb-8"></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <div className="h-32 bg-gray-200"></div>
+                    <div className="p-6">
+                      <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                      <div className="h-4 bg-gray-200 rounded mb-4"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -702,10 +709,15 @@ export default function PatchPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
-      <MinimalNav />
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={`min-h-screen flex ${inter.className}`}>
+      {/* Left nav */}
+      <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+        <MinimalNav />
+      </aside>
+
+      {/* Main content area */}
+      <main className="flex-1 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
           <span>Carrot Patch</span>
@@ -835,7 +847,8 @@ export default function PatchPage() {
             </div>
           </>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
