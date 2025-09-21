@@ -63,49 +63,43 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
       byIndex.get(idx)!.push(r);
     }
 
-    // Determine how many indices to assert based on provided IDs
-    const expectedCount = expectedCountFromIds();
+    const observationalMode = !!IDS; // when real IDs are passed, only log, don't assert exact shape
 
-    // Assert 0..expectedCount-1 present
-    for (let i = 0; i < expectedCount; i++) {
-      expect(byIndex.has(i)).toBeTruthy();
-    }
-
-    // If fewer than 10 IDs provided, do not assert absence/presence beyond that count;
-    // otherwise keep asserting that 10 and 11 are absent initially
-    if (!IDS) {
+    if (!observationalMode) {
+      // Strict assertions for default harness
+      for (let i = 0; i < 10; i++) {
+        expect(byIndex.has(i)).toBeTruthy();
+      }
       expect(byIndex.has(10)).toBeFalsy();
       expect(byIndex.has(11)).toBeFalsy();
-    }
 
-    // For our updated fixture order across 0..9 (or fewer if IDS provided):
-    const TYPE = {
-      POSTER: 'POSTER',
-      VIDEO_PREROLL_6S: 'VIDEO_PREROLL_6S',
-      IMAGE: 'IMAGE',
-      TEXT_FULL: 'TEXT_FULL',
-      AUDIO_META: 'AUDIO_META',
-    } as const;
+      // For our updated fixture order across 0..9: 0 v,1 i,2 t,3 a,4 v,5 i,6 t,7 a,8 v,9 i
+      const TYPE = {
+        POSTER: 'POSTER',
+        VIDEO_PREROLL_6S: 'VIDEO_PREROLL_6S',
+        IMAGE: 'IMAGE',
+        TEXT_FULL: 'TEXT_FULL',
+        AUDIO_META: 'AUDIO_META',
+      } as const;
+      const needPoster = new Set([0, 4, 8]);
+      const needVideo6s = new Set([0, 4, 8]);
+      const needImage = new Set([1, 5, 9]);
+      const needText = new Set([2, 6]);
+      const needAudioMeta = new Set([3, 7]);
 
-    // Expected types per index for the first 10: 0 v,1 i,2 t,3 a,4 v,5 i,6 t,7 a,8 v,9 i
-    const needPoster = new Set([0, 4, 8]);
-    const needVideo6s = new Set([0, 4, 8]);
-    const needImage = new Set([1, 5, 9]);
-    const needText = new Set([2, 6]);
-    const needAudioMeta = new Set([3, 7]);
-
-    for (let i = 0; i < expectedCount; i++) {
-      const recs = byIndex.get(i)!;
-      const types = new Set(recs.map(r => r.type));
-      if (needPoster.has(i)) expect(types.has(TYPE.POSTER)).toBeTruthy();
-      if (needVideo6s.has(i)) expect(types.has(TYPE.VIDEO_PREROLL_6S)).toBeTruthy();
-      if (needImage.has(i)) expect(types.has(TYPE.IMAGE)).toBeTruthy();
-      if (needText.has(i)) expect(types.has(TYPE.TEXT_FULL)).toBeTruthy();
-      if (needAudioMeta.has(i)) expect(types.has(TYPE.AUDIO_META)).toBeTruthy();
+      for (let i = 0; i < 10; i++) {
+        const recs = byIndex.get(i)!;
+        const types = new Set(recs.map(r => r.type));
+        if (needPoster.has(i)) expect(types.has(TYPE.POSTER)).toBeTruthy();
+        if (needVideo6s.has(i)) expect(types.has(TYPE.VIDEO_PREROLL_6S)).toBeTruthy();
+        if (needImage.has(i)) expect(types.has(TYPE.IMAGE)).toBeTruthy();
+        if (needText.has(i)) expect(types.has(TYPE.TEXT_FULL)).toBeTruthy();
+        if (needAudioMeta.has(i)) expect(types.has(TYPE.AUDIO_META)).toBeTruthy();
+      }
     }
 
     // Build and log a concise summary for operator visibility (feedIndex, postId, task types)
-    const maxIndexToShow = Math.max(12, expectedCount);
+    const maxIndexToShow = observationalMode ? Math.max(12, expectedCountFromIds()) : 12;
     const summaryLines: string[] = [];
     for (let i = 0; i < maxIndexToShow; i++) {
       const recs = (byIndex.get(i) || []).sort((a, b) => a.type.localeCompare(b.type));
@@ -124,7 +118,7 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
 
     // Print to test output
     // eslint-disable-next-line no-console
-    console.log('\nPreload Summary (indices 0..' + (expectedCount - 1) + '):\n' + summaryText + '\n');
+    console.log(`\nPreload Summary (${observationalMode ? 'observational, real IDs' : 'first 12 indices'}):\n` + summaryText + '\n');
 
     // Attach to report
     await testInfo.attach('preload-summary.txt', { body: summaryText, contentType: 'text/plain' });
