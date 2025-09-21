@@ -1,16 +1,72 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import FeedMediaManager, { type PostAsset as FMPostAsset } from "../../components/video/FeedMediaManager";
 import MediaPreloadQueue, { TaskType, Priority } from "../../lib/MediaPreloadQueue";
 
-// We construct 12 posts where the first 10 are either video or image (which the current
-// FeedMediaManager.queuePostTasks() actually enqueues). Posts 10 and 11 are outside the
-// initial window and should not be enqueued at initial setPosts().
-
 type Kind = "video" | "image" | "text" | "audio";
 
-function makePosts(): FMPostAsset[] {
+function parseIdsFromQuery(): string[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const ids = sp.get('ids');
+    if (!ids) return null;
+    return ids.split(',').map(s => s.trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+function makePostsFromIds(ids: string[]): FMPostAsset[] {
+  const kinds: Kind[] = ["video", "image", "text", "audio"]; // repeat
+  return ids.map((id, i) => {
+    const kind = kinds[i % kinds.length];
+    const base = {
+      id,
+      feedIndex: i,
+      bucket: "test-bucket",
+      path: id,
+    } as Partial<FMPostAsset>;
+
+    if (kind === "video") {
+      return {
+        ...base,
+        id,
+        type: "video",
+        thumbnailUrl: `/api/img?bucket=test-bucket&path=${encodeURIComponent(id)}/thumb.jpg` as any,
+        videoUrl: `/api/video?bucket=test-bucket&path=${encodeURIComponent(id)}/video.mp4` as any,
+        feedIndex: i,
+      } as FMPostAsset;
+    }
+    if (kind === "image") {
+      return {
+        ...base,
+        id,
+        type: "image",
+        thumbnailUrl: `/api/img?bucket=test-bucket&path=${encodeURIComponent(id)}` as any,
+        feedIndex: i,
+      } as FMPostAsset;
+    }
+    if (kind === "text") {
+      return {
+        ...base,
+        id,
+        type: "text",
+        feedIndex: i,
+      } as FMPostAsset;
+    }
+    // audio
+    return {
+      ...base,
+      id,
+      type: "audio",
+      feedIndex: i,
+    } as FMPostAsset;
+  });
+}
+
+function makeDefaultPosts(): FMPostAsset[] {
   const posts: FMPostAsset[] = [];
   // First 10 include all types to validate queuing rules across types
   const kinds: Kind[] = [
@@ -68,6 +124,8 @@ export default function TestPreloadClient() {
   const [ready, setReady] = useState(false);
   const [enqueues, setEnqueues] = useState<any[]>([]);
 
+  const overrideIds = useMemo(() => parseIdsFromQuery(), []);
+
   useEffect(() => {
     // Patch enqueue to record activity
     const mpq: any = MediaPreloadQueue as any;
@@ -120,7 +178,10 @@ export default function TestPreloadClient() {
     };
 
     // Seed posts and trigger initial queuing
-    const posts = makePosts();
+    const posts = overrideIds && overrideIds.length > 0
+      ? makePostsFromIds(overrideIds)
+      : makeDefaultPosts();
+
     FeedMediaManager.inst.setPosts(posts);
 
     // Expose to window for Playwright and set component state for rendering
@@ -137,7 +198,7 @@ export default function TestPreloadClient() {
       try { if (originalFetch) (window as any).fetch = originalFetch; } catch {}
       clearTimeout(t);
     };
-  }, []);
+  }, [overrideIds]);
 
   return (
     <div className="p-4">
@@ -147,6 +208,7 @@ export default function TestPreloadClient() {
       <pre id="enqueue-json" className="mt-4 whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded">
         {JSON.stringify(enqueues, null, 2)}
       </pre>
+      <p className="text-xs text-gray-500 mt-2">Tip: Append ?ids=id1,id2,id3 to this URL to test with your real post IDs (no login required).</p>
     </div>
   );
 }

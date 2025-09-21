@@ -2,14 +2,27 @@ import { test, expect, Page } from '@playwright/test';
 
 // Base URL can be overridden via E2E_BASE_URL, default to local dev
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:3005';
+const IDS = process.env.E2E_TEST_IDS; // comma-separated post IDs
 
 async function go(page: Page, path: string) {
-  await page.goto(`${BASE}${path}`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/${path}`, { waitUntil: 'load' });
+}
+
+function pathWithIds(basePath: string): string {
+  if (!IDS) return basePath;
+  const q = new URLSearchParams({ ids: IDS }).toString();
+  return `${basePath}?${q}`;
 }
 
 test.describe('Initial preload queuing (first 10 posts)', () => {
   test('queues only posts 0..9 and uses correct task types', async ({ page }, testInfo) => {
-    await go(page, '/test-preload');
+    const targetPath = pathWithIds('test-preload');
+    await go(page, targetPath);
+
+    // Debug: print the actual URL navigated to and any ids detected by the harness
+    const currentUrl = page.url();
+    // eslint-disable-next-line no-console
+    console.log(`[DEBUG] Navigated to: ${currentUrl}`);
 
     // Wait for the harness flag to be present in the DOM (no visibility requirement)
     await page.waitForSelector('[data-testid="ready-flag"]', { state: 'attached', timeout: 10000 });
@@ -25,6 +38,16 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
     const records: Array<{ postId: string; type: string; priority: number; feedIndex: number; url: string; bucket?: string; path?: string; }> = await page.evaluate(() => (window as any).__mpq_enqueues || []);
     expect(Array.isArray(records)).toBeTruthy();
     expect(records.length).toBeGreaterThan(0);
+
+    // Debug: show any ids the harness read from the query
+    const harnessIds = await page.evaluate(() => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        return sp.get('ids') || '';
+      } catch { return ''; }
+    });
+    // eslint-disable-next-line no-console
+    console.log(`[DEBUG] Harness ids query: ${harnessIds || '(none)'}`);
 
     // Group by feedIndex
     const byIndex: Map<number, any[]> = new Map();

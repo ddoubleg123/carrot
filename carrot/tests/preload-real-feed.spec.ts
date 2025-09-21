@@ -3,6 +3,13 @@ import { test, expect, Page } from '@playwright/test';
 // Base URL and path can be overridden via env
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:3005';
 const PATH = process.env.E2E_FEED_PATH || '/home';
+const STORAGE = process.env.E2E_STORAGE_STATE; // optional path to a Playwright storage state JSON
+
+// If a storage state is provided, use it to avoid interactive login
+if (STORAGE) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (test as any).use?.({ storageState: STORAGE });
+}
 
 async function loginIfNeeded(page: Page): Promise<boolean> {
   const url = new URL(page.url());
@@ -40,7 +47,7 @@ async function goToFeed(page: Page): Promise<boolean> {
 test.describe('Real feed preload summary (IDs and task types)', () => {
   test('collects enqueues and verifies offscreen preloading without scrolling', async ({ page }, testInfo) => {
     const ok = await goToFeed(page);
-    if (!ok) test.skip(true, 'Could not reach a public feed page (login redirect). Set E2E_EMAIL/PASSWORD or E2E_FEED_PATH');
+    if (!ok) test.skip(true, 'Could not reach a public feed page (login redirect). Provide E2E_STORAGE_STATE or set E2E_EMAIL/PASSWORD or E2E_FEED_PATH');
 
     // Ensure we have not scrolled
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -88,9 +95,20 @@ test.describe('Real feed preload summary (IDs and task types)', () => {
     const divider = '---------|-------------------------------|-------------------------------';
     const summaryText = [header, divider, ...summaryLines].join('\n');
 
+    // Additionally, print a time-ordered log of enqueues to see EXACTLY when things queued
+    const timeOrdered = entries
+      .slice()
+      .sort((a, b) => a.ts - b.ts)
+      .map(e => `${new Date(e.ts).toISOString()} | idx:${e.feedIndex.toString().padStart(2,'0')} | ${e.postId} | ${e.type}`)
+      .join('\n');
+
     // Print and attach
     // eslint-disable-next-line no-console
     console.log('\nReal Feed Preload Summary (first 20 indices):\n' + summaryText + '\n');
+    // eslint-disable-next-line no-console
+    console.log('\nTime-ordered enqueues:\n' + timeOrdered + '\n');
+
     await testInfo.attach('real-feed-preload-summary.txt', { body: summaryText, contentType: 'text/plain' });
+    await testInfo.attach('real-feed-time-ordered.txt', { body: timeOrdered, contentType: 'text/plain' });
   });
 });
