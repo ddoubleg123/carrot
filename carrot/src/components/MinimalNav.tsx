@@ -53,8 +53,11 @@ const NavIcons = {
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2L2 7l20 5-10-5zm0 12l9.5-4.5L12 5v9zm0 7l-10-5 10-5 10 5-10 5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2"/>
+        <rect x="15" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2"/>
+        <rect x="3" y="15" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2"/>
+        <rect x="15" y="15" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2"/>
+        <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="2"/>
       </svg>
     </div>
   ),
