@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import './rabbit.css';
 import { 
   Filter, 
   Search, 
@@ -72,19 +71,6 @@ const AGENT_CATEGORIES = [
           { label: 'Test Navigation', icon: Eye }
         ],
         status: 'online'
-      },
-      {
-        id: 'performance-bot',
-        name: 'Performance Bot',
-        role: 'Speed & Web Vitals',
-        avatar: '/agents/performance-bot.png',
-        skills: ['⚡ Speed', '📊 Metrics', '🔍 Analysis'],
-        actions: [
-          { label: 'Run Lighthouse', icon: Play, primary: true },
-          { label: 'Check Core Web Vitals', icon: Eye },
-          { label: 'Optimize Assets', icon: Zap }
-        ],
-        status: 'online'
       }
     ]
   },
@@ -115,19 +101,6 @@ const AGENT_CATEGORIES = [
           { label: 'Check Grid', icon: Play, primary: true },
           { label: 'Measure Spacing', icon: Eye },
           { label: 'Validate Layout', icon: CheckCircle }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'token-builder',
-        name: 'Token Builder',
-        role: 'Design System Expert',
-        avatar: '/agents/token-builder.png',
-        skills: ['🎨 Tokens', '🎯 Consistency', '📐 Scale'],
-        actions: [
-          { label: 'Build Tokens', icon: Zap, primary: true },
-          { label: 'Validate Scale', icon: CheckCircle },
-          { label: 'Export Variables', icon: Settings }
         ],
         status: 'online'
       }
@@ -162,58 +135,56 @@ const AGENT_CATEGORIES = [
           { label: 'Test Interactions', icon: Zap }
         ],
         status: 'offline'
-      },
-      {
-        id: 'copy-guardian',
-        name: 'Copy Guardian',
-        role: 'Plain Language Checker',
-        avatar: '/agents/copy-guardian.png',
-        skills: ['📝 Copy', '📖 Readability', '🎯 Clarity'],
-        actions: [
-          { label: 'Review Copy', icon: Eye, primary: true },
-          { label: 'Check Tone', icon: CheckCircle },
-          { label: 'Improve Clarity', icon: Zap }
-        ],
-        status: 'online'
-      }
-    ]
-  },
-  {
-    id: 'metrics',
-    title: '📈 Metrics Agents',
-    agents: [
-      {
-        id: 'lighthouse-agent',
-        name: 'Lighthouse Agent',
-        role: 'Performance Monitor',
-        avatar: '/agents/lighthouse-agent.png',
-        skills: ['📊 Performance', '⚡ Speed', '🔍 Analysis'],
-        actions: [
-          { label: 'Run Audit', icon: Play, primary: true },
-          { label: 'Check Scores', icon: Eye },
-          { label: 'Generate Report', icon: FileText }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'analytics-bot',
-        name: 'Analytics Bot',
-        role: 'Data Insights',
-        avatar: '/agents/analytics-bot.png',
-        skills: ['📊 Data', '📈 Trends', '🔍 Insights'],
-        actions: [
-          { label: 'Analyze Data', icon: Play, primary: true },
-          { label: 'Generate Report', icon: FileText },
-          { label: 'Track Trends', icon: Eye }
-        ],
-        status: 'online'
       }
     ]
   }
 ];
 
+// Header Component
+function Header({ onCreateAgent }: { onCreateAgent: () => void }) {
+  const [activeFilter, setActiveFilter] = useState('All');
+  const filters = ['All', 'Design', 'Audit', 'Custom'];
 
-// Enhanced Agent Tile Component - Netflix Style
+  return (
+    <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-semibold text-gray-900">Rabbit Workforce</h1>
+        
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            {filters.map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeFilter === filter
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
+          
+          <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <Search size={20} />
+          </button>
+
+          <button 
+            onClick={onCreateAgent}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
+          >
+            <Plus size={18} />
+            Create Agent
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Enhanced Agent Tile Component - Phase 2
 function AgentTile({ agent }: { agent: any }) {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -233,89 +204,59 @@ function AgentTile({ agent }: { agent: any }) {
     }
   };
 
-  // Portrait mapping based on your reference image
-  const getPortraitStyle = (agentName: string) => {
-    const portraits: { [key: string]: { bg: string; initials: string; gradient: string } } = {
-      'Design Guardian': { bg: 'from-purple-500 to-pink-500', initials: 'DG', gradient: 'from-purple-400 via-pink-400 to-orange-400' },
-      'A11Y Auditor': { bg: 'from-blue-500 to-cyan-500', initials: 'AA', gradient: 'from-blue-400 via-cyan-400 to-teal-400' },
-      'Performance Bot': { bg: 'from-green-500 to-emerald-500', initials: 'PB', gradient: 'from-green-400 via-emerald-400 to-lime-400' },
-      'Spec Generator': { bg: 'from-orange-500 to-red-500', initials: 'SG', gradient: 'from-orange-400 via-red-400 to-pink-400' },
-      'Layout Inspector': { bg: 'from-indigo-500 to-purple-500', initials: 'LI', gradient: 'from-indigo-400 via-purple-400 to-pink-400' },
-      'Token Builder': { bg: 'from-teal-500 to-blue-500', initials: 'TB', gradient: 'from-teal-400 via-blue-400 to-indigo-400' },
-      'Typographer': { bg: 'from-amber-500 to-yellow-500', initials: 'TY', gradient: 'from-amber-400 via-yellow-400 to-orange-400' },
-      'Motion Moderator': { bg: 'from-violet-500 to-purple-500', initials: 'MM', gradient: 'from-violet-400 via-purple-400 to-pink-400' },
-      'Copy Guardian': { bg: 'from-rose-500 to-pink-500', initials: 'CG', gradient: 'from-rose-400 via-pink-400 to-red-400' },
-      'Lighthouse Agent': { bg: 'from-sky-500 to-blue-500', initials: 'LA', gradient: 'from-sky-400 via-blue-400 to-indigo-400' },
-      'Analytics Bot': { bg: 'from-emerald-500 to-green-500', initials: 'AB', gradient: 'from-emerald-400 via-green-400 to-lime-400' }
-    };
-    
-    return portraits[agentName] || { bg: 'from-gray-500 to-gray-600', initials: agent.name.split(' ').map((n: string) => n[0]).join(''), gradient: 'from-gray-400 to-gray-500' };
-  };
-
-  const portrait = getPortraitStyle(agent.name);
-
   return (
-    <div className="agent-tile group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[280px] max-w-[280px] border border-gray-100">
+    <div className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[300px] max-w-[300px]">
       <div className="flex flex-col items-center text-center">
-        {/* Portrait with status indicator - Netflix style */}
-        <div className="relative mb-6">
-          <div className={`w-24 h-24 bg-gradient-to-br ${portrait.bg} rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-xl relative overflow-hidden`}>
-            {/* Portrait background gradient */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${portrait.gradient} opacity-80`}></div>
-            <div className="relative z-10 text-white font-bold text-xl">
-              {portrait.initials}
-            </div>
-            {/* Subtle pattern overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+        {/* Avatar with status indicator */}
+        <div className="relative mb-4">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+            {agent.name.split(' ').map((n: string) => n[0]).join('')}
           </div>
           {/* Status indicator */}
-          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-3 border-white flex items-center justify-center status-indicator shadow-lg`}>
+          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-2 border-white flex items-center justify-center`}>
             <div className="w-2 h-2 bg-white rounded-full"></div>
           </div>
         </div>
         
         {/* Agent info */}
-        <h3 className="font-bold text-gray-900 mb-1 text-xl">{agent.name}</h3>
-        <p className="text-sm text-gray-600 mb-2 font-medium">{agent.role}</p>
-        <div className="flex items-center gap-2 mb-4">
-          <div className={`w-2 h-2 ${getStatusColor(agent.status)} rounded-full`}></div>
-          <p className="text-xs text-gray-500 font-medium">{getStatusText(agent.status)}</p>
-        </div>
+        <h3 className="font-semibold text-gray-900 mb-1 text-lg">{agent.name}</h3>
+        <p className="text-sm text-gray-600 mb-2">{agent.role}</p>
+        <p className="text-xs text-gray-500 mb-4">{getStatusText(agent.status)}</p>
         
-        {/* Skills badges - more refined */}
+        {/* Skills badges */}
         <div className="flex flex-wrap gap-2 mb-6 justify-center">
           {agent.skills.map((skill: string, index: number) => (
             <span
               key={index}
-              className="px-3 py-1.5 bg-gray-50 text-gray-700 text-xs font-semibold rounded-full border border-gray-200 hover:border-gray-300 transition-colors"
+              className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200 hover:border-blue-300 transition-colors"
             >
               {skill}
             </span>
           ))}
         </div>
         
-        {/* Quick actions - Netflix style */}
-        <div className="flex flex-col gap-3 w-full">
+        {/* Quick actions */}
+        <div className="flex flex-col gap-2 w-full">
           {agent.actions.slice(0, 2).map((action: any, index: number) => {
             const IconComponent = action.icon;
             return (
               <button
                 key={index}
-                className={`flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 min-h-[48px] ${
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 min-h-[44px] ${
                   action.primary
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-200 hover:border-gray-300'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900'
                 }`}
               >
-                <IconComponent size={18} />
+                <IconComponent size={16} />
                 {action.label}
               </button>
             );
           })}
           
-          {/* Chat button - more prominent */}
-          <button className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-200 min-h-[48px] border-2 border-blue-200 hover:border-blue-300 hover:shadow-md">
-            <MessageSquare size={18} />
+          {/* Chat button */}
+          <button className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors min-h-[44px] border border-blue-200 hover:border-blue-300">
+            <MessageSquare size={16} />
             Chat
           </button>
         </div>
@@ -324,26 +265,23 @@ function AgentTile({ agent }: { agent: any }) {
   );
 }
 
-// Agent Row Component - Netflix Style
+// Agent Row Component
 function AgentRow({ category }: { category: any }) {
   return (
-    <div className="agent-category mb-16">
-      <div className="px-6 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-3">{category.title}</h2>
-        <p className="text-gray-600 text-lg">Specialized agents for {category.title.toLowerCase().replace(/[🧪🛠️👀📈]/g, '').trim()}</p>
-      </div>
-      <div className="flex gap-6 overflow-x-auto px-6 pb-6 scrollbar-hide">
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold text-gray-900 mb-6 px-6">{category.title}</h2>
+      <div className="flex gap-6 overflow-x-auto px-6 pb-4">
         {category.agents.map((agent: any) => (
           <AgentTile key={agent.id} agent={agent} />
         ))}
         
-        {/* Add new agent tile - Netflix style */}
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-2xl p-8 min-w-[280px] max-w-[280px] flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-blue-100 transition-all duration-300 cursor-pointer group shadow-lg hover:shadow-xl">
-          <div className="w-24 h-24 bg-gradient-to-br from-gray-200 to-gray-300 group-hover:from-blue-200 group-hover:to-blue-300 rounded-2xl mb-6 flex items-center justify-center transition-all duration-300 shadow-lg">
-            <Plus size={40} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+        {/* Add new agent tile */}
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 min-w-[300px] max-w-[300px] flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 cursor-pointer group">
+          <div className="w-20 h-20 bg-gray-200 group-hover:bg-blue-200 rounded-xl mb-4 flex items-center justify-center transition-colors">
+            <span className="text-3xl text-gray-400 group-hover:text-blue-500 transition-colors">+</span>
           </div>
-          <h3 className="text-gray-700 font-bold mb-2 text-lg">Create New Agent</h3>
-          <p className="text-sm text-gray-500 font-medium">Custom specialist for your workflow</p>
+          <p className="text-gray-600 font-medium mb-2">Create New Agent</p>
+          <p className="text-sm text-gray-500">Custom specialist for your workflow</p>
         </div>
       </div>
     </div>
@@ -447,10 +385,10 @@ function ChatBar() {
   };
 
   return (
-    <div className="relative">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg backdrop-blur-sm bg-white/95 z-50">
       {/* Slash Commands Dropdown */}
       {showCommands && filteredCommands.length > 0 && (
-        <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 z-50">
+        <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg max-w-4xl mx-auto mb-1">
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Command size={16} />
@@ -483,7 +421,7 @@ function ChatBar() {
 
       {/* History Dropdown */}
       {showHistory && (
-        <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 z-50">
+        <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg max-w-4xl mx-auto mb-1">
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Clock size={16} />
@@ -512,7 +450,7 @@ function ChatBar() {
 
       {/* Agent Selector Dropdown */}
       {showAgentSelector && (
-        <div className="absolute top-full right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-2 w-80 z-50">
+        <div className="absolute bottom-full right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg mb-1 w-80">
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <User size={16} />
@@ -569,103 +507,105 @@ function ChatBar() {
       )}
 
       {/* Main Chat Bar */}
-      <div className="flex items-center gap-3">
-        {/* History Button */}
-        <button 
-          onClick={() => {
-            setShowHistory(!showHistory);
-            setShowAgentSelector(false);
-          }}
-          className={`p-2 rounded-lg transition-colors ${
-            showHistory 
-              ? 'text-blue-600 bg-blue-100' 
-              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <History size={20} />
-        </button>
-        
-        {/* Message Input */}
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={message}
-            onChange={handleInputChange}
-            placeholder="Ask an agent to help you... (try /audit or /generate)"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12"
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          />
-          {message.startsWith('/') && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <Command size={16} className="text-gray-400" />
-            </div>
-          )}
-        </div>
-        
-        {/* Agent Selector */}
-        <div className="relative">
-          <button
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="flex items-center gap-3">
+          {/* History Button */}
+          <button 
             onClick={() => {
-              setShowAgentSelector(!showAgentSelector);
-              setShowHistory(false);
+              setShowHistory(!showHistory);
+              setShowAgentSelector(false);
             }}
-            className={`px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none flex items-center gap-2 min-w-[160px] transition-all ${
-              showAgentSelector ? 'ring-2 ring-blue-500 border-transparent' : 'hover:border-gray-400'
+            className={`p-2 rounded-lg transition-colors ${
+              showHistory 
+                ? 'text-blue-600 bg-blue-100' 
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <div className="flex items-center gap-2 flex-1">
-              {selectedAgent === 'all' ? (
-                <>
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                    All
-                  </div>
-                  <span className="text-gray-700 text-sm">All Agents</span>
-                </>
-              ) : (
-                (() => {
-                  const agent = allAgents.find(a => a.id === selectedAgent);
-                  return agent ? (
-                    <>
-                      <div className="relative">
-                        <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                          {agent.name.split(' ').map(n => n[0]).join('')}
+            <History size={20} />
+          </button>
+          
+          {/* Message Input */}
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={message}
+              onChange={handleInputChange}
+              placeholder="Ask an agent to help you... (try /audit or /generate)"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12"
+              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            />
+            {message.startsWith('/') && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <Command size={16} className="text-gray-400" />
+              </div>
+            )}
+          </div>
+          
+          {/* Agent Selector */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowAgentSelector(!showAgentSelector);
+                setShowHistory(false);
+              }}
+              className={`px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none flex items-center gap-2 min-w-[160px] transition-all ${
+                showAgentSelector ? 'ring-2 ring-blue-500 border-transparent' : 'hover:border-gray-400'
+              }`}
+            >
+              <div className="flex items-center gap-2 flex-1">
+                {selectedAgent === 'all' ? (
+                  <>
+                    <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                      All
+                    </div>
+                    <span className="text-gray-700 text-sm">All Agents</span>
+                  </>
+                ) : (
+                  (() => {
+                    const agent = allAgents.find(a => a.id === selectedAgent);
+                    return agent ? (
+                      <>
+                        <div className="relative">
+                          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                            {agent.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 ${getAgentStatus(agent.status)} rounded-full border border-white`}></div>
                         </div>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 ${getAgentStatus(agent.status)} rounded-full border border-white`}></div>
-                      </div>
-                      <span className="text-gray-700 text-sm truncate">{agent.name}</span>
-                    </>
-                  ) : null;
-                })()
-              )}
-            </div>
-            <ChevronDown size={16} className={`text-gray-400 transition-transform ${showAgentSelector ? 'rotate-180' : ''}`} />
+                        <span className="text-gray-700 text-sm truncate">{agent.name}</span>
+                      </>
+                    ) : null;
+                  })()
+                )}
+              </div>
+              <ChevronDown size={16} className={`text-gray-400 transition-transform ${showAgentSelector ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+          
+          {/* Send Button */}
+          <button 
+            onClick={handleSend}
+            disabled={!message.trim()}
+            className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send size={18} />
+            Send
           </button>
         </div>
-        
-        {/* Send Button */}
-        <button 
-          onClick={handleSend}
-          disabled={!message.trim()}
-          className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Send size={18} />
-          Send
-        </button>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2 mt-3 text-sm">
-        <span className="text-gray-500">Quick:</span>
-        {slashCommands.slice(0, 3).map((cmd, index) => (
-          <button
-            key={index}
-            onClick={() => handleCommandSelect(cmd.command)}
-            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-1"
-          >
-            <cmd.icon size={14} className={cmd.color} />
-            {cmd.command}
-          </button>
-        ))}
+        {/* Quick Actions */}
+        <div className="flex items-center gap-2 mt-3 text-sm">
+          <span className="text-gray-500">Quick:</span>
+          {slashCommands.slice(0, 3).map((cmd, index) => (
+            <button
+              key={index}
+              onClick={() => handleCommandSelect(cmd.command)}
+              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-1"
+            >
+              <cmd.icon size={14} className={cmd.color} />
+              {cmd.command}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1051,51 +991,196 @@ function CreateAgentModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
   );
 }
 
-// Main Page Component
-export default function RabbitPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+// Minimalistic Agent Card - Avatar Focused
+function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
+  // Map agent names to actual avatar files
+  const getAvatarPath = (agentName: string) => {
+    const avatarMap: { [key: string]: string } = {
+      'Design Guardian': '/agents/Alan Turing.png',
+      'A11Y Auditor': '/agents/MLK.png',
+      'Performance Bot': '/agents/John McCarthy.png',
+      'Spec Generator': '/agents/Albert Einstein.png',
+      'Layout Inspector': '/agents/Frederick Law Olmsted.png',
+      'Token Builder': '/agents/Benjamin Graham.png',
+      'Typographer': '/agents/Mark Twain.png',
+      'Motion Moderator': '/agents/Sigmund Freud.png',
+      'Copy Guardian': '/agents/Mother Jones.png',
+      'Lighthouse Agent': '/agents/Edward Murrow.png',
+      'Analytics Bot': '/agents/John Maynard Keynes.png'
+    };
+    return avatarMap[agentName] || '/agents/Alan Turing.png';
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header Section */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="px-6 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">🐰 Rabbit Workforce</h1>
-              <p className="text-gray-600 text-lg">AI-powered agents for design, development, and quality assurance</p>
+    <div className="group cursor-pointer" onClick={onClick}>
+      <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105">
+        {/* Avatar - Main Focus */}
+        <div className="aspect-square relative">
+          <img
+            src={getAvatarPath(agent.name)}
+            alt={agent.name}
+            className="w-full h-full object-cover object-top"
+          />
+          {/* Subtle overlay on hover */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+        </div>
+        
+        {/* Agent Info - Minimal */}
+        <div className="p-4 text-center">
+          <h3 className="font-bold text-gray-900 text-lg mb-1">{agent.name}</h3>
+          <p className="text-sm text-gray-600 font-medium">{agent.role}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Agent Detail Modal
+function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: boolean; onClose: () => void }) {
+  if (!isOpen || !agent) return null;
+
+  const getAvatarPath = (agentName: string) => {
+    const avatarMap: { [key: string]: string } = {
+      'Design Guardian': '/agents/Alan Turing.png',
+      'A11Y Auditor': '/agents/MLK.png',
+      'Performance Bot': '/agents/John McCarthy.png',
+      'Spec Generator': '/agents/Albert Einstein.png',
+      'Layout Inspector': '/agents/Frederick Law Olmsted.png',
+      'Token Builder': '/agents/Benjamin Graham.png',
+      'Typographer': '/agents/Mark Twain.png',
+      'Motion Moderator': '/agents/Sigmund Freud.png',
+      'Copy Guardian': '/agents/Mother Jones.png',
+      'Lighthouse Agent': '/agents/Edward Murrow.png',
+      'Analytics Bot': '/agents/John Maynard Keynes.png'
+    };
+    return avatarMap[agentName] || '/agents/Alan Turing.png';
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-8">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <img
+                src={getAvatarPath(agent.name)}
+                alt={agent.name}
+                className="w-16 h-16 rounded-full object-cover object-top"
+              />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{agent.name}</h2>
+                <p className="text-gray-600">{agent.role}</p>
+              </div>
             </div>
-            
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl font-semibold"
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <Plus size={20} />
-              Create New Agent
+              <X size={24} />
             </button>
+          </div>
+
+          {/* Skills */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Expertise</h3>
+            <div className="flex flex-wrap gap-2">
+              {agent.skills.map((skill: string, index: number) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {agent.actions.map((action: any, index: number) => {
+                const IconComponent = action.icon;
+                return (
+                  <button
+                    key={index}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                      action.primary
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <IconComponent size={20} />
+                    <span className="font-medium">{action.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chat Button */}
+          <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+            <MessageSquare size={20} />
+            Start Chat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main Page Component - Minimalistic Design
+export default function RabbitPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+
+  const handleAgentClick = (agent: any) => {
+    setSelectedAgent(agent);
+  };
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Generous white space and main phrase */}
+      <div className="pt-24 pb-12">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-12">Meet Your AI Agents</h1>
+          
+          {/* Prominent search box */}
+          <div className="max-w-2xl mx-auto px-6">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search for an AI agent..."
+                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:outline-none transition-colors shadow-sm"
+              />
+              <Search className="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400" size={24} />
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Chat Bar - Middle Upper Section */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
-        <ChatBar />
+      
+      {/* Agent Grid - Avatar Focused */}
+      <div className="px-6 pb-16">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+            {AGENT_CATEGORIES.flatMap(category => category.agents).map((agent) => (
+              <AgentCard 
+                key={agent.id} 
+                agent={agent} 
+                onClick={() => handleAgentClick(agent)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
       
-      {/* Agent Categories Grid - Netflix Style */}
-      <div className="py-8">
-        {AGENT_CATEGORIES.map((category) => (
-          <AgentRow key={category.id} category={category} />
-        ))}
-      </div>
-      
-      {/* Create Agent Modal */}
-      {isModalOpen && (
-        <CreateAgentModal 
-          isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
-        />
-      )}
+      {/* Agent Detail Modal */}
+      <AgentDetailModal 
+        agent={selectedAgent}
+        isOpen={!!selectedAgent}
+        onClose={() => setSelectedAgent(null)}
+      />
     </div>
   );
 }

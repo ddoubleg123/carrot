@@ -49,7 +49,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       },
       userVote: null,
       timestamp: post.createdAt,
-      imageUrls: Array.isArray(post.imageUrls) ? post.imageUrls : [],
+      imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
       videoUrl: post.videoUrl || null,
       videoThumbnailUrl: post.videoThumbnailUrl || null,
       audioUrl: post.audioUrl || null,
