@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { 
   Search, 
   MessageSquare, 
@@ -11,7 +12,7 @@ import {
   Filter,
   SortAsc,
   Calendar,
-  Link,
+  Link as LinkIcon,
   FileText,
   Shield,
   Star,
@@ -310,7 +311,7 @@ export default function PatchPage() {
                 href={source.url}
                 className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group"
               >
-                <Link className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 group-hover:text-orange-500 transition-colors" />
+                <LinkIcon className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 group-hover:text-orange-500 transition-colors" />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-gray-900 group-hover:text-orange-600 transition-colors line-clamp-2">
                     {source.title}
@@ -559,7 +560,7 @@ export default function PatchPage() {
               href={source.url}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors"
             >
-              <Link className="w-4 h-4" />
+              <LinkIcon className="w-4 h-4" />
               View Source
             </a>
           </div>
@@ -702,10 +703,10 @@ export default function PatchPage() {
             {/* Groups Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {mockGroups.map((group) => (
-                <div 
+                <Link 
                   key={group.id}
-                  onClick={() => window.location.href = `/patch/${group.slug}`}
-                  className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+                  href={`/patch/${group.slug}`}
+                  className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group block"
                 >
                   <div 
                     className="h-32 w-full"
@@ -765,7 +766,7 @@ export default function PatchPage() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </>
