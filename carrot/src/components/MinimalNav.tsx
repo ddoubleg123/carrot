@@ -35,20 +35,6 @@ const NavIcons = {
       </svg>
     </div>
   ),
-  CarrotPatch: ({ isActive }: { isActive: boolean }) => (
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
-      isActive
-        ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
-        : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
-    }`}>
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <rect x="4" y="6" width="12" height="2" rx="1" fill="currentColor" opacity="0.9"/>
-        <rect x="4" y="9" width="10" height="2" rx="1" fill="currentColor" opacity="0.9"/>
-        <rect x="4" y="12" width="14" height="2" rx="1" fill="currentColor"/>
-        <rect x="4" y="15" width="8" height="2" rx="1" fill="currentColor" opacity="0.8"/>
-      </svg>
-    </div>
-  ),
   Messages: ({ isActive }: { isActive: boolean }) => (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
       isActive
