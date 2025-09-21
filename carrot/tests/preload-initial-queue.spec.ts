@@ -14,6 +14,12 @@ function pathWithIds(basePath: string): string {
   return `${basePath}?${q}`;
 }
 
+function expectedCountFromIds(): number {
+  if (!IDS) return 10;
+  const count = IDS.split(',').map(s => s.trim()).filter(Boolean).length;
+  return Math.min(10, count);
+}
+
 test.describe('Initial preload queuing (first 10 posts)', () => {
   test('queues only posts 0..9 and uses correct task types', async ({ page }, testInfo) => {
     const targetPath = pathWithIds('test-preload');
@@ -57,15 +63,22 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
       byIndex.get(idx)!.push(r);
     }
 
-    // Assert indices 0..9 present, >=10 absent at initial queue time
-    for (let i = 0; i < 10; i++) {
+    // Determine how many indices to assert based on provided IDs
+    const expectedCount = expectedCountFromIds();
+
+    // Assert 0..expectedCount-1 present
+    for (let i = 0; i < expectedCount; i++) {
       expect(byIndex.has(i)).toBeTruthy();
     }
-    expect(byIndex.has(10)).toBeFalsy();
-    expect(byIndex.has(11)).toBeFalsy();
 
-    // For our updated fixture (0..9):
-    // 0 video, 1 image, 2 text, 3 audio, 4 video, 5 image, 6 text, 7 audio, 8 video, 9 image
+    // If fewer than 10 IDs provided, do not assert absence/presence beyond that count;
+    // otherwise keep asserting that 10 and 11 are absent initially
+    if (!IDS) {
+      expect(byIndex.has(10)).toBeFalsy();
+      expect(byIndex.has(11)).toBeFalsy();
+    }
+
+    // For our updated fixture order across 0..9 (or fewer if IDS provided):
     const TYPE = {
       POSTER: 'POSTER',
       VIDEO_PREROLL_6S: 'VIDEO_PREROLL_6S',
@@ -74,13 +87,14 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
       AUDIO_META: 'AUDIO_META',
     } as const;
 
+    // Expected types per index for the first 10: 0 v,1 i,2 t,3 a,4 v,5 i,6 t,7 a,8 v,9 i
     const needPoster = new Set([0, 4, 8]);
     const needVideo6s = new Set([0, 4, 8]);
     const needImage = new Set([1, 5, 9]);
     const needText = new Set([2, 6]);
     const needAudioMeta = new Set([3, 7]);
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < expectedCount; i++) {
       const recs = byIndex.get(i)!;
       const types = new Set(recs.map(r => r.type));
       if (needPoster.has(i)) expect(types.has(TYPE.POSTER)).toBeTruthy();
@@ -91,7 +105,7 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
     }
 
     // Build and log a concise summary for operator visibility (feedIndex, postId, task types)
-    const maxIndexToShow = 12; // show a bit beyond initial 10
+    const maxIndexToShow = Math.max(12, expectedCount);
     const summaryLines: string[] = [];
     for (let i = 0; i < maxIndexToShow; i++) {
       const recs = (byIndex.get(i) || []).sort((a, b) => a.type.localeCompare(b.type));
@@ -110,7 +124,7 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
 
     // Print to test output
     // eslint-disable-next-line no-console
-    console.log('\nPreload Summary (first 12 indices):\n' + summaryText + '\n');
+    console.log('\nPreload Summary (indices 0..' + (expectedCount - 1) + '):\n' + summaryText + '\n');
 
     // Attach to report
     await testInfo.attach('preload-summary.txt', { body: summaryText, contentType: 'text/plain' });

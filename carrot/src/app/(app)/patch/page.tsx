@@ -33,8 +33,23 @@ import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// Type definitions
+type MockGroup = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  avatar: string;
+  cover: string;
+  stats: { members: number; threads: number; events: number };
+  tags: string[];
+  latestUpdate: string;
+  isJoined: boolean;
+  role: string;
+};
+
 // Mock data for design
-const mockGroups = [
+const mockGroups: MockGroup[] = [
   {
     id: '1',
     name: 'Clean Energy',
@@ -137,9 +152,9 @@ export default function PatchPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'hot' | 'new' | 'top' | 'controversial'>('hot');
 
-  const currentGroup = selectedGroup ? mockGroups.find(g => g.id === selectedGroup) : null;
+  const currentGroup: MockGroup | null = selectedGroup ? mockGroups.find(g => g.id === selectedGroup) || null : null;
 
-  const GroupHeader = ({ group }: { group: typeof mockGroups[0] }) => (
+  const GroupHeader = ({ group }: { group: MockGroup }) => (
     <div className="relative rounded-2xl overflow-hidden mb-6">
       <div 
         className="h-48 w-full"
