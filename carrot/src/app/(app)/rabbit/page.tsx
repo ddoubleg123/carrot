@@ -1202,17 +1202,39 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
   // Map agent names to actual avatar files
   const getAvatarPath = (agentName: string) => {
     const avatarMap: { [key: string]: string } = {
-      'Design Guardian': '/agents/Alan Turing.png',
-      'A11Y Auditor': '/agents/MLK.png',
-      'Performance Bot': '/agents/John McCarthy.png',
-      'Spec Generator': '/agents/Albert Einstein.png',
-      'Layout Inspector': '/agents/Frederick Law Olmsted.png',
-      'Token Builder': '/agents/Benjamin Graham.png',
-      'Typographer': '/agents/Mark Twain.png',
-      'Motion Moderator': '/agents/Sigmund Freud.png',
-      'Copy Guardian': '/agents/Mother Jones.png',
-      'Lighthouse Agent': '/agents/Edward Murrow.png',
-      'Analytics Bot': '/agents/John Maynard Keynes.png'
+      // Governance & Democracy
+      'James Madison': '/agents/James Madison.png',
+      'Nelson Mandela': '/agents/Nelson Mandela.png',
+      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
+      
+      // Economics & Finance
+      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
+      'Milton Friedman': '/agents/Milton Friedman.png',
+      'Hal Finney': '/agents/Hal Finney.png',
+      'Benjamin Graham': '/agents/Benjamin Graham.png',
+      
+      // Social Justice & Labor
+      'Martin Luther King Jr.': '/agents/MLK.png',
+      'Mother Jones': '/agents/Mother Jones.png',
+      
+      // Technology & Science
+      'Alan Turing': '/agents/Alan Turing.png',
+      'John McCarthy': '/agents/John McCarthy.png',
+      'Albert Einstein': '/agents/Albert Einstein.png',
+      'Charles Darwin': '/agents/Charles Darwin.png',
+      
+      // Environment & Urbanism
+      'Teddy Roosevelt': '/agents/Teddy Roosevelt.png',
+      'Frederick Law Olmsted': '/agents/Frederick Law Olmsted.png',
+      
+      // Media & Psychology
+      'Edward Murrow': '/agents/Edward Murrow.png',
+      'Sigmund Freud': '/agents/Sigmund Freud.png',
+      
+      // Philosophy & Theology
+      'Socrates': '/agents/Socrates.png',
+      'Martin Luther': '/agents/Martin Luther.png',
+      'Mark Twain': '/agents/Mark Twain.png'
     };
     return avatarMap[agentName] || '/agents/Alan Turing.png';
   };
@@ -1247,17 +1269,39 @@ function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: bool
 
   const getAvatarPath = (agentName: string) => {
     const avatarMap: { [key: string]: string } = {
-      'Design Guardian': '/agents/Alan Turing.png',
-      'A11Y Auditor': '/agents/MLK.png',
-      'Performance Bot': '/agents/John McCarthy.png',
-      'Spec Generator': '/agents/Albert Einstein.png',
-      'Layout Inspector': '/agents/Frederick Law Olmsted.png',
-      'Token Builder': '/agents/Benjamin Graham.png',
-      'Typographer': '/agents/Mark Twain.png',
-      'Motion Moderator': '/agents/Sigmund Freud.png',
-      'Copy Guardian': '/agents/Mother Jones.png',
-      'Lighthouse Agent': '/agents/Edward Murrow.png',
-      'Analytics Bot': '/agents/John Maynard Keynes.png'
+      // Governance & Democracy
+      'James Madison': '/agents/James Madison.png',
+      'Nelson Mandela': '/agents/Nelson Mandela.png',
+      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
+      
+      // Economics & Finance
+      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
+      'Milton Friedman': '/agents/Milton Friedman.png',
+      'Hal Finney': '/agents/Hal Finney.png',
+      'Benjamin Graham': '/agents/Benjamin Graham.png',
+      
+      // Social Justice & Labor
+      'Martin Luther King Jr.': '/agents/MLK.png',
+      'Mother Jones': '/agents/Mother Jones.png',
+      
+      // Technology & Science
+      'Alan Turing': '/agents/Alan Turing.png',
+      'John McCarthy': '/agents/John McCarthy.png',
+      'Albert Einstein': '/agents/Albert Einstein.png',
+      'Charles Darwin': '/agents/Charles Darwin.png',
+      
+      // Environment & Urbanism
+      'Teddy Roosevelt': '/agents/Teddy Roosevelt.png',
+      'Frederick Law Olmsted': '/agents/Frederick Law Olmsted.png',
+      
+      // Media & Psychology
+      'Edward Murrow': '/agents/Edward Murrow.png',
+      'Sigmund Freud': '/agents/Sigmund Freud.png',
+      
+      // Philosophy & Theology
+      'Socrates': '/agents/Socrates.png',
+      'Martin Luther': '/agents/Martin Luther.png',
+      'Mark Twain': '/agents/Mark Twain.png'
     };
     return avatarMap[agentName] || '/agents/Alan Turing.png';
   };

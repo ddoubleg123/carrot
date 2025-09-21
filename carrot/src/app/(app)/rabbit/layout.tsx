@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { auth } from '../../../auth';
 import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
-import Widgets from '../dashboard/components/Widgets';
 import { Suspense } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -27,18 +26,13 @@ export default async function RabbitLayout({ children }: { children: React.React
         </aside>
 
         {/* Main content area */}
-        <main className="flex-1 min-w-0 flex">
-          {/* Rabbit content column */}
-          <div className="w-full min-w-[320px] max-w-[720px] px-6" style={{ marginTop: -20, paddingTop: 0 }}>
+        <main className="flex-1 min-w-0">
+          {/* Rabbit content column - full width */}
+          <div className="w-full px-6" style={{ marginTop: -20, paddingTop: 0 }}>
             <ClientSessionProvider>
               {children}
             </ClientSessionProvider>
           </div>
-
-          {/* Right rail (hidden on small screens) - same as home page */}
-          <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-            <Widgets />
-          </aside>
         </main>
       </div>
     </Suspense>

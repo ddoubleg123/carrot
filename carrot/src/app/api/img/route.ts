@@ -115,15 +115,27 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
 let storageClient: any = null;
 function ensureStorage(): any | null {
   try {
-    if (storageClient) return storageClient;
+    if (storageClient) {
+      console.log('[api/img] Using existing storage client');
+      return storageClient;
+    }
+    
+    console.log('[api/img] Initializing storage client...');
+    
     // Prefer explicit inline JSON if provided
     const jsonEnv = process.env.GCS_SA_JSON;
     if (jsonEnv) {
+      console.log('[api/img] Using GCS_SA_JSON credentials');
       let creds;
       try {
         creds = JSON.parse(jsonEnv);
+        console.log('[api/img] Credentials parsed successfully', {
+          projectId: creds.project_id,
+          clientEmail: creds.client_email?.substring(0, 20) + '...',
+          hasPrivateKey: !!creds.private_key
+        });
       } catch (parseError) {
-        console.warn('[api/img] Failed to parse GCS_SA_JSON env var:', (parseError as any)?.message);
+        console.error('[api/img] Failed to parse GCS_SA_JSON env var:', (parseError as any)?.message);
         return null;
       }
       const opts: StorageOptions = {
@@ -136,15 +148,24 @@ function ensureStorage(): any | null {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       GCS = GCS || require('@google-cloud/storage');
       storageClient = new GCS.Storage(opts);
+      console.log('[api/img] Storage client created with credentials');
       return storageClient;
     }
+    
     // Else rely on GOOGLE_APPLICATION_CREDENTIALS or default ADC
+    console.log('[api/img] Using default ADC or GOOGLE_APPLICATION_CREDENTIALS');
+    console.log('[api/img] GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS || 'not set');
+    
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     GCS = GCS || require('@google-cloud/storage');
     storageClient = new GCS.Storage();
+    console.log('[api/img] Storage client created with default credentials');
     return storageClient;
   } catch (e) {
-    console.warn('[api/img] GCS client init failed; falling back to public URLs', (e as any)?.message);
+    console.error('[api/img] GCS client init failed; falling back to public URLs', {
+      error: (e as any)?.message,
+      stack: (e as any)?.stack?.substring(0, 200)
+    });
     return null;
   }
 }
@@ -265,6 +286,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   const bucket = sp.get('bucket')
   const generatePoster = sp.get('generatePoster') === 'true'
 
+  // Enhanced logging for debugging
+  console.log('[api/img] Request received', {
+    rawUrl: rawUrl?.substring(0, 100) + (rawUrl && rawUrl.length > 100 ? '...' : ''),
+    path,
+    bucket,
+    generatePoster,
+    userAgent: req.headers.get('user-agent')?.substring(0, 50),
+    referer: req.headers.get('referer')?.substring(0, 50)
+  });
+
   // Prevent double-wrapping: if rawUrl already points to /api/img, reject
   if (rawUrl && rawUrl.includes('/api/img')) {
     console.warn('[api/img] Detected double-wrapping, rejecting', { rawUrl });
@@ -274,59 +305,92 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   // Build target URL from either url or path
   let target: URL | null = null
   if (bucket && path) {
+    console.log('[api/img] Building URL from bucket/path', { bucket, path: path.substring(0, 50) + '...' });
+    
     // Explicit path-mode (preferred): try public thumbnail first
     const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
+    console.log('[api/img] Decoded path', { safe: safe.substring(0, 50) + '...' });
     
     // Try public thumbnail bucket first for thumbnails
     const publicUrl = tryPublicThumbnail(safe);
     if (publicUrl) {
+      console.log('[api/img] Trying public thumbnail', { publicUrl });
       try {
         const testResponse = await fetch(publicUrl, { method: 'HEAD' });
         if (testResponse.ok) {
           target = new URL(publicUrl);
           console.log('[api/img] Using public thumbnail', { path: safe, publicUrl });
+        } else {
+          console.log('[api/img] Public thumbnail not available', { status: testResponse.status });
         }
-      } catch {
-        // Fall through to signed URL
+      } catch (e) {
+        console.log('[api/img] Public thumbnail test failed', { error: (e as any)?.message });
       }
     }
     
     // Fallback to signed URL
     if (!target) {
-      const signed = await getFreshSignedUrl(bucket, safe).catch(() => null)
+      console.log('[api/img] Attempting to get fresh signed URL', { bucket, path: safe });
+      const signed = await getFreshSignedUrl(bucket, safe).catch((e) => {
+        console.error('[api/img] getFreshSignedUrl failed', { error: (e as any)?.message, bucket, path: safe });
+        return null;
+      });
       if (signed) {
-        try { target = new URL(signed) } catch {}
+        try { 
+          target = new URL(signed);
+          console.log('[api/img] Using fresh signed URL', { url: signed.substring(0, 100) + '...' });
+        } catch (e) {
+          console.error('[api/img] Failed to parse signed URL', { error: (e as any)?.message, signed: signed.substring(0, 100) + '...' });
+        }
+      } else {
+        console.warn('[api/img] No signed URL available', { bucket, path: safe });
       }
     }
     
     // If signing failed and this looks like a video thumbnail request, try generating poster
     if (!target && generatePoster && safe.includes('thumb.jpg')) {
+      console.log('[api/img] Attempting to generate static poster');
       const videoPath = safe.replace(/thumb\.jpg$/, 'video.mp4');
       const posterUrl = await generateStaticPoster(bucket, videoPath);
       if (posterUrl) {
-        try { target = new URL(posterUrl) } catch {}
+        try { 
+          target = new URL(posterUrl);
+          console.log('[api/img] Using generated poster', { url: posterUrl.substring(0, 100) + '...' });
+        } catch (e) {
+          console.error('[api/img] Failed to parse poster URL', { error: (e as any)?.message });
+        }
       }
     }
     
     if (!target) {
+      console.log('[api/img] Falling back to constructed Firebase URL');
       const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
-      try { target = new URL(constructed) } catch {
-        console.warn('[api/img] bad bucket/path', { bucket, path })
+      try { 
+        target = new URL(constructed);
+        console.log('[api/img] Using constructed URL', { url: constructed.substring(0, 100) + '...' });
+      } catch (e) {
+        console.error('[api/img] bad bucket/path', { bucket, path, error: (e as any)?.message });
         return new NextResponse('Bad bucket/path', { status: 400 })
       }
     }
   } else if (rawUrl) {
-    try { target = new URL(rawUrl) } catch {
+    console.log('[api/img] Building URL from rawUrl', { rawUrl: rawUrl.substring(0, 100) + '...' });
+    try { 
+      target = new URL(rawUrl);
+      console.log('[api/img] Parsed rawUrl successfully', { hostname: target.hostname, pathname: target.pathname.substring(0, 50) + '...' });
+    } catch (e) {
+      console.log('[api/img] Failed to parse rawUrl, trying relative', { error: (e as any)?.message });
       try {
         // Support relative URL inputs by resolving against origin
         target = new URL(rawUrl, url.origin)
-      } catch {
-        console.warn('[api/img] bad url', rawUrl)
+        console.log('[api/img] Parsed as relative URL', { hostname: target.hostname, pathname: target.pathname.substring(0, 50) + '...' });
+      } catch (e2) {
+        console.error('[api/img] bad url', { rawUrl: rawUrl.substring(0, 100) + '...', error: (e2 as any)?.message });
         return new NextResponse('Bad url', { status: 400 })
       }
     }
     if (!hostAllowed(target)) {
-      console.warn('[api/img] host not allowed', { host: target.hostname })
+      console.warn('[api/img] host not allowed', { host: target.hostname, rawUrl: rawUrl.substring(0, 100) + '...' });
       return new NextResponse('Host not allowed', { status: 400 })
     }
     // Normalize Firebase/GCS forms and enforce alt=media where applicable
@@ -415,10 +479,27 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
 
   // Fetch upstream
   let upstream: Response
+  console.log('[api/img] Fetching upstream', { 
+    target: target.toString().substring(0, 100) + '...',
+    hostname: target.hostname,
+    pathname: target.pathname.substring(0, 50) + '...'
+  });
+  
   try {
     upstream = await fetchUpstream(req, target)
+    console.log('[api/img] Upstream response received', { 
+      status: upstream.status, 
+      ok: upstream.ok,
+      contentType: upstream.headers.get('content-type'),
+      contentLength: upstream.headers.get('content-length')
+    });
   } catch (e: any) {
-    console.error('[api/img] upstream fetch failed', { host: target.hostname, msg: e?.message || String(e) })
+    console.error('[api/img] upstream fetch failed', { 
+      host: target.hostname, 
+      target: target.toString().substring(0, 100) + '...',
+      msg: e?.message || String(e),
+      stack: e?.stack?.substring(0, 200)
+    });
     return new NextResponse('Upstream fetch error', { status: 502 })
   }
 
@@ -607,5 +688,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   // Next.js 15: return a Uint8Array (ArrayBufferView) to avoid SharedArrayBuffer unions
   const view = new Uint8Array(out.byteLength)
   view.set(out)
+  
+  console.log('[api/img] Successfully processed image', {
+    originalSize: buf.length,
+    processedSize: out.length,
+    format: fmt,
+    quality: q,
+    dimensions: { w: targetW, h: targetH },
+    sourceDimensions: { w: srcW, h: srcH }
+  });
+  
   return new NextResponse(view, { status: 200, headers })
 }
