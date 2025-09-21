@@ -11,8 +11,15 @@ test.describe('Initial preload queuing (first 10 posts)', () => {
   test('queues only posts 0..9 and uses correct task types', async ({ page }) => {
     await go(page, '/test-preload');
 
-    // Wait for the harness to mark ready
-    await page.waitForSelector('[data-testid="ready-flag"][data-ready="1"]', { timeout: 5000 });
+    // Wait for the harness flag to be present in the DOM (no visibility requirement)
+    await page.waitForSelector('[data-testid="ready-flag"]', { state: 'attached', timeout: 10000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="ready-flag"]');
+      return el && (el as HTMLElement).getAttribute('data-ready') === '1';
+    }, { timeout: 10000 });
+
+    // Also wait until the harness exposes some records
+    await page.waitForFunction(() => Array.isArray((window as any).__mpq_enqueues) && (window as any).__mpq_enqueues.length > 0, { timeout: 10000 });
 
     // Pull the enqueue records from the harness
     const records = await page.evaluate(() => (window as any).__mpq_enqueues || []);
