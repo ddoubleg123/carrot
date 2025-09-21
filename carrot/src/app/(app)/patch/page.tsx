@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Search, 
@@ -151,8 +151,46 @@ export default function PatchPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'hot' | 'new' | 'top' | 'controversial'>('hot');
+  const [isClient, setIsClient] = useState(false);
+
+  // Fix hydration mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const currentGroup: MockGroup | null = selectedGroup ? mockGroups.find(g => g.id === selectedGroup) || null : null;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('PatchPage Debug:', { selectedGroup, currentGroup: !!currentGroup, isClient });
+  }, [selectedGroup, currentGroup, isClient]);
+
+  // Don't render until client-side hydration is complete
+  if (!isClient) {
+    return (
+      <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
+        <MinimalNav />
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-96 mb-8"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="h-32 bg-gray-200"></div>
+                  <div className="p-6">
+                    <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded mb-4"></div>
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const GroupHeader = ({ group }: { group: MockGroup }) => (
     <div className="relative rounded-2xl overflow-hidden mb-6">
@@ -717,7 +755,14 @@ export default function PatchPage() {
 
             {/* Groups Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockGroups.map((group) => (
+              {(() => {
+                const filteredGroups = mockGroups.filter(group => 
+                  group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  group.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  group.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+                );
+                console.log('Rendering groups:', filteredGroups.length, 'out of', mockGroups.length);
+                return filteredGroups.map((group) => (
                 <Link 
                   key={group.id}
                   href={`/patch/${group.slug}`}
@@ -785,7 +830,8 @@ export default function PatchPage() {
                     </div>
                   </div>
                 </Link>
-              ))}
+                ));
+              })()}
             </div>
           </>
         )}
