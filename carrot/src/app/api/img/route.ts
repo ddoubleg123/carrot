@@ -57,16 +57,20 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
   try {
     const u = new URL(raw)
     const host = u.hostname
+    console.log('[api/img] Extracting from URL', { host, pathname: u.pathname, search: u.search });
+    
     // Firebase REST: /v0/b/<bucket>/o/<ENCODED_PATH>
     const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/)
     if (host === 'firebasestorage.googleapis.com' && m1) {
       return { bucket: decodeURIComponent(m1[1]), path: decodeURIComponent(m1[2]), kind: 'firebase' }
     }
+    
     // GCS XML-style: /<bucket>/<path>
     const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/)
     if (host === 'storage.googleapis.com' && m2) {
       return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]), kind: 'gcs' }
     }
+    
     // App subdomain: <sub>.firebasestorage.app/o/<ENCODED_PATH>
     const m3 = u.pathname.match(/^\/o\/([^?]+)$/)
     if (host.endsWith('.firebasestorage.app') && m3) {
@@ -75,6 +79,7 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
       const fallbackBucket = baseM ? baseM[1] : undefined
       return { bucket: fallbackBucket, path: decodeURIComponent(m3[1]), kind: 'firebase' }
     }
+    
     // Firebase Storage subdomain: <bucket>.firebasestorage.app/<path>
     const m4 = u.pathname.match(/^\/(.+)$/)
     if (host.endsWith('.firebasestorage.app') && m4) {
@@ -82,7 +87,36 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
       const bucket = host.replace('.firebasestorage.app', '')
       return { bucket, path: decodeURIComponent(m4[1]), kind: 'firebase' }
     }
-  } catch {}
+    
+    // Special case: storage.googleapis.com with signed URLs (your specific case)
+    if (host === 'storage.googleapis.com' && u.search.includes('GoogleAccessId')) {
+      // Try to extract from the path - this is the tricky case
+      const pathMatch = u.pathname.match(/^\/(.+)$/);
+      if (pathMatch) {
+        const fullPath = pathMatch[1];
+        // For signed URLs, we need to infer the bucket from the path structure
+        // Common patterns: /bucket-name/path/to/file or /ingest/job-xxx/thumb.jpg
+        if (fullPath.startsWith('ingest/')) {
+          // This looks like a video processing path, try to infer bucket
+          const possibleBuckets = ['involuted-river-466315-p0', 'carrot-videos', 'carrot-thumbnails'];
+          for (const bucket of possibleBuckets) {
+            // Test if this bucket exists by trying to construct a test URL
+            const testUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fullPath)}?alt=media`;
+            return { bucket, path: fullPath, kind: 'firebase' };
+          }
+        }
+        // Fallback: try to extract bucket from the first part of the path
+        const pathParts = fullPath.split('/');
+        if (pathParts.length > 1) {
+          const possibleBucket = pathParts[0];
+          return { bucket: possibleBucket, path: pathParts.slice(1).join('/'), kind: 'gcs' };
+        }
+      }
+    }
+    
+  } catch (e) {
+    console.warn('[api/img] URL parsing failed', { error: e, raw });
+  }
   return {}
 }
 
@@ -400,11 +434,21 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   if (!upstream.ok) {
     const errorBody = await upstream.text();
     
-    // Check for expired token in any error response
+    // Check for expired token in any error response - more comprehensive detection
     const isExpiredToken = errorBody.includes('ExpiredToken') || 
                           errorBody.includes('expired') || 
                           errorBody.includes('Invalid argument') ||
-                          target.toString().includes('Expires=');
+                          errorBody.includes('Request signature expired') ||
+                          target.toString().includes('Expires=') ||
+                          upstream.status === 400 ||
+                          upstream.status === 403;
+    
+    console.warn('[api/img] Upstream error detected', { 
+      url: target.toString(), 
+      status: upstream.status,
+      isExpiredToken,
+      errorBody: errorBody.slice(0, 256)
+    });
     
     if (isExpiredToken) {
       console.warn('[api/img] ExpiredToken detected, attempting to re-sign URL', { 
@@ -423,13 +467,65 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
       });
       
       if (ext.bucket && ext.path) {
-        const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch((e) => {
+        // Try multiple approaches for re-signing
+        let resigned: string | null = null;
+        
+        // First try: direct re-signing
+        resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch((e) => {
           console.warn('[api/img] getFreshSignedUrl failed', { error: e, bucket: ext.bucket, path: ext.path });
           return null;
         });
         
+        // Second try: try public thumbnail if this is a thumbnail
+        if (!resigned && (ext.path.includes('thumb') || ext.path.includes('poster'))) {
+          const publicUrl = tryPublicThumbnail(ext.path);
+          if (publicUrl) {
+            try {
+              const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+              if (testResponse.ok) {
+                resigned = publicUrl;
+                console.log('[api/img] Using public thumbnail as fallback', { path: ext.path, publicUrl });
+              }
+            } catch (e) {
+              console.warn('[api/img] Public thumbnail test failed', { error: e, publicUrl });
+            }
+          }
+        }
+        
+        // Third try: construct Firebase REST URL
+        if (!resigned) {
+          const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ext.bucket)}/o/${encodeURIComponent(ext.path)}?alt=media`;
+          try {
+            const testResponse = await fetch(firebaseUrl, { method: 'HEAD' });
+            if (testResponse.ok) {
+              resigned = firebaseUrl;
+              console.log('[api/img] Using Firebase REST URL as fallback', { path: ext.path, firebaseUrl });
+            }
+          } catch (e) {
+            console.warn('[api/img] Firebase REST URL test failed', { error: e, firebaseUrl });
+          }
+        }
+        
+        // Fourth try: try different bucket names for video thumbnails
+        if (!resigned && ext.path.includes('thumb') && ext.path.includes('ingest')) {
+          const possibleBuckets = ['involuted-river-466315-p0', 'carrot-videos', 'carrot-thumbnails'];
+          for (const bucket of possibleBuckets) {
+            const testUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(ext.path)}?alt=media`;
+            try {
+              const testResponse = await fetch(testUrl, { method: 'HEAD' });
+              if (testResponse.ok) {
+                resigned = testUrl;
+                console.log('[api/img] Found working bucket for thumbnail', { bucket, path: ext.path, testUrl });
+                break;
+              }
+            } catch (e) {
+              // Continue to next bucket
+            }
+          }
+        }
+        
         if (resigned) {
-          console.log('[api/img] Generated fresh signed URL', { newUrl: resigned });
+          console.log('[api/img] Generated fresh URL', { newUrl: resigned });
           try {
             const newTarget = new URL(resigned);
             const retryUpstream = await fetchUpstream(req, newTarget);
