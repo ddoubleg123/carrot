@@ -167,8 +167,9 @@ class FeedMediaManager {
           this.preloadQueue.enqueue(post.id, TaskType.POSTER, priority, post.feedIndex, posterUrl, post.bucket, post.path);
         }
 
-        const videoUrl = post.videoUrl || 
-          (post.bucket && post.path ? `/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4` : null);
+        const videoUrl = (post.bucket && post.path)
+          ? `/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4`
+          : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : `/api/video?url=${encodeURIComponent(post.videoUrl)}`) : null);
         
         if (videoUrl) {
           this.preloadQueue.enqueue(post.id, TaskType.VIDEO_PREROLL_6S, priority, post.feedIndex, videoUrl, post.bucket, post.path);

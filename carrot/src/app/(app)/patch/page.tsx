@@ -352,8 +352,8 @@ export default function PatchPage() {
 
         {/* Action Row - Floating at 60% viewport height */}
         <div 
-          className="relative z-10 -mt-8"
-          style={{ marginTop: 'var(--action-row-offset)' }}
+          className="relative z-10 -mt-20"
+          style={{ marginTop: 'calc(60vh - 200px)' }}
         >
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
@@ -423,6 +423,8 @@ export default function PatchPage() {
                     src={group.imageUrls?.[0] || '/placeholder-group.jpg'}
                     alt={group.content}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
                 

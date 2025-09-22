@@ -57,26 +57,27 @@ export default function NeverBlackVideo({
   const stateCacheRef = useRef(MediaStateCache.instance);
   const preloadQueueRef = useRef(MediaPreloadQueue);
   
-  // PHASE A.1: Guaranteed Poster Fallback Chain
+  // PHASE A.1: Guaranteed Poster Fallback Chain (proxied)
   const getPosterUrl = (): string | null => {
-    // 1st Priority: Direct poster prop (should be public GCS URL)
-    if (poster) return poster;
-    
-    // 2nd Priority: Public GCS thumbnail URL (no /api/img proxy)
-    if (bucket && path) {
-      // Use direct public GCS URL - no ExpiredToken risk
-      return `https://storage.googleapis.com/${bucket}/${path}/thumb.jpg`;
+    // 1st Priority: Poster prop via proxy (avoid CORS/expiry)
+    if (poster) {
+      try {
+        if (poster.startsWith('/api/img') || poster.startsWith('data:') || poster.startsWith('blob:')) return poster;
+        return `/api/img?url=${encodeURIComponent(poster)}`;
+      } catch { return `/api/img?url=${encodeURIComponent(poster)}`; }
     }
-    
+    // 2nd Priority: Durable bucket/path via proxy with generatePoster fallback
+    if (bucket && path) {
+      return `/api/img?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/thumb.jpg')}&generatePoster=true`;
+    }
     return null;
   };
 
   const getFallbackPosterUrl = (): string | null => {
-    // Fallback: Server-generated poster via /api/img (only if public URL fails)
+    // Fallback path tries again using generatePoster; in case the first was a proxy url-mode
     if (bucket && path && fallbackAttempt === 1) {
-      return `/api/img?bucket=${bucket}&path=${path}/thumb.jpg&generatePoster=true`;
+      return `/api/img?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/thumb.jpg')}&generatePoster=true`;
     }
-    
     return null;
   };
   
@@ -85,8 +86,20 @@ export default function NeverBlackVideo({
   const fallbackPosterUrl = getFallbackPosterUrl();
   const currentPosterUrl = fallbackAttempt === 0 ? primaryPosterUrl : fallbackPosterUrl;
   
-  const videoUrl = src || 
-    (bucket && path ? `/api/video?bucket=${bucket}&path=${path}/video.mp4` : null);
+  // Resolve video URL via proxy
+  const videoUrl = (() => {
+    if (bucket && path) return `/api/video?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`;
+    if (!src) return null;
+    try {
+      const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      if (u.pathname.startsWith('/api/video')) return u.toString();
+      const wrapped = new URL('/api/video', typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      wrapped.searchParams.set('url', u.toString());
+      return wrapped.pathname + '?' + wrapped.searchParams.toString();
+    } catch {
+      return `/api/video?url=${encodeURIComponent(src)}`;
+    }
+  })();
 
   const setVideoRef = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
@@ -331,6 +344,7 @@ export default function NeverBlackVideo({
             onError={handlePosterError}
             priority={isPosterPreloaded}
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            unoptimized
           />
         </div>
       )}

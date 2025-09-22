@@ -85,20 +85,27 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
     try {
-      // Prefer durable path-mode via /api/video when available
-      const u = new URL(videoUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-      // If already pointing at our proxy, just return it (and add pid if provided)
+      const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+      const u = new URL(videoUrl, base);
+      // Already our proxy: append pid if missing
       if (u.pathname.startsWith('/api/video')) {
-        // Append pid for debugging attribution in tests (ignored by server)
         if (postId && !u.searchParams.has('pid')) {
           u.searchParams.set('pid', String(postId));
           return u.pathname + '?' + u.searchParams.toString();
         }
-        return videoUrl;
+        return u.toString();
       }
-      return videoUrl;
+      // Not proxied: wrap with /api/video?url=...
+      const wrapped = new URL('/api/video', base);
+      wrapped.searchParams.set('url', u.toString());
+      if (postId) wrapped.searchParams.set('pid', String(postId));
+      return wrapped.pathname + '?' + wrapped.searchParams.toString();
     } catch {
-      return videoUrl;
+      try {
+        // Last resort: string wrap without URL parsing
+        const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
+        return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+      } catch { return videoUrl; }
     }
   }, [videoUrl, postId]);
 

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { headers as nextHeaders } from 'next/headers';
+import ClientSessionProvider from './dashboard/components/ClientSessionProvider';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,6 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <main className="flex-1 min-h-screen bg-gray-50">{children}</main>
+    <ClientSessionProvider>
+      <main className="flex-1 min-h-screen bg-gray-50">{children}</main>
+    </ClientSessionProvider>
   );
 }
