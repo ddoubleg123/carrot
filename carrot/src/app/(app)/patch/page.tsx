@@ -165,6 +165,22 @@ export default function PatchPage() {
     console.log('PatchPage Debug:', { selectedGroup, currentGroup: !!currentGroup, isClient });
   }, [selectedGroup, currentGroup, isClient]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Don't render until client-side hydration is complete
   if (!isClient) {
     return (
@@ -726,25 +742,70 @@ export default function PatchPage() {
           </>
         ) : (
           <>
-            {/* Groups List Header */}
-            <div className="mb-12">
-              <h1 className="text-3xl font-bold text-gray-900 mb-8">Knowledge shared is knowledge squared</h1>
+            {/* Hidden heading for accessibility */}
+            <h1 className="sr-only">Knowledge</h1>
+            
+            {/* Plato Hero Section */}
+            <div className="relative h-[34vh] sm:h-[36vh] md:h-[38vh] lg:h-[40vh] min-h-[280px] max-h-[500px] overflow-hidden rounded-2xl mb-8" role="banner">
+              {/* Background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500 via-orange-400 to-blue-500 opacity-90" aria-hidden="true"></div>
               
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Knowledge shared is knowledge squared"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-3 w-full bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  />
+              {/* Grain texture overlay */}
+              <div className="absolute inset-0 opacity-[0.03] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxmaWx0ZXIgaWQ9Im5vaXNlIj4KICAgICAgPGZlVHVyYnVsZW5jZSBiYXNlRnJlcXVlbmN5PSIwLjkiIG51bU9jdGF2ZXM9IjQiIHN0aXRjaFR5cGU9InN0aXRjaCIvPgogICAgPC9maWx0ZXI+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSkiLz4KPC9zdmc+')]" aria-hidden="true"></div>
+              
+              {/* Plato Portrait - Hidden on mobile, visible on tablet+ */}
+              <div className="absolute right-0 bottom-0 h-full w-[40%] sm:w-[45%] max-w-[400px] hidden sm:block" aria-hidden="true">
+                <img 
+                  src="/avatars/plato-hero.png" 
+                  alt=""
+                  className="h-full w-full object-cover object-right-bottom opacity-90"
+                  onError={(e) => {
+                    e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDQwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxjaXJjbGUgY3g9IjIwMCIgY3k9IjI1MCIgcj0iMTAwIiBmaWxsPSIjRjNGNEY2IiBzdHJva2U9IiM2QjcyODAiIHN0cm9rZS13aWR0aD0iMiIvPgo8dGV4dCB4PSIyMDAiIHk9IjI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNkI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+UGxhdG88L3RleHQ+Cjwvc3ZnPgo=';
+                  }}
+                />
+              </div>
+              
+              {/* Quote Overlay - Responsive positioning */}
+              <div className="absolute left-0 top-0 h-full w-full sm:w-[60%] flex flex-col justify-center px-6 sm:pl-8 sm:pr-4">
+                <div className="relative text-center sm:text-left">
+                  {/* Highlight stroke behind text */}
+                  <div className="absolute -inset-2 bg-gradient-to-r from-orange-500 to-blue-500 opacity-20 transform rotate-1 rounded-lg" aria-hidden="true"></div>
+                  
+                  {/* Quote text */}
+                  <blockquote className="relative text-white">
+                    <p className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide mb-4">
+                      The more you know, the more you realize you know nothing.
+                    </p>
+                    <cite className="text-sm md:text-base text-white/80 not-italic">
+                      — Plato
+                    </cite>
+                  </blockquote>
                 </div>
-                <button className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold">
-                  <Plus className="w-5 h-5" />
-                  Create Group
-                </button>
+              </div>
+            </div>
+
+            {/* Action Row - Positioned at 60% viewport height */}
+            <div className="relative -mt-16 mb-8 z-10">
+              <div className="max-w-4xl mx-auto px-4">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                      <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Knowledge shared is knowledge squared"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 pr-4 py-3 w-full bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        autoFocus
+                      />
+                    </div>
+                    <button className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold">
+                      <Plus className="w-5 h-5" />
+                      Create Group
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
