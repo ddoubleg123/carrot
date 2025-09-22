@@ -31,9 +31,9 @@ export function useFeedView() {
     if (typeof window === "undefined") return;
 
     // Parse URL params
-    const view = (searchParams.get("view") as FeedView) || DEFAULT_STATE.view;
-    const topicsParam = searchParams.get("topics");
-    const excludeParam = searchParams.get("exclude");
+    const view = (searchParams?.get("view") as FeedView) || DEFAULT_STATE.view;
+    const topicsParam = searchParams?.get("topics");
+    const excludeParam = searchParams?.get("exclude");
     
     const selectedTopics = topicsParam ? topicsParam.split(",").filter(Boolean) : [];
     const excludedTopics = excludeParam ? excludeParam.split(",").filter(Boolean) : [];
@@ -64,7 +64,7 @@ export function useFeedView() {
 
   // Update URL when state changes
   const updateURL = useCallback((newState: FeedViewState) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() || '');
     
     // Update view param
     if (newState.view !== DEFAULT_STATE.view) {
