@@ -296,19 +296,77 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     referer: _req.headers.get('referer')?.substring(0, 50)
   });
 
-  // Prevent double-wrapping: if rawUrl already points to /api/img, reject
-  if (rawUrl && rawUrl.includes('/api/img')) {
-    console.warn('[api/img] Detected double-wrapping, rejecting', { rawUrl });
-    return new NextResponse('Double-wrapping detected. Use direct URLs.', { status: 400 });
+  // Prevent double-wrapping: if rawUrl already points to /api/img, try to unwrap once
+  if (rawUrl) {
+    try {
+      const decoded = decodeURIComponent(rawUrl);
+      let toCheck = decoded;
+      // Unwrap up to 3 nested /api/img layers defensively
+      for (let i = 0; i < 3 && toCheck.includes('/api/img'); i++) {
+        const inner = new URL(toCheck.startsWith('http') ? toCheck : toCheck, url.origin);
+        if (inner.pathname.startsWith('/api/img')) {
+          const innerUrl = inner.searchParams.get('url');
+          const innerPath = inner.searchParams.get('path');
+          const innerBucket = inner.searchParams.get('bucket');
+          if (innerBucket && innerPath) {
+            sp.set('bucket', innerBucket);
+            sp.set('path', innerPath);
+          } else if (innerUrl) {
+            sp.set('url', innerUrl);
+          }
+          // Prepare next iteration
+          toCheck = innerUrl || innerPath || '';
+        } else {
+          break;
+        }
+      }
+      if (decoded.startsWith('/api/img')) {
+        // Unwrap inner params from the nested /api/img
+        const inner = new URL(decoded, url.origin);
+        const innerUrl = inner.searchParams.get('url');
+        const innerPath = inner.searchParams.get('path');
+        const innerBucket = inner.searchParams.get('bucket');
+        if (innerBucket && innerPath) {
+          sp.set('bucket', innerBucket);
+          sp.set('path', innerPath);
+        } else if (innerUrl) {
+          sp.set('url', innerUrl);
+        }
+      } else if (decoded.includes('/api/img')) {
+        // Defensive: if a fully-qualified nested /api/img URL is present, unwrap similarly
+        const match = decoded.match(/(https?:\/\/[^\s]+\/api\/img\?[^\s]+)/) || decoded.match(/(\/api\/img\?[^\s]+)/);
+        if (match && match[1]) {
+          const inner = new URL(match[1], url.origin);
+          const innerUrl = inner.searchParams.get('url');
+          const innerPath = inner.searchParams.get('path');
+          const innerBucket = inner.searchParams.get('bucket');
+          if (innerBucket && innerPath) {
+            sp.set('bucket', innerBucket);
+            sp.set('path', innerPath);
+          } else if (innerUrl) {
+            sp.set('url', innerUrl);
+          }
+        }
+      }
+    } catch {}
   }
+
+  // Re-read values after potential unwrap
+  const rawUrl2 = sp.get('url');
+  const path2 = sp.get('path');
+  const bucket2 = sp.get('bucket');
 
   // Build target URL from either url or path
   let target: URL | null = null
-  if (bucket && path) {
-    console.log('[api/img] Building URL from bucket/path', { bucket, path: path.substring(0, 50) + '...' });
+  const effBucket = bucket2 || bucket;
+  const effPath = path2 || path;
+  const effRawUrl = rawUrl2 || rawUrl;
+
+  if (effBucket && effPath) {
+    console.log('[api/img] Building URL from bucket/path', { bucket: effBucket, path: (effPath as string).substring(0, 50) + '...' });
     
     // Explicit path-mode (preferred): try public thumbnail first
-    const safe = decodeURIComponent(decodeURIComponent(path)).replace(/^\/+/, '')
+    const safe = decodeURIComponent(decodeURIComponent(effPath as string)).replace(/^\/+/, '')
     console.log('[api/img] Decoded path', { safe: safe.substring(0, 50) + '...' });
     
     // Try public thumbnail bucket first for thumbnails
@@ -330,9 +388,9 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     
     // Fallback to signed URL
     if (!target) {
-      console.log('[api/img] Attempting to get fresh signed URL', { bucket, path: safe });
-      const signed = await getFreshSignedUrl(bucket, safe).catch((e) => {
-        console.error('[api/img] getFreshSignedUrl failed', { error: (e as any)?.message, bucket, path: safe });
+      console.log('[api/img] Attempting to get fresh signed URL', { bucket: effBucket, path: safe });
+      const signed = await getFreshSignedUrl(effBucket, safe).catch((e) => {
+        console.error('[api/img] getFreshSignedUrl failed', { error: (e as any)?.message, bucket: effBucket, path: safe });
         return null;
       });
       if (signed) {
@@ -343,7 +401,7 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
           console.error('[api/img] Failed to parse signed URL', { error: (e as any)?.message, signed: signed.substring(0, 100) + '...' });
         }
       } else {
-        console.warn('[api/img] No signed URL available', { bucket, path: safe });
+        console.warn('[api/img] No signed URL available', { bucket: effBucket, path: safe });
       }
     }
     
@@ -351,7 +409,7 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     if (!target && generatePoster && safe.includes('thumb.jpg')) {
       console.log('[api/img] Attempting to generate static poster');
       const videoPath = safe.replace(/thumb\.jpg$/, 'video.mp4');
-      const posterUrl = await generateStaticPoster(bucket, videoPath);
+      const posterUrl = effBucket ? await generateStaticPoster(effBucket as string, videoPath) : null;
       if (posterUrl) {
         try { 
           target = new URL(posterUrl);
@@ -364,33 +422,33 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     
     if (!target) {
       console.log('[api/img] Falling back to constructed Firebase URL');
-      const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(safe)}?alt=media`
+      const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(effBucket)}/o/${encodeURIComponent(safe)}?alt=media`
       try { 
         target = new URL(constructed);
         console.log('[api/img] Using constructed URL', { url: constructed.substring(0, 100) + '...' });
       } catch (e) {
-        console.error('[api/img] bad bucket/path', { bucket, path, error: (e as any)?.message });
+        console.error('[api/img] bad bucket/path', { bucket: effBucket, path: effPath, error: (e as any)?.message });
         return new NextResponse('Bad bucket/path', { status: 400 })
       }
     }
-  } else if (rawUrl) {
-    console.log('[api/img] Building URL from rawUrl', { rawUrl: rawUrl.substring(0, 100) + '...' });
+  } else if (effRawUrl) {
+    console.log('[api/img] Building URL from rawUrl', { rawUrl: (effRawUrl as string).substring(0, 100) + '...' });
     try { 
-      target = new URL(rawUrl);
+      target = new URL(effRawUrl as string);
       console.log('[api/img] Parsed rawUrl successfully', { hostname: target.hostname, pathname: target.pathname.substring(0, 50) + '...' });
     } catch (e) {
       console.log('[api/img] Failed to parse rawUrl, trying relative', { error: (e as any)?.message });
       try {
         // Support relative URL inputs by resolving against origin
-        target = new URL(rawUrl, url.origin)
+        target = new URL(effRawUrl as string, url.origin)
         console.log('[api/img] Parsed as relative URL', { hostname: target.hostname, pathname: target.pathname.substring(0, 50) + '...' });
       } catch (e2) {
-        console.error('[api/img] bad url', { rawUrl: rawUrl.substring(0, 100) + '...', error: (e2 as any)?.message });
+        console.error('[api/img] bad url', { rawUrl: (effRawUrl as string).substring(0, 100) + '...', error: (e2 as any)?.message });
         return new NextResponse('Bad url', { status: 400 })
       }
     }
     if (!hostAllowed(target)) {
-      console.warn('[api/img] host not allowed', { host: target.hostname, rawUrl: rawUrl.substring(0, 100) + '...' });
+      console.warn('[api/img] host not allowed', { host: target.hostname, rawUrl: (effRawUrl as string)?.substring(0, 100) + '...' });
       return new NextResponse('Host not allowed', { status: 400 })
     }
     // Normalize Firebase/GCS forms and enforce alt=media where applicable

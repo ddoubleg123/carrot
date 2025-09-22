@@ -163,7 +163,7 @@ export default function Sidebar() {
                 <span className="label max-lg:hidden">{item.label}</span>
                 {/* Custom tooltip for collapsed mode (when label is hidden) */}
                 <span
-                  className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-black/90 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg max-lg:block hidden"
+                  className="pointer-events-none absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-black/90 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg max-lg:block hidden z-50"
                   role="tooltip"
                 >
                   {item.label}

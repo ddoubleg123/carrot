@@ -89,7 +89,7 @@ export default function PatchPage() {
       author: {
         name: 'Clean Energy Group',
         username: 'cleanenergy',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1466611653911-95081537e5b7&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=400&h=400&format=webp&q=80',
         id: 'cleanenergy'
       },
       location: { zip: '10001', city: 'Global', state: 'Worldwide' },
@@ -102,7 +102,7 @@ export default function PatchPage() {
         sticks: 350
       },
       timestamp: new Date().toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1466611653911-95081537e5b7&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=400&h=300&format=webp&q=80'],
       emoji: '🌱',
       gradientFromColor: COLOR_SCHEMES[0].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[0].gradientToColor,
@@ -117,7 +117,7 @@ export default function PatchPage() {
       author: {
         name: 'UBI Advocates',
         username: 'ubi_advocates',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1554224155-6726b3ff858f&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=400&format=webp&q=80',
         id: 'ubi_advocates'
       },
       location: { zip: '10001', city: 'Global', state: 'Worldwide' },
@@ -130,7 +130,7 @@ export default function PatchPage() {
         sticks: 260
       },
       timestamp: new Date(Date.now() - 86400000).toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1554224155-6726b3ff858f&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&format=webp&q=80'],
       emoji: '💰',
       gradientFromColor: COLOR_SCHEMES[1].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[1].gradientToColor,
@@ -145,7 +145,7 @@ export default function PatchPage() {
       author: {
         name: 'Political Reform',
         username: 'political_reform',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&format=webp&q=80',
         id: 'political_reform'
       },
       location: { zip: '10001', city: 'Washington', state: 'DC' },
@@ -158,7 +158,7 @@ export default function PatchPage() {
         sticks: 460
       },
       timestamp: new Date(Date.now() - 172800000).toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=300&format=webp&q=80'],
       emoji: '🏛️',
       gradientFromColor: COLOR_SCHEMES[2].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[2].gradientToColor,
@@ -173,7 +173,7 @@ export default function PatchPage() {
       author: {
         name: 'Space Advocates',
         username: 'space_advocates',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1446776877081-d282a0f896e2&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1446776877081-d282a0f896e2?w=400&h=400&format=webp&q=80',
         id: 'space_advocates'
       },
       location: { zip: '10001', city: 'Global', state: 'Universe' },
@@ -186,7 +186,7 @@ export default function PatchPage() {
         sticks: 360
       },
       timestamp: new Date(Date.now() - 259200000).toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1446776877081-d282a0f896e2&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1446776877081-d282a0f896e2?w=400&h=300&format=webp&q=80'],
       emoji: '🚀',
       gradientFromColor: COLOR_SCHEMES[3].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[3].gradientToColor,
@@ -201,7 +201,7 @@ export default function PatchPage() {
       author: {
         name: 'AI Ethics Group',
         username: 'ai_ethics',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1677442136019-21780ecad995&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400&h=400&format=webp&q=80',
         id: 'ai_ethics'
       },
       location: { zip: '10001', city: 'Global', state: 'Digital' },
@@ -214,7 +214,7 @@ export default function PatchPage() {
         sticks: 240
       },
       timestamp: new Date(Date.now() - 345600000).toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1677442136019-21780ecad995&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400&h=300&format=webp&q=80'],
       emoji: '🤖',
       gradientFromColor: COLOR_SCHEMES[4].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[4].gradientToColor,
@@ -229,7 +229,7 @@ export default function PatchPage() {
       author: {
         name: 'Climate Action',
         username: 'climate_action',
-        avatar: '/api/img?url=https://images.unsplash.com/photo-1611273426858-450d8e3c9fce&w=400&h=400&format=webp&q=80',
+        avatar: 'https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=400&h=400&format=webp&q=80',
         id: 'climate_action'
       },
       location: { zip: '10001', city: 'Global', state: 'Earth' },
@@ -242,7 +242,7 @@ export default function PatchPage() {
         sticks: 400
       },
       timestamp: new Date(Date.now() - 432000000).toISOString(),
-      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1611273426858-450d8e3c9fce&w=400&h=300&format=webp&q=80'],
+      imageUrls: ['https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=400&h=300&format=webp&q=80'],
       emoji: '🌍',
       gradientFromColor: COLOR_SCHEMES[5].gradientFromColor,
       gradientToColor: COLOR_SCHEMES[5].gradientToColor,
@@ -352,79 +352,75 @@ export default function PatchPage() {
 
         {/* Action Row - Floating at 60% viewport height */}
         <div 
-          className="relative z-10 px-6 -mt-16"
+          className="relative z-10 -mt-16"
           style={{ marginTop: 'var(--action-row-offset)' }}
         >
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-              <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
-                {/* Search Input */}
-                <div className="flex-1 relative">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Let's go"
-                    className="w-full h-12 px-4 pr-12 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-lg placeholder-gray-500"
-                    aria-label="Search knowledge and groups"
-                  />
-                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+              {/* Search Input */}
+              <div className="flex-1 relative">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Let's go"
+                  className="w-full h-12 px-4 pr-12 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-lg placeholder-gray-500"
+                  aria-label="Search knowledge and groups"
+                />
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                {/* Keyboard shortcut hint */}
+                <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 hidden sm:block">
+                  <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">/</kbd>
+                </div>
+              </div>
+              
+              {/* Create Group Button */}
+              <button
+                type="button"
+                onClick={handleCreateGroup}
+                className="h-12 px-8 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-2xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-3 whitespace-nowrap relative overflow-hidden group"
+              >
+                {/* Background pattern */}
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-orange-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                
+                {/* Icon with animation */}
+                <div className="relative z-10 flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors duration-300">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
-                  {/* Keyboard shortcut hint */}
-                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 hidden sm:block">
-                    <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">/</kbd>
-                  </div>
+                  <span className="font-bold tracking-wide">Create Group</span>
                 </div>
                 
-                {/* Create Group Button */}
-                <button
-                  type="button"
-                  onClick={handleCreateGroup}
-                  className="h-12 px-8 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-2xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-3 whitespace-nowrap relative overflow-hidden group"
-                >
-                  {/* Background pattern */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-orange-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  
-                  {/* Icon with animation */}
-                  <div className="relative z-10 flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors duration-300">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </div>
-                    <span className="font-bold tracking-wide">Create Group</span>
-                  </div>
-                  
-                  {/* Shine effect */}
-                  <div className="absolute inset-0 -top-1 -left-1 w-0 h-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -skew-x-12 group-hover:w-full group-hover:h-full transition-all duration-500 ease-out" />
-                </button>
-              </form>
-            </div>
+                {/* Shine effect */}
+                <div className="absolute inset-0 -top-1 -left-1 w-0 h-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -skew-x-12 group-hover:w-full group-hover:h-full transition-all duration-500 ease-out" />
+              </button>
+            </form>
           </div>
         </div>
 
         {/* Groups Feed - CommitmentCard Style */}
-        <section className="px-6 py-12">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-              Explore Groups
-            </h2>
-            
-            <div className="space-y-6">
-              {groups.map((group) => (
-                <CommitmentCard
-                  key={group.id}
-                  {...group}
-                  onVote={() => {}} // TODO: Implement voting
-                  onDelete={() => {}} // TODO: Implement deletion
-                  onBlock={() => {}} // TODO: Implement blocking
-                />
-              ))}
-            </div>
+        <section className="py-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
+            Explore Groups
+          </h2>
+          
+          <div className="space-y-6">
+            {groups.map((group) => (
+              <CommitmentCard
+                key={group.id}
+                {...group}
+                onVote={() => {}} // TODO: Implement voting
+                onDelete={() => {}} // TODO: Implement deletion
+                onBlock={() => {}} // TODO: Implement blocking
+              />
+            ))}
           </div>
         </section>
       </div>

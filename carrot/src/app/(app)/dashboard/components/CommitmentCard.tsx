@@ -436,6 +436,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     sizes="40px"
                     priority={false}
                     loading="lazy"
+                    unoptimized
                     style={{ objectFit: 'cover' }}
                   />
                 ) : null}
@@ -611,6 +612,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 sizes="(max-width: 768px) 100vw, 700px"
                 priority={false}
                 loading="lazy"
+                unoptimized
                 style={{ objectFit: 'cover' }}
               />
             </div>
@@ -632,6 +634,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       sizes="(max-width: 768px) 100vw, 700px"
                       priority={false}
                       loading="lazy"
+                      unoptimized
                       style={{ objectFit: 'cover' }}
                     />
                   </div>
@@ -647,6 +650,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                         sizes="(max-width: 768px) 50vw, 33vw"
                         priority={false}
                         loading="lazy"
+                        unoptimized
                         style={{ objectFit: 'cover' }}
                       />
                     </div>

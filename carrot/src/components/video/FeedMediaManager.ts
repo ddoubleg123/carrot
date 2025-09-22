@@ -159,8 +159,9 @@ class FeedMediaManager {
   private queuePostTasks(post: PostAsset, priority: Priority): void {
     switch (post.type) {
       case 'video':
-        const posterUrl = post.thumbnailUrl || 
-          (post.bucket && post.path ? `/api/img?bucket=${post.bucket}&path=${post.path}/thumb.jpg&generatePoster=true` : null);
+        const posterUrl = post.thumbnailUrl
+          ? (post.thumbnailUrl.startsWith('/api/img') ? post.thumbnailUrl : `/api/img?url=${encodeURIComponent(post.thumbnailUrl)}`)
+          : (post.bucket && post.path ? `/api/img?bucket=${post.bucket}&path=${post.path}/thumb.jpg&generatePoster=true` : null);
         
         if (posterUrl) {
           this.preloadQueue.enqueue(post.id, TaskType.POSTER, priority, post.feedIndex, posterUrl, post.bucket, post.path);

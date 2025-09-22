@@ -39,10 +39,15 @@ export default async function Layout({ children }: { children: React.ReactNode }
           scrim?.addEventListener('click', close);
         `}} />
 
-        {/* CENTER CONTENT */}
-        <main className="flex-1 min-w-0">
+        {/* CENTER FEED */}
+        <main className="w-[650px] flex-shrink-0" style={{ width: '650px !important', maxWidth: '650px !important' }}>
           {children}
         </main>
+
+        {/* RIGHT SIDEBAR - Hidden below 1200px */}
+        <aside className="hidden min-[1200px]:block w-[300px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
+          <Widgets />
+        </aside>
       </div>
     </ClientSessionProvider>
   );
