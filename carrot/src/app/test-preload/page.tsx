@@ -3,7 +3,8 @@ import LivePreloadClient from './LivePreloadClient';
 
 export const dynamic = 'force-dynamic';
 
-export default function Page({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
-  const limit = typeof searchParams?.limit === 'string' ? parseInt(searchParams.limit, 10) : 20;
+export default async function Page({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const params = await searchParams;
+  const limit = typeof params?.limit === 'string' ? parseInt(params.limit, 10) : 20;
   return <LivePreloadClient limit={isFinite(limit) && limit > 0 ? limit : 20} />;
 }
