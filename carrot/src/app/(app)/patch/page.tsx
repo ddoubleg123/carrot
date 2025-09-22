@@ -727,19 +727,18 @@ export default function PatchPage() {
         ) : (
           <>
             {/* Groups List Header */}
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Knowledge shared is knowledge squared</h1>
-              </div>
+            <div className="mb-12">
+              <h1 className="text-3xl font-bold text-gray-900 mb-8">Knowledge shared is knowledge squared</h1>
+              
               <div className="flex items-center gap-3">
-                <div className="relative">
+                <div className="relative flex-1">
                   <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search groups..."
+                    placeholder="Knowledge shared is knowledge squared"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-3 w-80 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="pl-10 pr-4 py-3 w-full bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   />
                 </div>
                 <button className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold">
