@@ -244,7 +244,7 @@ export default function PatchPage() {
       {/* Hero Section with Plato */}
       <div 
         className="relative w-full overflow-hidden"
-        style={{ height: '40vh' }}
+        style={{ height: '50vh' }}
       >
         {/* Background gradient */}
         <div 
@@ -301,53 +301,28 @@ export default function PatchPage() {
             willChange: !isReducedMotion ? 'transform' : 'auto'
           }}
         >
-          <div className="max-w-4xl mx-auto text-center lg:text-left">
-            {/* Quote with duotone gradient effect */}
+          <div className="max-w-6xl mx-auto text-center lg:text-left">
+            {/* Quote in white text */}
             <blockquote className="relative">
-              <div
-                className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide break-words"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6A00 0%, #FF8A00 50%, #FFA500 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-                  textShadow: '0 0 20px rgba(255,106,0,0.3)'
-                }}
-              >
-                The more you know, the more you realize you know nothing.
-              </div>
-
-              {/* 45° highlight stroke behind text */}
-              <div
-                className="absolute inset-0 text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide opacity-20 break-words"
-                style={{
-                  background: 'linear-gradient(45deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.3) 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  transform: 'translate(2px, 2px)',
-                  zIndex: -1
-                }}
-              >
+              <div className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide break-words text-white drop-shadow-lg">
                 The more you know, the more you realize you know nothing.
               </div>
             </blockquote>
 
             {/* Author attribution */}
-            <cite className="block mt-4 text-lg md:text-xl text-white font-medium">
+            <cite className="block mt-4 text-lg md:text-xl text-white font-medium drop-shadow-md">
               — Plato
             </cite>
           </div>
         </div>
       </div>
 
-      {/* Action Row - Floating between hero and content */}
+      {/* Action Row - Overlapping 50/50 on image and white space */}
       <div 
-        className="relative z-10 px-6"
-        style={{ marginTop: 'calc(60vh - 200px)' }}
+        className="relative z-10 px-4 sm:px-6 lg:px-8"
+        style={{ marginTop: '-100px' }}
       >
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Search Input */}
@@ -377,21 +352,44 @@ export default function PatchPage() {
         </div>
       </div>
 
-      {/* Groups Grid - Using CommitmentCard components */}
-      <div className="px-6 pb-16 pt-8">
-        <div className="max-w-4xl mx-auto">
+      {/* Groups Grid - Simple tiles */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-16 pt-16">
+        <div className="max-w-7xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Explore Groups</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {sampleGroups.map((group) => (
-              <CommitmentCard
+              <div
                 key={group.id}
-                {...group}
-                onVote={() => {}}
-                onDelete={() => {}}
-                onBlock={() => {}}
-                currentUserId="current-user"
-              />
+                className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group"
+              >
+                {/* Header Image */}
+                <div className="aspect-video relative overflow-hidden">
+                  <img
+                    src={group.imageUrls[0]}
+                    alt={group.content}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                
+                {/* Group Info */}
+                <div className="p-4">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors">
+                    {group.content}
+                  </h3>
+                  
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-4 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-xs">👥</span>
+                      </div>
+                      <span>{group.stats.likes.toLocaleString()} subscribers</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>

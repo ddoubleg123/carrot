@@ -93,8 +93,8 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
   return (
     <div className="group cursor-pointer" onClick={onClick}>
       <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-full flex flex-col">
-        {/* Avatar - Main Focus */}
-        <div className="aspect-square relative">
+        {/* Avatar - Main Focus - Taller format like Alan Turing */}
+        <div className="aspect-[4/5] relative">
           <img
             src={agent.avatar}
             alt={agent.name}
@@ -359,8 +359,8 @@ function ConversationThread({
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Thread Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
+      {/* Thread Header - Aligned with carrot logo height */}
+      <div className="bg-white border-b border-gray-200 px-6 py-6" style={{ paddingTop: '32px' }}>
         <h2 className="text-xl font-semibold text-gray-900">{thread.title}</h2>
         <p className="text-sm text-gray-500">
           {thread.activeAgents.length} advisors • {thread.messages.length} messages
@@ -622,6 +622,31 @@ export default function RabbitPage() {
     setCurrentView('conversation');
   };
 
+  // Handle direct agent click - show only that agent as active
+  const handleAgentClick = (agent: any) => {
+    const singleAgent = [agent.id];
+    setActiveAgents(singleAgent);
+    
+    const newThread: Thread = {
+      id: Date.now().toString(),
+      title: `Chat with ${agent.name} about ${agent.role}`,
+      messages: [
+        {
+          id: '1',
+          type: 'user',
+          content: `Chat with ${agent.name} about ${agent.role}`,
+          timestamp: new Date()
+        }
+      ],
+      activeAgents: singleAgent,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    setCurrentThread(newThread);
+    setCurrentView('conversation');
+  };
+
   async function streamAssistantReply(userMsg: string) {
     try {
       const thread = currentThread;
@@ -786,7 +811,7 @@ export default function RabbitPage() {
               <AgentCard 
                 key={agent.id} 
                 agent={agent} 
-                  onClick={() => handleStartConversation(`Chat with ${agent.name} about ${agent.role}`)}
+                onClick={() => handleAgentClick(agent)}
               />
             ))}
           </div>

@@ -184,6 +184,17 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // Normalize Firebase v0 path: ensure /o/<object> is encoded exactly once (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
+      // Fix mis-specified bucket in query param `b` that sometimes appears as "<project>.firebasestorage.app"
+      try {
+        const b = target.searchParams.get('b');
+        if (b && b.endsWith('.firebasestorage.app')) {
+          const project = b.replace(/\.firebasestorage\.app$/, '');
+          const corrected = `${project}.appspot.com`;
+          target.searchParams.set('b', corrected);
+          // Reconstruct URL with updated search params
+          target = new URL(target.origin + target.pathname + '?' + target.searchParams.toString());
+        }
+      } catch {}
       try {
         const isSigned = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
           target.searchParams.has('X-Goog-Algorithm');

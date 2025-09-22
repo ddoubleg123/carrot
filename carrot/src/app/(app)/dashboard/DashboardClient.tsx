@@ -10,6 +10,7 @@ import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
 import { VideoProvider } from '../../../context/VideoContext';
+import { FeedTabsContainer } from '../../../components/FeedTabsContainer';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -793,6 +794,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           ) : (
             <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
           )}
+          
+          {/* Feed Tabs - positioned right under the composer */}
+          <FeedTabsContainer />
+          
           {/* Professional compact spacing for social media feed */}
           <div className="space-y-3 mt-6">
             {commitments.map((commitment) => (

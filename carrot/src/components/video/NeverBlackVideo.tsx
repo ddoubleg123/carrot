@@ -48,7 +48,8 @@ export default function NeverBlackVideo({
   const [posterLoaded, setPosterLoaded] = useState(false);
   const [posterError, setPosterError] = useState(false);
   const [fallbackAttempt, setFallbackAttempt] = useState(0); // Track fallback attempts
-  const [videoReady, setVideoReady] = useState(false);
+  const [videoReady, setVideoReady] = useState(false); // metadata available
+  const [firstFrameReady, setFirstFrameReady] = useState(false); // can paint frame
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttffStarted, setTtffStarted] = useState(false);
   
@@ -236,12 +237,19 @@ export default function NeverBlackVideo({
   };
 
   const handleVideoTimeUpdate = () => {
-    if (videoRef.current) {
-      stateCacheRef.current.updateTime(postId, videoRef.current.currentTime);
+    const v = videoRef.current;
+    if (v) {
+      stateCacheRef.current.updateTime(postId, v.currentTime);
+      // If playback progressed, we can consider first frame ready
+      if (!firstFrameReady && (v.currentTime > 0 || (v.readyState ?? 0) >= 2)) {
+        setFirstFrameReady(true);
+      }
     }
   };
 
   const handleVideoCanPlay = () => {
+    // Mark first frame paintable
+    if (!firstFrameReady) setFirstFrameReady(true);
     // End TTFF tracking on first playable frame
     if (ttffStarted) {
       metricsRef.current.endTTFF(postId, true);
@@ -273,14 +281,15 @@ export default function NeverBlackVideo({
   }, [postId, currentPosterUrl, posterLoaded, posterError, fallbackAttempt]);
 
   // PHASE A.1: Display Logic - NEVER show black screens
-  const showPoster = !isPlaying && posterLoaded && !posterError;
+  // Keep poster/placeholder visible until the first frame is ready to paint
+  const showPoster = (!firstFrameReady) && posterLoaded && !posterError;
   const showPlaceholder = !showPoster && (!currentPosterUrl || posterError);
-  const showLoading = !posterLoaded && !posterError && currentPosterUrl;
+  const showLoading = (!firstFrameReady) && !posterLoaded && !posterError && currentPosterUrl;
 
-  // Check if we have a cached frozen frame to show
+  // Sticky frame: show last captured frame when paused and we have video metadata
   const cachedState = stateCacheRef.current.get(postId);
-  const frozenFrame = cachedState?.frozenFrame;
-  const showFrozenFrame = !isPlaying && frozenFrame && videoReady;
+  const frozenFrame = cachedState?.frozenFrame as string | undefined;
+  const showFrozenFrame = !isPlaying && !!frozenFrame && videoReady;
 
   // GUARANTEE: Always show something - never black
   const hasVisibleContent = showPoster || showPlaceholder || showLoading || showFrozenFrame;
@@ -298,7 +307,7 @@ export default function NeverBlackVideo({
 
   return (
     <div className={`relative ${className}`} style={{ aspectRatio: '16/9' }}>
-      {/* Video element - only show when playing */}
+      {/* Video element - fade in only after first frame is ready */}
       <video
         ref={setVideoRef}
         className="w-full h-full object-cover"
@@ -316,7 +325,7 @@ export default function NeverBlackVideo({
         onCanPlay={handleVideoCanPlay}
         onError={handleVideoError}
         style={{
-          opacity: isPlaying ? 1 : 0,
+          opacity: firstFrameReady ? 1 : 0,
           transition: 'opacity 0.3s ease'
         }}
       >
@@ -343,7 +352,7 @@ export default function NeverBlackVideo({
         </div>
       )}
 
-      {/* Poster overlay */}
+      {/* Poster overlay kept until first frame is ready */}
       {showPoster && !showFrozenFrame && (
         <div className="absolute inset-0">
           <Image
@@ -360,7 +369,7 @@ export default function NeverBlackVideo({
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Loading placeholder while poster is loading and first frame not ready */}
       {showLoading && !showFrozenFrame && (
         <div className="absolute inset-0">
           <VideoPlaceholder 
@@ -387,7 +396,7 @@ export default function NeverBlackVideo({
         <div className="absolute top-2 right-2 text-xs bg-black bg-opacity-75 text-white px-2 py-1 rounded space-y-1">
           <div>P:{isPosterPreloaded ? '✓' : '○'} V:{isVideoPreloaded ? '✓' : '○'}</div>
           <div>F:{fallbackAttempt} {posterError ? 'ERR' : posterLoaded ? 'OK' : 'LOAD'}</div>
-          <div>Play:{isPlaying ? '▶' : '❚❚'} Ready:{(videoRef.current?.readyState ?? 0)}</div>
+          <div>Play:{isPlaying ? '▶' : '❚❚'} Ready:{(videoRef.current?.readyState ?? 0)} First:{firstFrameReady ? '✓' : '○'}</div>
           <div>Src:{(videoUrl || '').slice(0, 32)}...</div>
           <div>Poster:{(currentPosterUrl || '').slice(0, 32)}...</div>
         </div>
