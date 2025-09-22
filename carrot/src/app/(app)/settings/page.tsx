@@ -12,7 +12,7 @@ import {
   PrivacySettings,
 } from '../dashboard/settings/components';
 
-function SettingsContent() {
+export default function SettingsPageUnified() {
   const { data: session, update } = useSession();
   const [activeTab, setActiveTab] = useState('account');
   const [isSaving, setIsSaving] = useState(false);
@@ -159,7 +159,19 @@ function SettingsContent() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="min-h-screen flex">
+      {/* Left sidebar (same as /home) */}
+      <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+        <MinimalNav />
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 min-w-0 flex">
+        <div className="w-full min-w-[320px] max-w-[980px] px-6 py-6">
+          <FirebaseClientInit />
+          <ClientSessionProvider>
+            <Suspense>
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab}>
                   {activeTab === 'account' && (
                     <AccountInformation
@@ -185,15 +197,15 @@ function SettingsContent() {
                       </button>
                     </div>
                   )}
-      </SettingsLayout>
+                </SettingsLayout>
 
-      {/* Playback Preferences */}
-      <div className="mt-8 border rounded-xl bg-white shadow-sm">
-        <div className="px-5 py-4 border-b">
-          <h2 className="text-base font-semibold text-gray-900">Playback Preferences</h2>
-          <p className="text-sm text-gray-500 mt-1">Controls for motion and captions during feed playback.</p>
-        </div>
-        <div className="px-5 py-4 space-y-4">
+                {/* Playback Preferences */}
+                <div className="mt-8 border rounded-xl bg-white shadow-sm">
+                  <div className="px-5 py-4 border-b">
+                    <h2 className="text-base font-semibold text-gray-900">Playback Preferences</h2>
+                    <p className="text-sm text-gray-500 mt-1">Controls for motion and captions during feed playback.</p>
+                  </div>
+                  <div className="px-5 py-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-gray-900">Reduced motion</div>
@@ -290,25 +302,7 @@ function SettingsContent() {
                     </div>
                   </div>
                 </div>
-    </form>
-  );
-}
-
-export default function SettingsPageUnified() {
-  return (
-    <div className="min-h-screen flex">
-      {/* Left sidebar (same as /home) */}
-      <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
-        <MinimalNav />
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 min-w-0 flex">
-        <div className="w-full min-w-[320px] max-w-[980px] px-6 py-6">
-          <FirebaseClientInit />
-          <ClientSessionProvider>
-            <Suspense>
-              <SettingsContent />
+              </form>
             </Suspense>
           </ClientSessionProvider>
         </div>

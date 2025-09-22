@@ -61,6 +61,16 @@ function countryToEmoji(codeOrName?: string | null): string | null {
 export default function FlagChip({ countryCode, label, className }: { countryCode?: string | null; label?: string; className?: string }) {
   const emoji = countryToEmoji(countryCode);
   
+  // Debug logging for flag rendering
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[FlagChip] Debug:', {
+      countryCode,
+      normalized: normalizeCountry(countryCode),
+      emoji,
+      willShowFallback: !emoji
+    });
+  }
+  
   return (
     <span
       className={["inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#F7F8FA] border border-black/5 text-gray-800", className]
