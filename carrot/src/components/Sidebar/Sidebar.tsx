@@ -21,7 +21,7 @@ const MENU = [
     label: 'Notifications',
   },
   {
-    href: '/dashboard/patch',
+    href: '/patch',
     icon: <SidebarIcons.CarrotPatch />,
     label: 'Carrot Patch',
   },
