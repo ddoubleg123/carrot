@@ -111,7 +111,7 @@ const MENU_ITEMS = [
     label: 'Notifications',
   },
   {
-    href: '/dashboard/patch',
+    href: '/patch',
     icon: NavIcons.CarrotPatch,
     label: 'Carrot Patch',
   },

@@ -352,7 +352,7 @@ export default function PatchPage() {
 
         {/* Action Row - Floating at 60% viewport height */}
         <div 
-          className="relative z-10 -mt-16"
+          className="relative z-10 -mt-8"
           style={{ marginTop: 'var(--action-row-offset)' }}
         >
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -405,21 +405,50 @@ export default function PatchPage() {
           </div>
         </div>
 
-        {/* Groups Feed - CommitmentCard Style */}
+        {/* Groups Grid - Simple Tiles */}
         <section className="py-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
             Explore Groups
           </h2>
           
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {groups.map((group) => (
-              <CommitmentCard
+              <div
                 key={group.id}
-                {...group}
-                onVote={() => {}} // TODO: Implement voting
-                onDelete={() => {}} // TODO: Implement deletion
-                onBlock={() => {}} // TODO: Implement blocking
-              />
+                className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+              >
+                {/* Group Image */}
+                <div className="aspect-video rounded-xl overflow-hidden mb-4 bg-gradient-to-br from-gray-100 to-gray-200">
+                  <img
+                    src={group.imageUrls?.[0] || '/placeholder-group.jpg'}
+                    alt={group.content}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
+                
+                {/* Group Info */}
+                <div className="space-y-3">
+                  <h3 className="text-xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors">
+                    {group.content}
+                  </h3>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                      <span className="text-lg">{group.emoji}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">@{group.author.username}</p>
+                      <p className="text-xs text-gray-500">{group.stats.carrots} carrots</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4 text-sm text-gray-600">
+                    <span>{group.stats.likes} likes</span>
+                    <span>{group.stats.comments} comments</span>
+                    <span>{group.stats.views} views</span>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </section>
