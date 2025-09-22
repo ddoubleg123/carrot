@@ -30,82 +30,26 @@ import {
   Target,
   Palette,
   Code,
-  Shield
+  Shield,
+  Upload,
+  Image,
+  File,
+  ExternalLink
 } from 'lucide-react';
+import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
 
 // Design Tokens
 const COLORS = {
   actionOrange: '#FF6A00',
-  civicBlue: '#0A5AFF', 
+  civicBlue: '#0A5AFF',
   ink: '#0B0B0F',
   surface: '#FFFFFF',
   slate: '#64748B',
   gray: '#6B7280'
 };
 
-// AI Agents with their expertise
-const AGENTS = [
-  {
-    id: 'friedman',
-    name: 'Milton Friedman',
-    role: 'Free Market Economics',
-    avatar: '/agents/Milton Friedman.png',
-    expertise: ['Economics', 'Monetarism', 'Free Markets'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  },
-  {
-    id: 'keynes',
-    name: 'John Maynard Keynes',
-    role: 'Keynesian Economics',
-    avatar: '/agents/John Maynard Keynes.png',
-    expertise: ['Macroeconomics', 'Fiscal Policy', 'Government Intervention'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  },
-  {
-    id: 'brzezinski',
-    name: 'Zbigniew Brzezinski',
-    role: 'Geopolitics Expert',
-    avatar: '/agents/Zbigniew Brzezinski.png',
-    expertise: ['Geopolitics', 'International Relations', 'Strategy'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  },
-  {
-    id: 'finney',
-    name: 'Hal Finney',
-    role: 'Cryptocurrency Pioneer',
-    avatar: '/agents/Hal Finney.png',
-    expertise: ['Cryptocurrency', 'Blockchain', 'Digital Security'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  },
-  {
-    id: 'mandela',
-    name: 'Nelson Mandela',
-    role: 'Anti-Colonialism Leader',
-    avatar: '/agents/Nelson Mandela.png',
-    expertise: ['Liberation', 'Reconciliation', 'Social Justice'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  },
-  {
-    id: 'socrates',
-    name: 'Socrates',
-    role: 'Philosophy Master',
-    avatar: '/agents/Socrates.png',
-    expertise: ['Philosophy', 'Ethics', 'Critical Thinking'],
-    status: 'idle',
-    pinned: false,
-    hidden: false
-  }
-];
+// Use enhanced agents from the matching library
+const AGENTS = getAllAgents();
 
 // Message types
 interface Message {
@@ -133,35 +77,44 @@ interface Thread {
 
 // Original Agent Card Component (from the original design)
 function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
-  const getAvatarPath = (agentName: string) => {
-    const avatarMap: { [key: string]: string } = {
-      'Milton Friedman': '/agents/Milton Friedman.png',
-      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
-      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
-      'Hal Finney': '/agents/Hal Finney.png',
-      'Nelson Mandela': '/agents/Nelson Mandela.png',
-      'Socrates': '/agents/Socrates.png'
-    };
-    return avatarMap[agentName] || '/agents/Alan Turing.png';
+  // Format name to ensure last name is on second line for consistency
+  const formatName = (name: string) => {
+    const parts = name.split(' ');
+    if (parts.length <= 2) {
+      return { first: parts[0], last: parts[1] || '' };
+    } else {
+      // For names with 3+ parts, put everything except first name on second line
+      return { first: parts[0], last: parts.slice(1).join(' ') };
+    }
   };
+
+  const { first, last } = formatName(agent.name);
 
   return (
     <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-full flex flex-col">
         {/* Avatar - Main Focus */}
         <div className="aspect-square relative">
           <img
-            src={getAvatarPath(agent.name)}
+            src={agent.avatar}
             alt={agent.name}
             className="w-full h-full object-cover object-top"
           />
           {/* Subtle overlay on hover */}
           <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
-        </div>
-        
-        {/* Agent Info - Minimal */}
-        <div className="p-4 text-center">
-          <h3 className="font-bold text-gray-900 text-lg mb-1">{agent.name}</h3>
+          </div>
+          
+        {/* Agent Info - Consistent height */}
+        <div className="p-4 text-center flex-1 flex flex-col justify-center min-h-[80px]">
+          <h3 className="font-bold text-gray-900 text-lg mb-1 leading-tight">
+            {first}
+            {last && (
+              <>
+                <br />
+                {last}
+              </>
+            )}
+          </h3>
           <p className="text-sm text-gray-600 font-medium">{agent.role}</p>
         </div>
       </div>
@@ -197,12 +150,172 @@ function ChatStarter({ onStartConversation }: { onStartConversation: (query: str
           className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-sm"
           onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
         />
-        <button
+              <button
           onClick={handleSubmit}
           className="absolute right-4 top-1/2 transform -translate-y-1/2 p-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
         >
           <Send size={20} />
-        </button>
+          </button>
+      </div>
+    </div>
+  );
+}
+
+// Upload Modal Component
+function UploadModal({ 
+  isOpen, 
+  onClose, 
+  onUpload 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onUpload: (type: 'pdf' | 'link' | 'image', data: string) => void;
+}) {
+  const [uploadType, setUploadType] = useState<'pdf' | 'link' | 'image'>('link');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (uploadType === 'link' && linkUrl.trim()) {
+      onUpload('link', linkUrl.trim());
+      setLinkUrl('');
+      onClose();
+    } else if (uploadType === 'pdf' || uploadType === 'image') {
+      // File upload will be handled by the file input change event
+      fileInput?.click();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // For now, we'll just send the file name
+      // In a real implementation, you'd upload the file and get a URL
+      onUpload(uploadType, file.name);
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Share Content</h3>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Upload Type Selector */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setUploadType('link')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
+              uploadType === 'link'
+                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <ExternalLink size={20} />
+            <span className="font-medium">Link</span>
+          </button>
+          <button
+            onClick={() => setUploadType('pdf')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
+              uploadType === 'pdf'
+                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <File size={20} />
+            <span className="font-medium">PDF</span>
+          </button>
+          <button
+            onClick={() => setUploadType('image')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
+              uploadType === 'image'
+                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <Image size={20} />
+            <span className="font-medium">Image</span>
+          </button>
+        </div>
+
+        {/* Upload Form */}
+        <form onSubmit={handleSubmit}>
+          {uploadType === 'link' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Website URL
+                </label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://example.com/article"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {(uploadType === 'pdf' || uploadType === 'image') && (
+            <div className="space-y-4">
+              <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-xl">
+                <div className="flex flex-col items-center gap-3">
+                  {uploadType === 'pdf' ? (
+                    <File className="text-gray-400" size={48} />
+                  ) : (
+                    <Image className="text-gray-400" size={48} />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      Click to upload {uploadType === 'pdf' ? 'PDF' : 'image'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {uploadType === 'pdf' ? 'PDF files up to 10MB' : 'JPG, PNG, GIF up to 5MB'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+            >
+              {uploadType === 'link' ? 'Share Link' : `Upload ${uploadType === 'pdf' ? 'PDF' : 'Image'}`}
+            </button>
+          </div>
+        </form>
+
+        {/* Hidden file input */}
+        <input
+          ref={setFileInput}
+          type="file"
+          accept={uploadType === 'pdf' ? '.pdf' : 'image/*'}
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </div>
   );
@@ -217,6 +330,7 @@ function ConversationThread({
   onSendMessage: (content: string) => void;
 }) {
   const [newMessage, setNewMessage] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -231,10 +345,22 @@ function ConversationThread({
     }
   };
 
+  const handleUpload = (type: 'pdf' | 'link' | 'image', data: string) => {
+    let message = '';
+    if (type === 'link') {
+      message = `I've shared a link: ${data}`;
+    } else if (type === 'pdf') {
+      message = `I've uploaded a PDF: ${data}`;
+    } else if (type === 'image') {
+      message = `I've uploaded an image: ${data}`;
+    }
+    onSendMessage(message);
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Thread Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-6">
         <h2 className="text-xl font-semibold text-gray-900">{thread.title}</h2>
         <p className="text-sm text-gray-500">
           {thread.activeAgents.length} advisors • {thread.messages.length} messages
@@ -242,7 +368,7 @@ function ConversationThread({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -257,9 +383,9 @@ function ConversationThread({
                   alt={message.agent.name}
                   className="w-10 h-10 rounded-full object-cover"
                 />
-              </div>
-            )}
-            
+        </div>
+      )}
+
             <div
               className={`max-w-2xl px-4 py-3 rounded-2xl ${
                 message.type === 'user'
@@ -273,21 +399,29 @@ function ConversationThread({
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                     {message.agent.role}
                   </span>
-                </div>
+              </div>
               )}
               <p className="text-sm">{message.content}</p>
               <p className="text-xs opacity-70 mt-1">
                 {message.timestamp.toLocaleTimeString()}
               </p>
-            </div>
-          </div>
+              </div>
+                  </div>
         ))}
         <div ref={messagesEndRef} />
-      </div>
-
+          </div>
+          
       {/* Message Input */}
       <div className="bg-white border-t border-gray-200 p-4">
         <form onSubmit={handleSend} className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            className="px-4 py-3 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
+            title="Upload file or share link"
+          >
+            <Upload size={20} />
+          </button>
           <input
             type="text"
             value={newMessage}
@@ -303,6 +437,13 @@ function ConversationThread({
           </button>
         </form>
       </div>
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUpload={handleUpload}
+      />
     </div>
   );
 }
@@ -335,7 +476,7 @@ function AgentRoster({
 
   return (
     <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-      {/* Header */}
+        {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">Your Council</h3>
@@ -345,8 +486,8 @@ function AgentRoster({
           >
             <Settings size={20} />
           </button>
+          </div>
         </div>
-      </div>
 
       {/* Settings Panel */}
       {showSettings && (
@@ -365,9 +506,9 @@ function AgentRoster({
               <Users size={16} />
               Curate "My Council"
             </button>
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          )}
 
       {/* Create New Agent */}
       <div className="p-4 border-b border-gray-200">
@@ -375,8 +516,8 @@ function AgentRoster({
           <Plus size={20} />
           <span className="font-medium text-gray-700">Create New Agent</span>
         </button>
-      </div>
-
+              </div>
+              
       {/* Active Agents */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
@@ -396,23 +537,23 @@ function AgentRoster({
                       className="w-10 h-10 rounded-full object-cover"
                     />
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
-                  </div>
+                      </div>
                   
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{agent.name}</p>
                     <p className="text-sm text-gray-500 truncate">{agent.role}</p>
-                  </div>
+              </div>
 
-                  <button
+                    <button
                     onClick={() => onRemoveAgent(agent.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
                   >
                     <X size={16} />
-                  </button>
+                    </button>
                 </div>
-              ))}
-          </div>
-        </div>
+                      ))}
+                    </div>
+                  </div>
 
         {/* Available Agents */}
         <div className="p-4 border-t border-gray-200">
@@ -421,7 +562,7 @@ function AgentRoster({
             {agents
               .filter(agent => !activeAgents.includes(agent.id) && !agent.hidden)
               .map((agent) => (
-                <button
+          <button
                   key={agent.id}
                   onClick={() => onToggleAgent(agent.id)}
                   className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
@@ -436,7 +577,7 @@ function AgentRoster({
                     <p className="text-xs text-gray-500">{agent.role}</p>
                   </div>
                   <Plus size={16} className="text-gray-400" />
-                </button>
+          </button>
               ))}
           </div>
         </div>
@@ -452,16 +593,9 @@ export default function RabbitPage() {
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
 
-  // Auto-join agents based on query
+  // Enhanced auto-join agents using smart matching
   const autoJoinAgents = (query: string) => {
-    const queryLower = query.toLowerCase();
-    const relevantAgents = agents.filter(agent => 
-      agent.expertise.some(skill => 
-        skill.toLowerCase().includes(queryLower) || 
-        queryLower.includes(skill.toLowerCase())
-      )
-    );
-    return relevantAgents.map(agent => agent.id);
+    return getAutoJoinAgents(query, 5); // Get top 5 most relevant agents
   };
 
   const handleStartConversation = (query: string) => {
@@ -506,15 +640,36 @@ export default function RabbitPage() {
   };
 
   const handleToggleAgent = (agentId: string) => {
+    const isAdding = !activeAgents.includes(agentId);
     setActiveAgents(prev => 
       prev.includes(agentId) 
         ? prev.filter(id => id !== agentId)
         : [...prev, agentId]
     );
+    
+    // Log user interaction for learning
+    if (currentThread) {
+      logAgentInteraction(
+        currentThread.title,
+        currentThread.activeAgents,
+        isAdding ? [] : [agentId],
+        isAdding ? [agentId] : []
+      );
+    }
   };
 
   const handleRemoveAgent = (agentId: string) => {
     setActiveAgents(prev => prev.filter(id => id !== agentId));
+    
+    // Log user interaction for learning
+    if (currentThread) {
+      logAgentInteraction(
+        currentThread.title,
+        currentThread.activeAgents,
+        [agentId],
+        []
+      );
+    }
   };
 
   const handlePinAgent = (agentId: string) => {
@@ -535,32 +690,32 @@ export default function RabbitPage() {
 
   // Original Grid View (Default State)
   if (currentView === 'grid') {
-    return (
-      <div className="bg-white">
-        {/* Generous white space and main phrase */}
-        <div className="pt-24 pb-12">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
-            
+  return (
+    <div className="bg-white">
+      {/* Generous white space and main phrase */}
+      <div className="pt-24 pb-12">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
+          
             {/* Chat Starter */}
             <ChatStarter onStartConversation={handleStartConversation} />
-          </div>
         </div>
-        
-        {/* Agent Grid - Avatar Focused */}
-        <div className="px-6 pb-16">
-          <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+      </div>
+      
+      {/* Agent Grid - Avatar Focused */}
+      <div className="px-6 pb-16">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
               {agents.map((agent) => (
-                <AgentCard 
-                  key={agent.id} 
-                  agent={agent} 
+              <AgentCard 
+                key={agent.id} 
+                agent={agent} 
                   onClick={() => handleStartConversation(`Chat with ${agent.name} about ${agent.role}`)}
-                />
-              ))}
-            </div>
+              />
+            ))}
           </div>
         </div>
+      </div>
       </div>
     );
   }

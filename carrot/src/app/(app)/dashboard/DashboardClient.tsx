@@ -324,7 +324,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         name: '',
         username: (session?.user as any)?.username || 'demo',
         avatar,
-        flag: undefined,
+        flag: 'US',
         id: (session?.user as any)?.id || 'u_mock',
       },
       homeCountry: 'US',
