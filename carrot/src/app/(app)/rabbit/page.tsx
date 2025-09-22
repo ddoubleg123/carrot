@@ -622,6 +622,79 @@ export default function RabbitPage() {
     setCurrentView('conversation');
   };
 
+  async function streamAssistantReply(userMsg: string) {
+    try {
+      const thread = currentThread;
+      if (!thread) return;
+      const payload = {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        temperature: 0.3,
+        max_tokens: 1024,
+        messages: [
+          // Optional: add a system preface later for guardrails
+          // { role: 'system', content: 'You are a helpful assistant.' },
+          ...thread.messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.content })),
+          { role: 'user', content: userMsg }
+        ]
+      };
+
+      const resp = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok || !resp.body) return;
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      // Insert placeholder agent message
+      const agentMsgId = `a-${Date.now()}`;
+      setCurrentThread(prev => prev ? {
+        ...prev,
+        messages: [...prev.messages, { id: agentMsgId, type: 'agent', content: '', timestamp: new Date(), agent: { id: 'deepseek', name: 'DeepSeek V3', role: 'AI Assistant', avatar: '/avatar-placeholder.svg' } }],
+        updatedAt: new Date()
+      } : prev);
+
+      const pushToken = (tok: string) => {
+        setCurrentThread(prev => {
+          if (!prev) return prev;
+          const msgs = prev.messages.slice();
+          const idx = msgs.findIndex(m => m.id === agentMsgId);
+          if (idx >= 0) {
+            msgs[idx] = { ...msgs[idx], content: msgs[idx].content + tok } as any;
+          }
+          return { ...prev, messages: msgs, updatedAt: new Date() };
+        });
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split(/\n\n/);
+        buf = lines.pop() || '';
+        for (const block of lines) {
+          const line = block.trim();
+          if (!line) continue;
+          if (line.startsWith('data:')) {
+            const payload = line.slice(5).trim();
+            if (payload === '[DONE]') continue;
+            try {
+              const j = JSON.parse(payload);
+              if (j.type === 'token' && j.token) pushToken(j.token);
+            } catch { /* ignore */ }
+          }
+        }
+      }
+    } catch (e) {
+      // Soft-fail
+      console.warn('[Rabbit] streamAssistantReply error', e);
+    }
+  }
+
   const handleSendMessage = (content: string) => {
     if (!currentThread) return;
 
@@ -637,6 +710,9 @@ export default function RabbitPage() {
       messages: [...prev.messages, newMessage],
       updatedAt: new Date()
     } : null);
+
+    // Kick off assistant streaming reply (DeepSeek)
+    streamAssistantReply(content);
   };
 
   const handleToggleAgent = (agentId: string) => {
