@@ -1,18 +1,18 @@
 :root {
   /* ===== COLOR TOKENS ===== */
   
-  /* Primary Colors - Civic Blue System */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6; /* Main blue */
-  --color-primary-600: #2563eb; /* Civic Blue */
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-  --color-primary-950: #172554;
+  /* Primary Colors - Carrot Orange System */
+  --color-primary-50: #fff7ed;
+  --color-primary-100: #ffedd5;
+  --color-primary-200: #fed7aa;
+  --color-primary-300: #fdba74;
+  --color-primary-400: #fb923c;
+  --color-primary-500: #f97316; /* Main orange */
+  --color-primary-600: #ea580c; /* Carrot Orange */
+  --color-primary-700: #c2410c;
+  --color-primary-800: #9a3412;
+  --color-primary-900: #7c2d12;
+  --color-primary-950: #431407;
 
   /* Semantic Colors */
   --color-success-50: #f0fdf4;

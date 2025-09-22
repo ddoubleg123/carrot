@@ -52,13 +52,18 @@ This plan provides an organization-wide UX/design scaffold. It captures product 
 
 ## 4) Color & Contrast (Refactoring UI, Lidwell)
 - **Do**
-  - One primary, one neutral, 1–2 accents; semantic roles (info/success/warn/error).
-- **Don’t**
-  - Color as sole meaning.
+  - **Carrot Orange System**: Primary orange (#f97316) with vibrant gradient schemes
+  - 40+ curated gradient pairs for composer (Sunset Pop, Ocean Pop, Mint Pop, etc.)
+  - Semantic roles (info/success/warn/error) with orange as primary action color
+  - Duotone effects for hero images and portraits
+- **Don't**
+  - Color as sole meaning; static single-color schemes
 - **Measures**
-  - AA for text; 3:1 for non-text UI; color-blind sims pass.
+  - AA for text; 3:1 for non-text UI; color-blind sims pass
+  - Gradient accessibility: maintain contrast ratios across gradient stops
 - **Deliverables**
-  - Palette with semantic mapping; accessible pairs.
+  - Orange-based palette with semantic mapping; gradient library; accessible pairs
+  - **Key Colors**: #f97316 (primary), #ea580c (accent), vibrant gradient schemes
 
 ## 5) Visual Hierarchy & Spacing (Refactoring UI)
 - **Do**
@@ -72,14 +77,18 @@ This plan provides an organization-wide UX/design scaffold. It captures product 
 
 ## 6) Core Interaction Patterns (About Face, Tidwell)
 - **Do**
-  - Canonical patterns (cards, tabs, drawers; modals sparingly).
-  - Primary action placement/labels consistent (e.g., “Create Post”).
-- **Don’t**
-  - Novel controls where standards exist.
+  - **Composer Modal**: Full-screen overlay with gradient backgrounds and media previews
+  - **Commitment Cards**: Carrot/stick text with gradient overlays and emoji indicators
+  - **Video Players**: Thumbnail-first, 6s preroll, instant start when visible
+  - **Media Upload**: Drag-and-drop with progress indicators and thumbnail generation
+  - Primary action placement/labels consistent (e.g., "Create Post", "Create Group")
+- **Don't**
+  - Novel controls where standards exist; blocking modals for simple actions
 - **Measures**
-  - Pattern error rate < 2%; discoverability tests pass.
+  - Pattern error rate < 2%; discoverability tests pass; media upload success > 95%
 - **Deliverables**
-  - Pattern library with do/don’t and anti-patterns.
+  - Pattern library with do/don't and anti-patterns
+  - **Key Patterns**: Composer modal, commitment cards, media players, gradient overlays
 
 ## 7) Forms & Input (Krug, Johnson)
 - **Do**
@@ -94,13 +103,18 @@ This plan provides an organization-wide UX/design scaffold. It captures product 
 
 ## 8) Microinteractions (Saffer)
 - **Do**
-  - Define triggers, rules, feedback, loops per control; subtle 200–300ms animations.
-- **Don’t**
-  - Motion that blocks input.
+  - **Button Animations**: Scale transforms (hover:scale-105), shadow transitions, gradient shifts
+  - **Media Interactions**: Thumbnail hover effects, video play/pause transitions, progress bars
+  - **Form Feedback**: Real-time validation, upload progress with orange gradient fills
+  - **Gradient Transitions**: Smooth color shifts in composer, card hover states
+  - Subtle 200–300ms animations with proper easing curves
+- **Don't**
+  - Motion that blocks input; jarring transitions; excessive animation
 - **Measures**
-  - Feedback ≤ 100ms; animation ≤ 300ms.
+  - Feedback ≤ 100ms; animation ≤ 300ms; reduced-motion compliance
 - **Deliverables**
-  - Microinteraction specs (spinners, toasts, toggles).
+  - Microinteraction specs (spinners, toasts, toggles, gradient transitions)
+  - **Key Animations**: Button hover, media loading, gradient shifts, scale transforms
 
 ## 9) Content & Microcopy (Krug, Lidwell)
 - **Do**
@@ -296,6 +310,28 @@ This plan provides an organization-wide UX/design scaffold. It captures product 
 - Text contrast AA+; captions on all media; keyboard navigability.
 - Primary action discoverable within 5s on key screens.
 - LCP ≤ 2.5s p75 mobile; tap targets ≥ 44×44; visible focus always.
+
+## 29) Carrot-Specific Design Patterns (From Home Page & Composer Analysis)
+- **Hero Sections**: Large gradient backgrounds with duotone portrait overlays
+  - Use real agent images from `/public/agents/` with grayscale + orange overlay effects
+  - Quote text with gradient clipping and 45° highlight strokes
+  - Responsive sizing: 40vh desktop, 36vh tablet, 34vh mobile
+- **Composer Modal**: Full-screen overlay with gradient backgrounds
+  - 40+ curated gradient schemes from `colorSchemes.ts`
+  - Media preview with thumbnail generation and progress indicators
+  - Carrot/stick text input with emoji indicators and gradient overlays
+- **Button Design**: Orange gradient system with graphic elements
+  - Primary: `from-orange-500 to-orange-600` with hover states
+  - Scale transforms (hover:scale-105), shadow transitions, shine effects
+  - Circular icon containers with background pattern overlays
+- **Media Handling**: Thumbnail-first approach with instant playback
+  - 6s video preroll for smooth feed experience
+  - Duotone effects for portraits and hero images
+  - Progress bars with orange gradient fills
+- **Typography**: Gradient text effects for impact
+  - Large hero quotes with gradient clipping and highlight strokes
+  - Break-words for responsive text wrapping
+  - Proper contrast ratios across gradient stops
 
 ---
 

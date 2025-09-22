@@ -11,6 +11,7 @@ import {
   NotificationPreferences,
   PrivacySettings,
 } from '../dashboard/settings/components';
+import ProfileSettings from '../dashboard/settings/components/ProfileSettings';
 
 export default function SettingsPageUnified() {
   const { data: session, update } = useSession();
@@ -29,6 +30,7 @@ export default function SettingsPageUnified() {
     phone: '',
     bio: '',
     location: '',
+    displayName: ''
   });
 
   // Initialize form data from session
@@ -41,6 +43,7 @@ export default function SettingsPageUnified() {
       phone: user.phone || '',
       bio: user.bio || '',
       location: user.location || '',
+      displayName: user.displayName || user.name || ''
     });
   }, [session?.user]);
 
@@ -117,6 +120,41 @@ export default function SettingsPageUnified() {
     if (saveError) setSaveError('');
   };
 
+  // Media upload helper -> returns public URL and durable storage path if available
+  const uploadToStorage = async (file: File): Promise<{ publicURL: string; path?: string } | null> => {
+    try {
+      const maxBytes = file.type.startsWith('image/') ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+      const pres = await fetch('/api/getPresignedURL', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: file.type, maxBytes }),
+      });
+      if (!pres.ok) return null;
+      const { uploadURL, publicURL, path } = await pres.json();
+      const put = await fetch(uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      if (!put.ok) return null;
+      return { publicURL, path };
+    } catch { return null; }
+  };
+
+  // Handle avatar/banner image selection from ProfileSettings
+  const handleProfileImageChange = async (type: 'avatar' | 'banner', file: File) => {
+    try {
+      setIsSaving(true);
+      const up = await uploadToStorage(file);
+      if (!up) { setSaveError('Upload failed'); return; }
+      if (type === 'avatar') {
+        await fetch('/api/me/avatar/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: up.path || '', url: up.publicURL }) });
+      } else {
+        await fetch('/api/me/header/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: up.path || '', url: up.publicURL }) });
+      }
+    } catch (e) {
+      setSaveError('Failed to update image');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleUsernameChange = async (username: string) => {
     if (!session) return { success: false, message: 'Not authenticated' };
     setIsSaving(true);
@@ -173,6 +211,13 @@ export default function SettingsPageUnified() {
             <Suspense>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab}>
+                  {activeTab === 'profile' && (
+                    <ProfileSettings
+                      formData={{ displayName: formData.displayName, bio: formData.bio, location: formData.location }}
+                      onInputChange={handleInputChange}
+                      onImageChange={handleProfileImageChange}
+                    />
+                  )}
                   {activeTab === 'account' && (
                     <AccountInformation
                       formData={formData}

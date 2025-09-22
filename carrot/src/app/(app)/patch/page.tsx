@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import CommitmentCard, { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
+import COLOR_SCHEMES from '../../../config/colorSchemes';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,7 @@ const CSS_VARS = `
 export default function PatchPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isReducedMotion, setIsReducedMotion] = useState(false);
+  const [selectedScheme, setSelectedScheme] = useState(0);
   const router = useRouter();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,43 +79,175 @@ export default function PatchPage() {
     console.log('Creating new group');
   };
 
-  // Sample groups data
-  const groups = [
+  // Sample groups data with CommitmentCard-style formatting
+  const groups: CommitmentCardProps[] = [
     {
-      id: 1,
-      title: "Clean Energy",
-      subscribers: 1240,
-      image: "/api/img?url=https://images.unsplash.com/photo-1466611653911-95081537e5b7&w=400&h=300&format=webp&q=80"
+      id: '1',
+      content: 'Clean Energy Revolution',
+      carrotText: 'Sustainable future with renewable energy',
+      stickText: 'Dependence on fossil fuels',
+      author: {
+        name: 'Clean Energy Group',
+        username: 'cleanenergy',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1466611653911-95081537e5b7&w=400&h=400&format=webp&q=80',
+        id: 'cleanenergy'
+      },
+      location: { zip: '10001', city: 'Global', state: 'Worldwide' },
+      stats: {
+        likes: 1240,
+        comments: 89,
+        reposts: 156,
+        views: 12400,
+        carrots: 890,
+        sticks: 350
+      },
+      timestamp: new Date().toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1466611653911-95081537e5b7&w=400&h=300&format=webp&q=80'],
+      emoji: '🌱',
+      gradientFromColor: COLOR_SCHEMES[0].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[0].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[0].gradientViaColor,
+      gradientDirection: 'to-r'
     },
     {
-      id: 2,
-      title: "Universal Basic Income",
-      subscribers: 980,
-      image: "/api/img?url=https://images.unsplash.com/photo-1554224155-6726b3ff858f&w=400&h=300&format=webp&q=80"
+      id: '2',
+      content: 'Universal Basic Income',
+      carrotText: 'Economic security and freedom',
+      stickText: 'Dependency and reduced work incentive',
+      author: {
+        name: 'UBI Advocates',
+        username: 'ubi_advocates',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1554224155-6726b3ff858f&w=400&h=400&format=webp&q=80',
+        id: 'ubi_advocates'
+      },
+      location: { zip: '10001', city: 'Global', state: 'Worldwide' },
+      stats: {
+        likes: 980,
+        comments: 67,
+        reposts: 123,
+        views: 9800,
+        carrots: 720,
+        sticks: 260
+      },
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1554224155-6726b3ff858f&w=400&h=300&format=webp&q=80'],
+      emoji: '💰',
+      gradientFromColor: COLOR_SCHEMES[1].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[1].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[1].gradientViaColor,
+      gradientDirection: 'to-r'
     },
     {
-      id: 3,
-      title: "Term Limits",
-      subscribers: 2110,
-      image: "/api/img?url=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d&w=400&h=300&format=webp&q=80"
+      id: '3',
+      content: 'Term Limits for Politicians',
+      carrotText: 'Fresh perspectives and reduced corruption',
+      stickText: 'Loss of experienced leadership',
+      author: {
+        name: 'Political Reform',
+        username: 'political_reform',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d&w=400&h=400&format=webp&q=80',
+        id: 'political_reform'
+      },
+      location: { zip: '10001', city: 'Washington', state: 'DC' },
+      stats: {
+        likes: 2110,
+        comments: 145,
+        reposts: 234,
+        views: 21100,
+        carrots: 1650,
+        sticks: 460
+      },
+      timestamp: new Date(Date.now() - 172800000).toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d&w=400&h=300&format=webp&q=80'],
+      emoji: '🏛️',
+      gradientFromColor: COLOR_SCHEMES[2].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[2].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[2].gradientViaColor,
+      gradientDirection: 'to-r'
     },
     {
-      id: 4,
-      title: "Space Exploration",
-      subscribers: 1560,
-      image: "/api/img?url=https://images.unsplash.com/photo-1446776877081-d282a0f896e2&w=400&h=300&format=webp&q=80"
+      id: '4',
+      content: 'Space Exploration Priority',
+      carrotText: 'Scientific advancement and human expansion',
+      stickText: 'Waste of resources on Earth problems',
+      author: {
+        name: 'Space Advocates',
+        username: 'space_advocates',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1446776877081-d282a0f896e2&w=400&h=400&format=webp&q=80',
+        id: 'space_advocates'
+      },
+      location: { zip: '10001', city: 'Global', state: 'Universe' },
+      stats: {
+        likes: 1560,
+        comments: 98,
+        reposts: 178,
+        views: 15600,
+        carrots: 1200,
+        sticks: 360
+      },
+      timestamp: new Date(Date.now() - 259200000).toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1446776877081-d282a0f896e2&w=400&h=300&format=webp&q=80'],
+      emoji: '🚀',
+      gradientFromColor: COLOR_SCHEMES[3].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[3].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[3].gradientViaColor,
+      gradientDirection: 'to-r'
     },
     {
-      id: 5,
-      title: "AI Ethics",
-      subscribers: 890,
-      image: "/api/img?url=https://images.unsplash.com/photo-1677442136019-21780ecad995&w=400&h=300&format=webp&q=80"
+      id: '5',
+      content: 'AI Ethics and Regulation',
+      carrotText: 'Safe and beneficial AI development',
+      stickText: 'Stifling innovation and progress',
+      author: {
+        name: 'AI Ethics Group',
+        username: 'ai_ethics',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1677442136019-21780ecad995&w=400&h=400&format=webp&q=80',
+        id: 'ai_ethics'
+      },
+      location: { zip: '10001', city: 'Global', state: 'Digital' },
+      stats: {
+        likes: 890,
+        comments: 56,
+        reposts: 89,
+        views: 8900,
+        carrots: 650,
+        sticks: 240
+      },
+      timestamp: new Date(Date.now() - 345600000).toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1677442136019-21780ecad995&w=400&h=300&format=webp&q=80'],
+      emoji: '🤖',
+      gradientFromColor: COLOR_SCHEMES[4].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[4].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[4].gradientViaColor,
+      gradientDirection: 'to-r'
     },
     {
-      id: 6,
-      title: "Climate Action",
-      subscribers: 3200,
-      image: "/api/img?url=https://images.unsplash.com/photo-1611273426858-450d8e3c9fce&w=400&h=300&format=webp&q=80"
+      id: '6',
+      content: 'Climate Action Now',
+      carrotText: 'Preserving planet for future generations',
+      stickText: 'Economic disruption and job losses',
+      author: {
+        name: 'Climate Action',
+        username: 'climate_action',
+        avatar: '/api/img?url=https://images.unsplash.com/photo-1611273426858-450d8e3c9fce&w=400&h=400&format=webp&q=80',
+        id: 'climate_action'
+      },
+      location: { zip: '10001', city: 'Global', state: 'Earth' },
+      stats: {
+        likes: 3200,
+        comments: 234,
+        reposts: 456,
+        views: 32000,
+        carrots: 2800,
+        sticks: 400
+      },
+      timestamp: new Date(Date.now() - 432000000).toISOString(),
+      imageUrls: ['/api/img?url=https://images.unsplash.com/photo-1611273426858-450d8e3c9fce&w=400&h=300&format=webp&q=80'],
+      emoji: '🌍',
+      gradientFromColor: COLOR_SCHEMES[5].gradientFromColor,
+      gradientToColor: COLOR_SCHEMES[5].gradientToColor,
+      gradientViaColor: COLOR_SCHEMES[5].gradientViaColor,
+      gradientDirection: 'to-r'
     }
   ];
 
@@ -120,7 +255,7 @@ export default function PatchPage() {
     <>
       <style dangerouslySetInnerHTML={{ __html: CSS_VARS }} />
       
-      <div className="min-h-screen bg-[#F7F8FA] relative">
+      <div className="bg-gray-50 min-h-screen">
         {/* Hidden heading for accessibility */}
         <h1 className="sr-only">Knowledge - Carrot Patch</h1>
         
@@ -131,7 +266,7 @@ export default function PatchPage() {
         >
           {/* Background gradient with grain */}
           <div 
-            className="absolute inset-0 bg-gradient-to-br from-[#FF6A00] to-[#0A5AFF]"
+            className="absolute inset-0 bg-gradient-to-br from-orange-400 via-orange-500 to-orange-600"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E")`,
             }}
@@ -148,27 +283,18 @@ export default function PatchPage() {
             }}
           >
             <div className="relative">
-              {/* Fallback SVG Plato silhouette */}
-              <div className="w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80">
-                <svg 
-                  viewBox="0 0 200 200" 
-                  className="w-full h-full text-white/20"
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <linearGradient id="platoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="rgba(255,255,255,0.3)" />
-                      <stop offset="50%" stopColor="rgba(255,255,255,0.1)" />
-                      <stop offset="100%" stopColor="rgba(255,255,255,0.05)" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="100" cy="100" r="90" fill="url(#platoGradient)" />
-                  <circle cx="100" cy="80" r="25" fill="rgba(255,255,255,0.2)" />
-                  <path d="M 60 140 Q 100 120 140 140 Q 100 160 60 140" fill="rgba(255,255,255,0.15)" />
-                  <text x="100" y="190" textAnchor="middle" className="text-xs fill-white/40 font-serif">
-                    Plato
-                  </text>
-                </svg>
+              {/* Real Plato image with duotone effect */}
+              <div className="w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 relative">
+                <img
+                  src="/agents/Plato.png"
+                  alt="Plato"
+                  className="w-full h-full object-cover rounded-full opacity-20"
+                  style={{
+                    filter: 'grayscale(100%) contrast(1.2) brightness(1.1)',
+                    mixBlendMode: 'overlay'
+                  }}
+                />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-orange-400/30 to-orange-600/20 mix-blend-mode-overlay" />
               </div>
             </div>
           </div>
@@ -187,9 +313,9 @@ export default function PatchPage() {
               {/* Quote with duotone gradient effect */}
               <blockquote className="relative">
                 <div 
-                  className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-wide"
+                  className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide break-words"
                   style={{
-                    background: 'linear-gradient(135deg, #FF6A00 0%, #0A5AFF 100%)',
+                    background: 'linear-gradient(135deg, #FF6A00 0%, #FF8A00 50%, #FFA500 100%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
@@ -202,7 +328,7 @@ export default function PatchPage() {
                 
                 {/* 45° highlight stroke behind text */}
                 <div 
-                  className="absolute inset-0 text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-wide opacity-20"
+                  className="absolute inset-0 text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide opacity-20 break-words"
                   style={{
                     background: 'linear-gradient(45deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.3) 100%)',
                     WebkitBackgroundClip: 'text',
@@ -217,7 +343,7 @@ export default function PatchPage() {
               </blockquote>
               
               {/* Author attribution */}
-              <cite className="block mt-4 text-lg md:text-xl text-[#60646C] font-medium">
+              <cite className="block mt-4 text-lg md:text-xl text-white/80 font-medium">
                 — Plato
               </cite>
             </div>
@@ -230,7 +356,7 @@ export default function PatchPage() {
           style={{ marginTop: 'var(--action-row-offset)' }}
         >
           <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
               <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
                 {/* Search Input */}
                 <div className="flex-1 relative">
@@ -239,18 +365,18 @@ export default function PatchPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Knowledge shared is knowledge squared"
-                    className="w-full h-12 px-4 pr-12 rounded-xl border border-[#E6E8EC] focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent outline-none text-lg placeholder-[#60646C]"
+                    placeholder="Let's go"
+                    className="w-full h-12 px-4 pr-12 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-lg placeholder-gray-500"
                     aria-label="Search knowledge and groups"
                   />
-                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-[#60646C]">
+                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
                   {/* Keyboard shortcut hint */}
-                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-[#60646C] hidden sm:block">
-                    <kbd className="px-2 py-1 bg-[#F7F8FA] rounded text-xs">/</kbd>
+                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 hidden sm:block">
+                    <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">/</kbd>
                   </div>
                 </div>
                 
@@ -258,57 +384,45 @@ export default function PatchPage() {
                 <button
                   type="button"
                   onClick={handleCreateGroup}
-                  className="h-12 px-6 bg-gradient-to-r from-[#FF6A00] to-[#0A5AFF] text-white rounded-xl font-semibold hover:from-[#E55A00] hover:to-[#0947E6] transition-all duration-200 transform hover:scale-105 hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
+                  className="h-12 px-8 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-2xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-3 whitespace-nowrap relative overflow-hidden group"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Create Group
+                  {/* Background pattern */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 to-orange-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  
+                  {/* Icon with animation */}
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors duration-300">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                    <span className="font-bold tracking-wide">Create Group</span>
+                  </div>
+                  
+                  {/* Shine effect */}
+                  <div className="absolute inset-0 -top-1 -left-1 w-0 h-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -skew-x-12 group-hover:w-full group-hover:h-full transition-all duration-500 ease-out" />
                 </button>
               </form>
             </div>
           </div>
         </div>
 
-        {/* Groups Grid */}
+        {/* Groups Feed - CommitmentCard Style */}
         <section className="px-6 py-12">
-          <div className="max-w-6xl mx-auto">
-            <h2 className="text-2xl font-bold text-[#0B0B0F] mb-8 text-center">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
               Explore Groups
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
               {groups.map((group) => (
-                <div 
+                <CommitmentCard
                   key={group.id}
-                  className="bg-white rounded-xl border border-[#E6E8EC] overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group"
-                >
-                  {/* Group Image */}
-                  <div className="aspect-video bg-gray-100 relative overflow-hidden">
-                    <img
-                      src={group.image}
-                      alt={group.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                  </div>
-                  
-                  {/* Group Info */}
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-[#0B0B0F] mb-2 group-hover:text-[#FF6A00] transition-colors">
-                      {group.title}
-                    </h3>
-                    <div className="flex items-center gap-2 text-[#60646C]">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      <span className="text-sm font-medium">
-                        {group.subscribers.toLocaleString()} subscribers
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  {...group}
+                  onVote={() => {}} // TODO: Implement voting
+                  onDelete={() => {}} // TODO: Implement deletion
+                  onBlock={() => {}} // TODO: Implement blocking
+                />
               ))}
             </div>
           </div>
