@@ -1,1195 +1,419 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
-  Filter, 
-  Search, 
+  Send, 
+  X, 
+  Plus, 
+  Settings, 
+  Brain, 
   MessageSquare, 
   History, 
-  Send, 
-  Zap, 
-  Eye, 
-  Settings, 
-  Play, 
-  CheckCircle, 
-  AlertTriangle, 
-  ChevronDown, 
-  Command, 
-  Clock, 
-  User, 
-  X, 
-  ArrowRight, 
-  ArrowLeft, 
-  Plus, 
-  Sparkles, 
-  Brain, 
-  Target, 
-  Palette, 
-  Code, 
-  FileText, 
-  Shield 
+  Pin, 
+  EyeOff,
+  Users,
+  Link,
+  FileText,
+  Sparkles,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { AgentOutputDemo } from '@/components/rabbit/AgentOutputDemo';
 
 // Design Tokens
 const COLORS = {
   actionOrange: '#FF6A00',
-  civicBlue: '#0A5AFF',
+  civicBlue: '#0A5AFF', 
   ink: '#0B0B0F',
   surface: '#FFFFFF',
-  slate: '#64748B'
+  slate: '#64748B',
+  gray: '#6B7280'
 };
 
-// Historical AI Agents with their real expertise
-const AGENT_CATEGORIES = [
+// AI Agents with their expertise
+const AGENTS = [
   {
-    id: 'governance',
-    title: '🏛️ Governance & Democracy',
-    agents: [
-      {
-        id: 'james-madison',
-        name: 'James Madison',
-        role: 'Democracy Expert',
-        avatar: '/agents/James Madison.png',
-        skills: ['🏛️ Democracy', '📜 Constitution', '⚖️ Governance'],
-        actions: [
-          { label: 'Analyze Policy', icon: Play, primary: true },
-          { label: 'Review Structure', icon: Eye },
-          { label: 'Check Balance', icon: CheckCircle }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'nelson-mandela',
-        name: 'Nelson Mandela',
-        role: 'Anti-Colonialism Leader',
-        avatar: '/agents/Nelson Mandela.png',
-        skills: ['🌍 Liberation', '🤝 Reconciliation', '⚖️ Justice'],
-        actions: [
-          { label: 'Guide Liberation', icon: Play, primary: true },
-          { label: 'Promote Unity', icon: Target },
-          { label: 'Fight Injustice', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'zbigniew-brzezinski',
-        name: 'Zbigniew Brzezinski',
-        role: 'Geopolitics Expert',
-        avatar: '/agents/Zbigniew Brzezinski.png',
-        skills: ['🌍 Geopolitics', '⚖️ Strategy', '🔍 Analysis'],
-        actions: [
-          { label: 'Analyze Geopolitics', icon: Play, primary: true },
-          { label: 'Strategic Planning', icon: Target },
-          { label: 'Risk Assessment', icon: Eye }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'friedman',
+    name: 'Milton Friedman',
+    role: 'Free Market Economics',
+    avatar: '/agents/Milton Friedman.png',
+    expertise: ['Economics', 'Monetarism', 'Free Markets'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   },
   {
-    id: 'economics',
-    title: '💰 Economics & Finance',
-    agents: [
-      {
-        id: 'john-maynard-keynes',
-        name: 'John Maynard Keynes',
-        role: 'Keynesian Economics',
-        avatar: '/agents/John Maynard Keynes.png',
-        skills: ['📈 Macroeconomics', '🏛️ Policy', '💡 Innovation'],
-        actions: [
-          { label: 'Economic Analysis', icon: Play, primary: true },
-          { label: 'Policy Review', icon: Target },
-          { label: 'Market Insights', icon: Eye }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'milton-friedman',
-        name: 'Milton Friedman',
-        role: 'Free Market Economics',
-        avatar: '/agents/Milton Friedman.png',
-        skills: ['📊 Free Markets', '💰 Monetarism', '🎯 Efficiency'],
-        actions: [
-          { label: 'Market Analysis', icon: Play, primary: true },
-          { label: 'Policy Critique', icon: Target },
-          { label: 'Efficiency Review', icon: CheckCircle }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'hal-finney',
-        name: 'Hal Finney',
-        role: 'Cryptocurrency Pioneer',
-        avatar: '/agents/Hal Finney.png',
-        skills: ['₿ Cryptocurrency', '🔐 Security', '💻 Technology'],
-        actions: [
-          { label: 'Crypto Analysis', icon: Play, primary: true },
-          { label: 'Security Review', icon: Shield },
-          { label: 'Tech Innovation', icon: Zap }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'benjamin-graham',
-        name: 'Benjamin Graham',
-        role: 'Value Investing Expert',
-        avatar: '/agents/Benjamin Graham.png',
-        skills: ['📈 Value Investing', '📊 Analysis', '💰 Finance'],
-        actions: [
-          { label: 'Investment Analysis', icon: Play, primary: true },
-          { label: 'Value Assessment', icon: Target },
-          { label: 'Portfolio Review', icon: Eye }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'keynes',
+    name: 'John Maynard Keynes',
+    role: 'Keynesian Economics',
+    avatar: '/agents/John Maynard Keynes.png',
+    expertise: ['Macroeconomics', 'Fiscal Policy', 'Government Intervention'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   },
   {
-    id: 'social-justice',
-    title: '✊ Social Justice & Labor',
-    agents: [
-      {
-        id: 'mlk',
-        name: 'Martin Luther King Jr.',
-        role: 'Civil Rights Leader',
-        avatar: '/agents/MLK.png',
-        skills: ['✊ Civil Rights', '🤝 Nonviolence', '⚖️ Justice'],
-        actions: [
-          { label: 'Guide Movement', icon: Play, primary: true },
-          { label: 'Promote Justice', icon: Target },
-          { label: 'Build Unity', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'mother-jones',
-        name: 'Mother Jones',
-        role: 'Labor Rights Advocate',
-        avatar: '/agents/Mother Jones.png',
-        skills: ['👷 Labor Rights', '⚖️ Workers', '📢 Advocacy'],
-        actions: [
-          { label: 'Labor Analysis', icon: Play, primary: true },
-          { label: 'Rights Review', icon: Target },
-          { label: 'Advocacy Guide', icon: Shield }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'brzezinski',
+    name: 'Zbigniew Brzezinski',
+    role: 'Geopolitics Expert',
+    avatar: '/agents/Zbigniew Brzezinski.png',
+    expertise: ['Geopolitics', 'International Relations', 'Strategy'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   },
   {
-    id: 'technology',
-    title: '💻 Technology & Science',
-    agents: [
-      {
-        id: 'alan-turing',
-        name: 'Alan Turing',
-        role: 'Computing Pioneer',
-        avatar: '/agents/Alan Turing.png',
-        skills: ['💻 Computing', '🧮 Algorithms', '🔐 Cryptography'],
-        actions: [
-          { label: 'Code Analysis', icon: Play, primary: true },
-          { label: 'Algorithm Review', icon: Target },
-          { label: 'Security Check', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'john-mccarthy',
-        name: 'John McCarthy',
-        role: 'AI Pioneer',
-        avatar: '/agents/John McCarthy.png',
-        skills: ['🤖 Artificial Intelligence', '🧠 Machine Learning', '💡 Innovation'],
-        actions: [
-          { label: 'AI Analysis', icon: Play, primary: true },
-          { label: 'ML Review', icon: Target },
-          { label: 'Innovation Guide', icon: Zap }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'albert-einstein',
-        name: 'Albert Einstein',
-        role: 'Physics Revolutionary',
-        avatar: '/agents/Albert Einstein.png',
-        skills: ['⚛️ Physics', '🧮 Mathematics', '💡 Innovation'],
-        actions: [
-          { label: 'Physics Analysis', icon: Play, primary: true },
-          { label: 'Math Review', icon: Target },
-          { label: 'Theory Guide', icon: Zap }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'charles-darwin',
-        name: 'Charles Darwin',
-        role: 'Evolution Expert',
-        avatar: '/agents/Charles Darwin.png',
-        skills: ['🧬 Evolution', '🔬 Biology', '📊 Research'],
-        actions: [
-          { label: 'Evolution Analysis', icon: Play, primary: true },
-          { label: 'Biology Review', icon: Target },
-          { label: 'Research Guide', icon: Eye }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'finney',
+    name: 'Hal Finney',
+    role: 'Cryptocurrency Pioneer',
+    avatar: '/agents/Hal Finney.png',
+    expertise: ['Cryptocurrency', 'Blockchain', 'Digital Security'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   },
   {
-    id: 'environment-urbanism',
-    title: '🌍 Environment & Urbanism',
-    agents: [
-      {
-        id: 'teddy-roosevelt',
-        name: 'Teddy Roosevelt',
-        role: 'Environmental Conservation',
-        avatar: '/agents/Teddy Roosevelt.png',
-        skills: ['🌲 Conservation', '🏞️ Nature', '⚖️ Policy'],
-        actions: [
-          { label: 'Environmental Analysis', icon: Play, primary: true },
-          { label: 'Conservation Review', icon: Target },
-          { label: 'Policy Guide', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'frederick-law-olmsted',
-        name: 'Frederick Law Olmsted',
-        role: 'Urban Planning Pioneer',
-        avatar: '/agents/Frederick Law Olmsted.png',
-        skills: ['🏙️ Urban Planning', '🌳 Landscape', '📐 Design'],
-        actions: [
-          { label: 'Urban Analysis', icon: Play, primary: true },
-          { label: 'Planning Review', icon: Target },
-          { label: 'Design Guide', icon: Eye }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'mandela',
+    name: 'Nelson Mandela',
+    role: 'Anti-Colonialism Leader',
+    avatar: '/agents/Nelson Mandela.png',
+    expertise: ['Liberation', 'Reconciliation', 'Social Justice'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   },
   {
-    id: 'media-psychology',
-    title: '📺 Media & Psychology',
-    agents: [
-      {
-        id: 'edward-murrow',
-        name: 'Edward Murrow',
-        role: 'Broadcast Journalism',
-        avatar: '/agents/Edward Murrow.png',
-        skills: ['📺 Journalism', '📢 Media', '⚖️ Truth'],
-        actions: [
-          { label: 'Media Analysis', icon: Play, primary: true },
-          { label: 'Journalism Review', icon: Target },
-          { label: 'Truth Guide', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'sigmund-freud',
-        name: 'Sigmund Freud',
-        role: 'Psychology Pioneer',
-        avatar: '/agents/Sigmund Freud.png',
-        skills: ['🧠 Psychology', '🔍 Analysis', '💭 Mind'],
-        actions: [
-          { label: 'Psychological Analysis', icon: Play, primary: true },
-          { label: 'Behavior Review', icon: Target },
-          { label: 'Mind Guide', icon: Eye }
-        ],
-        status: 'online'
-      }
-    ]
-  },
-  {
-    id: 'philosophy-theology',
-    title: '🤔 Philosophy & Theology',
-    agents: [
-      {
-        id: 'socrates',
-        name: 'Socrates',
-        role: 'Philosophy Master',
-        avatar: '/agents/Socrates.png',
-        skills: ['🤔 Philosophy', '❓ Questioning', '💡 Wisdom'],
-        actions: [
-          { label: 'Philosophical Analysis', icon: Play, primary: true },
-          { label: 'Question Review', icon: Target },
-          { label: 'Wisdom Guide', icon: Zap }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'martin-luther',
-        name: 'Martin Luther',
-        role: 'Theology Reformer',
-        avatar: '/agents/Martin Luther.png',
-        skills: ['⛪ Theology', '📖 Scripture', '🔄 Reform'],
-        actions: [
-          { label: 'Theological Analysis', icon: Play, primary: true },
-          { label: 'Scripture Review', icon: Target },
-          { label: 'Reform Guide', icon: Shield }
-        ],
-        status: 'online'
-      },
-      {
-        id: 'mark-twain',
-        name: 'Mark Twain',
-        role: 'Satire & Literature',
-        avatar: '/agents/Mark Twain.png',
-        skills: ['✍️ Literature', '😄 Satire', '📝 Writing'],
-        actions: [
-          { label: 'Literary Analysis', icon: Play, primary: true },
-          { label: 'Writing Review', icon: Target },
-          { label: 'Satire Guide', icon: Zap }
-        ],
-        status: 'online'
-      }
-    ]
+    id: 'socrates',
+    name: 'Socrates',
+    role: 'Philosophy Master',
+    avatar: '/agents/Socrates.png',
+    expertise: ['Philosophy', 'Ethics', 'Critical Thinking'],
+    status: 'idle',
+    pinned: false,
+    hidden: false
   }
 ];
 
-// Header Component
-function Header({ onCreateAgent }: { onCreateAgent: () => void }) {
-  const [activeFilter, setActiveFilter] = useState('All');
-  const filters = ['All', 'Design', 'Audit', 'Custom'];
-
-  return (
-    <div className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold text-gray-900">Rabbit Workforce</h1>
-        
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-            {filters.map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeFilter === filter
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-          
-          <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-            <Search size={20} />
-          </button>
-
-          <button 
-            onClick={onCreateAgent}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
-          >
-            <Plus size={18} />
-            Create Agent
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+// Message types
+interface Message {
+  id: string;
+  type: 'user' | 'agent';
+  content: string;
+  agent?: {
+    id: string;
+    name: string;
+    role: string;
+    avatar: string;
+  };
+  timestamp: Date;
 }
 
-// Enhanced Agent Tile Component - Phase 2
-function AgentTile({ agent }: { agent: any }) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'busy': return 'bg-orange-500';
-      case 'offline': return 'bg-gray-400';
-      default: return 'bg-gray-400';
-    }
-  };
+// Thread types
+interface Thread {
+  id: string;
+  title: string;
+  messages: Message[];
+  activeAgents: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'online': return 'Available';
-      case 'busy': return 'Busy';
-      case 'offline': return 'Offline';
-      default: return 'Unknown';
+// Chat Starter Component
+function ChatStarter({ onStartConversation }: { onStartConversation: (query: string) => void }) {
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      onStartConversation(query.trim());
     }
   };
 
   return (
-    <div className="group bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-blue-500/20 hover:shadow-blue-500/10 p-6 min-w-[300px] max-w-[300px]">
-      <div className="flex flex-col items-center text-center">
-        {/* Avatar with status indicator */}
-        <div className="relative mb-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-            {agent.name.split(' ').map((n: string) => n[0]).join('')}
-          </div>
-          {/* Status indicator */}
-          <div className={`absolute -bottom-1 -right-1 w-6 h-6 ${getStatusColor(agent.status)} rounded-full border-2 border-white flex items-center justify-center`}>
-            <div className="w-2 h-2 bg-white rounded-full"></div>
-          </div>
-        </div>
-        
-        {/* Agent info */}
-        <h3 className="font-semibold text-gray-900 mb-1 text-lg">{agent.name}</h3>
-        <p className="text-sm text-gray-600 mb-2">{agent.role}</p>
-        <p className="text-xs text-gray-500 mb-4">{getStatusText(agent.status)}</p>
-        
-        {/* Skills badges */}
-        <div className="flex flex-wrap gap-2 mb-6 justify-center">
-          {agent.skills.map((skill: string, index: number) => (
-            <span
+    <div className="max-w-4xl mx-auto px-6 py-16">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Your AI Council
+        </h1>
+        <p className="text-xl text-gray-600 mb-8">
+          Summon, feed, and collaborate with focused agents representing specific domains
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="What's your obsession today?"
+          className="w-full px-8 py-6 text-xl border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-lg"
+        />
+        <button
+          type="submit"
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 p-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+        >
+          <Send size={24} />
+        </button>
+      </form>
+
+      <div className="mt-8 text-center">
+        <p className="text-gray-500 mb-4">Try asking about:</p>
+        <div className="flex flex-wrap justify-center gap-3">
+          {[
+            "Argentina's economy in the 80s",
+            "Cryptocurrency regulation",
+            "Climate change solutions",
+            "AI ethics and governance"
+          ].map((example, index) => (
+            <button
               key={index}
-              className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200 hover:border-blue-300 transition-colors"
+              onClick={() => setQuery(example)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
             >
-              {skill}
-            </span>
+              {example}
+            </button>
           ))}
         </div>
-        
-        {/* Quick actions */}
-        <div className="flex flex-col gap-2 w-full">
-          {agent.actions.slice(0, 2).map((action: any, index: number) => {
-            const IconComponent = action.icon;
-            return (
-              <button
-                key={index}
-                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 min-h-[44px] ${
-                  action.primary
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900'
-                }`}
-              >
-                <IconComponent size={16} />
-                {action.label}
-              </button>
-            );
-          })}
-          
-          {/* Chat button */}
-          <button className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors min-h-[44px] border border-blue-200 hover:border-blue-300">
-            <MessageSquare size={16} />
-            Chat
-          </button>
-        </div>
       </div>
     </div>
   );
 }
 
-// Agent Row Component
-function AgentRow({ category }: { category: any }) {
+// Conversation Thread Component
+function ConversationThread({ 
+  thread, 
+  onSendMessage 
+}: { 
+  thread: Thread; 
+  onSendMessage: (content: string) => void;
+}) {
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread.messages]);
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newMessage.trim()) {
+      onSendMessage(newMessage.trim());
+      setNewMessage('');
+    }
+  };
+
   return (
-    <div className="mb-8">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6 px-6">{category.title}</h2>
-      <div className="flex gap-6 overflow-x-auto px-6 pb-4">
-        {category.agents.map((agent: any) => (
-          <AgentTile key={agent.id} agent={agent} />
-        ))}
-        
-        {/* Add new agent tile */}
-        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 min-w-[300px] max-w-[300px] flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 cursor-pointer group">
-          <div className="w-20 h-20 bg-gray-200 group-hover:bg-blue-200 rounded-xl mb-4 flex items-center justify-center transition-colors">
-            <span className="text-3xl text-gray-400 group-hover:text-blue-500 transition-colors">+</span>
-          </div>
-          <p className="text-gray-600 font-medium mb-2">Create New Agent</p>
-          <p className="text-sm text-gray-500">Custom specialist for your workflow</p>
-        </div>
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Thread Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <h2 className="text-xl font-semibold text-gray-900">{thread.title}</h2>
+        <p className="text-sm text-gray-500">
+          {thread.activeAgents.length} advisors • {thread.messages.length} messages
+        </p>
       </div>
-    </div>
-  );
-}
 
-// Enhanced Chat Bar Component - Phase 3
-function ChatBar() {
-  const [message, setMessage] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState<string>('all');
-  const [showCommands, setShowCommands] = useState(false);
-  const [showAgentSelector, setShowAgentSelector] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-
-  // Slash commands
-  const slashCommands = [
-    { 
-      command: '/audit', 
-      description: 'Run accessibility and design audit',
-      agent: 'Design Guardian',
-      icon: CheckCircle,
-      color: 'text-green-600'
-    },
-    { 
-      command: '/generate', 
-      description: 'Generate design specs and tokens',
-      agent: 'Spec Generator',
-      icon: Zap,
-      color: 'text-purple-600'
-    },
-    { 
-      command: '/check', 
-      description: 'Check layout and spacing',
-      agent: 'Layout Inspector',
-      icon: Eye,
-      color: 'text-blue-600'
-    },
-    { 
-      command: '/review', 
-      description: 'Review typography and readability',
-      agent: 'Typographer',
-      icon: Settings,
-      color: 'text-orange-600'
-    }
-  ];
-
-  // Recent commands history
-  const recentCommands = [
-    'Run accessibility audit on homepage',
-    'Generate design tokens for buttons',
-    'Check grid alignment in header',
-    'Review font sizes and contrast'
-  ];
-
-  // Get all agents for selector
-  const allAgents = AGENT_CATEGORIES.flatMap(category => 
-    category.agents.map(agent => ({
-      ...agent,
-      category: category.title
-    }))
-  );
-
-  // Filter slash commands based on input
-  const filteredCommands = slashCommands.filter(cmd =>
-    message.toLowerCase().includes(cmd.command.toLowerCase()) ||
-    (message.startsWith('/') && cmd.command.toLowerCase().includes(message.toLowerCase().slice(1)))
-  );
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setMessage(value);
-    
-    // Show slash commands if user types /
-    if (value.startsWith('/') && value.length > 1) {
-      setShowCommands(true);
-    } else {
-      setShowCommands(false);
-    }
-  };
-
-  const handleCommandSelect = (command: string) => {
-    setMessage(command + ' ');
-    setShowCommands(false);
-  };
-
-  const handleSend = () => {
-    if (message.trim()) {
-      console.log(`Sending to ${selectedAgent}: ${message}`);
-      setMessage('');
-      setShowCommands(false);
-    }
-  };
-
-  const getAgentStatus = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'busy': return 'bg-orange-500';
-      case 'offline': return 'bg-gray-400';
-      default: return 'bg-gray-400';
-    }
-  };
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg backdrop-blur-sm bg-white/95 z-50">
-      {/* Slash Commands Dropdown */}
-      {showCommands && filteredCommands.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg max-w-4xl mx-auto mb-1">
-          <div className="p-3 border-b border-gray-100">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Command size={16} />
-              <span>Slash Commands</span>
-            </div>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {filteredCommands.map((cmd, index) => {
-              const IconComponent = cmd.icon;
-              return (
-                <button
-                  key={index}
-                  onClick={() => handleCommandSelect(cmd.command)}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 last:border-b-0"
-                >
-                  <div className={`p-2 rounded-lg bg-gray-100 ${cmd.color}`}>
-                    <IconComponent size={16} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{cmd.command}</div>
-                    <div className="text-sm text-gray-500">{cmd.description}</div>
-                    <div className="text-xs text-gray-400 mt-1">→ {cmd.agent}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* History Dropdown */}
-      {showHistory && (
-        <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg max-w-4xl mx-auto mb-1">
-          <div className="p-3 border-b border-gray-100">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Clock size={16} />
-              <span>Recent Commands</span>
-            </div>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {recentCommands.map((cmd, index) => (
-              <button
-                key={index}
-                onClick={() => setMessage(cmd)}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 last:border-b-0"
-              >
-                <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
-                  <History size={16} />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm text-gray-900">{cmd}</div>
-                  <div className="text-xs text-gray-400 mt-1">2 minutes ago</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Agent Selector Dropdown */}
-      {showAgentSelector && (
-        <div className="absolute bottom-full right-0 bg-white border border-gray-200 rounded-t-lg shadow-lg mb-1 w-80">
-          <div className="p-3 border-b border-gray-100">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <User size={16} />
-              <span>Select Agent</span>
-            </div>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {/* All Agents Option */}
-            <button
-              onClick={() => {
-                setSelectedAgent('all');
-                setShowAgentSelector(false);
-              }}
-              className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 ${
-                selectedAgent === 'all' ? 'bg-blue-50 border-blue-200' : ''
-              }`}
-            >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                All
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-gray-900">All Agents</div>
-                <div className="text-sm text-gray-500">Broadcast to workforce</div>
-              </div>
-            </button>
-
-            {/* Individual Agents */}
-            {allAgents.map((agent) => (
-              <button
-                key={agent.id}
-                onClick={() => {
-                  setSelectedAgent(agent.id);
-                  setShowAgentSelector(false);
-                }}
-                className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-50 last:border-b-0 ${
-                  selectedAgent === agent.id ? 'bg-blue-50 border-blue-200' : ''
-                }`}
-              >
-                <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                    {agent.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${getAgentStatus(agent.status)} rounded-full border border-white`}></div>
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{agent.name}</div>
-                  <div className="text-sm text-gray-500">{agent.role}</div>
-                  <div className="text-xs text-gray-400">{agent.category}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Main Chat Bar */}
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="flex items-center gap-3">
-          {/* History Button */}
-          <button 
-            onClick={() => {
-              setShowHistory(!showHistory);
-              setShowAgentSelector(false);
-            }}
-            className={`p-2 rounded-lg transition-colors ${
-              showHistory 
-                ? 'text-blue-600 bg-blue-100' 
-                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {thread.messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex gap-4 ${
+              message.type === 'user' ? 'justify-end' : 'justify-start'
             }`}
           >
-            <History size={20} />
-          </button>
-          
-          {/* Message Input */}
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={message}
-              onChange={handleInputChange}
-              placeholder="Ask an agent to help you... (try /audit or /generate)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12"
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            />
-            {message.startsWith('/') && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <Command size={16} className="text-gray-400" />
+            {message.type === 'agent' && message.agent && (
+              <div className="flex-shrink-0">
+                <img
+                  src={message.agent.avatar}
+                  alt={message.agent.name}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
               </div>
             )}
-          </div>
-          
-          {/* Agent Selector */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowAgentSelector(!showAgentSelector);
-                setShowHistory(false);
-              }}
-              className={`px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none flex items-center gap-2 min-w-[160px] transition-all ${
-                showAgentSelector ? 'ring-2 ring-blue-500 border-transparent' : 'hover:border-gray-400'
+            
+            <div
+              className={`max-w-2xl px-4 py-3 rounded-2xl ${
+                message.type === 'user'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-100 text-gray-900'
               }`}
             >
-              <div className="flex items-center gap-2 flex-1">
-                {selectedAgent === 'all' ? (
-                  <>
-                    <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                      All
-                    </div>
-                    <span className="text-gray-700 text-sm">All Agents</span>
-                  </>
-                ) : (
-                  (() => {
-                    const agent = allAgents.find(a => a.id === selectedAgent);
-                    return agent ? (
-                      <>
-                        <div className="relative">
-                          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {agent.name.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 ${getAgentStatus(agent.status)} rounded-full border border-white`}></div>
-                        </div>
-                        <span className="text-gray-700 text-sm truncate">{agent.name}</span>
-                      </>
-                    ) : null;
-                  })()
-                )}
-              </div>
-              <ChevronDown size={16} className={`text-gray-400 transition-transform ${showAgentSelector ? 'rotate-180' : ''}`} />
-            </button>
+              {message.type === 'agent' && message.agent && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-semibold text-sm">{message.agent.name}</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    {message.agent.role}
+                  </span>
+                </div>
+              )}
+              <p className="text-sm">{message.content}</p>
+              <p className="text-xs opacity-70 mt-1">
+                {message.timestamp.toLocaleTimeString()}
+              </p>
+            </div>
           </div>
-          
-          {/* Send Button */}
-          <button 
-            onClick={handleSend}
-            disabled={!message.trim()}
-            className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send size={18} />
-            Send
-          </button>
-        </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
 
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2 mt-3 text-sm">
-          <span className="text-gray-500">Quick:</span>
-          {slashCommands.slice(0, 3).map((cmd, index) => (
-            <button
-              key={index}
-              onClick={() => handleCommandSelect(cmd.command)}
-              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-1"
-            >
-              <cmd.icon size={14} className={cmd.color} />
-              {cmd.command}
-            </button>
-          ))}
-        </div>
+      {/* Message Input */}
+      <div className="bg-white border-t border-gray-200 p-4">
+        <form onSubmit={handleSend} className="flex gap-3">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Continue the conversation..."
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+          />
+          <button
+            type="submit"
+            className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+          >
+            <Send size={20} />
+          </button>
+        </form>
       </div>
     </div>
   );
 }
 
-// Agent Creation Modal - Phase 4
-function CreateAgentModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [agentData, setAgentData] = useState({
-    name: '',
-    role: '',
-    category: '',
-    description: '',
-    skills: [] as string[],
-    actions: [] as string[],
-    personality: '',
-    expertise: [] as string[]
-  });
+// Agent Roster Sidebar Component
+function AgentRoster({ 
+  agents, 
+  activeAgents, 
+  onToggleAgent, 
+  onRemoveAgent,
+  onPinAgent,
+  onHideAgent 
+}: {
+  agents: typeof AGENTS;
+  activeAgents: string[];
+  onToggleAgent: (agentId: string) => void;
+  onRemoveAgent: (agentId: string) => void;
+  onPinAgent: (agentId: string) => void;
+  onHideAgent: (agentId: string) => void;
+}) {
+  const [showSettings, setShowSettings] = useState(false);
 
-  const totalSteps = 4;
-
-  // Predefined options
-  const categories = [
-    { id: 'qa-audit', title: '🧪 QA & Audit', description: 'Quality assurance and auditing specialists' },
-    { id: 'build-spec', title: '🛠️ Build & Spec', description: 'System builders and specification generators' },
-    { id: 'reviewers', title: '👀 Reviewers', description: 'Content and design reviewers' },
-    { id: 'custom', title: '⚡ Custom', description: 'Create your own specialized category' }
-  ];
-
-  const skillOptions = [
-    '🕵️ Audit', '⚡ Actions', '📊 Metrics', '♿ A11Y', '🎯 WCAG', '🔍 Scan',
-    '✍️ Spec', '🎨 Tokens', '📐 Layout', '📏 Spacing', '🎯 Alignment',
-    '🔠 Type', '📖 Readability', '🎨 Contrast', '🌀 Motion', '⏱️ Duration', '🎭 Easing'
-  ];
-
-  const actionOptions = [
-    'Run Audit', 'Check Contrast', 'Scan A11Y', 'Generate Spec', 'Create Tokens',
-    'Export CSS', 'Check Grid', 'Measure Spacing', 'Validate Layout', 'Review Type',
-    'Check Readability', 'Test Contrast', 'Review Motion', 'Check Duration', 'Test Interactions'
-  ];
-
-  const personalityOptions = [
-    { id: 'professional', label: 'Professional', description: 'Formal, precise, and methodical' },
-    { id: 'friendly', label: 'Friendly', description: 'Approachable, helpful, and encouraging' },
-    { id: 'expert', label: 'Expert', description: 'Authoritative, detailed, and technical' },
-    { id: 'creative', label: 'Creative', description: 'Innovative, inspiring, and artistic' }
-  ];
-
-  const expertiseOptions = [
-    'Design Systems', 'Accessibility', 'Performance', 'SEO', 'Typography', 'Color Theory',
-    'User Experience', 'Frontend Development', 'CSS Architecture', 'Component Design',
-    'Brand Guidelines', 'Responsive Design', 'Animation', 'Prototyping'
-  ];
-
-  const handleNext = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'responding': return 'bg-orange-500';
+      case 'idle': return 'bg-gray-400';
+      default: return 'bg-gray-400';
     }
   };
-
-  const handlePrevious = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleSkillToggle = (skill: string) => {
-    setAgentData(prev => ({
-      ...prev,
-      skills: prev.skills.includes(skill)
-        ? prev.skills.filter(s => s !== skill)
-        : [...prev.skills, skill]
-    }));
-  };
-
-  const handleActionToggle = (action: string) => {
-    setAgentData(prev => ({
-      ...prev,
-      actions: prev.actions.includes(action)
-        ? prev.actions.filter(a => a !== action)
-        : [...prev.actions, action]
-    }));
-  };
-
-  const handleExpertiseToggle = (expertise: string) => {
-    setAgentData(prev => ({
-      ...prev,
-      expertise: prev.expertise.includes(expertise)
-        ? prev.expertise.filter(e => e !== expertise)
-        : [...prev.expertise, expertise]
-    }));
-  };
-
-  const handleCreate = () => {
-    console.log('Creating agent:', agentData);
-    // Here you would typically save the agent to your backend
-    onClose();
-    // Reset form
-    setCurrentStep(1);
-    setAgentData({
-      name: '',
-      role: '',
-      category: '',
-      description: '',
-      skills: [],
-      actions: [],
-      personality: '',
-      expertise: []
-    });
-  };
-
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Create New Agent</h2>
-              <p className="text-sm text-gray-500">Step {currentStep} of {totalSteps}</p>
-            </div>
-          </div>
+    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Your Council</h3>
           <button
-            onClick={onClose}
+            onClick={() => setShowSettings(!showSettings)}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X size={20} />
+            <Settings size={20} />
           </button>
         </div>
+      </div>
 
-        {/* Progress Bar */}
-        <div className="px-6 py-4 bg-gray-50">
-          <div className="flex items-center justify-between mb-2">
-            {Array.from({ length: totalSteps }, (_, i) => (
-              <div key={i} className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  i + 1 <= currentStep 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-500'
-                }`}>
-                  {i + 1}
-                </div>
-                {i < totalSteps - 1 && (
-                  <div className={`w-16 h-1 mx-2 rounded ${
-                    i + 1 < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-                  }`} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Basic Info</span>
-            <span>Category</span>
-            <span>Skills</span>
-            <span>Review</span>
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="p-4 bg-gray-50 border-b border-gray-200">
+          <h4 className="font-medium text-gray-900 mb-3">Agent Preferences</h4>
+          <div className="space-y-2">
+            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
+              <Pin size={16} />
+              Pin agents to always include
+            </button>
+            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
+              <EyeOff size={16} />
+              Hide agents from auto-join
+            </button>
+            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
+              <Users size={16} />
+              Curate "My Council"
+            </button>
           </div>
         </div>
+      )}
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {/* Step 1: Basic Information */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Agent Name</label>
-                <input
-                  type="text"
-                  value={agentData.name}
-                  onChange={(e) => setAgentData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Design Guardian, Code Reviewer"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                <input
-                  type="text"
-                  value={agentData.role}
-                  onChange={(e) => setAgentData(prev => ({ ...prev, role: e.target.value }))}
-                  placeholder="e.g., Accessibility Specialist, Design System Expert"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={agentData.description}
-                  onChange={(e) => setAgentData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe what this agent specializes in and how it can help..."
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
-                />
-              </div>
-            </div>
-          )}
+      {/* Create New Agent */}
+      <div className="p-4 border-b border-gray-200">
+        <button className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2">
+          <Plus size={20} />
+          <span className="font-medium text-gray-700">Create New Agent</span>
+        </button>
+      </div>
 
-          {/* Step 2: Category Selection */}
-          {currentStep === 2 && (
-            <div className="space-y-4">
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Choose a Category</h3>
-                <p className="text-gray-600">Select the category that best fits your agent's purpose</p>
-              </div>
-              
-              <div className="grid grid-cols-1 gap-4">
-                {categories.map((category) => (
+      {/* Active Agents */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4">
+          <h4 className="text-sm font-medium text-gray-500 mb-3">Active Advisors</h4>
+          <div className="space-y-3">
+            {agents
+              .filter(agent => activeAgents.includes(agent.id))
+              .map((agent) => (
+                <div
+                  key={agent.id}
+                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
+                >
+                  <div className="relative">
+                    <img
+                      src={agent.avatar}
+                      alt={agent.name}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{agent.name}</p>
+                    <p className="text-sm text-gray-500 truncate">{agent.role}</p>
+                  </div>
+
                   <button
-                    key={category.id}
-                    onClick={() => setAgentData(prev => ({ ...prev, category: category.id }))}
-                    className={`p-4 border-2 rounded-xl text-left transition-all ${
-                      agentData.category === category.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
+                    onClick={() => onRemoveAgent(agent.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">{category.title.split(' ')[0]}</div>
-                      <div>
-                        <div className="font-medium text-gray-900">{category.title}</div>
-                        <div className="text-sm text-gray-600">{category.description}</div>
-                      </div>
-                    </div>
+                    <X size={16} />
                   </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Skills and Actions */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Skills & Capabilities</h3>
-                <p className="text-gray-600 mb-4">Select the skills your agent will have</p>
-                
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6">
-                  {skillOptions.map((skill) => (
-                    <button
-                      key={skill}
-                      onClick={() => handleSkillToggle(skill)}
-                      className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-                        agentData.skills.includes(skill)
-                          ? 'bg-blue-100 border-blue-300 text-blue-700'
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {skill}
-                    </button>
-                  ))}
                 </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Actions</h3>
-                <p className="text-gray-600 mb-4">Choose actions your agent can perform</p>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {actionOptions.map((action) => (
-                    <button
-                      key={action}
-                      onClick={() => handleActionToggle(action)}
-                      className={`px-3 py-2 text-sm rounded-lg border text-left transition-colors ${
-                        agentData.actions.includes(action)
-                          ? 'bg-green-100 border-green-300 text-green-700'
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {action}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Review and Create */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Review Your Agent</h3>
-                <p className="text-gray-600">Make sure everything looks good before creating</p>
-              </div>
-
-              {/* Agent Preview */}
-              <div className="bg-gray-50 rounded-xl p-6">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-xl font-bold">
-                    {agentData.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
-                  <div>
-                    <h4 className="text-xl font-semibold text-gray-900">{agentData.name || 'Unnamed Agent'}</h4>
-                    <p className="text-gray-600">{agentData.role || 'No role specified'}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-sm text-gray-500">Ready to deploy</span>
-                    </div>
-                  </div>
-                </div>
-
-                {agentData.description && (
-                  <p className="text-gray-700 mb-4">{agentData.description}</p>
-                )}
-
-                {agentData.skills.length > 0 && (
-                  <div className="mb-4">
-                    <h5 className="font-medium text-gray-900 mb-2">Skills</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {agentData.skills.map((skill, index) => (
-                        <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {agentData.actions.length > 0 && (
-                  <div>
-                    <h5 className="font-medium text-gray-900 mb-2">Quick Actions</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {agentData.actions.slice(0, 3).map((action, index) => (
-                        <span key={index} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                          {action}
-                        </span>
-                      ))}
-                      {agentData.actions.length > 3 && (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                          +{agentData.actions.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+              ))}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={handlePrevious}
-            disabled={currentStep === 1}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Previous
-          </button>
-
-          <div className="flex items-center gap-3">
-            {currentStep < totalSteps ? (
-              <button
-                onClick={handleNext}
-                disabled={
-                  (currentStep === 1 && (!agentData.name || !agentData.role)) ||
-                  (currentStep === 2 && !agentData.category)
-                }
-                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Next
-                <ArrowRight size={16} />
-              </button>
-            ) : (
-              <button
-                onClick={handleCreate}
-                className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Plus size={16} />
-                Create Agent
-              </button>
-            )}
+        {/* Available Agents */}
+        <div className="p-4 border-t border-gray-200">
+          <h4 className="text-sm font-medium text-gray-500 mb-3">Available Advisors</h4>
+          <div className="space-y-2">
+            {agents
+              .filter(agent => !activeAgents.includes(agent.id) && !agent.hidden)
+              .map((agent) => (
+                <button
+                  key={agent.id}
+                  onClick={() => onToggleAgent(agent.id)}
+                  className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <img
+                    src={agent.avatar}
+                    alt={agent.name}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium text-gray-900">{agent.name}</p>
+                    <p className="text-xs text-gray-500">{agent.role}</p>
+                  </div>
+                  <Plus size={16} className="text-gray-400" />
+                </button>
+              ))}
           </div>
         </div>
       </div>
@@ -1197,182 +421,93 @@ function CreateAgentModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
   );
 }
 
-// Minimalistic Agent Card - Avatar Focused
-function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
-  // Map agent names to actual avatar files
-  const getAvatarPath = (agentName: string) => {
-    const avatarMap: { [key: string]: string } = {
-      // Governance & Democracy
-      'James Madison': '/agents/James Madison.png',
-      'Nelson Mandela': '/agents/Nelson Mandela.png',
-      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
-      
-      // Economics & Finance
-      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
-      'Milton Friedman': '/agents/Milton Friedman.png',
-      'Hal Finney': '/agents/Hal Finney.png',
-      'Benjamin Graham': '/agents/Benjamin Graham.png',
-      
-      // Social Justice & Labor
-      'Martin Luther King Jr.': '/agents/MLK.png',
-      'Mother Jones': '/agents/Mother Jones.png',
-      
-      // Technology & Science
-      'Alan Turing': '/agents/Alan Turing.png',
-      'John McCarthy': '/agents/John McCarthy.png',
-      'Albert Einstein': '/agents/Albert Einstein.png',
-      'Charles Darwin': '/agents/Charles Darwin.png',
-      
-      // Environment & Urbanism
-      'Teddy Roosevelt': '/agents/Teddy Roosevelt.png',
-      'Frederick Law Olmsted': '/agents/Frederick Law Olmsted.png',
-      
-      // Media & Psychology
-      'Edward Murrow': '/agents/Edward Murrow.png',
-      'Sigmund Freud': '/agents/Sigmund Freud.png',
-      
-      // Philosophy & Theology
-      'Socrates': '/agents/Socrates.png',
-      'Martin Luther': '/agents/Martin Luther.png',
-      'Mark Twain': '/agents/Mark Twain.png'
-    };
-    return avatarMap[agentName] || '/agents/Alan Turing.png';
-  };
+// Feed the Agent Modal
+function FeedAgentModal({ 
+  isOpen, 
+  onClose, 
+  agent 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  agent: typeof AGENTS[0] | null;
+}) {
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [label, setLabel] = useState('');
 
-  return (
-    <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
-        {/* Avatar - Main Focus */}
-        <div className="aspect-square relative">
-          <img
-            src={getAvatarPath(agent.name)}
-            alt={agent.name}
-            className="w-full h-full object-cover object-top"
-          />
-          {/* Subtle overlay on hover */}
-          <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
-        </div>
-        
-        {/* Agent Info - Minimal */}
-        <div className="p-4 text-center">
-          <h3 className="font-bold text-gray-900 text-lg mb-1">{agent.name}</h3>
-          <p className="text-sm text-gray-600 font-medium">{agent.role}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Agent Detail Modal
-function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: boolean; onClose: () => void }) {
   if (!isOpen || !agent) return null;
-
-  const getAvatarPath = (agentName: string) => {
-    const avatarMap: { [key: string]: string } = {
-      // Governance & Democracy
-      'James Madison': '/agents/James Madison.png',
-      'Nelson Mandela': '/agents/Nelson Mandela.png',
-      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
-      
-      // Economics & Finance
-      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
-      'Milton Friedman': '/agents/Milton Friedman.png',
-      'Hal Finney': '/agents/Hal Finney.png',
-      'Benjamin Graham': '/agents/Benjamin Graham.png',
-      
-      // Social Justice & Labor
-      'Martin Luther King Jr.': '/agents/MLK.png',
-      'Mother Jones': '/agents/Mother Jones.png',
-      
-      // Technology & Science
-      'Alan Turing': '/agents/Alan Turing.png',
-      'John McCarthy': '/agents/John McCarthy.png',
-      'Albert Einstein': '/agents/Albert Einstein.png',
-      'Charles Darwin': '/agents/Charles Darwin.png',
-      
-      // Environment & Urbanism
-      'Teddy Roosevelt': '/agents/Teddy Roosevelt.png',
-      'Frederick Law Olmsted': '/agents/Frederick Law Olmsted.png',
-      
-      // Media & Psychology
-      'Edward Murrow': '/agents/Edward Murrow.png',
-      'Sigmund Freud': '/agents/Sigmund Freud.png',
-      
-      // Philosophy & Theology
-      'Socrates': '/agents/Socrates.png',
-      'Martin Luther': '/agents/Martin Luther.png',
-      'Mark Twain': '/agents/Mark Twain.png'
-    };
-    return avatarMap[agentName] || '/agents/Alan Turing.png';
-  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <img
-                src={getAvatarPath(agent.name)}
-                alt={agent.name}
-                className="w-16 h-16 rounded-full object-cover object-top"
-              />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{agent.name}</h2>
-                <p className="text-gray-600">{agent.role}</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X size={24} />
-            </button>
+      <div className="bg-white rounded-2xl max-w-md w-full p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <img
+            src={agent.avatar}
+            alt={agent.name}
+            className="w-12 h-12 rounded-full object-cover"
+          />
+          <div>
+            <h3 className="font-semibold text-gray-900">Feed {agent.name}</h3>
+            <p className="text-sm text-gray-500">Add knowledge to this agent</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              URL or Document
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/article"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            />
           </div>
 
-          {/* Skills */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Expertise</h3>
-            <div className="flex flex-wrap gap-2">
-              {agent.skills.map((skill: string, index: number) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Note or Context (optional)
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Add context about this source..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none resize-none"
+            />
           </div>
 
-          {/* Actions */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {agent.actions.map((action: any, index: number) => {
-                const IconComponent = action.icon;
-                return (
-                  <button
-                    key={index}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-                      action.primary
-                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <IconComponent size={20} />
-                    <span className="font-medium">{action.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Label (optional)
+            </label>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g., 'X says this' vs 'Y counters with this'"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            />
           </div>
+        </div>
 
-          {/* Chat Button */}
-          <button className="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2">
-            <MessageSquare size={20} />
-            Start Chat
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              console.log('Feeding agent:', { agent: agent.name, url, note, label });
+              onClose();
+            }}
+            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+          >
+            Feed Agent
           </button>
         </div>
       </div>
@@ -1380,63 +515,136 @@ function AgentDetailModal({ agent, isOpen, onClose }: { agent: any; isOpen: bool
   );
 }
 
-// Main Page Component - Minimalistic Design
+// Main Rabbit Page Component
 export default function RabbitPage() {
-  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [currentView, setCurrentView] = useState<'starter' | 'conversation'>('starter');
+  const [agents, setAgents] = useState(AGENTS);
+  const [activeAgents, setActiveAgents] = useState<string[]>([]);
+  const [currentThread, setCurrentThread] = useState<Thread | null>(null);
+  const [showFeedModal, setShowFeedModal] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<typeof AGENTS[0] | null>(null);
 
-  const handleAgentClick = (agent: any) => {
-    setSelectedAgent(agent);
+  // Auto-join agents based on query
+  const autoJoinAgents = (query: string) => {
+    const queryLower = query.toLowerCase();
+    const relevantAgents = agents.filter(agent => 
+      agent.expertise.some(skill => 
+        skill.toLowerCase().includes(queryLower) || 
+        queryLower.includes(skill.toLowerCase())
+      )
+    );
+    return relevantAgents.map(agent => agent.id);
   };
 
+  const handleStartConversation = (query: string) => {
+    const autoJoined = autoJoinAgents(query);
+    setActiveAgents(autoJoined);
+    
+    const newThread: Thread = {
+      id: Date.now().toString(),
+      title: query.length > 50 ? query.substring(0, 50) + '...' : query,
+      messages: [
+        {
+          id: '1',
+          type: 'user',
+          content: query,
+          timestamp: new Date()
+        }
+      ],
+      activeAgents: autoJoined,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    setCurrentThread(newThread);
+    setCurrentView('conversation');
+  };
+
+  const handleSendMessage = (content: string) => {
+    if (!currentThread) return;
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content,
+      timestamp: new Date()
+    };
+
+    setCurrentThread(prev => prev ? {
+      ...prev,
+      messages: [...prev.messages, newMessage],
+      updatedAt: new Date()
+    } : null);
+  };
+
+  const handleToggleAgent = (agentId: string) => {
+    setActiveAgents(prev => 
+      prev.includes(agentId) 
+        ? prev.filter(id => id !== agentId)
+        : [...prev, agentId]
+    );
+  };
+
+  const handleRemoveAgent = (agentId: string) => {
+    setActiveAgents(prev => prev.filter(id => id !== agentId));
+  };
+
+  const handlePinAgent = (agentId: string) => {
+    setAgents(prev => prev.map(agent => 
+      agent.id === agentId 
+        ? { ...agent, pinned: !agent.pinned }
+        : agent
+    ));
+  };
+
+  const handleHideAgent = (agentId: string) => {
+    setAgents(prev => prev.map(agent => 
+      agent.id === agentId 
+        ? { ...agent, hidden: !agent.hidden }
+        : agent
+    ));
+  };
+
+  const handleFeedAgent = (agent: typeof AGENTS[0]) => {
+    setSelectedAgent(agent);
+    setShowFeedModal(true);
+  };
+
+  if (currentView === 'starter') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <ChatStarter onStartConversation={handleStartConversation} />
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white">
-      {/* Generous white space and main phrase */}
-      <div className="pt-24 pb-12">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
-          
-          {/* Prominent search box */}
-          <div className="max-w-2xl mx-auto px-6">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search for an AI agent..."
-                className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-sm"
-              />
-              <Search className="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400" size={24} />
-            </div>
-          </div>
-          
-          {/* Create Agent Button */}
-          <div className="mt-8">
-            <button className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold rounded-2xl hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-              <Plus size={24} />
-              Create New Agent
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Main Conversation Area */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {currentThread && (
+          <ConversationThread 
+            thread={currentThread}
+            onSendMessage={handleSendMessage}
+          />
+        )}
       </div>
-      
-      {/* Agent Grid - Avatar Focused */}
-      <div className="px-6 pb-16">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
-            {AGENT_CATEGORIES.flatMap(category => category.agents).map((agent) => (
-              <AgentCard 
-                key={agent.id} 
-                agent={agent} 
-                onClick={() => handleAgentClick(agent)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      {/* Agent Detail Modal */}
-      <AgentDetailModal 
+
+      {/* Agent Roster Sidebar */}
+      <AgentRoster
+        agents={agents}
+        activeAgents={activeAgents}
+        onToggleAgent={handleToggleAgent}
+        onRemoveAgent={handleRemoveAgent}
+        onPinAgent={handlePinAgent}
+        onHideAgent={handleHideAgent}
+      />
+
+      {/* Feed Agent Modal */}
+      <FeedAgentModal
+        isOpen={showFeedModal}
+        onClose={() => setShowFeedModal(false)}
         agent={selectedAgent}
-        isOpen={!!selectedAgent}
-        onClose={() => setSelectedAgent(null)}
       />
     </div>
   );
