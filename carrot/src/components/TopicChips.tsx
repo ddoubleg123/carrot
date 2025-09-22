@@ -47,7 +47,7 @@ export function TopicChips({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
-    if (e.key === 'Alt' && e.key === 'Enter') {
+    if (e.altKey && e.key === 'Enter') {
       e.preventDefault();
       onExclude(id);
     }
