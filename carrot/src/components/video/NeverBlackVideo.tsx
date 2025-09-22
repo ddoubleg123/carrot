@@ -285,6 +285,17 @@ export default function NeverBlackVideo({
   // GUARANTEE: Always show something - never black
   const hasVisibleContent = showPoster || showPlaceholder || showLoading || showFrozenFrame;
 
+  // Debug HUD toggle (works in production when localStorage.DEBUG_FEED === '1')
+  const [debugHud, setDebugHud] = useState(false);
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const val = (window.localStorage?.getItem('DEBUG_FEED') || '').trim();
+        setDebugHud(val === '1' || process.env.NODE_ENV === 'development');
+      }
+    } catch {}
+  }, []);
+
   return (
     <div className={`relative ${className}`} style={{ aspectRatio: '16/9' }}>
       {/* Video element - only show when playing */}
@@ -371,11 +382,14 @@ export default function NeverBlackVideo({
         </div>
       )}
 
-      {/* Development indicators */}
-      {process.env.NODE_ENV === 'development' && (
+      {/* Debug indicators */}
+      {debugHud && (
         <div className="absolute top-2 right-2 text-xs bg-black bg-opacity-75 text-white px-2 py-1 rounded space-y-1">
           <div>P:{isPosterPreloaded ? '✓' : '○'} V:{isVideoPreloaded ? '✓' : '○'}</div>
           <div>F:{fallbackAttempt} {posterError ? 'ERR' : posterLoaded ? 'OK' : 'LOAD'}</div>
+          <div>Play:{isPlaying ? '▶' : '❚❚'} Ready:{(videoRef.current?.readyState ?? 0)}</div>
+          <div>Src:{(videoUrl || '').slice(0, 32)}...</div>
+          <div>Poster:{(currentPosterUrl || '').slice(0, 32)}...</div>
         </div>
       )}
 

@@ -16,7 +16,21 @@ import {
   FileText,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Search,
+  Filter,
+  Play,
+  CheckCircle,
+  AlertTriangle,
+  Command,
+  Clock,
+  User,
+  ArrowRight,
+  ArrowLeft,
+  Target,
+  Palette,
+  Code,
+  Shield
 } from 'lucide-react';
 
 // Design Tokens
@@ -117,7 +131,45 @@ interface Thread {
   updatedAt: Date;
 }
 
-// Chat Starter Component
+// Original Agent Card Component (from the original design)
+function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
+  const getAvatarPath = (agentName: string) => {
+    const avatarMap: { [key: string]: string } = {
+      'Milton Friedman': '/agents/Milton Friedman.png',
+      'John Maynard Keynes': '/agents/John Maynard Keynes.png',
+      'Zbigniew Brzezinski': '/agents/Zbigniew Brzezinski.png',
+      'Hal Finney': '/agents/Hal Finney.png',
+      'Nelson Mandela': '/agents/Nelson Mandela.png',
+      'Socrates': '/agents/Socrates.png'
+    };
+    return avatarMap[agentName] || '/agents/Alan Turing.png';
+  };
+
+  return (
+    <div className="group cursor-pointer" onClick={onClick}>
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105">
+        {/* Avatar - Main Focus */}
+        <div className="aspect-square relative">
+          <img
+            src={getAvatarPath(agent.name)}
+            alt={agent.name}
+            className="w-full h-full object-cover object-top"
+          />
+          {/* Subtle overlay on hover */}
+          <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
+        </div>
+        
+        {/* Agent Info - Minimal */}
+        <div className="p-4 text-center">
+          <h3 className="font-bold text-gray-900 text-lg mb-1">{agent.name}</h3>
+          <p className="text-sm text-gray-600 font-medium">{agent.role}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Chat Starter Component (Original Design)
 function ChatStarter({ onStartConversation }: { onStartConversation: (query: string) => void }) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,51 +186,23 @@ function ChatStarter({ onStartConversation }: { onStartConversation: (query: str
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-16">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Your AI Council
-        </h1>
-        <p className="text-xl text-gray-600 mb-8">
-          Summon, feed, and collaborate with focused agents representing specific domains
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="relative">
+    <div className="max-w-2xl mx-auto px-6">
+      <div className="relative">
         <input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="What's your obsession today?"
-          className="w-full px-8 py-6 text-xl border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-lg"
+          className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:outline-none transition-colors shadow-sm"
+          onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
         />
         <button
-          type="submit"
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 p-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+          onClick={handleSubmit}
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 p-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
         >
-          <Send size={24} />
+          <Send size={20} />
         </button>
-      </form>
-
-      <div className="mt-8 text-center">
-        <p className="text-gray-500 mb-4">Try asking about:</p>
-        <div className="flex flex-wrap justify-center gap-3">
-          {[
-            "Argentina's economy in the 80s",
-            "Cryptocurrency regulation",
-            "Climate change solutions",
-            "AI ethics and governance"
-          ].map((example, index) => (
-            <button
-              key={index}
-              onClick={() => setQuery(example)}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-            >
-              {example}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -421,108 +445,12 @@ function AgentRoster({
   );
 }
 
-// Feed the Agent Modal
-function FeedAgentModal({ 
-  isOpen, 
-  onClose, 
-  agent 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  agent: typeof AGENTS[0] | null;
-}) {
-  const [url, setUrl] = useState('');
-  const [note, setNote] = useState('');
-  const [label, setLabel] = useState('');
-
-  if (!isOpen || !agent) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <img
-            src={agent.avatar}
-            alt={agent.name}
-            className="w-12 h-12 rounded-full object-cover"
-          />
-          <div>
-            <h3 className="font-semibold text-gray-900">Feed {agent.name}</h3>
-            <p className="text-sm text-gray-500">Add knowledge to this agent</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              URL or Document
-            </label>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/article"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Note or Context (optional)
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Add context about this source..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Label (optional)
-            </label>
-            <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g., 'X says this' vs 'Y counters with this'"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              console.log('Feeding agent:', { agent: agent.name, url, note, label });
-              onClose();
-            }}
-            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-          >
-            Feed Agent
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Main Rabbit Page Component
 export default function RabbitPage() {
-  const [currentView, setCurrentView] = useState<'starter' | 'conversation'>('starter');
+  const [currentView, setCurrentView] = useState<'grid' | 'conversation'>('grid');
   const [agents, setAgents] = useState(AGENTS);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
-  const [showFeedModal, setShowFeedModal] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<typeof AGENTS[0] | null>(null);
 
   // Auto-join agents based on query
   const autoJoinAgents = (query: string) => {
@@ -605,19 +533,39 @@ export default function RabbitPage() {
     ));
   };
 
-  const handleFeedAgent = (agent: typeof AGENTS[0]) => {
-    setSelectedAgent(agent);
-    setShowFeedModal(true);
-  };
-
-  if (currentView === 'starter') {
+  // Original Grid View (Default State)
+  if (currentView === 'grid') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <ChatStarter onStartConversation={handleStartConversation} />
+      <div className="bg-white">
+        {/* Generous white space and main phrase */}
+        <div className="pt-24 pb-12">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
+            
+            {/* Chat Starter */}
+            <ChatStarter onStartConversation={handleStartConversation} />
+          </div>
+        </div>
+        
+        {/* Agent Grid - Avatar Focused */}
+        <div className="px-6 pb-16">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+              {agents.map((agent) => (
+                <AgentCard 
+                  key={agent.id} 
+                  agent={agent} 
+                  onClick={() => handleStartConversation(`Chat with ${agent.name} about ${agent.role}`)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
+  // Conversation View (After User Engagement)
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Main Conversation Area */}
@@ -638,13 +586,6 @@ export default function RabbitPage() {
         onRemoveAgent={handleRemoveAgent}
         onPinAgent={handlePinAgent}
         onHideAgent={handleHideAgent}
-      />
-
-      {/* Feed Agent Modal */}
-      <FeedAgentModal
-        isOpen={showFeedModal}
-        onClose={() => setShowFeedModal(false)}
-        agent={selectedAgent}
       />
     </div>
   );

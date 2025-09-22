@@ -675,9 +675,17 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
         console.warn('[api/img] Could not extract bucket/path from URL', { url: target.toString() });
       }
       
-      // If re-signing failed, return 503
+      // If re-signing failed, last-resort: 302 redirect to original target to avoid black posters
       if (!upstream.ok) {
-        return new NextResponse('Image temporarily unavailable', { status: 503 });
+        try {
+          const hdrs = new Headers();
+          hdrs.set('location', target.toString());
+          hdrs.set('cache-control', 'private, max-age=60');
+          hdrs.set('x-proxy', 'img-last-resort-redirect');
+          return new NextResponse(null, { status: 302, headers: hdrs });
+        } catch {
+          return new NextResponse('Image temporarily unavailable', { status: 503 });
+        }
       }
     } else {
       console.warn('[api/img] upstream not ok', { host: target.hostname, status: upstream.status, body: errorBody.slice(0, 256) })

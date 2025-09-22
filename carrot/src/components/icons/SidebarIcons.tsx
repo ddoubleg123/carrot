@@ -146,16 +146,24 @@ export const FundsIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 export const CarrotPatchIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  // Stylized patch: single seedling, two leaves, wide base
-  <svg viewBox="0 0 32 32" width={24} height={24} fill="none" {...props}>
-    {/* Sprout stem */}
-    <rect x="14.7" y="10" width="2.6" height="7" rx="1.3" fill="currentColor" />
-    {/* Left leaf */}
-    <ellipse cx="13" cy="12.5" rx="2.2" ry="1.2" fill="currentColor" transform="rotate(-25 13 12.5)" />
-    {/* Right leaf */}
-    <ellipse cx="19" cy="12.5" rx="2.2" ry="1.2" fill="currentColor" transform="rotate(25 19 12.5)" />
-    {/* Patch base */}
-    <ellipse cx="16" cy="23.5" rx="10" ry="4.5" fill="currentColor" fillOpacity="0.32" />
+  // Knowledge icon: open book with lightbulb, representing learning and wisdom
+  <svg viewBox="0 0 24 24" width={24} height={24} fill="none" {...props}>
+    {/* Open book base */}
+    <path d="M4 6h16v12H4z" fill="currentColor" fillOpacity="0.1" />
+    {/* Book pages */}
+    <path d="M4 6h16v2H4z" fill="currentColor" fillOpacity="0.3" />
+    <path d="M4 8h16v2H4z" fill="currentColor" fillOpacity="0.2" />
+    <path d="M4 10h16v2H4z" fill="currentColor" fillOpacity="0.1" />
+    {/* Book spine */}
+    <rect x="2" y="6" width="2" height="12" fill="currentColor" fillOpacity="0.4" />
+    {/* Lightbulb (wisdom/knowledge) */}
+    <circle cx="12" cy="14" r="2.5" fill="currentColor" fillOpacity="0.8" />
+    <path d="M10 16.5h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    <path d="M11 18h2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    {/* Knowledge rays */}
+    <path d="M12 11.5l1 1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    <path d="M12 11.5l-1 1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    <path d="M12 11.5l0 1.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
   </svg>
 );
 
