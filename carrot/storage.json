@@ -1,4 +1,65 @@
 {
-  "cookies": [],
+  "cookies": [
+    {
+      "name": "__Host-authjs.csrf-token",
+      "value": "b8220a534e52ba52c7f1d984c89cef8b29f7762c22f85c0d5cac7e3a12e007c9%7C76d5164382ed0020076dadb69f1241188321a672ce96d2941843cfce02310e7e",
+      "domain": "carrot-app.onrender.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__Secure-authjs.callback-url",
+      "value": "https%3A%2F%2Fcarrot-app.onrender.com%2F",
+      "domain": "carrot-app.onrender.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__Secure-authjs.pkce.code_verifier",
+      "value": "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwia2lkIjoianMtWWFlREYybTdGNGUwTGxRM21zTlU0X2pVdFNFZVRldjRSUTRoc3hKU29MUlFDeGhpR00xMTNjaTUtVktOWXozbG9OVlJFa1lwNFhGRDA5NnpZdVEifQ..Rr1qSJAxYYPbeu3k3MTaMw.UlGr6nEQZ8owvrkNK9sF2pKALjbZa2e7dIZqLLKDQj1GLCD7WsQazpvQcI0X1XmheZxpSexLxEontodvEgAI8pyWb4lT5DwB5dSI_27IXkYmSFlwHOQ02-WtJlNiNd4iA04pae0YlHonNHTs7sAEuJn0orkrP1s5eiP2leHDhitPy3mmectq2AhrTM78_nh6.V2ZUUiuqW4CNu5b4kknR3UEcahIQim7_i-sMGqa_bMs",
+      "domain": "carrot-app.onrender.com",
+      "path": "/",
+      "expires": 1758498157.721349,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__Host-GAPS",
+      "value": "1:ALj1Kc21AnhsoDQ6DEwHzAggovBuGg:BouK3QL2R_QERewD",
+      "domain": "accounts.google.com",
+      "path": "/",
+      "expires": 1793057257.873889,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "OTZ",
+      "value": "8269888_72_76_104100_72_446760",
+      "domain": "accounts.google.com",
+      "path": "/",
+      "expires": 1761089258,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID",
+      "value": "525=JKJC0-OCd_zTrLsKYJOhIW9M4LGQz1cB_7olO068TkSBpuwVcvf-uLfDsVKnu-rlssRzHtKAnxyVTtYf_lHegJE7jW775iVX1z3WpZ1kxlPBJ7P758OOVlvOfV_Wl5jFO1cauGL69u99NzIuIq6ddhZvFM_Blk6Zy5I25EcH_b6pI_Lvg0G-tPn-XYFIdepXVuFZMQ",
+      "domain": ".google.com",
+      "path": "/",
+      "expires": 1774308458.326004,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
   "origins": []
 }

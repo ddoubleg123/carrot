@@ -204,19 +204,11 @@ class MediaPreloadQueue {
     }
   }
 
-  private getDependency(type: TaskType, feedIndex: number): string | undefined {
-    if (feedIndex === 0) return undefined; 
-
-    switch (type) {
-      case TaskType.POSTER:
-        return `${TaskType.POSTER}:post-${feedIndex - 1}`;
-      
-      case TaskType.VIDEO_PREROLL_6S:
-        return `${TaskType.POSTER}:post-${feedIndex}`;
-      
-      default:
-        return undefined;
-    }
+  private getDependency(_type: TaskType, _feedIndex: number): string | undefined {
+    // Disable ID-based dependency because task IDs are postId-based while this function
+    // only knows the feedIndex. We enforce ordering via sequential gating in canStartTask()
+    // and doesTaskAdvanceSequence(). Returning undefined here prevents permanent blocking.
+    return undefined;
   }
 
   // Remove task from queue and abort if running

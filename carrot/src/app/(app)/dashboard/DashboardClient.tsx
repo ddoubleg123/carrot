@@ -261,6 +261,36 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     } catch {}
   }, [setCommitments]);
 
+  // Map dashboard commitments to FeedMediaManager PostAsset and seed preloading
+  // This runs whenever the feed data changes and ensures the offscreen preloader is active
+  useEffect(() => {
+    (async () => {
+      try {
+        const mod = await import('../../../components/video/FeedMediaManager');
+        const FMM = (mod as any).default || mod;
+        if (!FMM) return;
+
+        const posts = (commitments || []).map((c, idx) => {
+          const hasVideo = !!(c as any).videoUrl;
+          const hasAudio = !!(c as any).audioUrl && !hasVideo;
+          const hasImages = Array.isArray((c as any).imageUrls) && (c as any).imageUrls.length > 0;
+          const type: 'video' | 'audio' | 'image' | 'text' = hasVideo ? 'video' : (hasAudio ? 'audio' : (hasImages ? 'image' : 'text'));
+          const thumbnailUrl = (c as any).thumbnailUrl || (hasImages ? (c as any).imageUrls[0] : null) || undefined;
+          const videoUrl = (c as any).videoUrl || undefined;
+          return {
+            id: String((c as any).id),
+            type,
+            thumbnailUrl,
+            videoUrl,
+            feedIndex: idx,
+          } as import('../../../components/video/FeedMediaManager').PostAsset;
+        });
+
+        FMM.inst.setPosts(posts);
+      } catch {}
+    })();
+  }, [commitments]);
+
   const handleDeletePost = useCallback(async (id: string) => {
     try {
       setCommitments(prev => prev.filter(p => p.id !== id));
@@ -420,6 +450,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           const handle = FMM.inst.getHandleByElement(activeEl);
           if (handle) {
             FMM.inst.setActive(handle);
+            try {
+              const idx = observed.indexOf(activeEl);
+              if (idx >= 0) {
+                FMM.inst.setViewportIndex(idx);
+              }
+            } catch {}
             try {
               const idx = observed.indexOf(activeEl);
               const id = activeEl.getAttribute('data-commitment-id');

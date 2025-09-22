@@ -619,10 +619,15 @@ export default function GroupPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
-      <MinimalNav />
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={`min-h-screen flex ${inter.className}`}>
+      {/* Left nav */}
+      <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+        <MinimalNav />
+      </aside>
+
+      {/* Main content area */}
+      <main className="flex-1 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
           <button 
@@ -641,7 +646,8 @@ export default function GroupPage() {
         <GroupHeader />
         <GroupTabs />
         {renderTabContent()}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

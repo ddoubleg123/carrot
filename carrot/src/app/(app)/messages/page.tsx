@@ -543,10 +543,15 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
-      <MinimalNav />
-      
-      <div className="flex h-screen">
+    <div className={`min-h-screen flex ${inter.className}`}>
+      {/* Left nav */}
+      <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+        <MinimalNav />
+      </aside>
+
+      {/* Main content area */}
+      <main className="flex-1 min-w-0">
+        <div className="flex h-screen">
         {/* Thread List Sidebar */}
         <div className="w-96 border-r border-gray-200 bg-white flex flex-col">
           {/* Header */}
@@ -623,9 +628,11 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* Modals */}
-      {showNewThread && <NewThreadModal />}
-      {showAIDraft && <AIDraftPanel />}
+        {/* Modals */}
+        {showNewThread && <NewThreadModal />}
+        {showAIDraft && <AIDraftPanel />}
+        </div>
+      </main>
     </div>
   );
 }
