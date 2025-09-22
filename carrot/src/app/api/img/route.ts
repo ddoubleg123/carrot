@@ -278,8 +278,8 @@ async function passthrough(upstream: Response) {
   return new NextResponse(body, { status, headers })
 }
 
-export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
-  const url = new URL(req.url)
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+  const url = new URL(_req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')
   const path = sp.get('path')
@@ -292,8 +292,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
     path,
     bucket,
     generatePoster,
-    userAgent: req.headers.get('user-agent')?.substring(0, 50),
-    referer: req.headers.get('referer')?.substring(0, 50)
+    userAgent: _req.headers.get('user-agent')?.substring(0, 50),
+    referer: _req.headers.get('referer')?.substring(0, 50)
   });
 
   // Prevent double-wrapping: if rawUrl already points to /api/img, reject
@@ -475,7 +475,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   const w = sp.get('w') ? Math.max(1, Math.min(4096, parseInt(sp.get('w') as string, 10) || 0)) : undefined
   const h = sp.get('h') ? Math.max(1, Math.min(4096, parseInt(sp.get('h') as string, 10) || 0)) : undefined
   const q = clampQuality(sp.get('q') ? parseInt(sp.get('q') as string, 10) : undefined)
-  const fmt = chooseFormat(req.headers.get('accept'), sp.get('format'))
+  const fmt = chooseFormat(_req.headers.get('accept'), sp.get('format'))
 
   // Fetch upstream
   let upstream: Response
@@ -486,7 +486,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
   });
   
   try {
-    upstream = await fetchUpstream(req, target)
+    upstream = await fetchUpstream(_req as any, target)
     console.log('[api/img] Upstream response received', { 
       status: upstream.status, 
       ok: upstream.ok,
@@ -600,7 +600,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{}> }) {
           console.log('[api/img] Generated fresh URL', { newUrl: resigned });
           try {
             const newTarget = new URL(resigned);
-            const retryUpstream = await fetchUpstream(req, newTarget);
+            const retryUpstream = await fetchUpstream(_req as any, newTarget);
             if (retryUpstream.ok) {
               console.log('[api/img] Successfully re-signed expired URL', { path: ext.path });
               upstream = retryUpstream;

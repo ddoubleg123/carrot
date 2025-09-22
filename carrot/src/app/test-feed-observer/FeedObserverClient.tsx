@@ -20,7 +20,7 @@ export default function FeedObserverClient({ posts }: { posts: ServerPost[] }) {
     (async () => {
       try {
         // Dynamically import to avoid SSR leaking
-        const mod = await import('../../../components/video/FeedMediaManager');
+        const mod = await import('@/components/video/FeedMediaManager');
         const FMM: any = (mod as any).default || mod;
         if (!FMM) return;
         const mapped = (posts || []).slice(0, 20).map((p, idx) => {

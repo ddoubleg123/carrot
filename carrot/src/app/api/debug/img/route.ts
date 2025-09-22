@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export async function GET(req: NextRequest) {
-  const url = new URL(req.url)
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+  const url = new URL(_req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')
   
   console.log('[debug/img] Debug request received', {
     rawUrl: rawUrl?.substring(0, 200),
-    userAgent: req.headers.get('user-agent')?.substring(0, 50),
-    referer: req.headers.get('referer')?.substring(0, 50),
+    userAgent: _req.headers.get('user-agent')?.substring(0, 50),
+    referer: _req.headers.get('referer')?.substring(0, 50),
     timestamp: new Date().toISOString()
   });
 
@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
     timestamp: new Date().toISOString(),
     request: {
       rawUrl: rawUrl?.substring(0, 200),
-      userAgent: req.headers.get('user-agent')?.substring(0, 50),
-      referer: req.headers.get('referer')?.substring(0, 50)
+      userAgent: _req.headers.get('user-agent')?.substring(0, 50),
+      referer: _req.headers.get('referer')?.substring(0, 50)
     },
     environment: envCheck,
     storageTest,
