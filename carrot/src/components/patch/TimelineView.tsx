@@ -1,127 +1,118 @@
-'use client'
+'use client';
 
-import { useState, useMemo } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Calendar, Filter, Search, ExternalLink, Tag } from 'lucide-react'
-
-interface Source {
-  id: string
-  title: string
-  url: string
-  author?: string | null
-  publisher?: string | null
-  publishedAt?: Date | null
-}
+import { useState, useMemo } from 'react';
+import { cardVariants, sectionHeading } from '@/styles/cards';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Calendar, Filter, Search, ExternalLink, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Event {
-  id: string
-  title: string
-  dateStart: Date
-  dateEnd?: Date | null
-  summary: string
-  tags: string[]
+  id: string;
+  title: string;
+  dateStart: Date;
+  dateEnd?: Date | null;
+  summary: string;
+  tags: string[];
   media?: {
-    type: 'image' | 'video'
-    url: string
-    alt?: string
-  } | null
-  sources: Source[]
-}
-
-interface Patch {
-  id: string
-  name: string
+    type: 'image' | 'video';
+    url: string;
+    alt?: string;
+  } | null;
+  sources: Array<{
+    id: string;
+    title: string;
+    url: string;
+  }>;
 }
 
 interface TimelineViewProps {
-  patch: Patch
-  events: Event[]
-  sources: Source[]
+  events: Event[];
 }
 
-export default function TimelineView({ patch, events, sources }: TimelineViewProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({})
-  const [viewMode, setViewMode] = useState<'compact' | 'expanded'>('compact')
+export default function TimelineView({ events }: TimelineViewProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({});
+  const [viewMode, setViewMode] = useState<'compact' | 'expanded'>('compact');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Get all unique tags from events
   const allTags = useMemo(() => {
-    const tagSet = new Set<string>()
+    const tagSet = new Set<string>();
     events.forEach(event => {
-      event.tags.forEach(tag => tagSet.add(tag))
-    })
-    return Array.from(tagSet).sort()
-  }, [events])
+      event.tags.forEach(tag => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort();
+  }, [events]);
 
   // Filter events based on search, tags, and date range
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
       // Search filter
       if (searchQuery) {
-        const query = searchQuery.toLowerCase()
+        const query = searchQuery.toLowerCase();
         const matchesSearch = 
           event.title.toLowerCase().includes(query) ||
           event.summary.toLowerCase().includes(query) ||
-          event.tags.some(tag => tag.toLowerCase().includes(query))
-        if (!matchesSearch) return false
+          event.tags.some(tag => tag.toLowerCase().includes(query));
+        if (!matchesSearch) return false;
       }
 
       // Tag filter
       if (selectedTags.length > 0) {
-        const hasSelectedTag = selectedTags.some(tag => event.tags.includes(tag))
-        if (!hasSelectedTag) return false
+        const hasSelectedTag = selectedTags.some(tag => event.tags.includes(tag));
+        if (!hasSelectedTag) return false;
       }
 
       // Date range filter
       if (dateRange.from) {
-        const fromDate = new Date(dateRange.from)
-        if (event.dateStart < fromDate) return false
+        const fromDate = new Date(dateRange.from);
+        if (event.dateStart < fromDate) return false;
       }
       if (dateRange.to) {
-        const toDate = new Date(dateRange.to)
-        if (event.dateStart > toDate) return false
+        const toDate = new Date(dateRange.to);
+        if (event.dateStart > toDate) return false;
       }
 
-      return true
-    })
-  }, [events, searchQuery, selectedTags, dateRange])
+      return true;
+    });
+  }, [events, searchQuery, selectedTags, dateRange]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => 
       prev.includes(tag) 
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
-    )
-  }
+    );
+  };
 
   const clearFilters = () => {
-    setSearchQuery('')
-    setSelectedTags([])
-    setDateRange({})
-  }
+    setSearchQuery('');
+    setSelectedTags([]);
+    setDateRange({});
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Timeline</h2>
-          <p className="text-gray-600">Chronological events and milestones for {patch.name}</p>
+          <h2 className={sectionHeading}>Timeline</h2>
+          <p className="text-sm text-[#60646C]">
+            Chronological events and milestones
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'compact' ? 'primary' : 'outline'}
+            variant={viewMode === 'compact' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('compact')}
           >
             Compact
           </Button>
           <Button
-            variant={viewMode === 'expanded' ? 'primary' : 'outline'}
+            variant={viewMode === 'expanded' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('expanded')}
           >
@@ -131,12 +122,25 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
       </div>
 
       {/* Filters */}
-      <Card className="rounded-2xl border border-gray-200">
-        <CardContent className="p-6">
+      <div className={cardVariants.default}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium text-[#0B0B0F]">Filters</h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-1"
+          >
+            <Filter className="w-4 h-4" />
+            {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+
+        {showFilters && (
           <div className="space-y-4">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#60646C] w-4 h-4" />
               <Input
                 placeholder="Search events..."
                 value={searchQuery}
@@ -148,7 +152,7 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
             {/* Date Range */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[#0B0B0F] mb-1">
                   From Date
                 </label>
                 <Input
@@ -158,7 +162,7 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[#0B0B0F] mb-1">
                   To Date
                 </label>
                 <Input
@@ -171,15 +175,19 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-[#0B0B0F] mb-2">
                 Filter by Tags
               </label>
               <div className="flex flex-wrap gap-2">
                 {allTags.map(tag => (
                   <Badge
                     key={tag}
-                    variant={selectedTags.includes(tag) ? 'default' : 'outline'}
-                    className="cursor-pointer hover:bg-gray-100 transition-colors"
+                    variant={selectedTags.includes(tag) ? 'default' : 'secondary'}
+                    className={`cursor-pointer hover:bg-gray-100 transition-colors ${
+                      selectedTags.includes(tag) 
+                        ? 'bg-[#0A5AFF] text-white' 
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
                     onClick={() => toggleTag(tag)}
                   >
                     <Tag className="w-3 h-3 mr-1" />
@@ -202,12 +210,12 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       {/* Results Count */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-[#60646C]">
           Showing {filteredEvents.length} of {events.length} events
         </p>
       </div>
@@ -215,109 +223,104 @@ export default function TimelineView({ patch, events, sources }: TimelineViewPro
       {/* Timeline */}
       <div className="space-y-4">
         {filteredEvents.length === 0 ? (
-          <Card className="rounded-2xl border border-gray-200">
-            <CardContent className="p-8 text-center">
-              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No events found</h3>
-              <p className="text-gray-600">
+          <div className={cardVariants.default}>
+            <div className="text-center py-8">
+              <Calendar className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">No events found</h3>
+              <p className="text-[#60646C]">
                 {searchQuery || selectedTags.length > 0 || dateRange.from || dateRange.to
                   ? 'Try adjusting your filters to see more events.'
                   : 'No events have been added to this patch yet.'}
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : (
           filteredEvents.map((event, index) => (
-            <Card key={event.id} className="rounded-2xl border border-gray-200 hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex gap-4">
-                  {/* Timeline indicator */}
-                  <div className="flex-shrink-0">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full mt-2"></div>
-                    {index < filteredEvents.length - 1 && (
-                      <div className="w-px h-full bg-gray-200 ml-1 mt-2"></div>
-                    )}
-                  </div>
+            <div key={event.id} className={cardVariants.default}>
+              <div className="flex gap-4">
+                {/* Timeline indicator */}
+                <div className="flex-shrink-0">
+                  <div className="w-3 h-3 bg-[#0A5AFF] rounded-full mt-2"></div>
+                  {index < filteredEvents.length - 1 && (
+                    <div className="w-px h-full bg-[#E6E8EC] ml-1 mt-2"></div>
+                  )}
+                </div>
 
-                  {/* Event content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {event.title}
-                          </h3>
-                          <Badge variant="outline" className="text-xs">
-                            {event.dateStart.toLocaleDateString()}
-                            {event.dateEnd && ` - ${event.dateEnd.toLocaleDateString()}`}
-                          </Badge>
-                        </div>
-
-                        <p className={`text-gray-700 mb-4 ${
-                          viewMode === 'compact' ? 'line-clamp-3' : ''
-                        }`}>
-                          {event.summary}
-                        </p>
-
-                        {/* Tags */}
-                        {event.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-4">
-                            {event.tags.map(tag => (
-                              <Badge
-                                key={tag}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Sources */}
-                        {event.sources.length > 0 && (
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-gray-900">Sources:</h4>
-                            <div className="space-y-1">
-                              {event.sources.map(source => (
-                                <div key={source.id} className="flex items-center gap-2 text-sm">
-                                  <a
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                    {source.title}
-                                  </a>
-                                  {source.author && (
-                                    <span className="text-gray-500">by {source.author}</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                {/* Event content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold text-[#0B0B0F]">
+                          {event.title}
+                        </h3>
+                        <Badge variant="secondary" className="text-xs">
+                          {event.dateStart.toLocaleDateString()}
+                          {event.dateEnd && ` - ${event.dateEnd.toLocaleDateString()}`}
+                        </Badge>
                       </div>
 
-                      {/* Media */}
-                      {event.media && (
-                        <div className="flex-shrink-0">
-                          <img
-                            src={event.media.url}
-                            alt={event.media.alt || event.title}
-                            className="w-32 h-24 object-cover rounded-lg"
-                          />
+                      <p className={`text-[#60646C] mb-4 ${
+                        viewMode === 'compact' ? 'line-clamp-3' : ''
+                      }`}>
+                        {event.summary}
+                      </p>
+
+                      {/* Tags */}
+                      {event.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-4">
+                          {event.tags.map(tag => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Sources */}
+                      {event.sources.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-[#0B0B0F]">Sources:</h4>
+                          <div className="space-y-1">
+                            {event.sources.map(source => (
+                              <div key={source.id} className="flex items-center gap-2 text-sm">
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#0A5AFF] hover:text-[#0A5AFF]/80 flex items-center gap-1"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  {source.title}
+                                </a>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
+
+                    {/* Media */}
+                    {event.media && (
+                      <div className="flex-shrink-0">
+                        <img
+                          src={event.media.url}
+                          alt={event.media.alt || event.title}
+                          className="w-32 h-24 object-cover rounded-lg"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))
         )}
       </div>
     </div>
-  )
+  );
 }

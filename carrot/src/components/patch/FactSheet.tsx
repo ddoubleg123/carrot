@@ -1,131 +1,160 @@
-'use client'
+'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ExternalLink, Users, MessageSquare, Calendar, BookOpen } from 'lucide-react'
+import { cardVariants, sectionHeading } from '@/styles/cards';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ExternalLink, Users, Star, Clock } from 'lucide-react';
 
 interface Fact {
-  id: string
-  label: string
-  value: string
+  id: string;
+  label: string;
+  value: string;
   source?: {
-    id: string
-    title: string
-    url: string
-  } | null
+    id: string;
+    title: string;
+    url: string;
+  } | null;
 }
 
 interface Patch {
-  id: string
-  name: string
-  handle: string
+  id: string;
+  name: string;
+  _count: {
+    members: number;
+    posts: number;
+    events: number;
+    sources: number;
+  };
 }
 
 interface FactSheetProps {
-  patch: Patch
-  facts: Fact[]
-  stats: {
-    members: number
-    posts: number
-    events: number
-    sources: number
-  }
+  patch: Patch;
+  facts: Fact[];
+  topContributors?: Array<{
+    id: string;
+    name: string;
+    username: string;
+    contributions: number;
+  }>;
 }
 
-export default function FactSheet({ patch, facts, stats }: FactSheetProps) {
+export default function FactSheet({ patch, facts, topContributors = [] }: FactSheetProps) {
   return (
     <div className="space-y-6">
-      {/* Patch Info Card */}
-      <Card className="rounded-2xl border border-gray-200">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold text-gray-900">
-            {patch.name}
-          </CardTitle>
-          <p className="text-sm text-gray-600">r/{patch.handle}</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-700">{stats.members.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <MessageSquare className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-700">{stats.posts.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-700">{stats.events.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <BookOpen className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-700">{stats.sources.toLocaleString()}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Facts Card */}
-      {facts.length > 0 && (
-        <Card className="rounded-2xl border border-gray-200">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              Fact Sheet
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {facts.map((fact) => (
-              <div key={fact.id} className="border-b border-gray-100 last:border-b-0 pb-3 last:pb-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <dt className="text-sm font-medium text-gray-900 mb-1">
-                      {fact.label}
-                    </dt>
-                    <dd className="text-sm text-gray-700">
-                      {fact.value}
-                    </dd>
-                  </div>
-                  {fact.source && (
-                    <a
-                      href={fact.source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-                      title={`Source: ${fact.source.title}`}
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
+      {/* Key Facts */}
+      <div className={cardVariants.sidebar}>
+        <h3 className={sectionHeading}>Key Facts</h3>
+        <div className="space-y-4">
+          {facts.slice(0, 6).map((fact) => (
+            <div key={fact.id} className="space-y-1">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-medium text-[#0B0B0F]">
+                  {fact.label}
+                </span>
+                {fact.source && (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-200"
+                    title={`Source: ${fact.source.title}`}
+                  >
+                    📄
+                  </Badge>
+                )}
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+              <p className="text-sm text-[#60646C] leading-relaxed">
+                {fact.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Quick Actions */}
-      <Card className="rounded-2xl border border-gray-200">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold text-gray-900">
-            Quick Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <button className="w-full text-left p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
-            <div className="font-medium text-gray-900">Share this patch</div>
-            <div className="text-sm text-gray-600">Invite others to join</div>
-          </button>
-          <button className="w-full text-left p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
-            <div className="font-medium text-gray-900">Report content</div>
-            <div className="text-sm text-gray-600">Help keep the community safe</div>
-          </button>
-          <button className="w-full text-left p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
-            <div className="font-medium text-gray-900">View rules</div>
-            <div className="text-sm text-gray-600">Community guidelines</div>
-          </button>
-        </CardContent>
-      </Card>
+      <div className={cardVariants.sidebar}>
+        <h3 className={sectionHeading}>Quick Actions</h3>
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-sm"
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Add Source
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-sm"
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            Add Event
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-sm"
+          >
+            <Star className="w-4 h-4 mr-2" />
+            Add Fact
+          </Button>
+        </div>
+      </div>
+
+      {/* Top Contributors */}
+      {topContributors.length > 0 && (
+        <div className={cardVariants.sidebar}>
+          <h3 className={sectionHeading}>Top Contributors</h3>
+          <div className="space-y-3">
+            {topContributors.slice(0, 5).map((contributor) => (
+              <div key={contributor.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-medium text-gray-600">
+                      {contributor.name.charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#0B0B0F]">
+                      {contributor.name}
+                    </p>
+                    <p className="text-xs text-[#60646C]">
+                      @{contributor.username}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs text-[#60646C]">
+                  {contributor.contributions}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Patch Stats */}
+      <div className={cardVariants.sidebar}>
+        <h3 className={sectionHeading}>Community</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#60646C]" />
+              <span className="text-sm text-[#0B0B0F]">Members</span>
+            </div>
+            <span className="text-sm font-medium text-[#0B0B0F]">
+              {patch._count.members.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#60646C]" />
+              <span className="text-sm text-[#0B0B0F]">Events</span>
+            </div>
+            <span className="text-sm font-medium text-[#0B0B0F]">
+              {patch._count.events.toLocaleString()}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

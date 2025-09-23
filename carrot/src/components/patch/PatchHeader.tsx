@@ -1,136 +1,106 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Heart, Users, MessageSquare, Calendar, BookOpen } from 'lucide-react'
-
-interface PatchTheme {
-  bg?: string
-  accent?: string
-}
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { MoreHorizontal, Users, MessageSquare, Calendar, BookOpen } from 'lucide-react';
 
 interface Patch {
-  id: string
-  handle: string
-  name: string
-  description: string
-  tags: string[]
-  theme?: PatchTheme | null
+  id: string;
+  name: string;
+  tagline?: string | null;
+  tags: string[];
   _count: {
-    members: number
-    posts: number
-    events: number
-    sources: number
-  }
+    members: number;
+    posts: number;
+    events: number;
+    sources: number;
+  };
 }
 
 interface PatchHeaderProps {
-  patch: Patch
+  patch: Patch;
+  isMember?: boolean;
+  onJoin?: () => void;
+  onLeave?: () => void;
 }
 
-export default function PatchHeader({ patch }: PatchHeaderProps) {
-  const [isJoined, setIsJoined] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleJoinLeave = async () => {
-    setIsLoading(true)
-    try {
-      // TODO: Implement join/leave API call
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-      setIsJoined(!isJoined)
-    } catch (error) {
-      console.error('Failed to join/leave patch:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
+export default function PatchHeader({ patch, isMember = false, onJoin, onLeave }: PatchHeaderProps) {
   return (
-    <div className="py-8">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-        {/* Main content */}
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-4">
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">
-              {patch.name}
-            </h1>
-            <Badge variant="secondary" className="text-sm">
-              r/{patch.handle}
-            </Badge>
-          </div>
-          
-          <p className="text-lg text-gray-700 mb-6 max-w-3xl">
-            {patch.description}
-          </p>
-
-          {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {patch.tags.map((tag) => (
-              <Badge 
-                key={tag} 
-                variant="outline" 
-                className="text-sm px-3 py-1"
-                style={{ 
-                  borderColor: patch.theme?.accent || '#0A5AFF',
-                  color: patch.theme?.accent || '#0A5AFF'
-                }}
-              >
-                #{tag}
-              </Badge>
-            ))}
-          </div>
-
-          {/* Stats */}
-          <div className="flex flex-wrap gap-6 text-sm text-gray-600">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              <span>{patch._count.members.toLocaleString()} members</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              <span>{patch._count.posts.toLocaleString()} posts</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span>{patch._count.events.toLocaleString()} events</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              <span>{patch._count.sources.toLocaleString()} sources</span>
-            </div>
-          </div>
+    <div className="h-20 flex items-center justify-between px-6">
+      {/* Left side: Name, tagline, tags */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl font-bold text-[#0B0B0F] truncate">
+            {patch.name}
+          </h1>
+          {patch.tagline && (
+            <span className="text-[#60646C] text-sm line-clamp-1 hidden sm:block">
+              {patch.tagline}
+            </span>
+          )}
         </div>
-
-        {/* Join/Leave button */}
-        <div className="flex-shrink-0">
-          <Button
-            onClick={handleJoinLeave}
-            disabled={isLoading}
-            className={`px-8 py-3 text-base font-semibold transition-all duration-200 ${
-              isJoined 
-                ? 'bg-gray-100 text-gray-900 hover:bg-gray-200' 
-                : 'bg-orange-500 text-white hover:bg-orange-600'
-            }`}
-            style={{
-              backgroundColor: isJoined ? undefined : (patch.theme?.accent || '#FF6A00'),
-              borderColor: patch.theme?.accent || '#FF6A00',
-            }}
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span>Loading...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Heart className={`w-4 h-4 ${isJoined ? 'fill-current' : ''}`} />
-                <span>{isJoined ? 'Leave' : 'Join'}</span>
-              </div>
-            )}
-          </Button>
+        
+        {/* Tags */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {patch.tags.slice(0, 4).map((tag) => (
+            <Badge
+              key={tag}
+              variant="secondary"
+              className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700"
+            >
+              {tag}
+            </Badge>
+          ))}
+          {patch.tags.length > 4 && (
+            <span className="text-xs text-[#60646C]">
+              +{patch.tags.length - 4} more
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Right side: Join/Leave button and menu */}
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={isMember ? onLeave : onJoin}
+          variant={isMember ? "outline" : "default"}
+          className={isMember 
+            ? "border-[#E6E8EC] text-[#60646C] hover:bg-gray-50" 
+            : "bg-[#0A5AFF] hover:bg-[#0A5AFF]/90 text-white"
+          }
+        >
+          {isMember ? 'Leave' : 'Join'}
+        </Button>
+        
+        <Button variant="ghost" size="sm" className="p-2">
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </div>
     </div>
-  )
+  );
+}
+
+// Metric bar component for below header
+export function MetricBar({ patch }: { patch: Patch }) {
+  const metrics = [
+    { label: 'Members', value: patch._count.members, icon: Users },
+    { label: 'Posts', value: patch._count.posts, icon: MessageSquare },
+    { label: 'Events', value: patch._count.events, icon: Calendar },
+    { label: 'Sources', value: patch._count.sources, icon: BookOpen },
+  ];
+
+  return (
+    <div className="px-6 py-3 border-b border-[#E6E8EC] bg-white/50">
+      <div className="flex items-center gap-6">
+        {metrics.map(({ label, value, icon: Icon }) => (
+          <div key={label} className="flex items-center gap-2">
+            <Icon className="w-4 h-4 text-[#60646C]" />
+            <span className="text-sm text-[#60646C]">
+              {value.toLocaleString()} {label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

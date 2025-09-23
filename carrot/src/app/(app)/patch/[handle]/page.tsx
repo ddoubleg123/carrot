@@ -1,16 +1,14 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import PatchHeader from '@/components/patch/PatchHeader'
-import PatchTabs from '@/components/patch/PatchTabs'
+import { getPatchThemeClass } from '@/lib/patch-theme'
+import PatchHeader, { MetricBar } from '@/components/patch/PatchHeader'
+import PillNav from '@/components/patch/PillNav'
 import FactSheet from '@/components/patch/FactSheet'
+import Overview from '@/components/patch/Overview'
 import TimelineView from '@/components/patch/TimelineView'
-import ReferencesList from '@/components/patch/ReferencesList'
+import ResourcesList from '@/components/patch/ResourcesList'
 import PostFeed from '@/components/patch/PostFeed'
-
-interface PatchTheme {
-  bg?: string
-  accent?: string
-}
+import AIAgentDock from '@/components/patch/AIAgentDock'
 
 interface PatchPageProps {
   params: Promise<{ handle: string }>
@@ -140,156 +138,110 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
   const contributorsWithCounts = contributors.map(user => ({
     ...user,
-    postCount: topContributors.find(c => c.authorId === user.id)?._count.authorId || 0
+    contributions: topContributors.find(c => c.authorId === user.id)?._count.authorId || 0
   }))
 
-  const theme = patch.theme as PatchTheme | null
+  // Get theme class
+  const themeClass = getPatchThemeClass(patch.theme)
 
-  // Create a properly typed patch object for components
-  // This ensures TypeScript compatibility with theme objects
-  const typedPatch = {
-    ...patch,
-    theme: theme
-  }
+  // Transform data for components
+  const typedEvents = patch.events.map(event => ({
+    ...event,
+    media: event.media && typeof event.media === 'object' && event.media !== null && 'type' in event.media && 'url' in event.media
+      ? event.media as { type: 'image' | 'video'; url: string; alt?: string }
+      : null
+  }))
+
+  const typedPosts = patch.posts.map(post => ({
+    ...post,
+    metrics: post.metrics && typeof post.metrics === 'object' && post.metrics !== null && 
+      'likes' in post.metrics && 'comments' in post.metrics && 'reposts' in post.metrics && 'views' in post.metrics
+      ? post.metrics as { likes: number; comments: number; reposts: number; views: number }
+      : { likes: 0, comments: 0, reposts: 0, views: 0 }
+  }))
+
+  const typedSources = patch.sources.map(source => ({
+    ...source,
+    citeMeta: source.citeMeta && typeof source.citeMeta === 'object' && source.citeMeta !== null && 
+      'title' in source.citeMeta && 'url' in source.citeMeta
+      ? source.citeMeta as { title: string; url: string; author?: string; publisher?: string; publishedAt?: string }
+      : null
+  }))
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen ${themeClass}`}>
       {/* Header with theme background */}
-      <div className={`${theme?.bg || 'bg-white'} border-b border-gray-200`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <PatchHeader patch={typedPatch} />
+      <div className="bg-white border-b border-[#E6E8EC]">
+        <div className="max-w-7xl mx-auto">
+          <PatchHeader patch={patch} />
+          <MetricBar patch={patch} />
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Sticky Navigation */}
+      <PillNav activeTab={activeTab} patchHandle={patch.handle} />
+
+      {/* Main content area - Two column layout */}
+      <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Main content - 3 columns */}
+          {/* Main column - 3 columns */}
           <div className="lg:col-span-3">
-            <PatchTabs activeTab={activeTab} patch={typedPatch}>
-              {activeTab === 'overview' && (
-                <div className="space-y-8">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">About {patch.name}</h2>
-                    <p className="text-gray-700 leading-relaxed">{patch.description}</p>
-                  </div>
-                  
-                  {patch.rules && (
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-3">Community Rules</h3>
-                      <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-                          {patch.rules}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
+            {activeTab === 'overview' && (
+              <Overview 
+                facts={patch.facts}
+                recentEvents={typedEvents.slice(0, 5)}
+                recentSources={typedSources.slice(0, 5)}
+                recentPosts={typedPosts.slice(0, 5)}
+              />
+            )}
 
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-3">Recent Activity</h3>
-                    <div className="space-y-4">
-                      {patch.posts.slice(0, 5).map((post) => (
-                        <div key={post.id} className="bg-white rounded-2xl border border-gray-200 p-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <img 
-                              src={post.author.profilePhoto || post.author.image || '/default-avatar.png'} 
-                              alt={post.author.name || 'User'} 
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                            <div>
-                              <p className="font-medium text-gray-900">{post.author.name || post.author.username}</p>
-                              <p className="text-sm text-gray-500">{post.createdAt.toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                          <h4 className="font-semibold text-gray-900 mb-1">{post.title}</h4>
-                          {post.body && (
-                            <p className="text-gray-700 text-sm line-clamp-2">{post.body}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+            {activeTab === 'timeline' && (
+              <TimelineView events={typedEvents} />
+            )}
 
-              {activeTab === 'timeline' && (
-                <TimelineView 
-                  patch={typedPatch} 
-                  events={patch.events.map(event => ({
-                    ...event,
-                    media: event.media && typeof event.media === 'object' && event.media !== null && 'type' in event.media && 'url' in event.media
-                      ? event.media as { type: 'image' | 'video'; url: string; alt?: string }
-                      : null
-                  }))}
-                  sources={patch.sources}
-                />
-              )}
+            {activeTab === 'resources' && (
+              <ResourcesList sources={typedSources} />
+            )}
 
-              {activeTab === 'posts' && (
-                <PostFeed 
-                  patch={typedPatch}
-                  posts={patch.posts.map(post => ({
-                    ...post,
-                    metrics: post.metrics && typeof post.metrics === 'object' && post.metrics !== null && 
-                      'likes' in post.metrics && 'comments' in post.metrics && 'reposts' in post.metrics && 'views' in post.metrics
-                      ? post.metrics as { likes: number; comments: number; reposts: number; views: number }
-                      : { likes: 0, comments: 0, reposts: 0, views: 0 }
-                  }))}
-                />
-              )}
-
-              {activeTab === 'references' && (
-                <ReferencesList 
-                  sources={patch.sources.map(source => ({
-                    ...source,
-                    citeMeta: source.citeMeta && typeof source.citeMeta === 'object' && source.citeMeta !== null && 
-                      'title' in source.citeMeta && 'url' in source.citeMeta
-                      ? source.citeMeta as { title: string; url: string; author?: string; publisher?: string; publishedAt?: string }
-                      : null
-                  }))}
-                />
-              )}
-            </PatchTabs>
+            {activeTab === 'posts' && (
+              <PostFeed 
+                patch={patch}
+                posts={typedPosts}
+              />
+            )}
           </div>
 
           {/* Sidebar - 1 column */}
           <div className="lg:col-span-1">
-            <div className="space-y-6">
-              <FactSheet 
-                patch={typedPatch}
-                facts={patch.facts}
-                stats={{
-                  members: patch._count.members,
-                  posts: patch._count.posts,
-                  events: patch._count.events,
-                  sources: patch._count.sources,
-                }}
-              />
-
-              {contributorsWithCounts.length > 0 && (
-                <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Contributors</h3>
-                  <div className="space-y-3">
-                    {contributorsWithCounts.map((contributor) => (
-                      <div key={contributor.id} className="flex items-center gap-3">
-                        <img 
-                          src={contributor.profilePhoto || contributor.image || '/default-avatar.png'} 
-                          alt={contributor.name || 'User'} 
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{contributor.name || contributor.username}</p>
-                          <p className="text-sm text-gray-500">{contributor.postCount} posts</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <FactSheet 
+              patch={patch}
+              facts={patch.facts}
+              topContributors={contributorsWithCounts}
+            />
           </div>
         </div>
       </div>
+
+      {/* AI Agent Dock */}
+      <AIAgentDock 
+        patchId={patch.id}
+        onAddFact={(fact) => {
+          // Mock server action - in real app, this would call a server action
+          console.log('Adding fact:', fact)
+        }}
+        onAddEvent={(event) => {
+          // Mock server action
+          console.log('Adding event:', event)
+        }}
+        onAddSource={(source) => {
+          // Mock server action
+          console.log('Adding source:', source)
+        }}
+        onSummarize={(content) => {
+          // Mock server action
+          console.log('Summarizing:', content)
+        }}
+      />
     </div>
   )
 }
@@ -301,6 +253,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     where: { handle },
     select: {
       name: true,
+      tagline: true,
       description: true,
       tags: true,
     }
@@ -314,7 +267,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 
   return {
     title: `${patch.name} - Carrot Patch`,
-    description: patch.description,
+    description: patch.tagline || patch.description,
     keywords: patch.tags.join(', '),
   }
 }

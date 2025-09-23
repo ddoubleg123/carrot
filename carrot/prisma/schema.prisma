@@ -437,10 +437,11 @@ model Patch {
   id          String   @id @default(cuid())
   handle      String   @unique
   name        String
+  tagline     String?  // Short one-liner for header
   description String
   rules       String?
   tags        String[]
-  theme       Json?    // { bg: 'bg-[linear-gradient(...)]' | 'bg-surface', accent: '#0A5AFF' | custom }
+  theme       String?  // 'light' | 'warm' | 'stone' - background variant
   createdBy   String   @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
