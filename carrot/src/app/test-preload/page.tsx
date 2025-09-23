@@ -1,5 +1,5 @@
 import React from "react";
-import LivePreloadClient from './LivePreloadClient.tsx';
+import LivePreloadClient from './LivePreloadClient';
 
 export const dynamic = 'force-dynamic';
 
