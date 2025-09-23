@@ -209,13 +209,11 @@ export default function ResourcesList({ sources }: ResourcesListProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        asChild
                         className="p-2"
                         title="Open source"
+                        onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
                       >
-                        <a href={source.url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
+                        <ExternalLink className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
