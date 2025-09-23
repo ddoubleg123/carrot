@@ -228,7 +228,13 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               {activeTab === 'posts' && (
                 <PostFeed 
                   patch={typedPatch}
-                  posts={patch.posts}
+                  posts={patch.posts.map(post => ({
+                    ...post,
+                    metrics: post.metrics && typeof post.metrics === 'object' && post.metrics !== null && 
+                      'likes' in post.metrics && 'comments' in post.metrics && 'reposts' in post.metrics && 'views' in post.metrics
+                      ? post.metrics as { likes: number; comments: number; reposts: number; views: number }
+                      : { likes: 0, comments: 0, reposts: 0, views: 0 }
+                  }))}
                 />
               )}
 
