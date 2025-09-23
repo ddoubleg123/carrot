@@ -69,7 +69,19 @@ export default function LivePreloadClient({ limit = 20 }: { limit?: number }) {
         const resp = await fetch('/api/posts', { cache: 'no-store' });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data: PostDTO[] = await resp.json();
-        const mapped = mapPostsToAssets(data, limit);
+        let mapped = mapPostsToAssets(data, limit);
+        // Fallback: if API returned zero posts, synthesize a small demo feed with videos
+        if (!mapped || mapped.length === 0) {
+          const demo: PostDTO[] = [
+            { id: 'demo-vid-1', type: 'video', videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' },
+            { id: 'demo-vid-2', type: 'video', videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4' },
+            { id: 'demo-vid-3', type: 'video', videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4' },
+          ];
+          mapped = mapPostsToAssets(demo, Math.min(limit, demo.length));
+          if (process.env.NODE_ENV !== 'production') {
+            try { console.warn('[LivePreloadClient] /api/posts returned 0; using demo posts for test-preload'); } catch {}
+          }
+        }
         if (cancelled) return;
         setPosts(mapped);
         FeedMediaManager.inst.setPosts(mapped);

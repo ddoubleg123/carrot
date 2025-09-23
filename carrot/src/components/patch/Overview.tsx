@@ -155,7 +155,7 @@ export default function Overview({ facts, recentEvents, recentSources, recentPos
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-[#0B0B0F]">
-                      {post.author.name || post.author.username}
+                      {post.author.name || post.author.username || 'Anonymous User'}
                     </span>
                     <span className="text-xs text-[#60646C]">
                       {post.createdAt.toLocaleDateString()}

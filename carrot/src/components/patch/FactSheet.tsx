@@ -32,8 +32,8 @@ interface FactSheetProps {
   facts: Fact[];
   topContributors?: Array<{
     id: string;
-    name: string;
-    username: string;
+    name: string | null;
+    username: string | null;
     contributions: number;
   }>;
 }
@@ -110,15 +110,15 @@ export default function FactSheet({ patch, facts, topContributors = [] }: FactSh
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
                     <span className="text-xs font-medium text-gray-600">
-                      {contributor.name.charAt(0)}
+                      {(contributor.name || 'A').charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#0B0B0F]">
-                      {contributor.name}
+                      {contributor.name || 'Anonymous User'}
                     </p>
                     <p className="text-xs text-[#60646C]">
-                      @{contributor.username}
+                      @{contributor.username || 'anonymous'}
                     </p>
                   </div>
                 </div>
