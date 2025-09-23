@@ -105,14 +105,14 @@ export default function TimelineView({ events }: TimelineViewProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'compact' ? 'default' : 'outline'}
+            variant={viewMode === 'compact' ? 'primary' : 'outline'}
             size="sm"
             onClick={() => setViewMode('compact')}
           >
             Compact
           </Button>
           <Button
-            variant={viewMode === 'expanded' ? 'default' : 'outline'}
+            variant={viewMode === 'expanded' ? 'primary' : 'outline'}
             size="sm"
             onClick={() => setViewMode('expanded')}
           >
