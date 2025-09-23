@@ -145,12 +145,18 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
   const theme = patch.theme as PatchTheme | null
 
+  // Create a properly typed patch object for components
+  const typedPatch = {
+    ...patch,
+    theme: theme
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with theme background */}
       <div className={`${theme?.bg || 'bg-white'} border-b border-gray-200`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <PatchHeader patch={patch} />
+          <PatchHeader patch={typedPatch} />
         </div>
       </div>
 
@@ -159,7 +165,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Main content - 3 columns */}
           <div className="lg:col-span-3">
-            <PatchTabs activeTab={activeTab} patch={patch}>
+            <PatchTabs activeTab={activeTab} patch={typedPatch}>
               {activeTab === 'overview' && (
                 <div className="space-y-8">
                   <div>
@@ -207,7 +213,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
               {activeTab === 'timeline' && (
                 <TimelineView 
-                  patch={patch} 
+                  patch={typedPatch} 
                   events={patch.events}
                   sources={patch.sources}
                 />
@@ -215,7 +221,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
               {activeTab === 'posts' && (
                 <PostFeed 
-                  patch={patch}
+                  patch={typedPatch}
                   posts={patch.posts}
                 />
               )}
@@ -232,7 +238,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
           <div className="lg:col-span-1">
             <div className="space-y-6">
               <FactSheet 
-                patch={patch}
+                patch={typedPatch}
                 facts={patch.facts}
                 stats={{
                   members: patch._count.members,
