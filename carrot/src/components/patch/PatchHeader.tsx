@@ -63,7 +63,7 @@ export default function PatchHeader({ patch, isMember = false, onJoin, onLeave }
       <div className="flex items-center gap-3">
         <Button
           onClick={isMember ? onLeave : onJoin}
-          variant={isMember ? "outline" : "default"}
+          variant={isMember ? "outline" : "primary"}
           className={isMember 
             ? "border-[#E6E8EC] text-[#60646C] hover:bg-gray-50" 
             : "bg-[#0A5AFF] hover:bg-[#0A5AFF]/90 text-white"
