@@ -22,7 +22,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   const searchParams = useSearchParams()
 
   const handleTabChange = (value: string) => {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(searchParams?.toString() || '')
     params.set('tab', value)
     router.push(`/patch/${patch.handle}?${params.toString()}`)
   }
