@@ -240,7 +240,13 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
               {activeTab === 'references' && (
                 <ReferencesList 
-                  sources={patch.sources}
+                  sources={patch.sources.map(source => ({
+                    ...source,
+                    citeMeta: source.citeMeta && typeof source.citeMeta === 'object' && source.citeMeta !== null && 
+                      'title' in source.citeMeta && 'url' in source.citeMeta
+                      ? source.citeMeta as { title: string; url: string; author?: string; publisher?: string; publishedAt?: string }
+                      : null
+                  }))}
                 />
               )}
             </PatchTabs>
