@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, 
   X, 
@@ -449,8 +449,8 @@ function ConversationThread({
       </div>
 
       {/* Message Input - Fixed at bottom of viewport */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
-        <div className="max-w-4xl mx-auto">
+      <div className="fixed bottom-0 left-16 right-80 bg-white border-t border-gray-200 p-4 z-10">
+        <div className="max-w-2xl mx-auto">
           <form onSubmit={handleSend} className="flex gap-3">
                     <button
               type="button"
@@ -628,6 +628,20 @@ function AgentRoster({
 // Main Rabbit Page Component
 export default function RabbitPage() {
   const { data: session } = useSession();
+  
+  // Debug: Log session data to see what avatar fields are available
+  React.useEffect(() => {
+    if (session?.user) {
+      console.log('[RabbitPage] Session user data:', {
+        id: session.user.id,
+        email: session.user.email,
+        username: session.user.username,
+        profilePhoto: (session.user as any)?.profilePhoto,
+        image: (session.user as any)?.image,
+        allFields: Object.keys(session.user)
+      });
+    }
+  }, [session]);
   const [currentView, setCurrentView] = useState<'grid' | 'conversation'>('grid');
   const [agents, setAgents] = useState(AGENTS);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
@@ -783,7 +797,7 @@ export default function RabbitPage() {
         id: (session?.user as any)?.id || 'unknown',
         name: (session?.user as any)?.name || 'User',
         username: (session?.user as any)?.username || 'user',
-        avatar: (session?.user as any)?.image || '/default-avatar.png'
+        avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
       },
       timestamp: new Date()
     };

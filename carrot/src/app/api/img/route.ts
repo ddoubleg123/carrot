@@ -302,6 +302,7 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
   const path = sp.get('path')
   const bucket = sp.get('bucket')
   const generatePoster = sp.get('generatePoster')
+  const videoUrl = sp.get('videoUrl')
 
   // Enhanced logging for debugging
   console.log('[api/img] Request received', {
@@ -309,6 +310,7 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
     path,
     bucket,
     generatePoster,
+    hasVideoUrl: !!videoUrl,
     userAgent: _req.headers.get('user-agent')?.substring(0, 50),
     referer: _req.headers.get('referer')?.substring(0, 50)
   });
@@ -496,7 +498,10 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
         
         // If public didn't work, try re-signing
         if (!publicUrl || target.hostname === 'storage.googleapis.com') {
-          const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch(() => null);
+          const resigned = await getFreshSignedUrl(ext.bucket, ext.path).catch((e) => {
+            console.warn('[api/img] getFreshSignedUrl failed', { error: e, bucket: ext.bucket, path: ext.path });
+            return null;
+          });
           if (resigned) {
             try { 
               target = new URL(resigned);
@@ -542,8 +547,36 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
       }
     }
   } else {
+    // Allow poster fallback via videoUrl even if no url/path provided
+    if (generatePoster && sp.get('videoUrl')) {
+      const seed = sp.get('videoUrl') as string;
+      const svg = svgPlaceholder(seed);
+      return new NextResponse(svg, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
     console.warn('[api/img] missing url or path')
     return new NextResponse('Missing url or path', { status: 400 })
+  }
+
+  // If asked to generate a poster solely from a videoUrl, return a deterministic SVG placeholder immediately.
+  // This guarantees that POSTER tasks never 400 when thumbnails are missing and we only have videoUrl.
+  if (generatePoster && (videoUrl || (!rawUrl && !path && !bucket))) {
+    const seed = videoUrl || 'carrot-video';
+    const svg = svgPlaceholder(seed);
+    return new NextResponse(svg, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   }
 
   // Parse dimensions & options (optional)
@@ -783,4 +816,3 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
   
   return new NextResponse(view, { status: 200, headers })
 }
-

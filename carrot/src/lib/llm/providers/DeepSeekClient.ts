@@ -17,13 +17,22 @@ export interface StreamChunk {
 }
 
 const DEFAULT_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
+const LOCAL_ROUTER_ENDPOINT = process.env.DEEPSEEK_ROUTER_URL || 'http://localhost:8080/v1/chat/completions';
 
 function hasKey() {
   return Boolean(process.env.DEEPSEEK_API_KEY);
 }
 
-async function* mockStream(_: ChatParams): AsyncGenerator<StreamChunk> {
-  const demo = 'This is a DeepSeek mock stream. Add DEEPSEEK_API_KEY to use the real API.';
+function hasLocalRouter() {
+  return Boolean(process.env.DEEPSEEK_ROUTER_URL || process.env.NODE_ENV === 'development');
+}
+
+async function* mockStream(params: ChatParams): AsyncGenerator<StreamChunk> {
+  const demo = 'This is a DeepSeek mock response. To use the real DeepSeek API, set DEEPSEEK_API_KEY environment variable. To use the local DeepSeek infrastructure, start the router service at localhost:8080.';
+  
+  // Add a small delay to simulate real streaming
+  await new Promise(r => setTimeout(r, 100));
+  
   for (const ch of demo.split(' ')) {
     await new Promise(r => setTimeout(r, 80));
     yield { type: 'token', token: ch + ' ' };
@@ -32,7 +41,11 @@ async function* mockStream(_: ChatParams): AsyncGenerator<StreamChunk> {
 }
 
 export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChunk> {
-  if (!hasKey()) {
+  // Try local router first, then cloud API, then mock
+  const useLocalRouter = hasLocalRouter();
+  const useCloudAPI = hasKey();
+  
+  if (!useLocalRouter && !useCloudAPI) {
     yield* mockStream(params);
     return;
   }
@@ -45,13 +58,25 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
     stream: true,
   };
 
-  const resp = await fetch(DEFAULT_ENDPOINT, {
+  const endpoint = useLocalRouter ? LOCAL_ROUTER_ENDPOINT : DEFAULT_ENDPOINT;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'text/event-stream',
+  };
+
+  // Only add auth header for cloud API
+  if (!useLocalRouter && process.env.DEEPSEEK_API_KEY) {
+    headers['Authorization'] = `Bearer ${process.env.DEEPSEEK_API_KEY}`;
+  }
+
+  // Add task type header for local router
+  if (useLocalRouter) {
+    headers['X-Task-Type'] = 'chat';
+  }
+
+  const resp = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
