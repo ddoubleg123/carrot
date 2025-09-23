@@ -37,6 +37,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
+import { useSession } from 'next-auth/react';
 
 // Design Tokens
 const COLORS = {
@@ -56,6 +57,12 @@ interface Message {
   id: string;
   type: 'user' | 'agent';
   content: string;
+  user?: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+  };
   agent?: {
     id: string;
     name: string;
@@ -332,9 +339,23 @@ function ConversationThread({
   const [newMessage, setNewMessage] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Prevent scroll jump when there are few messages
+    if (thread.messages.length === 0) return;
+    
+    // Only scroll if the container is actually scrollable
+    if (
+      messageContainerRef.current &&
+      messageContainerRef.current.scrollHeight > messageContainerRef.current.clientHeight
+    ) {
+      // Use timeout to ensure layout is ready
+      const timeout = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+      return () => clearTimeout(timeout);
+    }
   }, [thread.messages]);
 
   const handleSend = (e: React.FormEvent) => {
@@ -358,7 +379,7 @@ function ConversationThread({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-screen">
       {/* Thread Header - Aligned with carrot logo height */}
       <div className="bg-white border-b border-gray-200 px-6 py-6" style={{ paddingTop: '32px' }}>
         <h2 className="text-xl font-semibold text-gray-900">{thread.title}</h2>
@@ -368,7 +389,7 @@ function ConversationThread({
             </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 pb-24 space-y-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24 flex flex-col justify-end space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -376,6 +397,18 @@ function ConversationThread({
               message.type === 'user' ? 'justify-end' : 'justify-start'
             }`}
           >
+            {/* User Avatar */}
+            {message.type === 'user' && message.user && (
+              <div className="flex-shrink-0">
+                <img
+                  src={message.user.avatar}
+                  alt={message.user.name}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              </div>
+            )}
+
+            {/* Agent Avatar */}
             {message.type === 'agent' && message.agent && (
               <div className="flex-shrink-0">
                 <img
@@ -383,8 +416,8 @@ function ConversationThread({
                   alt={message.agent.name}
                   className="w-10 h-10 rounded-full object-cover"
                 />
-        </div>
-      )}
+              </div>
+            )}
 
             <div
               className={`max-w-2xl px-4 py-3 rounded-2xl ${
@@ -393,21 +426,31 @@ function ConversationThread({
                   : 'bg-gray-100 text-gray-900'
               }`}
             >
+              {/* User Message Header */}
+              {message.type === 'user' && message.user && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-semibold text-sm text-white">{message.user.name}</span>
+                  <span className="text-xs text-orange-200">@{message.user.username}</span>
+                </div>
+              )}
+
+              {/* Agent Message Header */}
               {message.type === 'agent' && message.agent && (
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-semibold text-sm">{message.agent.name}</span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                    {message.agent.role}
+                    AI Assistant
                   </span>
                 </div>
-                )}
+              )}
+
               <p className="text-sm">{message.content}</p>
               <p className="text-xs opacity-70 mt-1">
                 {message.timestamp.toLocaleTimeString()}
               </p>
-              </div>
-              </div>
-            ))}
+            </div>
+          </div>
+        ))}
         <div ref={messagesEndRef} />
         </div>
 
@@ -590,6 +633,7 @@ function AgentRoster({
 
 // Main Rabbit Page Component
 export default function RabbitPage() {
+  const { data: session } = useSession();
   const [currentView, setCurrentView] = useState<'grid' | 'conversation'>('grid');
   const [agents, setAgents] = useState(AGENTS);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
@@ -612,6 +656,12 @@ export default function RabbitPage() {
           id: '1',
           type: 'user',
           content: query,
+          user: {
+            id: (session?.user as any)?.id || 'unknown',
+            name: (session?.user as any)?.name || 'User',
+            username: (session?.user as any)?.username || 'user',
+            avatar: (session?.user as any)?.image || '/default-avatar.png'
+          },
           timestamp: new Date()
         }
       ],
@@ -637,6 +687,12 @@ export default function RabbitPage() {
           id: '1',
           type: 'user',
           content: `Chat with ${agent.name} about ${agent.role}`,
+          user: {
+            id: (session?.user as any)?.id || 'unknown',
+            name: (session?.user as any)?.name || 'User',
+            username: (session?.user as any)?.username || 'user',
+            avatar: (session?.user as any)?.image || '/default-avatar.png'
+          },
           timestamp: new Date()
         }
       ],
@@ -729,6 +785,12 @@ export default function RabbitPage() {
       id: Date.now().toString(),
       type: 'user',
       content,
+      user: {
+        id: (session?.user as any)?.id || 'unknown',
+        name: (session?.user as any)?.name || 'User',
+        username: (session?.user as any)?.username || 'user',
+        avatar: (session?.user as any)?.image || '/default-avatar.png'
+      },
       timestamp: new Date()
     };
 

@@ -322,7 +322,7 @@ export default function PatchPage() {
         className="relative z-10 px-6"
         style={{ marginTop: '-60px' }}
       >
-        <div className="max-w-[720px] mx-auto">
+        <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Search Input */}
@@ -354,14 +354,14 @@ export default function PatchPage() {
 
       {/* Groups Grid - Same size as AI agent tiles */}
       <div className="px-6 pb-16 pt-16">
-        <div className="max-w-[720px] mx-auto">
+        <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Explore Groups</h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {sampleGroups.map((group) => (
               <div
                 key={group.id}
-                className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group h-[280px] flex flex-col"
+                className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group h-[300px] flex flex-col"
               >
                 {/* Header Image - Fixed height like AI agent tiles */}
                 <div className="h-[200px] relative overflow-hidden">
@@ -375,8 +375,8 @@ export default function PatchPage() {
                 </div>
                 
                 {/* Group Info - Fixed height like AI agent tiles */}
-                <div className="h-[80px] p-4 flex flex-col justify-center">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors">
+                <div className="h-[100px] p-4 flex flex-col justify-between">
+                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-orange-600 transition-colors">
                     {group.content}
                   </h3>
                   
