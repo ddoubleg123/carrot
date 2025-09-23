@@ -97,6 +97,11 @@ model User {
   // Engagement relations
   postLikes         PostLike[]
   postSaves         PostSave[]
+  // Patch system relations
+  createdPatches    Patch[] @relation("PatchCreator")
+  addedSources      Source[] @relation("SourceAdder")
+  patchPosts        PatchPost[] @relation("PatchPostAuthor")
+  patchMemberships  PatchMember[] @relation("PatchMembers")
 }
 
 model Post {
@@ -425,4 +430,134 @@ model PostSave {
   @@index([postId])
   @@index([userId])
   @@map("post_saves")
+}
+
+// Patch system models for Reddit/Wikipedia-style group pages
+model Patch {
+  id          String   @id @default(cuid())
+  handle      String   @unique
+  name        String
+  description String
+  rules       String?
+  tags        String[]
+  theme       Json?    // { bg: 'bg-[linear-gradient(...)]' | 'bg-surface', accent: '#0A5AFF' | custom }
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  creator User @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  facts   Fact[]
+  events  Event[]
+  sources Source[]
+  posts   PatchPost[]
+  members PatchMember[]
+
+  @@index([handle])
+  @@index([createdBy])
+  @@map("patches")
+}
+
+model Fact {
+  id       String @id @default(cuid())
+  patchId  String @map("patch_id")
+  label    String
+  value    String
+  sourceId String? @map("source_id")
+
+  patch  Patch  @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  source Source? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([patchId])
+  @@map("facts")
+}
+
+model Event {
+  id         String   @id @default(cuid())
+  patchId    String   @map("patch_id")
+  title      String
+  dateStart  DateTime @map("date_start")
+  dateEnd    DateTime? @map("date_end")
+  summary    String
+  media      Json?    // { type: 'image' | 'video', url: string, alt?: string }
+  tags       String[]
+  sourceIds  String[] @map("source_ids")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  patch   Patch    @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  sources Source[] @relation("EventSources")
+
+  @@index([patchId])
+  @@index([dateStart])
+  @@map("events")
+}
+
+model Source {
+  id          String    @id @default(cuid())
+  patchId     String    @map("patch_id")
+  title       String
+  url         String
+  author      String?
+  publisher   String?
+  publishedAt DateTime? @map("published_at")
+  addedBy     String    @map("added_by")
+  citeMeta    Json?     @map("cite_meta") // { title, url, author?, publisher?, publishedAt? }
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  patch   Patch   @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  adder   User    @relation("SourceAdder", fields: [addedBy], references: [id], onDelete: Cascade)
+  facts   Fact[]
+  events  Event[] @relation("EventSources")
+
+  @@index([patchId])
+  @@index([addedBy])
+  @@map("sources")
+}
+
+model PatchPost {
+  id        String   @id @default(cuid())
+  patchId   String   @map("patch_id")
+  authorId  String   @map("author_id")
+  type      PostType
+  title     String?
+  body      String?
+  media     Json?    // { type: 'image' | 'video', url: string, alt?: string }
+  url       String?
+  tags      String[]
+  metrics   Json     // { likes: number, comments: number, reposts: number, views: number }
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  patch  Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  author User  @relation("PatchPostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([patchId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("patch_posts")
+}
+
+model PatchMember {
+  id        String   @id @default(cuid())
+  patchId   String   @map("patch_id")
+  userId    String   @map("user_id")
+  role      String   @default("member") // member, moderator, admin
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  user  User  @relation("PatchMembers", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, userId], name: "patch_user_member_unique")
+  @@index([patchId])
+  @@index([userId])
+  @@map("patch_members")
+}
+
+enum PostType {
+  CARROT
+  TEXT
+  LINK
+  IMAGE
+  VIDEO
 }

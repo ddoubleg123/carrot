@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import FeedMediaManager, { type PostAsset as FMPostAsset } from "../../components/video/FeedMediaManager";
 import MediaPreloadQueue, { TaskType, Priority } from "../../lib/MediaPreloadQueue";
+import NeverBlackVideo from "../../components/video/NeverBlackVideo";
 
 type PostDTO = {
   id: string;
@@ -151,6 +152,46 @@ export default function LivePreloadClient({ limit = 20 }: { limit?: number }) {
       {status === 'error' && (
         <div className="p-4 text-red-600">Error: {error}</div>
       )}
+
+      {/* PUBLIC FEED LIST - renders actual videos without login */}
+      <div className="p-4 space-y-8">
+        {posts.map((p) => (
+          <div key={p.id} data-post-id={p.id} className="max-w-2xl mx-auto border rounded-lg overflow-hidden shadow-sm">
+            <div className="p-3 text-sm text-gray-600 flex items-center gap-2">
+              <span className="inline-block w-6 h-6 rounded-full bg-gray-200" />
+              <span className="font-medium">@user_{p.id.slice(0,4)}</span>
+              <span className="text-gray-400">·</span>
+              <span>#{String(p.feedIndex).padStart(2,'0')}</span>
+            </div>
+            {p.type === 'video' && p.videoUrl ? (
+              <NeverBlackVideo
+                postId={p.id}
+                src={p.videoUrl}
+                poster={p.thumbnailUrl}
+                bucket={p.bucket}
+                path={p.path}
+                className="w-full"
+                muted
+                playsInline
+                controls={false}
+                autoPlay={false}
+              />
+            ) : p.type === 'image' && p.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.thumbnailUrl} alt="image" className="w-full object-cover" />
+            ) : (
+              <div className="w-full aspect-video bg-gray-100 flex items-center justify-center text-gray-400">No media</div>
+            )}
+            <div className="p-3 text-xs text-gray-500">
+              <button
+                className="px-2 py-1 border rounded mr-2"
+                onClick={() => FeedMediaManager.inst.setActive(FeedMediaManager.inst.getHandleByElement(document.querySelector(`[data-post-id="${p.id}"] video`) as Element)!, { manual: true })}
+              >Make Active</button>
+              <span>Tip: click video to play; only one should play at a time.</span>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="p-4">
         <h2 className="text-sm font-semibold mb-2">DOM order snapshot</h2>

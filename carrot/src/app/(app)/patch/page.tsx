@@ -353,7 +353,7 @@ export default function PatchPage() {
       </div>
 
       {/* Groups Grid - Same size as AI agent tiles */}
-      <div className="px-6 pb-16 pt-16">
+      <div className="px-6 pb-16 pt-8">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Explore Groups</h2>
           

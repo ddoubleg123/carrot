@@ -654,7 +654,7 @@ export default function RabbitPage() {
             id: (session?.user as any)?.id || 'unknown',
             name: (session?.user as any)?.name || 'User',
             username: (session?.user as any)?.username || 'user',
-            avatar: (session?.user as any)?.image || '/default-avatar.png'
+            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
           },
           timestamp: new Date()
         }
@@ -685,7 +685,7 @@ export default function RabbitPage() {
             id: (session?.user as any)?.id || 'unknown',
             name: (session?.user as any)?.name || 'User',
             username: (session?.user as any)?.username || 'user',
-            avatar: (session?.user as any)?.image || '/default-avatar.png'
+            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
           },
           timestamp: new Date()
         }
