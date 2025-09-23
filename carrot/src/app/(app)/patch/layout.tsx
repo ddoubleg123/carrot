@@ -23,7 +23,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
         {/* Main content area */}
         <main className="flex-1 min-w-0">
-          <div className="w-full min-w-[320px] max-w-[720px] px-6">
+          <div className="w-full min-w-[320px] px-6">
             {children}
           </div>
         </main>
