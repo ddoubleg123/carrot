@@ -198,12 +198,15 @@ function PersonalInfoStep({
         {/* Username */}
         <div>
           <label className="block text-sm font-medium">Username *</label>
+          {/* Hidden field to prevent autofill */}
+          <input type="text" style={{ display: 'none' }} autoComplete="username" />
           <div className={shell(!!errors.username)}>
             <input
               {...register("username")}
               className="w-full bg-transparent border-0 outline-none"
-              placeholder="Username"
-              autoComplete="username"
+              placeholder="Choose a unique username"
+              autoComplete="new-password"
+              data-form-type="other"
               onBlur={checkUsername} // 👈 only on blur
             />
           </div>
