@@ -19,17 +19,17 @@ import {
   ChevronUp,
   Search,
   Filter,
-  Play,
-  CheckCircle,
-  AlertTriangle,
-  Command,
-  Clock,
-  User,
-  ArrowRight,
-  ArrowLeft,
-  Target,
-  Palette,
-  Code,
+  Play, 
+  CheckCircle, 
+  AlertTriangle, 
+  Command, 
+  Clock, 
+  User, 
+  ArrowRight, 
+  ArrowLeft, 
+  Target, 
+  Palette, 
+  Code, 
   Shield,
   Upload,
   Image,
@@ -92,9 +92,9 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
 
   return (
     <div className="group cursor-pointer" onClick={onClick}>
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-full flex flex-col">
-        {/* Avatar - Main Focus - Taller format like Alan Turing */}
-        <div className="aspect-[4/5] relative">
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-[280px] flex flex-col">
+        {/* Avatar - Main Focus - Fixed height for consistency */}
+        <div className="h-[200px] relative">
           <img
             src={agent.avatar}
             alt={agent.name}
@@ -104,8 +104,8 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
           <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
           </div>
           
-        {/* Agent Info - Consistent height */}
-        <div className="p-4 text-center flex-1 flex flex-col justify-center min-h-[80px]">
+        {/* Agent Info - Fixed height for consistency */}
+        <div className="h-[80px] p-4 text-center flex flex-col justify-center">
           <h3 className="font-bold text-gray-900 text-lg mb-1 leading-tight">
             {first}
             {last && (
@@ -204,17 +204,17 @@ function UploadModal({
       <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Share Content</h3>
-          <button
+                <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
           >
             <X size={20} />
-          </button>
-        </div>
+                </button>
+          </div>
 
         {/* Upload Type Selector */}
         <div className="flex gap-2 mb-4">
-          <button
+              <button
             onClick={() => setUploadType('link')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
               uploadType === 'link'
@@ -224,8 +224,8 @@ function UploadModal({
           >
             <ExternalLink size={20} />
             <span className="font-medium">Link</span>
-          </button>
-          <button
+              </button>
+            <button
             onClick={() => setUploadType('pdf')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
               uploadType === 'pdf'
@@ -235,8 +235,8 @@ function UploadModal({
           >
             <File size={20} />
             <span className="font-medium">PDF</span>
-          </button>
-          <button
+            </button>
+              <button
             onClick={() => setUploadType('image')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
               uploadType === 'image'
@@ -246,8 +246,8 @@ function UploadModal({
           >
             <Image size={20} />
             <span className="font-medium">Image</span>
-          </button>
-        </div>
+              </button>
+          </div>
 
         {/* Upload Form */}
         <form onSubmit={handleSubmit}>
@@ -257,7 +257,7 @@ function UploadModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Website URL
                 </label>
-                <input
+            <input
                   type="url"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
@@ -266,7 +266,7 @@ function UploadModal({
                   required
                 />
               </div>
-            </div>
+          </div>
           )}
 
           {(uploadType === 'pdf' || uploadType === 'image') && (
@@ -285,27 +285,27 @@ function UploadModal({
                     <p className="text-xs text-gray-500">
                       {uploadType === 'pdf' ? 'PDF files up to 10MB' : 'JPG, PNG, GIF up to 5MB'}
                     </p>
-                  </div>
-                </div>
+                          </div>
+                        </div>
               </div>
-            </div>
+          </div>
           )}
-
+          
           <div className="flex gap-3 mt-6">
-            <button
+          <button 
               type="button"
               onClick={onClose}
               className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
             >
               Cancel
-            </button>
+          </button>
             <button
               type="submit"
               className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
             >
               {uploadType === 'link' ? 'Share Link' : `Upload ${uploadType === 'pdf' ? 'PDF' : 'Image'}`}
             </button>
-          </div>
+        </div>
         </form>
 
         {/* Hidden file input */}
@@ -365,10 +365,10 @@ function ConversationThread({
         <p className="text-sm text-gray-500">
           {thread.activeAgents.length} advisors • {thread.messages.length} messages
         </p>
-      </div>
+            </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 py-6 pb-24 space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -399,52 +399,54 @@ function ConversationThread({
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                     {message.agent.role}
                   </span>
-              </div>
-              )}
+                </div>
+                )}
               <p className="text-sm">{message.content}</p>
               <p className="text-xs opacity-70 mt-1">
                 {message.timestamp.toLocaleTimeString()}
               </p>
               </div>
-                  </div>
-        ))}
+              </div>
+            ))}
         <div ref={messagesEndRef} />
-          </div>
-          
-      {/* Message Input */}
-      <div className="bg-white border-t border-gray-200 p-4">
-        <form onSubmit={handleSend} className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setShowUploadModal(true)}
-            className="px-4 py-3 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
-            title="Upload file or share link"
-          >
-            <Upload size={20} />
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Continue the conversation..."
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-          />
-          <button
-            type="submit"
-            className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
-          >
-            <Send size={20} />
-          </button>
-        </form>
-      </div>
+        </div>
 
+      {/* Message Input - Fixed at bottom of viewport */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
+        <div className="max-w-4xl mx-auto">
+          <form onSubmit={handleSend} className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowUploadModal(true)}
+              className="px-4 py-3 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
+              title="Upload file or share link"
+            >
+              <Upload size={20} />
+            </button>
+                <input
+                  type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Continue the conversation..."
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            />
+            <button
+              type="submit"
+              className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+            >
+              <Send size={20} />
+            </button>
+          </form>
+              </div>
+              </div>
+              
       {/* Upload Modal */}
       <UploadModal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         onUpload={handleUpload}
-      />
-    </div>
+                />
+              </div>
   );
 }
 
@@ -480,14 +482,14 @@ function AgentRoster({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">Your Council</h3>
-          <button
+                  <button
             onClick={() => setShowSettings(!showSettings)}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <Settings size={20} />
           </button>
-          </div>
-        </div>
+                      </div>
+                    </div>
 
       {/* Settings Panel */}
       {showSettings && (
@@ -497,7 +499,7 @@ function AgentRoster({
             <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
               <Pin size={16} />
               Pin agents to always include
-            </button>
+                  </button>
             <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
               <EyeOff size={16} />
               Hide agents from auto-join
@@ -537,7 +539,7 @@ function AgentRoster({
                       className="w-10 h-10 rounded-full object-cover"
                     />
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
-                      </div>
+                </div>
                   
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{agent.name}</p>

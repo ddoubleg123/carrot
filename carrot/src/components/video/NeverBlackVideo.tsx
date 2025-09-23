@@ -283,7 +283,7 @@ export default function NeverBlackVideo({
   // PHASE A.1: Display Logic - NEVER show black screens
   // Keep poster/placeholder visible until the first frame is ready to paint
   const showPoster = (!firstFrameReady) && posterLoaded && !posterError;
-  const showPlaceholder = !showPoster && (!currentPosterUrl || posterError);
+  const showPlaceholder = (!firstFrameReady) && (!currentPosterUrl || posterError);
   const showLoading = (!firstFrameReady) && !posterLoaded && !posterError && currentPosterUrl;
 
   // Sticky frame: show last captured frame when paused and we have video metadata
@@ -324,6 +324,13 @@ export default function NeverBlackVideo({
         onTimeUpdate={handleVideoTimeUpdate}
         onCanPlay={handleVideoCanPlay}
         onError={handleVideoError}
+        onClick={() => {
+          try {
+            if (videoRef.current && videoRef.current.paused) {
+              void videoRef.current.play();
+            }
+          } catch {}
+        }}
         style={{
           opacity: firstFrameReady ? 1 : 0,
           transition: 'opacity 0.3s ease'
@@ -334,7 +341,7 @@ export default function NeverBlackVideo({
 
       {/* Frozen frame overlay (highest priority when paused) */}
       {showFrozenFrame && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none">
           <img
             src={frozenFrame}
             alt="Video frame"
@@ -354,7 +361,7 @@ export default function NeverBlackVideo({
 
       {/* Poster overlay kept until first frame is ready */}
       {showPoster && !showFrozenFrame && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none">
           <Image
             src={currentPosterUrl!}
             alt="Video thumbnail"
@@ -371,7 +378,7 @@ export default function NeverBlackVideo({
 
       {/* Loading placeholder while poster is loading and first frame not ready */}
       {showLoading && !showFrozenFrame && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none">
           <VideoPlaceholder 
             className="w-full h-full" 
             type="loading"
@@ -382,7 +389,7 @@ export default function NeverBlackVideo({
 
       {/* Fallback placeholder - NEVER BLACK */}
       {showPlaceholder && !showFrozenFrame && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none">
           <VideoPlaceholder 
             className="w-full h-full" 
             type="video"
@@ -404,7 +411,7 @@ export default function NeverBlackVideo({
 
       {/* Emergency fallback - should never be visible */}
       {!hasVisibleContent && (
-        <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
+        <div className="absolute inset-0 bg-gray-200 flex items-center justify-center pointer-events-none">
           <div className="text-gray-500 text-center">
             <div className="text-4xl mb-2">📹</div>
             <div className="text-sm">Media Loading...</div>
