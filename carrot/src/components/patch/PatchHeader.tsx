@@ -5,16 +5,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Heart, Users, MessageSquare, Calendar, BookOpen } from 'lucide-react'
 
+interface PatchTheme {
+  bg?: string
+  accent?: string
+}
+
 interface Patch {
   id: string
   handle: string
   name: string
   description: string
   tags: string[]
-  theme?: {
-    bg?: string
-    accent?: string
-  }
+  theme?: PatchTheme | null
   _count: {
     members: number
     posts: number

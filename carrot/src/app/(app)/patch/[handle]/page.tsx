@@ -7,6 +7,11 @@ import TimelineView from '@/components/patch/TimelineView'
 import ReferencesList from '@/components/patch/ReferencesList'
 import PostFeed from '@/components/patch/PostFeed'
 
+interface PatchTheme {
+  bg?: string
+  accent?: string
+}
+
 interface PatchPageProps {
   params: Promise<{ handle: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -138,10 +143,12 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     postCount: topContributors.find(c => c.authorId === user.id)?._count.authorId || 0
   }))
 
+  const theme = patch.theme as PatchTheme | null
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with theme background */}
-      <div className={`${patch.theme?.bg || 'bg-white'} border-b border-gray-200`}>
+      <div className={`${theme?.bg || 'bg-white'} border-b border-gray-200`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <PatchHeader patch={patch} />
         </div>
