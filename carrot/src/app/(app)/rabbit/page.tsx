@@ -341,22 +341,16 @@ function ConversationThread({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Prevent scroll jump when there are few messages
-    if (thread.messages.length === 0) return;
-    
-    // Only scroll if the container is actually scrollable
-    if (
-      messageContainerRef.current &&
-      messageContainerRef.current.scrollHeight > messageContainerRef.current.clientHeight
-    ) {
-      // Use timeout to ensure layout is ready
-      const timeout = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-      return () => clearTimeout(timeout);
-    }
-  }, [thread.messages]);
+  // Remove auto-scroll - let user control their own view
+  // useEffect(() => {
+  //   // Auto-scroll to bottom when new messages are added
+  //   if (thread.messages.length > 0) {
+  //     const timeout = setTimeout(() => {
+  //       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  //     }, 100);
+  //     return () => clearTimeout(timeout);
+  //   }
+  // }, [thread.messages]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,7 +383,7 @@ function ConversationThread({
             </div>
 
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24 flex flex-col justify-end space-y-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24 space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -452,20 +446,20 @@ function ConversationThread({
           </div>
         ))}
         <div ref={messagesEndRef} />
-        </div>
+      </div>
 
       {/* Message Input - Fixed at bottom of viewport */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
         <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSend} className="flex gap-3">
-            <button
+                    <button
               type="button"
               onClick={() => setShowUploadModal(true)}
               className="px-4 py-3 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
               title="Upload file or share link"
             >
               <Upload size={20} />
-            </button>
+                    </button>
                 <input
                   type="text"
               value={newMessage}
@@ -473,14 +467,14 @@ function ConversationThread({
               placeholder="Continue the conversation..."
               className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
             />
-            <button
+                    <button
               type="submit"
               className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
             >
               <Send size={20} />
-            </button>
+                    </button>
           </form>
-              </div>
+                </div>
               </div>
               
       {/* Upload Modal */}
@@ -531,8 +525,8 @@ function AgentRoster({
           >
             <Settings size={20} />
           </button>
-                      </div>
                     </div>
+                  </div>
 
       {/* Settings Panel */}
       {showSettings && (
@@ -551,9 +545,9 @@ function AgentRoster({
               <Users size={16} />
               Curate "My Council"
             </button>
-              </div>
-            </div>
-          )}
+                    </div>
+                  </div>
+                )}
 
       {/* Create New Agent */}
       <div className="p-4 border-b border-gray-200">
@@ -582,19 +576,19 @@ function AgentRoster({
                       className="w-10 h-10 rounded-full object-cover"
                     />
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
-                </div>
+            </div>
                   
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{agent.name}</p>
                     <p className="text-sm text-gray-500 truncate">{agent.role}</p>
-              </div>
+        </div>
 
-                    <button
+          <button
                     onClick={() => onRemoveAgent(agent.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-                  >
+          >
                     <X size={16} />
-                    </button>
+          </button>
                 </div>
                       ))}
                     </div>
@@ -607,7 +601,7 @@ function AgentRoster({
             {agents
               .filter(agent => !activeAgents.includes(agent.id) && !agent.hidden)
               .map((agent) => (
-          <button
+              <button
                   key={agent.id}
                   onClick={() => onToggleAgent(agent.id)}
                   className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
@@ -622,7 +616,7 @@ function AgentRoster({
                     <p className="text-xs text-gray-500">{agent.role}</p>
                   </div>
                   <Plus size={16} className="text-gray-400" />
-          </button>
+              </button>
               ))}
           </div>
         </div>

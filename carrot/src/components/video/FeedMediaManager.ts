@@ -87,7 +87,23 @@ export function isFastScroll(): boolean {
 class FeedMediaManager {
   private static _inst: FeedMediaManager | null = null;
   static get inst(): FeedMediaManager {
-    if (!this._inst) this._inst = new FeedMediaManager();
+    if (!this._inst) {
+      this._inst = new FeedMediaManager();
+      // Attach a single global click handler to promote clicked videos to manual Active
+      try {
+        if (typeof window !== 'undefined' && !this._inst._manualHooked) {
+          window.addEventListener('click', (e: MouseEvent) => {
+            const target = e.target as Element | null;
+            if (!target) return;
+            const videoEl = target.closest('video');
+            if (!videoEl) return;
+            const handle = this._inst!.getHandleByElement(videoEl);
+            if (handle) this._inst!.setActive(handle, { manual: true });
+          }, { capture: true });
+          this._inst._manualHooked = true;
+        }
+      } catch {}
+    }
     return this._inst!;
   }
 
@@ -101,7 +117,12 @@ class FeedMediaManager {
   private _posts: PostAsset[] = [];
   private _currentViewportIndex = 0;
   private _screenHeight = 0;
-  
+  private _io = new WeakMap<Element, IntersectionObserver>();
+  private _visibility = new WeakMap<VideoHandle, number>(); // 0..1 intersection ratio
+  private _debounceTimer: number | null = null;
+  private _manualActive?: VideoHandle; // manual override survives until not visible
+  private _manualHooked = false; // ensure global click hook only binds once
+
   private preloadQueue = MediaPreloadQueue;
   private stateCache = MediaStateCache.instance;
 
@@ -301,11 +322,29 @@ class FeedMediaManager {
     this._handles.set(el, handle);
     this._allHandles.add(handle);
     this._states.set(handle, TileState.Idle);
+
+    // Attach IntersectionObserver to track visibility ratio for active winner selection
+    try {
+      const cb: IntersectionObserverCallback = (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const ratio = entry.intersectionRatio || 0;
+        this._visibility.set(handle, ratio);
+        this.scheduleActiveRecalc();
+      };
+      const io = new IntersectionObserver(cb, { threshold: [0, 0.1, 0.25, 0.5, 0.75, 1], root: null, rootMargin: '0px' });
+      this._io.set(el, io);
+      io.observe(el);
+    } catch {}
   }
   
   unregisterHandle(el: Element) {
     const handle = this._handles.get(el);
     if (handle) {
+      try { this._visibility.delete(handle); } catch {}
+      const io = this._io.get(el);
+      if (io) { try { io.unobserve(el); io.disconnect(); } catch {}; this._io.delete(el); }
+      
       const timer = this._releaseTimers.get(handle);
       if (timer) {
         clearTimeout(timer);
@@ -317,6 +356,7 @@ class FeedMediaManager {
       this._paused.delete(handle);
       if (this._active === handle) this._active = undefined;
       if (this._warm === handle) this._warm = undefined;
+      if (this._manualActive === handle) this._manualActive = undefined;
     }
     this._handles.delete(el);
   }
@@ -329,7 +369,7 @@ class FeedMediaManager {
     return this._states.get(handle) || TileState.Idle;
   }
 
-  setActive(next?: VideoHandle) {
+  setActive(next?: VideoHandle, opts?: { manual?: boolean }) {
     if (next) {
       const timer = this._releaseTimers.get(next);
       if (timer) {
@@ -343,6 +383,9 @@ class FeedMediaManager {
           id: next.id, 
           currentTime: cachedState.currentTime 
         });
+      }
+      if (opts?.manual) {
+        this._manualActive = next;
       }
     }
 
@@ -370,6 +413,34 @@ class FeedMediaManager {
         id: next.id, 
         preloaded: this.preloadQueue.isCompleted(next.id, TaskType.VIDEO_PREROLL_6S) 
       });
+    }
+  }
+
+  private scheduleActiveRecalc(delay = 150) {
+    if (this._debounceTimer) window.clearTimeout(this._debounceTimer);
+    this._debounceTimer = window.setTimeout(() => {
+      this._debounceTimer = null;
+      this.updateActiveFromViewport();
+    }, delay);
+  }
+
+  private updateActiveFromViewport() {
+    // If manual active exists and still visible, keep it
+    if (this._manualActive) {
+      const ratio = this._manualActive.el ? (this._visibility.get(this._handles.get(this._manualActive.el!) || this._manualActive) || 0) : 0;
+      if (ratio > 0) return; // still visible: honor manual
+      this._manualActive = undefined; // no longer visible: release manual override
+    }
+
+    // Choose the handle with the highest intersection ratio
+    let best: VideoHandle | undefined;
+    let bestRatio = 0;
+    for (const h of this._allHandles) {
+      const r = this._visibility.get(h) || 0;
+      if (r > bestRatio) { bestRatio = r; best = h; }
+    }
+    if (best && best !== this._active) {
+      this.setActive(best);
     }
   }
 
@@ -611,6 +682,7 @@ class FeedMediaManager {
     this._warm = undefined;
     this._paused.clear();
     this._allHandles.clear();
+    this._manualActive = undefined;
   }
 }
 
