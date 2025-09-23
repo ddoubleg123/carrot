@@ -182,7 +182,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
     } catch {}
 
-    // Normalize Firebase v0 path: ensure /o/<object> is encoded exactly once (only for unsigned URLs)
+    // Normalize Firebase v0 path: ensure bucket host and /o/<object> are normalized (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
       // Fix mis-specified bucket in query param `b` that sometimes appears as "<project>.firebasestorage.app"
       try {
@@ -195,6 +195,28 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           target = new URL(target.origin + target.pathname + '?' + target.searchParams.toString());
         }
       } catch {}
+
+      // Also fix when the bucket appears within the v0 path: /v0/b/<bucket>/o/<object>
+      try {
+        // Only adjust unsigned URLs; signed URLs must not change path semantics
+        const isSigned = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
+          target.searchParams.has('X-Goog-Algorithm');
+        if (!isSigned) {
+          const m = target.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+          if (m) {
+            let bucket = decodeURIComponent(m[1]);
+            const objectPart = m[2];
+            if (bucket.endsWith('.firebasestorage.app')) {
+              const project = bucket.replace(/\.firebasestorage\.app$/, '');
+              const correctedBucket = `${project}.appspot.com`;
+              const encObject = encodeURIComponent(decodeURIComponent(objectPart));
+              const rebuilt = new URL(`${target.origin}/v0/b/${encodeURIComponent(correctedBucket)}/o/${encObject}${target.search}`);
+              target = rebuilt;
+            }
+          }
+        }
+      } catch {}
+
       try {
         const isSigned = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires') ||
           target.searchParams.has('X-Goog-Algorithm');

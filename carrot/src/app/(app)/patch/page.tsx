@@ -362,6 +362,7 @@ export default function PatchPage() {
               <div
                 key={group.id}
                 className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group h-[300px] flex flex-col"
+                onClick={() => window.location.href = `/patch/${group.id}`}
               >
                 {/* Header Image - Fixed height like AI agent tiles */}
                 <div className="h-[200px] relative overflow-hidden">

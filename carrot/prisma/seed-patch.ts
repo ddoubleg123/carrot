@@ -12,7 +12,55 @@ async function main() {
     return
   }
 
-  // Create or find the sample patch
+  // Create or find the sample patches
+  const patches = [
+    {
+      handle: 'clean-energy-revolution',
+      name: 'Clean Energy Revolution',
+      description: 'A community dedicated to accelerating the transition to renewable energy and sustainable technologies. We discuss policy, innovation, and the latest developments in clean energy.',
+      rules: `1. Stay on topic - all discussions should relate to clean energy, sustainability, or environmental policy
+2. Be respectful - no personal attacks or harassment
+3. Cite sources - when making claims, provide credible sources
+4. No spam - promotional content must be clearly marked and relevant
+5. Constructive criticism welcome - challenge ideas, not people`,
+      tags: ['clean-energy', 'renewables', 'sustainability', 'climate', 'policy', 'innovation'],
+      theme: {
+        bg: 'bg-gradient-to-br from-green-50 to-blue-50',
+        accent: '#10B981'
+      }
+    },
+    {
+      handle: 'universal-basic-income',
+      name: 'Universal Basic Income',
+      description: 'Exploring the potential of UBI to address economic inequality and provide financial security for all citizens. We discuss implementation, funding, and real-world examples.',
+      rules: `1. Focus on UBI-related topics and economic policy
+2. Respectful debate encouraged - challenge ideas, not people
+3. Provide evidence and sources for claims
+4. No personal attacks or harassment
+5. Stay constructive and solution-oriented`,
+      tags: ['ubi', 'economics', 'inequality', 'policy', 'welfare', 'automation'],
+      theme: {
+        bg: 'bg-gradient-to-br from-blue-50 to-purple-50',
+        accent: '#8B5CF6'
+      }
+    },
+    {
+      handle: 'term-limits',
+      name: 'Term Limits for Politicians',
+      description: 'Advocating for term limits to bring fresh leadership and reduce career politicians. We discuss implementation strategies and their impact on democracy.',
+      rules: `1. Focus on political reform and term limits
+2. Respectful political discussion
+3. Cite sources and evidence
+4. No personal attacks on politicians or members
+5. Constructive solutions welcome`,
+      tags: ['term-limits', 'politics', 'reform', 'democracy', 'leadership', 'government'],
+      theme: {
+        bg: 'bg-gradient-to-br from-purple-50 to-pink-50',
+        accent: '#EC4899'
+      }
+    }
+  ]
+
   let patch = await prisma.patch.findUnique({
     where: { handle: 'clean-energy-revolution' }
   })
@@ -20,22 +68,26 @@ async function main() {
   if (!patch) {
     patch = await prisma.patch.create({
       data: {
-        handle: 'clean-energy-revolution',
-        name: 'Clean Energy Revolution',
-        description: 'A community dedicated to accelerating the transition to renewable energy and sustainable technologies. We discuss policy, innovation, and the latest developments in clean energy.',
-        rules: `1. Stay on topic - all discussions should relate to clean energy, sustainability, or environmental policy
-2. Be respectful - no personal attacks or harassment
-3. Cite sources - when making claims, provide credible sources
-4. No spam - promotional content must be clearly marked and relevant
-5. Constructive criticism welcome - challenge ideas, not people`,
-        tags: ['clean-energy', 'renewables', 'sustainability', 'climate', 'policy', 'innovation'],
-        theme: {
-          bg: 'bg-gradient-to-br from-green-50 to-blue-50',
-          accent: '#10B981'
-        },
+        ...patches[0],
         createdBy: user.id,
       }
     })
+  }
+
+  // Create the other patches
+  for (const patchData of patches.slice(1)) {
+    const existingPatch = await prisma.patch.findUnique({
+      where: { handle: patchData.handle }
+    })
+
+    if (!existingPatch) {
+      await prisma.patch.create({
+        data: {
+          ...patchData,
+          createdBy: user.id,
+        }
+      })
+    }
   }
 
   console.log(`✅ Found/Created patch: ${patch.name}`)
