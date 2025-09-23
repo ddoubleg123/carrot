@@ -215,7 +215,12 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               {activeTab === 'timeline' && (
                 <TimelineView 
                   patch={typedPatch} 
-                  events={patch.events}
+                  events={patch.events.map(event => ({
+                    ...event,
+                    media: event.media && typeof event.media === 'object' && event.media !== null && 'type' in event.media && 'url' in event.media
+                      ? event.media as { type: 'image' | 'video'; url: string; alt?: string }
+                      : null
+                  }))}
                   sources={patch.sources}
                 />
               )}
