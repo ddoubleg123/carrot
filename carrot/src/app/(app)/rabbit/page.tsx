@@ -450,7 +450,7 @@ function ConversationThread({
 
       {/* Message Input - Fixed at bottom of viewport */}
       <div className="fixed bottom-0 left-16 right-80 bg-white border-t border-gray-200 p-4 z-10">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-lg mx-auto">
           <form onSubmit={handleSend} className="flex gap-3">
                     <button
               type="button"
@@ -723,8 +723,11 @@ export default function RabbitPage() {
         temperature: 0.3,
         max_tokens: 1024,
         messages: [
-          // Optional: add a system preface later for guardrails
-          // { role: 'system', content: 'You are a helpful assistant.' },
+          // System message to set the agent's personality
+          { 
+            role: 'system', 
+            content: `You are ${respondingAgent.name}, an expert in ${respondingAgent.role}. Respond in character as this historical figure, drawing from their expertise and perspective. Keep responses concise and engaging.` 
+          },
           ...thread.messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.content })),
           { role: 'user', content: userMsg }
         ]
@@ -741,11 +744,32 @@ export default function RabbitPage() {
       const decoder = new TextDecoder();
       let buf = '';
 
-      // Insert placeholder agent message
+      // Get the first active agent to respond (or use a default)
+      const respondingAgent = activeAgents.length > 0 
+        ? getAgentById(activeAgents[0]) 
+        : getAgentById('brzezinski'); // Default to Brzezinski for geopolitics
+      
+      if (!respondingAgent) {
+        console.warn('[Rabbit] No agent found to respond');
+        return;
+      }
+
+      // Insert placeholder agent message with correct agent data
       const agentMsgId = `a-${Date.now()}`;
       setCurrentThread(prev => prev ? {
         ...prev,
-        messages: [...prev.messages, { id: agentMsgId, type: 'agent', content: '', timestamp: new Date(), agent: { id: 'deepseek', name: 'DeepSeek V3', role: 'AI Assistant', avatar: '/avatar-placeholder.svg' } }],
+        messages: [...prev.messages, { 
+          id: agentMsgId, 
+          type: 'agent', 
+          content: '', 
+          timestamp: new Date(), 
+          agent: { 
+            id: respondingAgent.id, 
+            name: respondingAgent.name, 
+            role: respondingAgent.role, 
+            avatar: respondingAgent.avatar 
+          } 
+        }],
         updatedAt: new Date()
       } : prev);
 

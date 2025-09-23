@@ -17,6 +17,21 @@ export default function MediaUploadCard({ onMediaSelect, selectedMedia, onClear 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // File size validation
+      if (file.type.startsWith('image/')) {
+        if (file.size > 10 * 1024 * 1024) { // 10 MB limit for images
+          alert("Image exceeds 10 MB. Please use a smaller image.");
+          event.target.value = "";
+          return;
+        }
+      } else if (file.type.startsWith('video/')) {
+        if (file.size > 100 * 1024 * 1024) { // 100 MB limit for videos
+          alert("Video exceeds 100 MB. Please trim/compress your video first. Current size: " + Math.round(file.size / 1024 / 1024 * 100) / 100 + " MB");
+          event.target.value = "";
+          return;
+        }
+      }
+      
       const url = URL.createObjectURL(file);
       const type = file.type.startsWith('video/') ? 'video' : 'image';
       onMediaSelect({ url, type, file });

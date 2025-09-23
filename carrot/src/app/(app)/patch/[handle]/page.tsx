@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { getPatchThemeClass } from '@/lib/patch-theme'
-import PatchHeader, { MetricBar } from '@/components/patch/PatchHeader'
+import PatchHeader from '@/components/patch/PatchHeader'
 import PillNav from '@/components/patch/PillNav'
 import FactSheet from '@/components/patch/FactSheet'
 import Overview from '@/components/patch/Overview'
@@ -174,7 +174,15 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       <div className="bg-white border-b border-[#E6E8EC]">
         <div className="max-w-7xl mx-auto">
           <PatchHeader patch={patch} />
-          <MetricBar patch={patch} />
+          {/* Metric Bar */}
+          <div className="bg-white border-b border-[#E6E8EC] py-2">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-4 text-sm text-[#60646C]">
+              <span className="flex items-center gap-1">👥 {patch._count.members} Members</span>
+              <span className="flex items-center gap-1">💬 {patch._count.posts} Posts</span>
+              <span className="flex items-center gap-1">🗓️ {patch._count.events} Events</span>
+              <span className="flex items-center gap-1">📚 {patch._count.sources} Sources</span>
+            </div>
+          </div>
         </div>
       </div>
 

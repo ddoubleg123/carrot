@@ -832,13 +832,22 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
       console.log("[DEBUG] File selected:", file.name, "Size:", Math.round(file.size / 1024 / 1024 * 100) / 100, "MB", "Type:", file.type);
 
+      // File size validation
       if (file.type.startsWith('image/')) {
+        if (file.size > 10 * 1024 * 1024) { // 10 MB limit for images
+          alert("Image exceeds 10 MB. Please use a smaller image.");
+          return;
+        }
         setMediaFile(file);
         setMediaType('image');
         const reader = new FileReader();
         reader.onload = (e) => setMediaPreview(e.target?.result as string);
         reader.readAsDataURL(file);
       } else if (file.type.startsWith('video/')) {
+        if (file.size > 100 * 1024 * 1024) { // 100 MB limit for videos
+          alert("Video exceeds 100 MB. Please trim/compress your video first. Current size: " + Math.round(file.size / 1024 / 1024 * 100) / 100 + " MB");
+          return;
+        }
         setMediaFile(file);
         setMediaType('video');
         // Use createObjectURL for videos to avoid data URL size limits
