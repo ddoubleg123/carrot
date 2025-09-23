@@ -278,13 +278,30 @@ async function passthrough(upstream: Response) {
   return new NextResponse(body, { status, headers })
 }
 
-export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+function svgPlaceholder(seed: string) {
+  let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const hueA = (h % 360);
+  const hueB = ((h >> 3) % 360);
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="hsl(${hueA},70%,18%)"/>
+      <stop offset="100%" stop-color="hsl(${hueB},70%,10%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#g)"/>
+</svg>`;
+  return svg;
+}
+
+export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
   const url = new URL(_req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')
   const path = sp.get('path')
   const bucket = sp.get('bucket')
-  const generatePoster = sp.get('generatePoster') === 'true'
+  const generatePoster = sp.get('generatePoster')
 
   // Enhanced logging for debugging
   console.log('[api/img] Request received', {
@@ -765,4 +782,59 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   });
   
   return new NextResponse(view, { status: 200, headers })
+}
+
+export async function GET2(req: NextRequest) {
+  try {
+    const u = new URL(req.url);
+    const url = u.searchParams.get('url');
+    const generatePoster = u.searchParams.get('generatePoster');
+    const bucket = u.searchParams.get('bucket');
+    const path = u.searchParams.get('path');
+    const videoUrl = u.searchParams.get('videoUrl');
+
+    // Fallback deterministic poster: return SVG quickly
+    if (generatePoster === '1' || generatePoster === 'true') {
+      const seed = videoUrl || `${bucket || ''}/${path || ''}` || 'carrot';
+      const svg = svgPlaceholder(seed);
+      return new NextResponse(svg, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    // Simple proxy for public images
+    if (!url) {
+      return NextResponse.json({ error: 'Missing url' }, { status: 400 });
+    }
+
+    let target: URL;
+    try {
+      target = new URL(decodeURIComponent(url));
+    } catch {
+      target = new URL(url);
+    }
+
+    const upstream = await fetch(target.toString(), { method: 'GET', redirect: 'follow', cache: 'no-store' });
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => '');
+      return NextResponse.json({ error: `Upstream ${upstream.status}`, body: text.slice(0, 200) }, { status: upstream.status || 502 });
+    }
+
+    const headers = new Headers();
+    const pass = ['content-type', 'content-length', 'etag', 'last-modified', 'cache-control'];
+    for (const h of pass) {
+      const v = upstream.headers.get(h); if (v) headers.set(h, v);
+    }
+    if (!headers.has('Cache-Control')) headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    headers.set('Access-Control-Allow-Origin', '*');
+
+    return new NextResponse(upstream.body, { status: upstream.status, headers });
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+  }
 }

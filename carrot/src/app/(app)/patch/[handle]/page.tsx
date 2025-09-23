@@ -146,6 +146,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
   const theme = patch.theme as PatchTheme | null
 
   // Create a properly typed patch object for components
+  // This ensures TypeScript compatibility with theme objects
   const typedPatch = {
     ...patch,
     theme: theme

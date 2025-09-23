@@ -180,9 +180,20 @@ class FeedMediaManager {
   private queuePostTasks(post: PostAsset, priority: Priority): void {
     switch (post.type) {
       case 'video':
-        const posterUrl = post.thumbnailUrl
-          ? (post.thumbnailUrl.startsWith('/api/img') ? post.thumbnailUrl : `/api/img?url=${encodeURIComponent(post.thumbnailUrl)}`)
-          : (post.bucket && post.path ? `/api/img?bucket=${post.bucket}&path=${post.path}/thumb.jpg&generatePoster=true` : null);
+        // Always enqueue a POSTER for videos. Order of preference:
+        // 1) Provided thumbnailUrl (proxied via /api/img)
+        // 2) If bucket/path exist, ask /api/img to generate or return a poster for the object
+        // 3) If only videoUrl exists, ask /api/img to generate a poster from videoUrl (fallback may be SVG)
+        let posterUrl: string | null = null;
+        if (post.thumbnailUrl) {
+          posterUrl = post.thumbnailUrl.startsWith('/api/img')
+            ? post.thumbnailUrl
+            : `/api/img?url=${encodeURIComponent(post.thumbnailUrl)}`;
+        } else if (post.bucket && post.path) {
+          posterUrl = `/api/img?bucket=${encodeURIComponent(post.bucket)}&path=${encodeURIComponent(post.path)}/thumb.jpg&generatePoster=1`;
+        } else if (post.videoUrl) {
+          posterUrl = `/api/img?generatePoster=1&videoUrl=${encodeURIComponent(post.videoUrl)}`;
+        }
         
         if (posterUrl) {
           this.preloadQueue.enqueue(post.id, TaskType.POSTER, priority, post.feedIndex, posterUrl, post.bucket, post.path);
