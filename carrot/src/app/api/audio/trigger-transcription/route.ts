@@ -221,7 +221,7 @@ async function processTranscription(postId: string, audioUrl: string, transcript
     const audioDuration = Math.max(1, Math.floor(audioSize / 16000)); // Rough estimate
     
     // Call the Vosk transcription service
-    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-591459094147.us-central1.run.app';
+    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-lnkmm5qvx3a-uc.a.run.app';
     
     console.log(`🎵 Calling Vosk transcription service: ${transcriptionServiceUrl}`);
     

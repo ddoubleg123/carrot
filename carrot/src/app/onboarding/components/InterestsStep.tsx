@@ -27,7 +27,7 @@ export function InterestsStep({
   totalSteps,
   userId
 }: InterestsStepProps) {
-  const [interests, setInterests] = useState(initialData.interests || '');
+  const [interests, setInterests] = useState(initialData?.interests || '');
   const [isValid, setIsValid] = useState(false);
   const [showError, setShowError] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -153,13 +153,13 @@ export function InterestsStep({
         <div className="text-xs text-red-500 mt-1">You must agree to the Terms of Service and Privacy Policy to continue.</div>
       )}
 
-      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+      <div className="mt-8 flex flex-col sm:flex-row gap-4">
         {onBack && (
           <Button
             type="button"
             variant="outline"
             onClick={onBack}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto px-8 py-3 text-base font-medium border-2 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
           >
             Back
@@ -168,8 +168,10 @@ export function InterestsStep({
         <Button
           type="submit"
           className={cn(
-            "w-full sm:w-auto bg-orange-500 text-white hover:bg-orange-600",
-            (!isValid || !draft || !draft.image || !draft.image.storagePath || !agreed) && "opacity-50 cursor-not-allowed"
+            "w-full sm:w-auto px-8 py-3 text-base font-medium rounded-lg shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500",
+            (!isValid || !draft || !draft.image || !draft.image.storagePath || !agreed) 
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed opacity-50" 
+              : "bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg transform hover:-translate-y-0.5"
           )}
           disabled={!isValid || loading || !draft || !draft.image || !draft.image.storagePath || !agreed}
         >
@@ -178,7 +180,6 @@ export function InterestsStep({
         {draftError && (
           <div className="mt-2 text-xs text-red-500 text-center">{draftError}</div>
         )}
-
       </div>
     </form>
   );

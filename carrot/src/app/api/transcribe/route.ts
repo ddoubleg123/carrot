@@ -73,7 +73,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     const mediaType = audioUrl ? 'audio' : 'video';
     console.log(`🎵 Sending ${mediaType} file to transcription service: ${mediaUrl.substring(0, 80)}...`);
     // Call the Vosk transcription service
-    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-591459094147.us-central1.run.app';
+    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-lnkmm5qvx3a-uc.a.run.app';
     
     try {
       console.log(`🔄 Calling transcription service at ${transcriptionServiceUrl}`);
