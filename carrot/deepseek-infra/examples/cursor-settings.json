@@ -1,0 +1,14 @@
+{
+  "deepseek.router.url": "http://localhost:8080/v1/chat/completions",
+  "deepseek.router.apiKey": "local-dev-key",
+  "deepseek.router.model": "deepseek-coder:6.7b",
+  "deepseek.router.temperature": 0.2,
+  "deepseek.router.maxTokens": 700,
+  "deepseek.router.taskType": "editor",
+  "deepseek.router.riskLevel": "low",
+  "deepseek.router.enableCache": true,
+  "deepseek.router.enableSafety": true,
+  "deepseek.router.timeout": 30000,
+  "deepseek.router.retries": 3,
+  "deepseek.router.fallbackModel": "deepseek-coder-v2:16b"
+}
