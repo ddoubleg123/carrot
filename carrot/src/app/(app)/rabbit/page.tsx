@@ -717,6 +717,17 @@ export default function RabbitPage() {
     try {
       const thread = currentThread;
       if (!thread) return;
+      
+      // Get the first active agent to respond (or use a default)
+      const respondingAgent = activeAgents.length > 0 
+        ? getAgentById(activeAgents[0]) 
+        : getAgentById('brzezinski'); // Default to Brzezinski for geopolitics
+      
+      if (!respondingAgent) {
+        console.warn('[Rabbit] No agent found to respond');
+        return;
+      }
+
       const payload = {
         provider: 'deepseek',
         model: 'deepseek-chat',
@@ -743,16 +754,6 @@ export default function RabbitPage() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
-
-      // Get the first active agent to respond (or use a default)
-      const respondingAgent = activeAgents.length > 0 
-        ? getAgentById(activeAgents[0]) 
-        : getAgentById('brzezinski'); // Default to Brzezinski for geopolitics
-      
-      if (!respondingAgent) {
-        console.warn('[Rabbit] No agent found to respond');
-        return;
-      }
 
       // Insert placeholder agent message with correct agent data
       const agentMsgId = `a-${Date.now()}`;
