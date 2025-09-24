@@ -20,7 +20,7 @@ export async function GET() {
       const admin = require('firebase-admin');
       adminStatus = 'available';
     } catch (error) {
-      adminStatus = `error: ${error.message}`;
+      adminStatus = `error: ${error instanceof Error ? error.message : String(error)}`;
     }
 
     // Test a simple video proxy request
