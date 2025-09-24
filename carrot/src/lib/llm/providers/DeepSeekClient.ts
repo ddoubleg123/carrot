@@ -45,13 +45,19 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   const useLocalRouter = hasLocalRouter();
   const useCloudAPI = hasKey();
   
+  console.log('[DeepSeek] useLocalRouter:', useLocalRouter, 'useCloudAPI:', useCloudAPI);
+  console.log('[DeepSeek] DEEPSEEK_API_KEY exists:', !!process.env.DEEPSEEK_API_KEY);
+  console.log('[DeepSeek] DEEPSEEK_ROUTER_URL:', process.env.DEEPSEEK_ROUTER_URL);
+  console.log('[DeepSeek] NODE_ENV:', process.env.NODE_ENV);
+  
   if (!useLocalRouter && !useCloudAPI) {
+    console.log('[DeepSeek] Using mock stream');
     yield* mockStream(params);
     return;
   }
 
   const body = {
-    model: params.model || 'deepseek-chat',
+    model: params.model || 'deepseek-reasoner',
     messages: params.messages,
     temperature: params.temperature ?? 0.3,
     max_tokens: params.max_tokens ?? 1024,
@@ -74,11 +80,17 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
     headers['X-Task-Type'] = 'chat';
   }
 
+  console.log('[DeepSeek] Making request to:', endpoint);
+  console.log('[DeepSeek] Headers:', headers);
+  console.log('[DeepSeek] Body:', JSON.stringify(body, null, 2));
+
   const resp = await fetch(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
+
+  console.log('[DeepSeek] Response status:', resp.status, 'ok:', resp.ok);
 
   if (!resp.ok || !resp.body) {
     const text = await resp.text().catch(() => '');

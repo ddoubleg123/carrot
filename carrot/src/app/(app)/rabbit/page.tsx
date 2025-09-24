@@ -340,17 +340,37 @@ function ConversationThread({
   const [showUploadModal, setShowUploadModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Remove auto-scroll - let user control their own view
-  // useEffect(() => {
-  //   // Auto-scroll to bottom when new messages are added
-  //   if (thread.messages.length > 0) {
-  //     const timeout = setTimeout(() => {
-  //       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  //     }, 100);
-  //     return () => clearTimeout(timeout);
-  //   }
-  // }, [thread.messages]);
+  // Check if user is near bottom of chat
+  const checkIfNearBottom = () => {
+    if (!messageContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+    const threshold = 100; // pixels from bottom
+    const nearBottom = scrollHeight - scrollTop - clientHeight < threshold;
+    setIsNearBottom(nearBottom);
+    setShowScrollButton(!nearBottom && scrollHeight > clientHeight);
+  };
+
+  // Auto-scroll to bottom when new messages are added (only if user is near bottom)
+  useEffect(() => {
+    if (thread.messages.length > 0 && isNearBottom) {
+      const timeout = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [thread.messages.length, isNearBottom]);
+
+  // Listen for scroll events to track if user is near bottom
+  useEffect(() => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', checkIfNearBottom);
+    return () => container.removeEventListener('scroll', checkIfNearBottom);
+  }, []);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -358,6 +378,10 @@ function ConversationThread({
       onSendMessage(newMessage.trim());
       setNewMessage('');
     }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleUpload = (type: 'pdf' | 'link' | 'image', data: string) => {
@@ -383,7 +407,7 @@ function ConversationThread({
             </div>
 
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24 space-y-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-32 space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -433,7 +457,7 @@ function ConversationThread({
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-semibold text-sm">{message.agent.name}</span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                    AI Assistant
+                    AI Expert
                   </span>
                 </div>
               )}
@@ -448,30 +472,45 @@ function ConversationThread({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Scroll to Bottom Button */}
+      {showScrollButton && (
+        <div className="fixed bottom-20 right-6 z-20">
+          <button
+            onClick={scrollToBottom}
+            className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105"
+            title="Scroll to latest messages"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Message Input - Fixed at bottom of viewport */}
-      <div className="fixed bottom-0 left-16 right-80 bg-white border-t border-gray-200 p-4 z-10">
-        <div className="max-w-lg mx-auto">
-          <form onSubmit={handleSend} className="flex gap-3">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
+        <div className="max-w-2xl mx-auto px-4">
+          <form onSubmit={handleSend} className="flex gap-3 max-w-lg mx-auto">
                     <button
               type="button"
               onClick={() => setShowUploadModal(true)}
-              className="px-4 py-3 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
+              className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
               title="Upload file or share link"
             >
-              <Upload size={20} />
+              <Upload size={18} />
                     </button>
                 <input
                   type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Continue the conversation..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
             />
                     <button
               type="submit"
-              className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors"
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
             >
-              <Send size={20} />
+              <Send size={18} />
                     </button>
           </form>
                 </div>
@@ -730,9 +769,9 @@ export default function RabbitPage() {
 
       const payload = {
         provider: 'deepseek',
-        model: 'deepseek-chat',
+        model: 'deepseek-reasoner',
         temperature: 0.3,
-        max_tokens: 1024,
+        max_tokens: 512,
         messages: [
           // System message to set the agent's personality
           { 
@@ -744,12 +783,17 @@ export default function RabbitPage() {
         ]
       };
 
+      console.log('[Rabbit] Calling DeepSeek API with payload:', payload);
       const resp = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!resp.ok || !resp.body) return;
+      console.log('[Rabbit] API response status:', resp.status, 'ok:', resp.ok);
+      if (!resp.ok || !resp.body) {
+        console.warn('[Rabbit] API call failed:', resp.status, resp.statusText);
+        return;
+      }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -797,11 +841,18 @@ export default function RabbitPage() {
           if (!line) continue;
           if (line.startsWith('data:')) {
             const payload = line.slice(5).trim();
+            console.log('[Rabbit] Received data payload:', payload);
             if (payload === '[DONE]') continue;
             try {
               const j = JSON.parse(payload);
-              if (j.type === 'token' && j.token) pushToken(j.token);
-            } catch { /* ignore */ }
+              console.log('[Rabbit] Parsed JSON:', j);
+              if (j.type === 'token' && j.token) {
+                console.log('[Rabbit] Pushing token:', j.token);
+                pushToken(j.token);
+              }
+            } catch (e) { 
+              console.warn('[Rabbit] Failed to parse JSON:', payload, e);
+            }
           }
         }
       }

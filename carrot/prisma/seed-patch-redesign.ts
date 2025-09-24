@@ -399,16 +399,23 @@ async function main() {
 
   console.log(`✅ Created ${posts.length} posts`)
 
-  // Create some members
-  const member = await prisma.patchMember.create({
-    data: {
+  // Create some members (upsert to avoid duplicate)
+  const member = await prisma.patchMember.upsert({
+    where: {
+      patch_user_member_unique: {
+        patchId: patch.id,
+        userId: user.id,
+      }
+    },
+    update: {},
+    create: {
       patchId: patch.id,
       userId: user.id,
       role: 'admin',
     }
   })
 
-  console.log(`✅ Created member: ${member.role}`)
+  console.log(`✅ Created/updated member: ${member.role}`)
 
   console.log('🎉 Patch redesign seeding complete!')
 }

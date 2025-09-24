@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const { provider = 'deepseek', model = 'deepseek-chat', messages = [], temperature = 0.3, max_tokens = 1024 } = await req.json();
+    const { provider = 'deepseek', model = 'deepseek-reasoner', messages = [], temperature = 0.3, max_tokens = 1024 } = await req.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response('messages required', { status: 400 });
