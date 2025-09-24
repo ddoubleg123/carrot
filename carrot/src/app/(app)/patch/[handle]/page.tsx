@@ -255,11 +255,17 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
   )
   } catch (error) {
     console.error('Patch page error:', error)
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      handle: await params.then(p => p.handle).catch(() => 'unknown')
+    })
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Patch</h1>
           <p className="text-gray-600 mb-4">There was an error loading this patch page.</p>
+          <p className="text-sm text-gray-500">Error: {error instanceof Error ? error.message : 'Unknown error'}</p>
           <p className="text-sm text-gray-500">Please try refreshing the page or contact support if the issue persists.</p>
         </div>
       </div>
