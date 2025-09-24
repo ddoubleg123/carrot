@@ -116,7 +116,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       }
 
       // Create the patch
-      patch = await prisma.patch.create({
+      const newPatch = await prisma.patch.create({
         data: {
           handle,
           name: handle.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
@@ -125,7 +125,21 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
           tags: ['community', 'discussion'],
           theme: 'light',
           createdBy: user.id,
-        },
+        }
+      });
+
+      // Add the creator as a member
+      await prisma.patchMember.create({
+        data: {
+          patchId: newPatch.id,
+          userId: user.id,
+          role: 'admin',
+        }
+      });
+
+      // Now fetch the full patch data with all relations
+      patch = await prisma.patch.findUnique({
+        where: { id: newPatch.id },
         include: {
           creator: {
             select: {
@@ -136,11 +150,61 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               image: true,
             }
           },
-          facts: [],
-          events: [],
-          sources: [],
-          posts: [],
-          members: [],
+          facts: {
+            include: {
+              source: true
+            }
+          },
+          events: {
+            include: {
+              sources: true
+            },
+            orderBy: {
+              dateStart: 'desc'
+            },
+            take: 20
+          },
+          sources: {
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: 15
+          },
+          posts: {
+            include: {
+              author: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  profilePhoto: true,
+                  image: true,
+                  country: true,
+                }
+              }
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: 25
+          },
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  profilePhoto: true,
+                  image: true,
+                }
+              }
+            },
+            orderBy: {
+              joinedAt: 'desc'
+            },
+            take: 10
+          },
           _count: {
             select: {
               members: true,
@@ -149,15 +213,6 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               sources: true,
             }
           }
-        }
-      });
-
-      // Add the creator as a member
-      await prisma.patchMember.create({
-        data: {
-          patchId: patch.id,
-          userId: user.id,
-          role: 'admin',
         }
       });
     }
