@@ -97,11 +97,12 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   if (!resp.ok) {
     const errorText = await resp.text();
     console.log('[DeepSeek] Error response body:', errorText);
+    yield { type: 'error', error: `DeepSeek HTTP ${resp.status}: ${errorText.slice(0,200)}` };
+    return;
   }
 
-  if (!resp.ok || !resp.body) {
-    const text = await resp.text().catch(() => '');
-    yield { type: 'error', error: `DeepSeek HTTP ${resp.status}: ${text.slice(0,200)}` };
+  if (!resp.body) {
+    yield { type: 'error', error: 'DeepSeek API returned no response body' };
     return;
   }
 
@@ -126,16 +127,26 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
           }
           try {
             const json = JSON.parse(payload);
+            
+            // Check for error in the response
+            if (json.error) {
+              console.log('[DeepSeek] API returned error:', json.error);
+              yield { type: 'error', error: json.error.message || json.error };
+              return;
+            }
+            
             const delta = json?.choices?.[0]?.delta?.content || '';
             if (delta) yield { type: 'token', token: delta };
+            
             // Optionally emit usage when provided at end
             const usage = json?.usage;
             if (usage && (usage.prompt_tokens || usage.completion_tokens)) {
               yield { type: 'done', usage };
               return;
             }
-          } catch {
-            // Ignore malformed lines
+          } catch (e) {
+            console.log('[DeepSeek] Failed to parse JSON:', payload, e);
+            // Ignore malformed lines but log them for debugging
           }
         }
       }
