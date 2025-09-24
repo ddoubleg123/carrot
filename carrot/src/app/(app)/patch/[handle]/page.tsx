@@ -22,87 +22,145 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     const activeTab = (search.tab as string) || 'overview'
 
     // Fetch patch data with all related information
-    const patch = await prisma.patch.findUnique({
-    where: { handle },
-    include: {
-      creator: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          profilePhoto: true,
-          image: true,
-        }
-      },
-      facts: {
-        include: {
-          source: true
-        }
-      },
-      events: {
-        include: {
-          sources: true
-        },
-        orderBy: {
-          dateStart: 'desc'
-        },
-        take: 20
-      },
-      sources: {
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 15
-      },
-      posts: {
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePhoto: true,
-              image: true,
-              country: true,
-            }
+    let patch = await prisma.patch.findUnique({
+      where: { handle },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            profilePhoto: true,
+            image: true,
           }
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 25
-      },
-      members: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePhoto: true,
-              image: true,
-            }
+        facts: {
+          include: {
+            source: true
           }
         },
-        orderBy: {
-          joinedAt: 'desc'
+        events: {
+          include: {
+            sources: true
+          },
+          orderBy: {
+            dateStart: 'desc'
+          },
+          take: 20
         },
-        take: 10
-      },
-      _count: {
-        select: {
-          members: true,
-          posts: true,
-          events: true,
-          sources: true,
+        sources: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 15
+        },
+        posts: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                profilePhoto: true,
+                image: true,
+                country: true,
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 25
+        },
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                profilePhoto: true,
+                image: true,
+              }
+            }
+          },
+          orderBy: {
+            joinedAt: 'desc'
+          },
+          take: 10
+        },
+        _count: {
+          select: {
+            members: true,
+            posts: true,
+            events: true,
+            sources: true,
+          }
         }
       }
-    }
-  })
+    });
 
-  if (!patch) {
-    notFound()
-  }
+    // If patch doesn't exist, create a basic one
+    if (!patch) {
+      // Find or create a user
+      let user = await prisma.user.findFirst();
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: 'admin@example.com',
+            name: 'Admin User',
+            username: 'admin',
+            isOnboarded: true,
+          }
+        });
+      }
+
+      // Create the patch
+      patch = await prisma.patch.create({
+        data: {
+          handle,
+          name: handle.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          tagline: 'A community discussion space',
+          description: 'Join the conversation and share your thoughts.',
+          tags: ['community', 'discussion'],
+          theme: 'light',
+          createdBy: user.id,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              profilePhoto: true,
+              image: true,
+            }
+          },
+          facts: [],
+          events: [],
+          sources: [],
+          posts: [],
+          members: [],
+          _count: {
+            select: {
+              members: true,
+              posts: true,
+              events: true,
+              sources: true,
+            }
+          }
+        }
+      });
+
+      // Add the creator as a member
+      await prisma.patchMember.create({
+        data: {
+          patchId: patch.id,
+          userId: user.id,
+          role: 'admin',
+        }
+      });
+    }
 
   // Get top contributors (users with most posts in this patch)
   const topContributors = await prisma.patchPost.groupBy({
