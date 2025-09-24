@@ -372,6 +372,13 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
+  // Scroll to top when thread changes (new conversation)
+  useEffect(() => {
+    if (messageContainerRef.current) {
+      messageContainerRef.current.scrollTop = 0;
+    }
+  }, [thread.id]);
+
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim()) {
@@ -397,15 +404,7 @@ function ConversationThread({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen">
-      {/* Thread Header - Aligned with carrot logo height */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6" style={{ paddingTop: '32px' }}>
-        <h2 className="text-xl font-semibold text-gray-900">{thread.title}</h2>
-        <p className="text-sm text-gray-500">
-          {thread.activeAgents.length} advisors • {thread.messages.length} messages
-        </p>
-            </div>
-
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
       <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-32 space-y-4">
         {thread.messages.map((message) => (
@@ -488,7 +487,7 @@ function ConversationThread({
       )}
 
       {/* Message Input - Fixed at bottom of viewport */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30">
         <div className="max-w-2xl mx-auto px-4">
           <form onSubmit={handleSend} className="flex gap-3 max-w-lg mx-auto">
                     <button
@@ -553,20 +552,7 @@ function AgentRoster({
   };
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-        {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Your Council</h3>
-                  <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <Settings size={20} />
-          </button>
-                    </div>
-                  </div>
-
+    <div className="flex-1 flex flex-col">
       {/* Settings Panel */}
       {showSettings && (
         <div className="p-4 bg-gray-50 border-b border-gray-200">
@@ -587,14 +573,6 @@ function AgentRoster({
                     </div>
                   </div>
                 )}
-
-      {/* Create New Agent */}
-      <div className="p-4 border-b border-gray-200">
-        <button className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2">
-          <Plus size={20} />
-          <span className="font-medium text-gray-700">Create New Agent</span>
-        </button>
-              </div>
               
       {/* Active Agents */}
       <div className="flex-1 overflow-y-auto">
@@ -971,26 +949,74 @@ export default function RabbitPage() {
 
   // Conversation View (After User Engagement)
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Main Conversation Area */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {currentThread && (
-          <ConversationThread 
-            thread={currentThread}
-            onSendMessage={handleSendMessage}
-          />
-        )}
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Unified Header - extends from left to right - STICKY */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        {/* Left side - Chat title */}
+        <div className="flex-1">
+          {currentThread && (
+            <>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Chat with {currentThread.title.split(' about ')[0].replace('Chat with ', '')}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {currentThread.activeAgents.length} advisors • {currentThread.messages.length} messages
+              </p>
+            </>
+          )}
+        </div>
+        
+        {/* Right side - Create Agent button and Settings */}
+        <div className="flex items-center gap-3">
+          <button className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2">
+            <Plus size={16} />
+            Create New Agent
+          </button>
+          <button className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <Settings size={24} />
+          </button>
+        </div>
       </div>
 
-      {/* Agent Roster Sidebar */}
-      <AgentRoster
-        agents={agents}
-        activeAgents={activeAgents}
-        onToggleAgent={handleToggleAgent}
-        onRemoveAgent={handleRemoveAgent}
-        onPinAgent={handlePinAgent}
-        onHideAgent={handleHideAgent}
-      />
+      {/* Main Content Area */}
+      <div className="flex-1 flex min-h-0">
+        {/* Main Conversation Area */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {currentThread && (
+            <ConversationThread 
+              thread={currentThread}
+              onSendMessage={handleSendMessage}
+            />
+          )}
+        </div>
+
+        {/* Agent Roster Sidebar with Search */}
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+          {/* Search Box */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search agents..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+              />
+            </div>
+          </div>
+          
+          {/* Agent List */}
+          <div className="flex-1 overflow-y-auto">
+            <AgentRoster
+              agents={agents}
+              activeAgents={activeAgents}
+              onToggleAgent={handleToggleAgent}
+              onRemoveAgent={handleRemoveAgent}
+              onPinAgent={handlePinAgent}
+              onHideAgent={handleHideAgent}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
