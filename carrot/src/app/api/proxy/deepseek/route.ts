@@ -1,0 +1,30 @@
+import { NextRequest } from 'next/server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.text();
+    
+    // Forward to DeepSeek API
+    const response = await fetch('https://deepseekapi.org/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.get('Authorization') || '',
+      },
+      body: body,
+    });
+
+    // Return the response
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch (error: any) {
+    console.error('Proxy error:', error);
+    return new Response(`Proxy error: ${error.message}`, { status: 500 });
+  }
+}

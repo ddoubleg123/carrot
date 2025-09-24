@@ -702,7 +702,7 @@ export default function RabbitPage() {
           content: query,
           user: {
             id: (session?.user as any)?.id || 'unknown',
-            name: (session?.user as any)?.name || 'User',
+            name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
             username: (session?.user as any)?.username || 'user',
             avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
           },
@@ -716,6 +716,9 @@ export default function RabbitPage() {
     
     setCurrentThread(newThread);
     setCurrentView('conversation');
+    
+    // Start streaming assistant reply
+    streamAssistantReply(query);
   };
 
   // Handle direct agent click - show only that agent as active
@@ -733,7 +736,7 @@ export default function RabbitPage() {
           content: `Chat with ${agent.name} about ${agent.role}`,
           user: {
             id: (session?.user as any)?.id || 'unknown',
-            name: (session?.user as any)?.name || 'User',
+            name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
             username: (session?.user as any)?.username || 'user',
             avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
           },
@@ -747,6 +750,9 @@ export default function RabbitPage() {
     
     setCurrentThread(newThread);
     setCurrentView('conversation');
+    
+    // Start streaming assistant reply
+    streamAssistantReply(`Chat with ${agent.name} about ${agent.role}`);
   };
 
   async function streamAssistantReply(userMsg: string) {
@@ -789,6 +795,20 @@ export default function RabbitPage() {
       console.log('[Rabbit] API response status:', resp.status, 'ok:', resp.ok);
       if (!resp.ok || !resp.body) {
         console.warn('[Rabbit] API call failed:', resp.status, resp.statusText);
+        
+        // Add a fallback response when API fails
+        const fallbackResponse = `I'm ${respondingAgent.name}, and I'd be happy to discuss ${respondingAgent.role} with you. However, I'm currently experiencing some technical difficulties. Please try again in a moment.`;
+        
+        // Add the fallback response to the thread
+        setCurrentThread(prev => {
+          if (!prev) return prev;
+          const msgs = prev.messages.slice();
+          const idx = msgs.findIndex(m => m.id === agentMsgId);
+          if (idx >= 0) {
+            msgs[idx] = { ...msgs[idx], content: fallbackResponse } as any;
+          }
+          return { ...prev, messages: msgs, updatedAt: new Date() };
+        });
         return;
       }
 
@@ -868,7 +888,7 @@ export default function RabbitPage() {
       content,
       user: {
         id: (session?.user as any)?.id || 'unknown',
-        name: (session?.user as any)?.name || 'User',
+        name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
         username: (session?.user as any)?.username || 'user',
         avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
       },

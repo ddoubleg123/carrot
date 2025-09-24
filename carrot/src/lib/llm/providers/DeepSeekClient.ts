@@ -18,6 +18,7 @@ export interface StreamChunk {
 
 const DEFAULT_ENDPOINT = 'https://deepseekapi.org/v1/chat/completions';
 const LOCAL_ROUTER_ENDPOINT = process.env.DEEPSEEK_ROUTER_URL || 'http://localhost:8080/v1/chat/completions';
+const PROXY_ENDPOINT = process.env.DEEPSEEK_PROXY_URL;
 
 function hasKey() {
   return Boolean(process.env.DEEPSEEK_API_KEY);
@@ -25,6 +26,10 @@ function hasKey() {
 
 function hasLocalRouter() {
   return Boolean(process.env.DEEPSEEK_ROUTER_URL || process.env.NODE_ENV === 'development');
+}
+
+function hasProxy() {
+  return Boolean(PROXY_ENDPOINT);
 }
 
 async function* mockStream(params: ChatParams): AsyncGenerator<StreamChunk> {
@@ -41,16 +46,18 @@ async function* mockStream(params: ChatParams): AsyncGenerator<StreamChunk> {
 }
 
 export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChunk> {
-  // Try local router first, then cloud API, then mock
+  // Try local router first, then proxy, then cloud API, then mock
   const useLocalRouter = hasLocalRouter();
+  const useProxy = hasProxy();
   const useCloudAPI = hasKey();
   
-  console.log('[DeepSeek] useLocalRouter:', useLocalRouter, 'useCloudAPI:', useCloudAPI);
+  console.log('[DeepSeek] useLocalRouter:', useLocalRouter, 'useProxy:', useProxy, 'useCloudAPI:', useCloudAPI);
   console.log('[DeepSeek] DEEPSEEK_API_KEY exists:', !!process.env.DEEPSEEK_API_KEY);
   console.log('[DeepSeek] DEEPSEEK_ROUTER_URL:', process.env.DEEPSEEK_ROUTER_URL);
+  console.log('[DeepSeek] DEEPSEEK_PROXY_URL:', PROXY_ENDPOINT);
   console.log('[DeepSeek] NODE_ENV:', process.env.NODE_ENV);
   
-  if (!useLocalRouter && !useCloudAPI) {
+  if (!useLocalRouter && !useProxy && !useCloudAPI) {
     console.log('[DeepSeek] Using mock stream');
     yield* mockStream(params);
     return;
@@ -64,14 +71,14 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
     stream: true,
   };
 
-  const endpoint = useLocalRouter ? LOCAL_ROUTER_ENDPOINT : DEFAULT_ENDPOINT;
+  const endpoint = useLocalRouter ? LOCAL_ROUTER_ENDPOINT : (useProxy ? PROXY_ENDPOINT : DEFAULT_ENDPOINT);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
   };
 
-  // Only add auth header for cloud API
-  if (!useLocalRouter && process.env.DEEPSEEK_API_KEY) {
+  // Add auth header for cloud API or proxy
+  if ((!useLocalRouter && process.env.DEEPSEEK_API_KEY)) {
     headers['Authorization'] = `Bearer ${process.env.DEEPSEEK_API_KEY}`;
   }
 
@@ -84,11 +91,33 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   console.log('[DeepSeek] Headers:', headers);
   console.log('[DeepSeek] Body:', JSON.stringify(body, null, 2));
 
-  const resp = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  let resp;
+  try {
+    resp = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      // Add timeout and other options for Render compatibility
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    });
+  } catch (fetchError: any) {
+    console.error('[DeepSeek] Fetch error:', fetchError);
+    console.error('[DeepSeek] Error details:', {
+      message: fetchError.message,
+      cause: fetchError.cause,
+      stack: fetchError.stack,
+      name: fetchError.name
+    });
+    
+    // Check if it's a network/connectivity issue
+    if (fetchError.message.includes('fetch failed') || fetchError.name === 'TypeError') {
+      console.log('[DeepSeek] Network connectivity issue detected - using fallback response');
+      yield { type: 'error', error: `Network connectivity issue: ${fetchError.message}. This may be due to Render's network restrictions.` };
+    } else {
+      yield { type: 'error', error: `Network error: ${fetchError.message}` };
+    }
+    return;
+  }
 
   console.log('[DeepSeek] Response status:', resp.status, 'ok:', resp.ok);
   console.log('[DeepSeek] Response headers:', Object.fromEntries(resp.headers.entries()));
