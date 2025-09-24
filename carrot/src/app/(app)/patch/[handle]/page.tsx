@@ -12,18 +12,14 @@ import {
   Video, 
   Upload,
   Clock,
-  TrendingUp,
   BookOpen,
   Share2,
   Heart,
-  Flag,
   MoreHorizontal,
-  ChevronRight,
   Plus,
   Search,
   Filter,
-  Grid,
-  List
+  Grid
 } from 'lucide-react'
 
 interface PatchPageProps {
