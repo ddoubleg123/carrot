@@ -51,58 +51,66 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // Helper: stream via Firebase Admin (supports private objects and Range)
     const adminDownload = async (bucketName: string, objectPath: string) => {
-      // Initialize admin app if needed
-      if (!admin.apps || !admin.apps.length) {
-        const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-        admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-          }),
-          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-        });
-      }
-      const bucket = admin.storage().bucket(bucketName);
-      const file = bucket.file(objectPath.replace(/^\/+/, ''));
-      const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
+      try {
+        // Initialize admin app if needed
+        if (!admin.apps || !admin.apps.length) {
+          const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+          if (!PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+            throw new Error('Firebase Admin SDK not configured');
+          }
+          admin.initializeApp({
+            credential: admin.credential.cert({
+              projectId: PROJECT_ID,
+              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+              privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+            }),
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+          });
+        }
+        const bucket = admin.storage().bucket(bucketName);
+        const file = bucket.file(objectPath.replace(/^\/+/, ''));
+        const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
 
-      const range = req.headers.get('range');
-      const size = Number(meta?.size || 0);
-      const contentType = meta?.contentType || 'application/octet-stream';
-      const cacheControl = meta?.cacheControl || 'public, max-age=604800, immutable';
-      if (range && size > 0) {
-        const m = /bytes=(\d+)-(\d*)/.exec(range);
-        const start = m ? parseInt(m[1], 10) : 0;
-        const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1);
-        if (isNaN(start) || isNaN(end) || start > end) return new NextResponse('Malformed Range', { status: 416 });
-        const stream = file.createReadStream({ start, end });
+        const range = req.headers.get('range');
+        const size = Number(meta?.size || 0);
+        const contentType = meta?.contentType || 'application/octet-stream';
+        const cacheControl = meta?.cacheControl || 'public, max-age=604800, immutable';
+        if (range && size > 0) {
+          const m = /bytes=(\d+)-(\d*)/.exec(range);
+          const start = m ? parseInt(m[1], 10) : 0;
+          const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1);
+          if (isNaN(start) || isNaN(end) || start > end) return new NextResponse('Malformed Range', { status: 416 });
+          const stream = file.createReadStream({ start, end });
+          return new NextResponse(stream as any, {
+            status: 206,
+            headers: {
+              'content-type': contentType,
+              'cache-control': cacheControl,
+              'content-length': String(end - start + 1),
+              'content-range': `bytes ${start}-${end}/${size}`,
+              'accept-ranges': 'bytes',
+              'Access-Control-Allow-Origin': '*',
+              'x-video-proxy-host': 'admin',
+              'x-video-proxy-mode': 'admin-range',
+            },
+          });
+        }
+        const stream = file.createReadStream();
         return new NextResponse(stream as any, {
-          status: 206,
+          status: 200,
           headers: {
             'content-type': contentType,
             'cache-control': cacheControl,
-            'content-length': String(end - start + 1),
-            'content-range': `bytes ${start}-${end}/${size}`,
             'accept-ranges': 'bytes',
             'Access-Control-Allow-Origin': '*',
             'x-video-proxy-host': 'admin',
-            'x-video-proxy-mode': 'admin-range',
+            'x-video-proxy-mode': 'admin-stream',
           },
         });
+      } catch (error) {
+        console.error('[api/video] Admin SDK error:', error);
+        throw error;
       }
-      const stream = file.createReadStream();
-      return new NextResponse(stream as any, {
-        status: 200,
-        headers: {
-          'content-type': contentType,
-          'cache-control': cacheControl,
-          'accept-ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
-          'x-video-proxy-host': 'admin',
-          'x-video-proxy-mode': 'admin-stream',
-        },
-      });
     };
 
     let target: URL | null = null;
@@ -166,46 +174,49 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
     }
 
-    // Handle Firebase Storage URLs by extracting file path and using Admin SDK
-    // This works for both signed and unsigned URLs
-    try {
-      if (target && (target.hostname === 'firebasestorage.googleapis.com' || target.hostname === 'storage.googleapis.com')) {
-        let bucket: string | null = null;
-        let objectPath: string | null = null;
-        
-        // Handle firebasestorage.googleapis.com/v0/b/<bucket>/o/<path> format
-        if (target.hostname === 'firebasestorage.googleapis.com') {
-          const m = target.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
-          if (m) {
-            bucket = decodeURIComponent(m[1]);
-            objectPath = decodeURIComponent(m[2]);
+        // Handle Firebase Storage URLs by extracting file path and using Admin SDK
+        // This works for both signed and unsigned URLs
+        try {
+          if (target && (target.hostname === 'firebasestorage.googleapis.com' || target.hostname === 'storage.googleapis.com')) {
+            let bucket: string | null = null;
+            let objectPath: string | null = null;
+            
+            // Handle firebasestorage.googleapis.com/v0/b/<bucket>/o/<path> format
+            if (target.hostname === 'firebasestorage.googleapis.com') {
+              const m = target.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+              if (m) {
+                bucket = decodeURIComponent(m[1]);
+                objectPath = decodeURIComponent(m[2]);
+              }
+            }
+            // Handle storage.googleapis.com/<bucket>/<path> format
+            else if (target.hostname === 'storage.googleapis.com') {
+              const m = target.pathname.match(/^\/([^/]+)\/(.+)$/);
+              if (m) {
+                bucket = decodeURIComponent(m[1]);
+                objectPath = decodeURIComponent(m[2]);
+              }
+            }
+            
+            // If we extracted bucket and path, use Admin SDK to stream directly
+            if (bucket && objectPath) {
+              // Convert .firebasestorage.app to .appspot.com for bucket name
+              if (bucket.endsWith('.firebasestorage.app')) {
+                bucket = bucket.replace('.firebasestorage.app', '.appspot.com');
+              }
+              
+              try {
+                return await adminDownload(bucket, objectPath);
+              } catch (e: any) {
+                console.warn('[api/video] admin stream failed, falling back to HTTPS', e?.message);
+                // Fall back to the original URL
+              }
+            }
           }
+        } catch (error) {
+          console.warn('[api/video] Firebase URL processing failed:', error);
+          // Continue with normal proxy logic
         }
-        // Handle storage.googleapis.com/<bucket>/<path> format
-        else if (target.hostname === 'storage.googleapis.com') {
-          const m = target.pathname.match(/^\/([^/]+)\/(.+)$/);
-          if (m) {
-            bucket = decodeURIComponent(m[1]);
-            objectPath = decodeURIComponent(m[2]);
-          }
-        }
-        
-        // If we extracted bucket and path, use Admin SDK to stream directly
-        if (bucket && objectPath) {
-          // Convert .firebasestorage.app to .appspot.com for bucket name
-          if (bucket.endsWith('.firebasestorage.app')) {
-            bucket = bucket.replace('.firebasestorage.app', '.appspot.com');
-          }
-          
-          try {
-            return await adminDownload(bucket, objectPath);
-          } catch (e: any) {
-            console.warn('[api/video] admin stream failed, falling back to HTTPS', e?.message);
-            // Fall back to the original URL
-          }
-        }
-      }
-    } catch {}
 
     // Normalize Firebase v0 path: ensure bucket host and /o/<object> are normalized (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
@@ -364,7 +375,17 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     return new NextResponse(upstream.body, { status, headers });
   } catch (e: any) {
     console.error('[api/video] proxy error', e);
-    return NextResponse.json({ error: 'Proxy failed' }, { status: 502 });
+    console.error('[api/video] Error details:', {
+      message: e.message,
+      stack: e.stack,
+      url: req.url,
+      headers: Object.fromEntries(req.headers.entries())
+    });
+    return NextResponse.json({ 
+      error: 'Video proxy failed', 
+      details: e.message,
+      url: req.url 
+    }, { status: 502 });
   }
 }
 
