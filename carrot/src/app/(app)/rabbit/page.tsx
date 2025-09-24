@@ -342,6 +342,7 @@ function ConversationThread({
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasUserScrolled, setHasUserScrolled] = useState(false);
 
   // Check if user is near bottom of chat
   const checkIfNearBottom = () => {
@@ -351,17 +352,24 @@ function ConversationThread({
     const nearBottom = scrollHeight - scrollTop - clientHeight < threshold;
     setIsNearBottom(nearBottom);
     setShowScrollButton(!nearBottom && scrollHeight > clientHeight);
+    
+    // Track if user has manually scrolled up
+    if (!nearBottom && scrollTop > 0) {
+      setHasUserScrolled(true);
+    } else if (nearBottom) {
+      setHasUserScrolled(false);
+    }
   };
 
-  // Auto-scroll to bottom when new messages are added (only if user is near bottom)
+  // Auto-scroll to bottom when new messages are added (only if user is near bottom or hasn't manually scrolled)
   useEffect(() => {
-    if (thread.messages.length > 0 && isNearBottom) {
+    if (thread.messages.length > 0 && (isNearBottom || !hasUserScrolled)) {
       const timeout = setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, isNearBottom]);
+  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -372,10 +380,23 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // Scroll to top when thread changes (new conversation)
+  // Scroll to top when thread changes (new conversation) - FIXED
   useEffect(() => {
     if (messageContainerRef.current) {
       messageContainerRef.current.scrollTop = 0;
+      setIsNearBottom(true);
+      setHasUserScrolled(false);
+      setShowScrollButton(false);
+    }
+  }, [thread.id]);
+
+  // Ensure latest message is visible when thread loads
+  useEffect(() => {
+    if (thread.messages.length > 0 && messageContainerRef.current) {
+      const timeout = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 200);
+      return () => clearTimeout(timeout);
     }
   }, [thread.id]);
 
@@ -406,7 +427,7 @@ function ConversationThread({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-32 space-y-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -473,7 +494,7 @@ function ConversationThread({
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
-        <div className="fixed bottom-20 right-6 z-20">
+        <div className="absolute bottom-20 right-6 z-20">
           <button
             onClick={scrollToBottom}
             className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105"
@@ -486,42 +507,40 @@ function ConversationThread({
         </div>
       )}
 
-      {/* Message Input - Fixed at bottom of viewport */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30">
-        <div className="max-w-2xl mx-auto px-4">
-          <form onSubmit={handleSend} className="flex gap-3 max-w-lg mx-auto">
-                    <button
-              type="button"
-              onClick={() => setShowUploadModal(true)}
-              className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
-              title="Upload file or share link"
-            >
-              <Upload size={18} />
-                    </button>
-                <input
-                  type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Continue the conversation..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
-            />
-                    <button
-              type="submit"
-              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
-            >
-              <Send size={18} />
-                    </button>
-          </form>
-                </div>
-              </div>
+      {/* Message Input - Contained within chat column */}
+      <div className="bg-white border-t border-gray-200 p-4">
+        <form onSubmit={handleSend} className="flex gap-3 max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+            title="Upload file or share link"
+          >
+            <Upload size={18} />
+          </button>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Continue the conversation..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
+          >
+            <Send size={18} />
+          </button>
+        </form>
+      </div>
               
       {/* Upload Modal */}
       <UploadModal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         onUpload={handleUpload}
-                />
-              </div>
+      />
+    </div>
   );
 }
 
@@ -978,6 +997,20 @@ export default function RabbitPage() {
         </div>
       </div>
 
+      {/* Search Bar - Fixed positioning below header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search agents..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Main Content Area */}
       <div className="flex-1 flex min-h-0">
         {/* Main Conversation Area */}
@@ -990,20 +1023,8 @@ export default function RabbitPage() {
           )}
         </div>
 
-        {/* Agent Roster Sidebar with Search */}
+        {/* Agent Roster Sidebar */}
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-          {/* Search Box */}
-          <div className="p-4 border-b border-gray-200">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="Search agents..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-              />
-            </div>
-          </div>
-          
           {/* Agent List */}
           <div className="flex-1 overflow-y-auto">
             <AgentRoster
