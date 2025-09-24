@@ -212,12 +212,12 @@ export default function TellYourFriendsStep({
       </p>
 
       {/* Navigation Buttons */}
-      <div className="mt-8 flex justify-between">
+      <div className="mt-8 flex flex-col sm:flex-row gap-4">
         <button
           type="button"
           onClick={onBack}
           disabled={loading}
-          className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F47C23] disabled:opacity-50"
+          className="w-full sm:w-auto px-6 py-3 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 rounded-lg"
         >
           Back
         </button>
@@ -225,10 +225,10 @@ export default function TellYourFriendsStep({
           type="button"
           onClick={handleNext}
           disabled={loading || isNextDisabled}
-          className={`px-6 py-2.5 font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F47C23] ${
+          className={`w-full sm:w-auto px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 ${
             isNextDisabled 
-              ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-50' 
-              : 'bg-[#F47C23] text-white hover:bg-[#E06D1D]'
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+              : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0'
           }`}
         >
           {loading ? 'Loading...' : 'Next'}

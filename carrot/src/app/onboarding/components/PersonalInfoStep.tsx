@@ -88,6 +88,9 @@ function PersonalInfoStep({
     console.log('[PersonalInfoStep] email prop:', email);
   }
   const [profilePhoto, setProfilePhoto] = useState<string | null>(typeof initialData?.profilePhoto === 'string' ? initialData.profilePhoto : null);
+  
+  // Generate a random field name to prevent autofill
+  const [randomFieldName] = useState(() => `field_${Math.random().toString(36).substr(2, 9)}`);
   const methods = useForm<FormData>({
     resolver: zodResolver(Schema),
     mode: "onBlur",
@@ -198,8 +201,10 @@ function PersonalInfoStep({
         {/* Username */}
         <div>
           <label className="block text-sm font-medium">Username *</label>
-          {/* Hidden field to prevent autofill */}
+          {/* Multiple hidden fields to confuse autofill */}
           <input type="text" style={{ display: 'none' }} autoComplete="username" />
+          <input type="email" style={{ display: 'none' }} autoComplete="email" />
+          <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
           <div className={shell(!!errors.username)}>
             <input
               {...register("username")}
@@ -207,6 +212,10 @@ function PersonalInfoStep({
               placeholder="Choose a unique username"
               autoComplete="new-password"
               data-form-type="other"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              name={randomFieldName}
+              id={randomFieldName}
               onBlur={checkUsername} // 👈 only on blur
             />
           </div>

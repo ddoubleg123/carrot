@@ -166,25 +166,42 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (!isAllowedUrl(target)) return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
     }
 
-    // Normalize storage.googleapis.com/<project>.firebasestorage.app/<path> to Firebase v0 only when unsigned.
-    // If URL contains GoogleAccessId/Signature/Expires (signed), DO NOT rewrite; those signatures are specific to the original path.
+    // Handle Firebase Storage URLs by extracting file path and using Admin SDK
+    // This works for both signed and unsigned URLs
     try {
-      if (target && target.hostname === 'storage.googleapis.com') {
-        const hasSignedParams = target.searchParams.has('GoogleAccessId') || target.searchParams.has('Signature') || target.searchParams.has('Expires');
-        if (!hasSignedParams) {
-          // Example path: "/involuted-...p0.firebasestorage.app/ingest/job-123/video.mp4"
-          const m = target.pathname.match(/^\/([^/]+)\.firebasestorage\.app\/(.+)$/);
+      if (target && (target.hostname === 'firebasestorage.googleapis.com' || target.hostname === 'storage.googleapis.com')) {
+        let bucket: string | null = null;
+        let objectPath: string | null = null;
+        
+        // Handle firebasestorage.googleapis.com/v0/b/<bucket>/o/<path> format
+        if (target.hostname === 'firebasestorage.googleapis.com') {
+          const m = target.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
           if (m) {
-            const project = decodeURIComponent(m[1]);
-            const objectPath = decodeURIComponent(m[2]);
-            const bucket = `${project}.appspot.com`;
-            const encPath = encodeURIComponent(objectPath);
-            const rewritten = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
-            // Carry through public download token if present (rare on GCS form)
-            const token = target.searchParams.get('token');
-            if (token) rewritten.searchParams.set('token', token);
-            target = rewritten;
-            mode = 'rewritten';
+            bucket = decodeURIComponent(m[1]);
+            objectPath = decodeURIComponent(m[2]);
+          }
+        }
+        // Handle storage.googleapis.com/<bucket>/<path> format
+        else if (target.hostname === 'storage.googleapis.com') {
+          const m = target.pathname.match(/^\/([^/]+)\/(.+)$/);
+          if (m) {
+            bucket = decodeURIComponent(m[1]);
+            objectPath = decodeURIComponent(m[2]);
+          }
+        }
+        
+        // If we extracted bucket and path, use Admin SDK to stream directly
+        if (bucket && objectPath) {
+          // Convert .firebasestorage.app to .appspot.com for bucket name
+          if (bucket.endsWith('.firebasestorage.app')) {
+            bucket = bucket.replace('.firebasestorage.app', '.appspot.com');
+          }
+          
+          try {
+            return await adminDownload(bucket, objectPath);
+          } catch (e: any) {
+            console.warn('[api/video] admin stream failed, falling back to HTTPS', e?.message);
+            // Fall back to the original URL
           }
         }
       }

@@ -159,7 +159,7 @@ export function InterestsStep({
             type="button"
             variant="outline"
             onClick={onBack}
-            className="w-full sm:w-auto px-8 py-3 text-base font-medium border-2 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto px-6 py-3 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 rounded-lg"
             disabled={loading}
           >
             Back
@@ -168,10 +168,10 @@ export function InterestsStep({
         <Button
           type="submit"
           className={cn(
-            "w-full sm:w-auto px-8 py-3 text-base font-medium rounded-lg shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500",
+            "w-full sm:w-auto px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500",
             (!isValid || !draft || !draft.image || !draft.image.storagePath || !agreed) 
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed opacity-50" 
-              : "bg-orange-500 text-white hover:bg-orange-600 hover:shadow-lg transform hover:-translate-y-0.5"
+              ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+              : "bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0"
           )}
           disabled={!isValid || loading || !draft || !draft.image || !draft.image.storagePath || !agreed}
         >
