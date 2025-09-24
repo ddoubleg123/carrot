@@ -72,6 +72,12 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   };
 
   const endpoint = useLocalRouter ? LOCAL_ROUTER_ENDPOINT : (useProxy ? PROXY_ENDPOINT : DEFAULT_ENDPOINT);
+  
+  if (!endpoint) {
+    console.error('[DeepSeek] No valid endpoint found');
+    yield { type: 'error', error: 'No valid endpoint configured' };
+    return;
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
