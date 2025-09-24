@@ -259,28 +259,28 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
   const themeClass = getPatchThemeClass(patch.theme)
 
   // Transform data for components
-  const typedEvents = patch.events.map(event => ({
+  const typedEvents = patch.events.map((event: any) => ({
     ...event,
     media: event.media && typeof event.media === 'object' && event.media !== null && 'type' in event.media && 'url' in event.media
       ? event.media as { type: 'image' | 'video'; url: string; alt?: string }
       : null
-  }))
+  }));
 
-  const typedPosts = patch.posts.map(post => ({
+  const typedPosts = patch.posts.map((post: any) => ({
     ...post,
     metrics: post.metrics && typeof post.metrics === 'object' && post.metrics !== null && 
       'likes' in post.metrics && 'comments' in post.metrics && 'reposts' in post.metrics && 'views' in post.metrics
       ? post.metrics as { likes: number; comments: number; reposts: number; views: number }
       : { likes: 0, comments: 0, reposts: 0, views: 0 }
-  }))
+  }));
 
-  const typedSources = patch.sources.map(source => ({
+  const typedSources = patch.sources.map((source: any) => ({
     ...source,
     citeMeta: source.citeMeta && typeof source.citeMeta === 'object' && source.citeMeta !== null && 
       'title' in source.citeMeta && 'url' in source.citeMeta
       ? source.citeMeta as { title: string; url: string; author?: string; publisher?: string; publishedAt?: string }
       : null
-  }))
+  }));
 
   return (
     <div className={`min-h-screen ${themeClass}`}>
