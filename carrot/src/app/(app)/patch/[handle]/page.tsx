@@ -22,7 +22,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     const activeTab = (search.tab as string) || 'overview'
 
     // Fetch patch data with all related information
-    let patch = await prisma.patch.findUnique({
+    let patch: any = await prisma.patch.findUnique({
       where: { handle },
       include: {
         creator: {
