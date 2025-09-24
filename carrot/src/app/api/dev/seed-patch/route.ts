@@ -59,20 +59,23 @@ export async function POST() {
     ];
 
     for (const fact of facts) {
-      await prisma.fact.upsert({
+      // Check if fact already exists
+      const existingFact = await prisma.fact.findFirst({
         where: {
-          patchId_label: {
-            patchId: patch.id,
-            label: fact.label,
-          }
-        },
-        update: {},
-        create: {
           patchId: patch.id,
           label: fact.label,
-          value: fact.value,
         }
       });
+      
+      if (!existingFact) {
+        await prisma.fact.create({
+          data: {
+            patchId: patch.id,
+            label: fact.label,
+            value: fact.value,
+          }
+        });
+      }
     }
     console.log('✅ Created facts');
 
