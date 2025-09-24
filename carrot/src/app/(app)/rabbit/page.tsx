@@ -747,7 +747,7 @@ export default function RabbitPage() {
 
       const payload = {
         provider: 'deepseek',
-        model: 'deepseek-reasoner',
+        model: 'deepseek-v3',
         temperature: 0.3,
         max_tokens: 512,
         messages: [

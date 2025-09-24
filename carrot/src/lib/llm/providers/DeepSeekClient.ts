@@ -16,7 +16,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-const DEFAULT_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
+const DEFAULT_ENDPOINT = 'https://deepseekapi.org/v1/chat/completions';
 const LOCAL_ROUTER_ENDPOINT = process.env.DEEPSEEK_ROUTER_URL || 'http://localhost:8080/v1/chat/completions';
 
 function hasKey() {
@@ -57,7 +57,7 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   }
 
   const body = {
-    model: params.model || 'deepseek-reasoner',
+    model: params.model || 'deepseek-v3',
     messages: params.messages,
     temperature: params.temperature ?? 0.3,
     max_tokens: params.max_tokens ?? 1024,
@@ -91,6 +91,13 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   });
 
   console.log('[DeepSeek] Response status:', resp.status, 'ok:', resp.ok);
+  console.log('[DeepSeek] Response headers:', Object.fromEntries(resp.headers.entries()));
+  
+  // Log response body for debugging
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    console.log('[DeepSeek] Error response body:', errorText);
+  }
 
   if (!resp.ok || !resp.body) {
     const text = await resp.text().catch(() => '');
