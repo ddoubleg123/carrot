@@ -113,6 +113,37 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
     };
 
+    // Helper: simple proxy without Admin SDK (fallback)
+    const simpleProxy = async (url: string) => {
+      const headers = new Headers();
+      const range = req.headers.get('range');
+      if (range) headers.set('range', range);
+      const ifModifiedSince = req.headers.get('if-modified-since');
+      if (ifModifiedSince) headers.set('if-modified-since', ifModifiedSince);
+      const ifNoneMatch = req.headers.get('if-none-match');
+      if (ifNoneMatch) headers.set('if-none-match', ifNoneMatch);
+
+      const upstreamRes = await fetch(url, {
+        method: 'GET',
+        headers,
+        redirect: 'follow',
+      });
+
+      const responseHeaders = new Headers(upstreamRes.headers);
+      responseHeaders.set('Access-Control-Allow-Origin', '*');
+      responseHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      responseHeaders.set('Access-Control-Allow-Headers', 'Range, Content-Type, Cache-Control');
+      responseHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Cache-Control');
+      responseHeaders.set('x-video-proxy-host', 'simple');
+      responseHeaders.set('x-video-proxy-mode', 'direct');
+
+      return new NextResponse(upstreamRes.body, {
+        status: upstreamRes.status,
+        statusText: upstreamRes.statusText,
+        headers: responseHeaders,
+      });
+    };
+
     let target: URL | null = null;
     // Preferred: path-based access using Admin SDK (private-safe) with Range support
     if (pathParam) {
@@ -208,14 +239,18 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
               try {
                 return await adminDownload(bucket, objectPath);
               } catch (e: any) {
-                console.warn('[api/video] admin stream failed, falling back to HTTPS', e?.message);
-                // Fall back to the original URL
+                console.warn('[api/video] admin stream failed, falling back to simple proxy', e?.message);
+                // Fall back to simple proxy
+                return await simpleProxy(target.toString());
               }
             }
           }
         } catch (error) {
-          console.warn('[api/video] Firebase URL processing failed:', error);
-          // Continue with normal proxy logic
+          console.warn('[api/video] Firebase URL processing failed, using simple proxy:', error);
+          // Fall back to simple proxy
+          if (target) {
+            return await simpleProxy(target.toString());
+          }
         }
 
     // Normalize Firebase v0 path: ensure bucket host and /o/<object> are normalized (only for unsigned URLs)
