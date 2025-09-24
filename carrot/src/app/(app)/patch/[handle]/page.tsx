@@ -2,6 +2,29 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getPatchThemeClass } from '@/lib/patch-theme'
+import { 
+  Calendar, 
+  Users, 
+  MessageSquare, 
+  FileText, 
+  Link, 
+  Image, 
+  Video, 
+  Upload,
+  Clock,
+  TrendingUp,
+  BookOpen,
+  Share2,
+  Heart,
+  Flag,
+  MoreHorizontal,
+  ChevronRight,
+  Plus,
+  Search,
+  Filter,
+  Grid,
+  List
+} from 'lucide-react'
 
 interface PatchPageProps {
   params: Promise<{ handle: string }>

@@ -99,12 +99,17 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
 
   let resp;
   try {
+    // Try with additional fetch options for Render compatibility
     resp = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       // Add timeout and other options for Render compatibility
       signal: AbortSignal.timeout(30000), // 30 second timeout
+      // Add additional options that might help with Render
+      mode: 'cors',
+      cache: 'no-cache',
+      credentials: 'omit',
     });
   } catch (fetchError: any) {
     console.error('[DeepSeek] Fetch error:', fetchError);

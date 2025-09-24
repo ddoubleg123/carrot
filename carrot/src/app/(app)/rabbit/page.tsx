@@ -336,8 +336,6 @@ function ConversationThread({
   thread: Thread; 
   onSendMessage: (content: string) => void;
 }) {
-  const [newMessage, setNewMessage] = useState('');
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -361,15 +359,18 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll to bottom when new messages are added (only if user is near bottom or hasn't manually scrolled)
+  // Auto-scroll to bottom when new messages are added
   useEffect(() => {
-    if (thread.messages.length > 0 && (isNearBottom || !hasUserScrolled)) {
+    if (thread.messages.length > 0) {
       const timeout = setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        setIsNearBottom(true);
+        setHasUserScrolled(false);
+        setShowScrollButton(false);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
+  }, [thread.messages.length]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -380,54 +381,29 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // Scroll to top when thread changes (new conversation) - FIXED
+  // Scroll to bottom when thread changes (new conversation)
   useEffect(() => {
     if (messageContainerRef.current) {
-      messageContainerRef.current.scrollTop = 0;
-      setIsNearBottom(true);
-      setHasUserScrolled(false);
-      setShowScrollButton(false);
-    }
-  }, [thread.id]);
-
-  // Ensure latest message is visible when thread loads
-  useEffect(() => {
-    if (thread.messages.length > 0 && messageContainerRef.current) {
       const timeout = setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        setIsNearBottom(true);
+        setHasUserScrolled(false);
+        setShowScrollButton(false);
       }, 200);
       return () => clearTimeout(timeout);
     }
   }, [thread.id]);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newMessage.trim()) {
-      onSendMessage(newMessage.trim());
-      setNewMessage('');
-    }
-  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleUpload = (type: 'pdf' | 'link' | 'image', data: string) => {
-    let message = '';
-    if (type === 'link') {
-      message = `I've shared a link: ${data}`;
-    } else if (type === 'pdf') {
-      message = `I've uploaded a PDF: ${data}`;
-    } else if (type === 'image') {
-      message = `I've uploaded an image: ${data}`;
-    }
-    onSendMessage(message);
-  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-24">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -494,7 +470,7 @@ function ConversationThread({
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
-        <div className="absolute bottom-20 right-6 z-20">
+        <div className="fixed bottom-24 right-6 z-30">
           <button
             onClick={scrollToBottom}
             className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105"
@@ -506,40 +482,6 @@ function ConversationThread({
           </button>
         </div>
       )}
-
-      {/* Message Input - Contained within chat column */}
-      <div className="bg-white border-t border-gray-200 p-4">
-        <form onSubmit={handleSend} className="flex gap-3 max-w-2xl mx-auto">
-          <button
-            type="button"
-            onClick={() => setShowUploadModal(true)}
-            className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
-            title="Upload file or share link"
-          >
-            <Upload size={18} />
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Continue the conversation..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
-          />
-          <button
-            type="submit"
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
-          >
-            <Send size={18} />
-          </button>
-        </form>
-      </div>
-              
-      {/* Upload Modal */}
-      <UploadModal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onUpload={handleUpload}
-      />
     </div>
   );
 }
@@ -1057,6 +999,43 @@ export default function RabbitPage() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Fixed Chat Input Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-20">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.currentTarget);
+          const message = formData.get('message') as string;
+          if (message?.trim()) {
+            handleSendMessage(message.trim());
+            e.currentTarget.reset();
+          }
+        }} className="flex gap-3 max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={() => {
+              // TODO: Implement upload modal
+              console.log('Upload clicked');
+            }}
+            className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+            title="Upload file or share link"
+          >
+            <Upload size={18} />
+          </button>
+          <input
+            name="message"
+            type="text"
+            placeholder="Continue the conversation..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
+          >
+            <Send size={18} />
+          </button>
+        </form>
       </div>
     </div>
   );
