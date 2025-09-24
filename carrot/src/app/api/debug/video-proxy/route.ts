@@ -31,7 +31,7 @@ export async function GET() {
       const response = await fetch(`http://localhost:3000/api/video?url=${encodeURIComponent(testUrl)}`);
       proxyTest = `status: ${response.status}`;
     } catch (error) {
-      proxyTest = `error: ${error.message}`;
+      proxyTest = `error: ${error instanceof Error ? error.message : String(error)}`;
     }
 
     return NextResponse.json({

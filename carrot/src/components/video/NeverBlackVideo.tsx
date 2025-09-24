@@ -341,60 +341,106 @@ export default function NeverBlackVideo({
 
       {/* Frozen frame overlay (highest priority when paused) */}
       {showFrozenFrame && (
-        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0">
           <img
             src={frozenFrame}
             alt="Video frame"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover pointer-events-none"
             style={{ imageRendering: 'auto' }}
           />
-          {/* Play button overlay for frozen frame */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-16 h-16 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+          {/* Play button overlay for frozen frame (clickable) */}
+          <button
+            type="button"
+            aria-label="Play video"
+            className="absolute inset-0 flex items-center justify-center"
+            onClick={() => {
+              try { if (videoRef.current) { void videoRef.current.play(); } } catch {}
+            }}
+          >
+            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5v14l11-7z"/>
               </svg>
             </div>
-          </div>
+          </button>
         </div>
       )}
 
       {/* Poster overlay kept until first frame is ready */}
       {showPoster && !showFrozenFrame && (
-        <div className="absolute inset-0 pointer-events-none">
-          <Image
-            src={currentPosterUrl!}
-            alt="Video thumbnail"
-            fill
-            className="object-cover"
-            onLoad={handlePosterLoad}
-            onError={handlePosterError}
-            priority={isPosterPreloaded}
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            unoptimized
-          />
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 pointer-events-none">
+            <Image
+              src={currentPosterUrl!}
+              alt="Video thumbnail"
+              fill
+              className="object-cover"
+              onLoad={handlePosterLoad}
+              onError={handlePosterError}
+              priority={isPosterPreloaded}
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              unoptimized
+            />
+          </div>
+          {/* Clickable play overlay */}
+          <button
+            type="button"
+            aria-label="Play video"
+            className="absolute inset-0 flex items-center justify-center"
+            onClick={() => { try { if (videoRef.current) { void videoRef.current.play(); } } catch {} }}
+          >
+            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+          </button>
         </div>
       )}
 
       {/* Loading placeholder while poster is loading and first frame not ready */}
       {showLoading && !showFrozenFrame && (
-        <div className="absolute inset-0 pointer-events-none">
-          <VideoPlaceholder 
-            className="w-full h-full" 
-            type="loading"
-            showPlayIcon={false}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 pointer-events-none">
+            <VideoPlaceholder 
+              className="w-full h-full" 
+              type="loading"
+              showPlayIcon={false}
+            />
+          </div>
+          {/* Allow click-to-play even while loading */}
+          <button
+            type="button"
+            aria-label="Play video"
+            className="absolute inset-0"
+            onClick={() => { try { if (videoRef.current) { void videoRef.current.play(); } } catch {} }}
           />
         </div>
       )}
 
       {/* Fallback placeholder - NEVER BLACK */}
       {showPlaceholder && !showFrozenFrame && (
-        <div className="absolute inset-0 pointer-events-none">
-          <VideoPlaceholder 
-            className="w-full h-full" 
-            type="video"
-            showPlayIcon={true}
-          />
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 pointer-events-none">
+            <VideoPlaceholder 
+              className="w-full h-full" 
+              type="video"
+              showPlayIcon={true}
+            />
+          </div>
+          {/* Clickable play overlay */}
+          <button
+            type="button"
+            aria-label="Play video"
+            className="absolute inset-0 flex items-center justify-center"
+            onClick={() => { try { if (videoRef.current) { void videoRef.current.play(); } } catch {} }}
+          >
+            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+          </button>
         </div>
       )}
 
