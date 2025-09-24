@@ -149,6 +149,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           decodedOnce = true;
         }
       } catch {}
+      
+      // Additional fix: Handle double-encoded URLs even if we already decoded once
+      // This handles cases where the URL is triple-encoded or has mixed encoding
+      try {
+        if (/%25[0-9A-Fa-f]{2}/.test(candidate)) {
+          candidate = decodeURIComponent(candidate);
+        }
+      } catch {}
       try {
         target = new URL(candidate);
       } catch {
