@@ -443,10 +443,10 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                           <div key={post.id} className="bg-[#F7F8FA] rounded-xl p-4 hover:bg-[#E6E8EC] transition-colors">
                             <div className="flex items-start gap-3 mb-3">
                               <div className="w-8 h-8 bg-[#0A5AFF] rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                                {post.author.name.charAt(0)}
+                                {post.author.name?.charAt(0) || 'U'}
                               </div>
                               <div className="flex-1">
-                                <p className="font-semibold text-[#0B0B0F] text-sm">{post.author.name}</p>
+                                <p className="font-semibold text-[#0B0B0F] text-sm">{post.author.name || 'Unknown User'}</p>
                                 <p className="text-[#60646C] text-xs">{new Date(post.createdAt).toLocaleDateString()}</p>
                               </div>
                             </div>
