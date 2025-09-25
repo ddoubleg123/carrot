@@ -16,7 +16,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-const DEFAULT_ENDPOINT = 'https://deepseekapi.org/v1/chat/completions';
+const DEFAULT_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
 const LOCAL_ROUTER_ENDPOINT = process.env.DEEPSEEK_ROUTER_URL || 'http://localhost:8080/v1/chat/completions';
 const PROXY_ENDPOINT = process.env.DEEPSEEK_PROXY_URL;
 
@@ -46,9 +46,9 @@ async function* mockStream(params: ChatParams): AsyncGenerator<StreamChunk> {
 }
 
 export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChunk> {
-  // Try local router first, then proxy, then cloud API, then mock
+  // Try local router first, then cloud API directly, then proxy, then mock
   const useLocalRouter = hasLocalRouter();
-  const useProxy = hasProxy();
+  const useProxy = false; // Temporarily disable proxy due to DNS issues
   const useCloudAPI = hasKey();
   
   console.log('[DeepSeek] useLocalRouter:', useLocalRouter, 'useProxy:', useProxy, 'useCloudAPI:', useCloudAPI);
@@ -64,7 +64,7 @@ export async function* chatStream(params: ChatParams): AsyncGenerator<StreamChun
   }
 
   const body = {
-    model: params.model || 'deepseek-v3',
+    model: params.model || 'deepseek-chat',
     messages: params.messages,
     temperature: params.temperature ?? 0.3,
     max_tokens: params.max_tokens ?? 1024,

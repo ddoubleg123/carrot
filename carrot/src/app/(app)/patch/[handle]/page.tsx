@@ -43,7 +43,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
     // Use Repository template for History handle
     if (handle === 'history') {
-      const RepositoryPage = (await import('./page-repository')).default;
+      const RepositoryPage = (await import('./page-repository-v2')).default;
       return <RepositoryPage params={params} searchParams={searchParams} />;
     }
 
