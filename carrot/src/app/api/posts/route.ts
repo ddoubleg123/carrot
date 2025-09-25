@@ -126,9 +126,9 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
         if (host === 'firebasestorage.googleapis.com' && m1) {
           bucket = decodeURIComponent(m1[1]);
-          // Fix bucket name: convert .firebasestorage.app to .appspot.com
+          // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
           if (bucket.endsWith('.firebasestorage.app')) {
-            bucket = bucket.replace('.firebasestorage.app', '.appspot.com');
+            console.log('[posts] Keeping Firebase bucket name:', bucket);
           }
           path = decodeURIComponent(m1[2]);
         }

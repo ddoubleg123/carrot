@@ -3,11 +3,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // Resolve public env at build time to avoid using `process` at runtime on the client
-const PUBLIC_BUCKET =
-  process.env.NEXT_PUBLIC_FIREBASE_BUCKET ||
-  process.env.FIREBASE_STORAGE_BUCKET ||
-  process.env.FIREBASE_BUCKET ||
-  '';
+// Use the same logic as firebase.ts to ensure .firebasestorage.app bucket names
+const PUBLIC_BUCKET = (() => {
+  const bucket = process.env.NEXT_PUBLIC_FIREBASE_BUCKET ||
+    process.env.FIREBASE_STORAGE_BUCKET ||
+    process.env.FIREBASE_BUCKET ||
+    '';
+  
+  // If bucket ends with .firebasestorage.app, keep it as-is
+  if (bucket.includes('.firebasestorage.app')) {
+    return bucket;
+  }
+  
+  // If bucket ends with .appspot.com, convert to .firebasestorage.app
+  if (bucket.endsWith('.appspot.com')) {
+    return bucket.replace('.appspot.com', '.firebasestorage.app');
+  }
+  
+  // If no bucket specified, construct from project ID
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (projectId) {
+    return `${projectId}.firebasestorage.app`;
+  }
+  
+  return bucket;
+})();
 
 interface VideoPlayerProps {
   videoUrl: string;
