@@ -96,10 +96,9 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         return u.toString();
       }
       // Not proxied: wrap with /api/video?url=...
-      const wrapped = new URL('/api/video', base);
-      wrapped.searchParams.set('url', u.toString());
-      if (postId) wrapped.searchParams.set('pid', String(postId));
-      return wrapped.pathname + '?' + wrapped.searchParams.toString();
+      // Use the original videoUrl instead of u.toString() to avoid double-encoding
+      const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
+      return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
     } catch {
       try {
         // Last resort: string wrap without URL parsing

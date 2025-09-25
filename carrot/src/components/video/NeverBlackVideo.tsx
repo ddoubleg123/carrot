@@ -94,9 +94,8 @@ export default function NeverBlackVideo({
     try {
       const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
       if (u.pathname.startsWith('/api/video')) return u.toString();
-      const wrapped = new URL('/api/video', typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-      wrapped.searchParams.set('url', u.toString());
-      return wrapped.pathname + '?' + wrapped.searchParams.toString();
+      // Use the original src string instead of u.toString() to avoid double-encoding
+      return `/api/video?url=${encodeURIComponent(src)}`;
     } catch {
       return `/api/video?url=${encodeURIComponent(src)}`;
     }
