@@ -170,65 +170,96 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
         </div>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
             {/* Main Timeline Area */}
             <div className="lg:col-span-3">
               {activeTab === 'timeline' && (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   {/* Timeline Header */}
-                  <div className="text-center mb-12">
-                    <h2 className="text-3xl font-bold text-gray-900 mb-4">The Roman Timeline</h2>
-                    <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                      Journey through the rise and fall of one of history's greatest civilizations
+                  <div className="text-center mb-16">
+                    <div className="inline-flex items-center gap-3 mb-6">
+                      <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-amber-500 rounded-full flex items-center justify-center">
+                        <Calendar className="w-6 h-6 text-white" />
+                      </div>
+                      <h2 className="text-4xl font-bold text-gray-900">Chronicles of Rome</h2>
+                    </div>
+                    <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                      Journey through the rise and fall of one of history's greatest civilizations. 
+                      Explore key moments that shaped Western civilization.
                     </p>
                   </div>
 
                   {/* Timeline Events */}
                   <div className="relative">
-                    {/* Timeline Line */}
-                    <div className="absolute left-8 top-0 bottom-0 w-1 bg-gradient-to-b from-red-500 via-amber-500 to-red-500 rounded-full"></div>
+                    {/* Enhanced Timeline Line with Gradient */}
+                    <div className="absolute left-12 top-0 bottom-0 w-2 bg-gradient-to-b from-red-600 via-amber-500 to-red-600 rounded-full shadow-lg"></div>
                     
-                    <div className="space-y-12">
-                      {patch.events.map((event, index) => (
-                        <div key={event.id} className="relative flex items-start gap-8">
-                          {/* Timeline Dot */}
+                    {/* Timeline Filter Controls */}
+                    <div className="flex items-center justify-between mb-12">
+                      <div className="flex items-center gap-4">
+                        <button className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-2">
+                          <Filter className="w-4 h-4" />
+                          Filter Era
+                        </button>
+                        <button className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+                          <Search className="w-4 h-4" />
+                          Search Events
+                        </button>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {patch.events.length} Historical Events
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-16">
+                      {patch.events.length > 0 ? patch.events.map((event, index) => (
+                        <div key={event.id} className="relative flex items-start gap-12">
+                          {/* Enhanced Timeline Dot */}
                           <div className="relative z-10 flex-shrink-0">
-                            <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gradient-to-br from-red-500 to-amber-500">
-                              <Calendar className="w-8 h-8 text-white" />
+                            <div className="w-24 h-24 rounded-full flex items-center justify-center shadow-xl bg-gradient-to-br from-red-500 to-amber-500 border-4 border-white">
+                              <span className="text-white font-bold text-lg">
+                                {new Date(event.dateStart).getFullYear()}
+                              </span>
                             </div>
+                            {/* Decorative ring */}
+                            <div className="absolute inset-0 rounded-full border-2 border-red-200 animate-pulse"></div>
                           </div>
 
-                          {/* Event Card */}
-                          <div className="flex-1 bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300">
-                            <div className="p-8">
-                              <div className="flex items-start justify-between mb-4">
-                                <div>
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-2xl font-bold text-red-600">
-                                      {new Date(event.dateStart).getFullYear()}
+                          {/* Enhanced Event Card */}
+                          <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-500 hover:scale-[1.02]">
+                            <div className="p-10">
+                              <div className="flex items-start justify-between mb-6">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-4 mb-4">
+                                    <span className="px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-red-100 to-amber-100 text-red-800">
+                                      Historical Milestone
                                     </span>
-                                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                                      Historical Event
+                                    <span className="text-sm text-gray-500">
+                                      {new Date(event.dateStart).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                      })}
                                     </span>
                                   </div>
-                                  <h3 className="text-2xl font-bold text-gray-900 mb-3">{event.title}</h3>
+                                  <h3 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">{event.title}</h3>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <button className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200 hover:scale-110">
                                     <Bookmark className="w-5 h-5" />
                                   </button>
-                                  <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                  <button className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200 hover:scale-110">
                                     <Share2 className="w-5 h-5" />
                                   </button>
                                 </div>
                               </div>
                               
-                              <p className="text-gray-700 text-lg mb-4 leading-relaxed">{event.summary}</p>
+                              <p className="text-gray-700 text-lg mb-6 leading-relaxed">{event.summary}</p>
                               
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-3">
                                 {event.tags.map((tag) => (
-                                  <span key={tag} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                                  <span key={tag} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors">
                                     {tag}
                                   </span>
                                 ))}
@@ -236,7 +267,97 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                             </div>
                           </div>
                         </div>
-                      ))}
+                      )) : (
+                        /* Sample Timeline Events for Demo */
+                        <>
+                          <div className="relative flex items-start gap-12">
+                            <div className="relative z-10 flex-shrink-0">
+                              <div className="w-24 h-24 rounded-full flex items-center justify-center shadow-xl bg-gradient-to-br from-red-500 to-amber-500 border-4 border-white">
+                                <span className="text-white font-bold text-lg">753</span>
+                              </div>
+                              <div className="absolute inset-0 rounded-full border-2 border-red-200 animate-pulse"></div>
+                            </div>
+                            <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-500 hover:scale-[1.02]">
+                              <div className="p-10">
+                                <div className="flex items-center gap-4 mb-4">
+                                  <span className="px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-red-100 to-amber-100 text-red-800">
+                                    Foundation
+                                  </span>
+                                  <span className="text-sm text-gray-500">753 BCE</span>
+                                </div>
+                                <h3 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">Foundation of Rome</h3>
+                                <p className="text-gray-700 text-lg mb-6 leading-relaxed">
+                                  According to legend, Rome was founded by Romulus and Remus on the Palatine Hill. 
+                                  This marked the beginning of what would become one of history's greatest empires.
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Foundation</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Legend</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Romulus</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="relative flex items-start gap-12">
+                            <div className="relative z-10 flex-shrink-0">
+                              <div className="w-24 h-24 rounded-full flex items-center justify-center shadow-xl bg-gradient-to-br from-red-500 to-amber-500 border-4 border-white">
+                                <span className="text-white font-bold text-lg">509</span>
+                              </div>
+                              <div className="absolute inset-0 rounded-full border-2 border-red-200 animate-pulse"></div>
+                            </div>
+                            <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-500 hover:scale-[1.02]">
+                              <div className="p-10">
+                                <div className="flex items-center gap-4 mb-4">
+                                  <span className="px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-red-100 to-amber-100 text-red-800">
+                                    Republic
+                                  </span>
+                                  <span className="text-sm text-gray-500">509 BCE</span>
+                                </div>
+                                <h3 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">Roman Republic Established</h3>
+                                <p className="text-gray-700 text-lg mb-6 leading-relaxed">
+                                  The Roman Republic was established after the overthrow of the last Roman king, 
+                                  Tarquin the Proud. This marked the beginning of representative government in Rome.
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Republic</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Government</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Democracy</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="relative flex items-start gap-12">
+                            <div className="relative z-10 flex-shrink-0">
+                              <div className="w-24 h-24 rounded-full flex items-center justify-center shadow-xl bg-gradient-to-br from-red-500 to-amber-500 border-4 border-white">
+                                <span className="text-white font-bold text-lg">27</span>
+                              </div>
+                              <div className="absolute inset-0 rounded-full border-2 border-red-200 animate-pulse"></div>
+                            </div>
+                            <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-500 hover:scale-[1.02]">
+                              <div className="p-10">
+                                <div className="flex items-center gap-4 mb-4">
+                                  <span className="px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-red-100 to-amber-100 text-red-800">
+                                    Empire
+                                  </span>
+                                  <span className="text-sm text-gray-500">27 BCE</span>
+                                </div>
+                                <h3 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">Augustus Becomes First Emperor</h3>
+                                <p className="text-gray-700 text-lg mb-6 leading-relaxed">
+                                  Octavian, later known as Augustus, became the first Roman Emperor, 
+                                  marking the end of the Republic and the beginning of the Roman Empire.
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Empire</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Augustus</span>
+                                  <span className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">Imperial</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -330,7 +451,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
             </div>
 
             {/* Sidebar */}
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Quick Facts */}
               <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">

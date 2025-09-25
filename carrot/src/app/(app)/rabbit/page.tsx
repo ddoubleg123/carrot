@@ -569,6 +569,18 @@ function AgentRoster({
                     </div>
                   </div>
 
+        {/* Search Bar */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search agents..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+            />
+          </div>
+        </div>
+
         {/* Available Agents */}
         <div className="p-4 border-t border-gray-200">
           <h4 className="text-sm font-medium text-gray-500 mb-3">Available Advisors</h4>
@@ -992,19 +1004,6 @@ export default function RabbitPage() {
         </div>
       </div>
 
-      {/* Search Bar - Fixed positioning below header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search agents..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            />
-          </div>
-        </div>
-      </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex min-h-0">
@@ -1035,7 +1034,7 @@ export default function RabbitPage() {
       </div>
 
       {/* Fixed Chat Input Bar - Positioned between sidebar and advisor rail */}
-      <div className="fixed bottom-0 left-0 right-80 bg-white border-t border-gray-200 p-4 z-20">
+      <div className="fixed bottom-0 left-16 right-80 bg-white border-t border-gray-200 p-4 z-20">
         <form onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.currentTarget);
