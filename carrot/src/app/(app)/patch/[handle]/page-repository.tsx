@@ -62,7 +62,6 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
         createdBy: true,
         createdAt: true,
         facts: {
-          orderBy: { createdAt: 'desc' },
           take: 8
         },
         events: {
@@ -75,7 +74,16 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
         },
         posts: {
           orderBy: { createdAt: 'desc' },
-          take: 10
+          take: 10,
+          include: {
+            author: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
         },
         _count: {
           select: {
