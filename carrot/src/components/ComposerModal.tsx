@@ -1020,7 +1020,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       );
       const trimmingRequested = !!(
         isVideoType &&
-        ((videoTrimStart && videoTrimStart > 0) || (videoTrimEnd && videoTrimEnd > 0)) &&
+        ((videoTrimStart > 0) || (videoTrimEnd > 0 && videoTrimEnd < videoDuration)) &&
         (videoTrimEnd === 0 || videoTrimEnd > videoTrimStart)
       );
       try { console.log('[Composer] trimmingRequested?', { isVideoType, videoTrimStart, videoTrimEnd, trimmingRequested, mediaType }); } catch {}
