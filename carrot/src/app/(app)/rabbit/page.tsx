@@ -359,17 +359,19 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: only scroll to bottom if user is near bottom
+  // Auto-scroll behavior: always keep newest messages in view
   useEffect(() => {
-    if (thread.messages.length > 0 && isNearBottom && !hasUserScrolled) {
+    if (thread.messages.length > 0) {
       const timeout = setTimeout(() => {
+        // Always scroll to bottom to keep newest message in view
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         setIsNearBottom(true);
         setShowScrollButton(false);
-      }, 50); // Reduced timeout for faster response
+        setHasUserScrolled(false);
+      }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
+  }, [thread.messages.length]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -400,7 +402,7 @@ function ConversationThread({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-24">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-32">
         {thread.messages.map((message) => (
           <div
             key={message.id}
@@ -534,7 +536,7 @@ function AgentRoster({
               
       {/* Active Agents */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4">
+        <div className="p-4 pt-6">
           <h4 className="text-sm font-medium text-gray-500 mb-3">Active Advisors</h4>
           <div className="space-y-3">
             {agents
@@ -748,7 +750,7 @@ export default function RabbitPage() {
         console.warn('[Rabbit] API call failed:', resp.status, resp.statusText);
         
         // Add a fallback response when API fails
-        const fallbackResponse = `I'm ${respondingAgent.name}, and I'd be happy to discuss ${respondingAgent.role} with you. However, I'm currently experiencing some technical difficulties. Please try again in a moment.`;
+        const fallbackResponse = `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.`;
         
         // Add the fallback response to the thread
         setCurrentThread(prev => {
@@ -825,7 +827,7 @@ export default function RabbitPage() {
                   const msgs = prev.messages.slice();
                   const idx = msgs.findIndex(m => m.id === agentMsgId);
                   if (idx >= 0) {
-                    msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties: ${j.error}. Please try again.` } as any;
+                    msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.` } as any;
                   }
                   return { ...prev, messages: msgs, updatedAt: new Date() };
                 });
@@ -856,7 +858,7 @@ export default function RabbitPage() {
             if (lastAgentMsg) {
               const idx = msgs.findIndex(m => m.id === lastAgentMsg.id);
               if (idx >= 0) {
-                msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I encountered an error: ${e instanceof Error ? e.message : 'Unknown error'}. Please try again.` } as any;
+                msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.` } as any;
               }
             }
             return { ...prev, messages: msgs, updatedAt: new Date() };
@@ -1033,41 +1035,59 @@ export default function RabbitPage() {
         </div>
       </div>
 
-      {/* Fixed Chat Input Bar - Positioned between sidebar and advisor rail */}
-      <div className="fixed bottom-0 left-16 right-80 bg-white border-t border-gray-200 p-4 z-20">
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const formData = new FormData(e.currentTarget);
-          const message = formData.get('message') as string;
-          if (message?.trim()) {
-            handleSendMessage(message.trim());
-            e.currentTarget.reset();
-          }
-        }} className="flex gap-3 w-full">
+      {/* Fixed Chat Input Bar - Duplicated from header container structure */}
+      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+        {/* Left side - Upload button */}
+        <div className="flex-shrink-0">
           <button
             type="button"
             onClick={() => {
               // TODO: Implement upload modal
               console.log('Upload clicked');
             }}
-            className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+            className="px-3 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
             title="Upload file or share link"
           >
             <Upload size={18} />
           </button>
+        </div>
+        
+        {/* Center - Chat input */}
+        <div className="flex-1 mx-4">
           <input
-            name="message"
+            id="chat-input"
             type="text"
             placeholder="Continue the conversation..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                const message = e.currentTarget.value.trim();
+                if (message) {
+                  handleSendMessage(message);
+                  e.currentTarget.value = '';
+                }
+              }
+            }}
           />
+        </div>
+        
+        {/* Right side - Send button */}
+        <div className="flex-shrink-0">
           <button
-            type="submit"
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
+            type="button"
+            onClick={() => {
+              const input = document.getElementById('chat-input') as HTMLInputElement;
+              const message = input?.value.trim();
+              if (message) {
+                handleSendMessage(message);
+                input.value = '';
+              }
+            }}
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
           >
             <Send size={18} />
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
