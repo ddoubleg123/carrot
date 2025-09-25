@@ -454,13 +454,13 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                             {post.body && <p className="text-[#0B0B0F] text-sm mb-3">{post.body}</p>}
                             <div className="flex items-center gap-4 text-[#60646C] text-xs">
                               <div className="flex items-center gap-1">
-                                <ThumbsUp className="w-4 h-4" /> {post.metrics.likes || 0}
+                                <ThumbsUp className="w-4 h-4" /> {(post.metrics as any)?.likes || 0}
                               </div>
                               <div className="flex items-center gap-1">
-                                <MessageSquare className="w-4 h-4" /> {post.metrics.comments || 0}
+                                <MessageSquare className="w-4 h-4" /> {(post.metrics as any)?.comments || 0}
                               </div>
                               <div className="flex items-center gap-1">
-                                <Eye className="w-4 h-4" /> {post.metrics.views || 0}
+                                <Eye className="w-4 h-4" /> {(post.metrics as any)?.views || 0}
                               </div>
                             </div>
                           </div>
