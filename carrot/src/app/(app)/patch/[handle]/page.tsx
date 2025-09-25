@@ -35,6 +35,12 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
     console.log('[PatchPage] Loading patch with handle:', handle)
 
+    // Use Rome template for Rome handle
+    if (handle === 'rome') {
+      const RomePage = (await import('./page-rome')).default;
+      return <RomePage params={params} searchParams={searchParams} />;
+    }
+
     // Simple patch query without complex includes
     let patch = await prisma.patch.findUnique({
       where: { handle },
