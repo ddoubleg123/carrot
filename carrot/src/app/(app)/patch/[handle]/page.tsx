@@ -41,10 +41,10 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       return <RomePage params={params} searchParams={searchParams} />;
     }
 
-    // Use History template for History handle
+    // Use Repository template for History handle
     if (handle === 'history') {
-      const HistoryPage = (await import('./page-history-simple')).default;
-      return <HistoryPage params={params} searchParams={searchParams} />;
+      const RepositoryPage = (await import('./page-repository')).default;
+      return <RepositoryPage params={params} searchParams={searchParams} />;
     }
 
     // Simple patch query without complex includes
