@@ -352,14 +352,14 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                               )}
                               {event.media && (
                                 <span className="px-2 py-1 bg-[#FF6A00]/10 text-[#FF6A00] rounded-lg text-xs font-medium flex items-center gap-1">
-                                  {event.media.type === 'image' && <Image className="w-3 h-3" />}
-                                  {event.media.type === 'video' && <Video className="w-3 h-3" />}
+                                  {(event.media as any)?.type === 'image' && <Image className="w-3 h-3" />}
+                                  {(event.media as any)?.type === 'video' && <Video className="w-3 h-3" />}
                                   Media
                                 </span>
                               )}
                             </div>
-                            {event.media?.url && event.media.type === 'image' && (
-                              <img src={event.media.url} alt={event.title} className="mt-3 rounded-lg max-h-48 object-cover w-full" />
+                            {(event.media as any)?.url && (event.media as any)?.type === 'image' && (
+                              <img src={(event.media as any).url} alt={event.title} className="mt-3 rounded-lg max-h-48 object-cover w-full" />
                             )}
                           </div>
                         </div>
