@@ -366,7 +366,7 @@ function ConversationThread({
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         setIsNearBottom(true);
         setShowScrollButton(false);
-      }, 100);
+      }, 50); // Reduced timeout for faster response
       return () => clearTimeout(timeout);
     }
   }, [thread.messages.length, isNearBottom, hasUserScrolled]);
@@ -380,16 +380,14 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // When starting a new conversation, scroll to top
+  // When starting a new conversation, scroll to top immediately
   useEffect(() => {
     if (messageContainerRef.current) {
-      const timeout = setTimeout(() => {
-        messageContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-        setIsNearBottom(false);
-        setHasUserScrolled(false);
-        setShowScrollButton(false);
-      }, 100);
-      return () => clearTimeout(timeout);
+      // Immediate scroll to top without animation to prevent visual jumping
+      messageContainerRef.current.scrollTop = 0;
+      setIsNearBottom(false);
+      setHasUserScrolled(false);
+      setShowScrollButton(false);
     }
   }, [thread.id]);
 
@@ -807,6 +805,19 @@ export default function RabbitPage() {
               if (j.type === 'token' && j.token) {
                 console.log('[Rabbit] Pushing token:', j.token);
                 pushToken(j.token);
+              } else if (j.type === 'error') {
+                console.error('[Rabbit] API Error:', j.error);
+                // Update the agent message with error content
+                setCurrentThread(prev => {
+                  if (!prev) return prev;
+                  const msgs = prev.messages.slice();
+                  const idx = msgs.findIndex(m => m.id === agentMsgId);
+                  if (idx >= 0) {
+                    msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties: ${j.error}. Please try again.` } as any;
+                  }
+                  return { ...prev, messages: msgs, updatedAt: new Date() };
+                });
+                break; // Exit the loop on error
               }
             } catch (e) { 
               console.warn('[Rabbit] Failed to parse JSON:', payload, e);
@@ -815,8 +826,31 @@ export default function RabbitPage() {
         }
       }
     } catch (e) {
-      // Soft-fail
+      // Soft-fail with better error handling
       console.warn('[Rabbit] streamAssistantReply error', e);
+      
+      // Add error message to the thread if we have a current thread
+      if (currentThread) {
+        const respondingAgent = activeAgents.length > 0 
+          ? getAgentById(activeAgents[0]) 
+          : getAgentById('brzezinski');
+        
+        if (respondingAgent) {
+          setCurrentThread(prev => {
+            if (!prev) return prev;
+            const msgs = prev.messages.slice();
+            // Find the last agent message to update it with error
+            const lastAgentMsg = msgs.reverse().find(m => m.type === 'agent');
+            if (lastAgentMsg) {
+              const idx = msgs.findIndex(m => m.id === lastAgentMsg.id);
+              if (idx >= 0) {
+                msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I encountered an error: ${e instanceof Error ? e.message : 'Unknown error'}. Please try again.` } as any;
+              }
+            }
+            return { ...prev, messages: msgs, updatedAt: new Date() };
+          });
+        }
+      }
     }
   }
 
@@ -1001,7 +1035,7 @@ export default function RabbitPage() {
       </div>
 
       {/* Fixed Chat Input Bar - Positioned between sidebar and advisor rail */}
-      <div className="fixed bottom-0 left-64 right-80 bg-white border-t border-gray-200 p-4 z-20">
+      <div className="fixed bottom-0 left-0 right-80 bg-white border-t border-gray-200 p-4 z-20">
         <form onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.currentTarget);
