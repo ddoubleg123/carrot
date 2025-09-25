@@ -103,8 +103,17 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
     } catch {
       try {
         // Last resort: string wrap without URL parsing
+        // Check if the URL is already heavily encoded (triple+ encoding)
+        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(videoUrl);
         const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
-        return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+        
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          return `/api/video?url=${videoUrl}${pidPart}`;
+        } else {
+          // URL is not encoded, encode it once
+          return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+        }
       } catch { return videoUrl; }
     }
   }, [videoUrl, postId]);
@@ -135,9 +144,22 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
       if (thumbnailUrl.startsWith('/api/img') || thumbnailUrl.startsWith('data:') || thumbnailUrl.startsWith('blob:')) {
         return thumbnailUrl;
       }
-      return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
+      
+      // Check if the URL is already heavily encoded (triple+ encoding)
+      // If it contains patterns like %252F or %253A, it's already encoded multiple times
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(thumbnailUrl);
+      
+      if (isAlreadyEncoded) {
+        // URL is already encoded, pass it directly to avoid double-encoding
+        return `/api/img?url=${thumbnailUrl}`;
+      } else {
+        // URL is not encoded, encode it once
+        return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
+      }
     } catch {
-      return `/api/img?url=${encodeURIComponent(thumbnailUrl)}`;
+      // Fallback: try to detect if already encoded
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(thumbnailUrl);
+      return `/api/img?url=${isAlreadyEncoded ? thumbnailUrl : encodeURIComponent(thumbnailUrl)}`;
     }
   }, [thumbnailUrl, postId]);
 
