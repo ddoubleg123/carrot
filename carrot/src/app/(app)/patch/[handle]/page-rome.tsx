@@ -57,12 +57,10 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
         tags: true,
         createdBy: true,
         createdAt: true,
-        timelineEvents: {
-          orderBy: { date: 'asc' }
+        events: {
+          orderBy: { dateStart: 'asc' }
         },
-        facts: {
-          orderBy: { createdAt: 'asc' }
-        }
+        facts: true
       }
     });
 
@@ -192,26 +190,12 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                     <div className="absolute left-8 top-0 bottom-0 w-1 bg-gradient-to-b from-red-500 via-amber-500 to-red-500 rounded-full"></div>
                     
                     <div className="space-y-12">
-                      {patch.timelineEvents.map((event, index) => (
+                      {patch.events.map((event, index) => (
                         <div key={event.id} className="relative flex items-start gap-8">
                           {/* Timeline Dot */}
                           <div className="relative z-10 flex-shrink-0">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg ${
-                              event.type === 'foundation' ? 'bg-gradient-to-br from-amber-400 to-red-500' :
-                              event.type === 'political' ? 'bg-gradient-to-br from-blue-500 to-purple-600' :
-                              event.type === 'military' ? 'bg-gradient-to-br from-red-500 to-red-700' :
-                              event.type === 'architecture' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                              event.type === 'monument' ? 'bg-gradient-to-br from-purple-500 to-pink-600' :
-                              event.type === 'religious' ? 'bg-gradient-to-br from-green-500 to-emerald-600' :
-                              'bg-gradient-to-br from-gray-500 to-gray-700'
-                            }`}>
-                              {event.type === 'foundation' ? <Crown className="w-8 h-8 text-white" /> :
-                               event.type === 'political' ? <Building className="w-8 h-8 text-white" /> :
-                               event.type === 'military' ? <Sword className="w-8 h-8 text-white" /> :
-                               event.type === 'architecture' ? <Building className="w-8 h-8 text-white" /> :
-                               event.type === 'monument' ? <Star className="w-8 h-8 text-white" /> :
-                               event.type === 'religious' ? <BookOpen className="w-8 h-8 text-white" /> :
-                               <Calendar className="w-8 h-8 text-white" />}
+                            <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gradient-to-br from-red-500 to-amber-500">
+                              <Calendar className="w-8 h-8 text-white" />
                             </div>
                           </div>
 
@@ -221,17 +205,11 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                               <div className="flex items-start justify-between mb-4">
                                 <div>
                                   <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-2xl font-bold text-red-600">{event.date}</span>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                      event.type === 'foundation' ? 'bg-amber-100 text-amber-800' :
-                                      event.type === 'political' ? 'bg-blue-100 text-blue-800' :
-                                      event.type === 'military' ? 'bg-red-100 text-red-800' :
-                                      event.type === 'architecture' ? 'bg-orange-100 text-orange-800' :
-                                      event.type === 'monument' ? 'bg-purple-100 text-purple-800' :
-                                      event.type === 'religious' ? 'bg-green-100 text-green-800' :
-                                      'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {event.type}
+                                    <span className="text-2xl font-bold text-red-600">
+                                      {new Date(event.dateStart).getFullYear()}
+                                    </span>
+                                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                      Historical Event
                                     </span>
                                   </div>
                                   <h3 className="text-2xl font-bold text-gray-900 mb-3">{event.title}</h3>
@@ -246,16 +224,8 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                                 </div>
                               </div>
                               
-                              <p className="text-gray-700 text-lg mb-4 leading-relaxed">{event.description}</p>
+                              <p className="text-gray-700 text-lg mb-4 leading-relaxed">{event.summary}</p>
                               
-                              <div className="bg-gradient-to-r from-red-50 to-amber-50 rounded-xl p-4 mb-4">
-                                <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                                  <Star className="w-4 h-4 text-amber-500" />
-                                  Historical Significance
-                                </h4>
-                                <p className="text-gray-700">{event.significance}</p>
-                              </div>
-
                               <div className="flex flex-wrap gap-2">
                                 {event.tags.map((tag) => (
                                   <span key={tag} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
@@ -412,7 +382,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-red-100">Timeline Events</span>
-                    <span className="font-bold text-xl">{patch.timelineEvents.length}</span>
+                    <span className="font-bold text-xl">{patch.events.length}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-red-100">Key Facts</span>
