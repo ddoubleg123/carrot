@@ -32,7 +32,21 @@ import {
   Bot,
   Lightbulb,
   History,
-  Globe
+  Globe,
+  Sparkles,
+  Zap,
+  Target,
+  Crown,
+  Award,
+  UserPlus,
+  Brain,
+  BookmarkCheck,
+  CalendarDays,
+  FileImage,
+  FileVideo,
+  FileText as FileTextIcon,
+  Link2,
+  Send
 } from 'lucide-react';
 
 interface PatchPageProps {

@@ -359,17 +359,27 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: only scroll to bottom if user is near bottom
+  // Auto-scroll behavior: always keep latest message visible when it would be hidden below input
   useEffect(() => {
-    if (thread.messages.length > 0 && isNearBottom && !hasUserScrolled) {
+    if (thread.messages.length > 0) {
       const timeout = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        setIsNearBottom(true);
-        setShowScrollButton(false);
+        if (messageContainerRef.current) {
+          const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+          const inputAreaHeight = 120; // Approximate height of input area + padding
+          const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
+          
+          // Always scroll to show latest message if it would be hidden below input area
+          if (latestMessageWouldBeHidden) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            setIsNearBottom(true);
+            setShowScrollButton(false);
+            setHasUserScrolled(false);
+          }
+        }
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
+  }, [thread.messages.length]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -655,7 +665,7 @@ export default function RabbitPage() {
             id: (session?.user as any)?.id || 'unknown',
             name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
             username: (session?.user as any)?.username || 'user',
-            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
+            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent((session?.user as any)?.name || (session?.user as any)?.username || 'User')}&background=FF6A00&color=fff&size=40`
           },
           timestamp: new Date()
         }
@@ -689,7 +699,7 @@ export default function RabbitPage() {
             id: (session?.user as any)?.id || 'unknown',
             name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
             username: (session?.user as any)?.username || 'user',
-            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
+            avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent((session?.user as any)?.name || (session?.user as any)?.username || 'User')}&background=FF6A00&color=fff&size=40`
           },
           timestamp: new Date()
         }
@@ -877,7 +887,7 @@ export default function RabbitPage() {
         id: (session?.user as any)?.id || 'unknown',
         name: (session?.user as any)?.name || (session?.user as any)?.username || 'User',
         username: (session?.user as any)?.username || 'user',
-        avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/default-avatar.png'
+        avatar: (session?.user as any)?.profilePhoto || (session?.user as any)?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent((session?.user as any)?.name || (session?.user as any)?.username || 'User')}&background=FF6A00&color=fff&size=40`
       },
       timestamp: new Date()
     };
