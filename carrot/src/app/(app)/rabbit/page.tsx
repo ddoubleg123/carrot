@@ -359,18 +359,17 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll to bottom when new messages are added
+  // Auto-scroll behavior: only scroll to bottom if user is near bottom
   useEffect(() => {
-    if (thread.messages.length > 0) {
+    if (thread.messages.length > 0 && isNearBottom && !hasUserScrolled) {
       const timeout = setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         setIsNearBottom(true);
-        setHasUserScrolled(false);
         setShowScrollButton(false);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length]);
+  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -381,15 +380,15 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // Scroll to bottom when thread changes (new conversation)
+  // When starting a new conversation, scroll to top
   useEffect(() => {
     if (messageContainerRef.current) {
       const timeout = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        setIsNearBottom(true);
+        messageContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        setIsNearBottom(false);
         setHasUserScrolled(false);
         setShowScrollButton(false);
-      }, 200);
+      }, 100);
       return () => clearTimeout(timeout);
     }
   }, [thread.id]);
@@ -1001,8 +1000,8 @@ export default function RabbitPage() {
         </div>
       </div>
 
-      {/* Fixed Chat Input Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-20">
+      {/* Fixed Chat Input Bar - Positioned between sidebar and advisor rail */}
+      <div className="fixed bottom-0 left-64 right-80 bg-white border-t border-gray-200 p-4 z-20">
         <form onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.currentTarget);
@@ -1011,7 +1010,7 @@ export default function RabbitPage() {
             handleSendMessage(message.trim());
             e.currentTarget.reset();
           }
-        }} className="flex gap-3 max-w-2xl mx-auto">
+        }} className="flex gap-3 w-full">
           <button
             type="button"
             onClick={() => {
