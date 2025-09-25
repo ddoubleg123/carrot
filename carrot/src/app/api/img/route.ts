@@ -205,12 +205,23 @@ export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
   const generatePoster = sp.get('generatePoster')
   const videoUrl = sp.get('videoUrl')
 
-  // Prevent double-wrapping: if rawUrl already points to /api/img, try to unwrap once (or a few times)
+  // Prevent multiple-wrapping: if rawUrl already points to /api/img, try to unwrap multiple times
   if (rawUrl) {
     try {
-      const decoded = decodeURIComponent(rawUrl);
-      let toCheck = decoded;
-      for (let i = 0; i < 3 && toCheck.includes('/api/img'); i++) {
+      let toCheck = rawUrl;
+      let decoded = rawUrl;
+      
+      // First, decode multiple times to handle triple+ encoding
+      for (let i = 0; i < 5; i++) {
+        const prev = decoded;
+        decoded = decodeURIComponent(decoded);
+        if (prev === decoded) break; // No more decoding needed
+      }
+      
+      toCheck = decoded;
+      
+      // Then unwrap /api/img wrappers
+      for (let i = 0; i < 5 && toCheck.includes('/api/img'); i++) {
         const inner = new URL(toCheck.startsWith('http') ? toCheck : toCheck, url.origin);
         if (inner.pathname.startsWith('/api/img')) {
           const innerUrl = inner.searchParams.get('url');

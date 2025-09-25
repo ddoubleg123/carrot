@@ -166,12 +166,19 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       let candidate = raw;
       // Detect signed URLs (GCS V2: GoogleAccessId/Signature/Expires, or GCS V4: X-Goog-*)
       const looksSigned = /(?:[?&])(GoogleAccessId|Signature|Expires|X-Goog-Algorithm|X-Goog-Credential|X-Goog-Date|X-Goog-Expires|X-Goog-SignedHeaders|X-Goog-Signature)=/i.test(candidate);
-      // Decode at most once for ALL URLs (including signed). The client encodes the entire URL when passing as query,
-      // which turns %40/%2F inside the signed URL into %2540/%252F; we must reduce one layer back.
+      // Decode multiple times to handle triple+ encoding. The client encodes the entire URL when passing as query,
+      // which turns %40/%2F inside the signed URL into %2540/%252F; we must reduce multiple layers back.
       try {
-        if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
-          candidate = decodeURIComponent(candidate);
-          decodedOnce = true;
+        let prev = candidate;
+        for (let i = 0; i < 5; i++) {
+          if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
+            candidate = decodeURIComponent(candidate);
+            if (prev === candidate) break; // No more decoding needed
+            prev = candidate;
+            decodedOnce = true;
+          } else {
+            break;
+          }
         }
       } catch {}
       try {
@@ -181,16 +188,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           if (inner) candidate = inner;
         }
       } catch {}
-      // If after unwrapping we still see a double-encoded marker and we haven't decoded yet, decode once
-      try {
-        if (!decodedOnce && /%25[0-9A-Fa-f]{2}/.test(candidate)) {
-          candidate = decodeURIComponent(candidate);
-          decodedOnce = true;
-        }
-      } catch {}
-      
-      // Additional fix: Handle double-encoded URLs even if we already decoded once
-      // This handles cases where the URL is triple-encoded or has mixed encoding
+      // Additional unwrapping for /api/img patterns
       try {
         if (/%25[0-9A-Fa-f]{2}/.test(candidate)) {
           candidate = decodeURIComponent(candidate);
