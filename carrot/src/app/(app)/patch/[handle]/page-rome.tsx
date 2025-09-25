@@ -341,8 +341,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                   {patch.facts.map((fact) => (
                     <div key={fact.id} className="border-l-4 border-red-500 pl-4">
                       <div className="font-semibold text-gray-900">{fact.label}</div>
-                      <div className="text-lg font-bold text-red-600 mb-1">{fact.value}</div>
-                      <div className="text-sm text-gray-600">{fact.description}</div>
+                      <div className="text-lg font-bold text-red-600">{fact.value}</div>
                     </div>
                   ))}
                 </div>
