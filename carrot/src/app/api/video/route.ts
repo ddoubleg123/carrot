@@ -229,9 +229,11 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
             
             // If we extracted bucket and path, use Admin SDK to stream directly
             if (bucket && objectPath) {
-              // Convert .firebasestorage.app to .appspot.com for bucket name
+              // For modern Firebase projects, keep .firebasestorage.app bucket names as-is
+              // Only convert legacy .appspot.com buckets if needed
               if (bucket.endsWith('.firebasestorage.app')) {
-                bucket = bucket.replace('.firebasestorage.app', '.appspot.com');
+                // Keep the .firebasestorage.app bucket name - don't convert to .appspot.com
+                console.log('[api/video] Using Firebase bucket:', bucket);
               }
               
               try {
@@ -253,17 +255,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // Normalize Firebase v0 path: ensure bucket host and /o/<object> are normalized (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
-      // Fix mis-specified bucket in query param `b` that sometimes appears as "<project>.firebasestorage.app"
-      try {
-        const b = target.searchParams.get('b');
-        if (b && b.endsWith('.firebasestorage.app')) {
-          const project = b.replace(/\.firebasestorage\.app$/, '');
-          const corrected = `${project}.appspot.com`;
-          target.searchParams.set('b', corrected);
-          // Reconstruct URL with updated search params
-          target = new URL(target.origin + target.pathname + '?' + target.searchParams.toString());
-        }
-      } catch {}
+        // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
+        try {
+          const b = target.searchParams.get('b');
+          if (b && b.endsWith('.firebasestorage.app')) {
+            // Don't convert .firebasestorage.app to .appspot.com - keep as-is
+            console.log('[api/video] Keeping Firebase bucket name:', b);
+          }
+        } catch {}
 
       // Also fix when the bucket appears within the v0 path: /v0/b/<bucket>/o/<object>
       try {
@@ -276,11 +275,8 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
             let bucket = decodeURIComponent(m[1]);
             const objectPart = m[2];
             if (bucket.endsWith('.firebasestorage.app')) {
-              const project = bucket.replace(/\.firebasestorage\.app$/, '');
-              const correctedBucket = `${project}.appspot.com`;
-              const encObject = encodeURIComponent(decodeURIComponent(objectPart));
-              const rebuilt = new URL(`${target.origin}/v0/b/${encodeURIComponent(correctedBucket)}/o/${encObject}${target.search}`);
-              target = rebuilt;
+              // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
+              console.log('[api/video] Keeping Firebase bucket in path:', bucket);
             }
           }
         }
