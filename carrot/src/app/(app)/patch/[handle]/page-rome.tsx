@@ -1,6 +1,6 @@
 import React from 'react';
 import { prisma } from '@/lib/prisma';
-import { getPatchThemeClass } from '@/lib/patchThemes';
+import { getPatchThemeClass } from '@/lib/patch-theme';
 import { Metadata } from 'next';
 import { 
   Calendar, 
