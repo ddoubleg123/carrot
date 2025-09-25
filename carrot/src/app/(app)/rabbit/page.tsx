@@ -359,19 +359,17 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: always keep newest messages in view
+  // Auto-scroll behavior: only scroll to bottom if user is near bottom
   useEffect(() => {
-    if (thread.messages.length > 0) {
+    if (thread.messages.length > 0 && isNearBottom && !hasUserScrolled) {
       const timeout = setTimeout(() => {
-        // Always scroll to bottom to keep newest message in view
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         setIsNearBottom(true);
         setShowScrollButton(false);
-        setHasUserScrolled(false);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length]);
+  }, [thread.messages.length, isNearBottom, hasUserScrolled]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -534,6 +532,18 @@ function AgentRoster({
                   </div>
                 )}
               
+      {/* Search Bar */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+          <input
+            type="text"
+            placeholder="Search agents..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+          />
+        </div>
+      </div>
+
       {/* Active Agents */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 pt-6">
@@ -570,18 +580,6 @@ function AgentRoster({
                       ))}
                     </div>
                   </div>
-
-        {/* Search Bar */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search agents..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
-            />
-          </div>
-        </div>
 
         {/* Available Agents */}
         <div className="p-4 border-t border-gray-200">
