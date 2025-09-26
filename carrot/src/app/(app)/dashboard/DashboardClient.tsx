@@ -77,6 +77,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
     const prox = (u?: string | null) => {
       if (!u) return null;
+      // If already proxied, return as-is
+      if (u.startsWith('/api/img')) return u;
       // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
       return `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
