@@ -409,15 +409,6 @@ function ConversationThread({
     }
   }, [thread.id]);
 
-  // Reset scroll state when starting a new conversation
-  useEffect(() => {
-    if (currentView === 'conversation' && thread.messages.length === 1) {
-      // This is a new conversation with just the initial user message
-      setHasUserScrolled(false);
-      setIsNearBottom(false);
-      setShowScrollButton(false);
-    }
-  }, [currentView, thread.messages.length]);
 
 
   const scrollToBottom = () => {
