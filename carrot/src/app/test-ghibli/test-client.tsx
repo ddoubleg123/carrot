@@ -39,11 +39,18 @@ export default function TestGhibliClient() {
     if (imgFileRef.current?.files?.[0]) form.append('image', imgFileRef.current.files[0])
     const t0 = performance.now()
     appendLog('[Image] Submitting job...')
+    if (!imgFileRef.current?.files?.[0]) {
+      appendLog('[Image] No upload provided: will generate a prompt-based SVG placeholder (Pillow not required).')
+    }
     const res = await fetch('/api/ghibli/image', { method: 'POST', body: form })
     const t1 = performance.now()
     const data: JobResult = await res.json()
     if (!data.ok) {
-      appendLog('[Image] Failed: ' + (data.message || res.statusText))
+      const msg = data.message || res.statusText
+      appendLog('[Image] Failed: ' + msg)
+      if (/Pillow|PIL not installed/i.test(msg)) {
+        appendLog('[Hint] Prompt-only mode works without uploads. To enable uploaded image processing, install Pillow on the backend (pip install -r scripts/ghibli/requirements.txt).')
+      }
       return
     }
     appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
@@ -83,6 +90,22 @@ export default function TestGhibliClient() {
         <button onClick={() => setTab('video')} style={{ padding: '8px 12px', background: tab==='video'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Video Animator</button>
       </div>
 
+      <Panel title={tab === 'image' ? 'How to use (Image)' : 'How to use (Video)'}>
+        {tab === 'image' ? (
+          <ol style={{ margin: 0, paddingLeft: 18 }}>
+            <li>Enter a prompt (required).</li>
+            <li>Optionally upload an image if you want the pipeline to stylize your input. This requires Pillow on the backend.</li>
+            <li>Click "Run Image Pipeline". If you didn’t upload, the server will generate a prompt-based SVG placeholder (works everywhere).</li>
+          </ol>
+        ) : (
+          <ol style={{ margin: 0, paddingLeft: 18 }}>
+            <li>Enter a prompt (optional).</li>
+            <li>Upload a video (≤60s, ≤720p target). The server pre-limits automatically.</li>
+            <li>Click "Run Video Pipeline" to stylize and preview original vs stylized.</li>
+          </ol>
+        )}
+      </Panel>
+
       <Panel title="Controls">
         <div style={{ display: 'grid', gap: 8 }}>
           <label>
@@ -99,7 +122,7 @@ export default function TestGhibliClient() {
           </label>
           {tab === 'image' ? (
             <label>
-              <div>Optional input image</div>
+              <div>Optional input image (not required for prompt-only)</div>
               <input type="file" accept="image/*" ref={imgFileRef} />
             </label>
           ) : (

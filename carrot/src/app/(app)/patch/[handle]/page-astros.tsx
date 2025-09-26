@@ -40,6 +40,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [isTimelineLoaded, setIsTimelineLoaded] = useState(false);
   const [timelineData, setTimelineData] = useState<any>(null);
+  const [timelineError, setTimelineError] = useState(false);
 
   // Load Timeline.js dynamically
   useEffect(() => {
@@ -166,31 +167,64 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   // Initialize Timeline.js when data is ready
   useEffect(() => {
     if (isTimelineLoaded && timelineData && typeof window !== 'undefined') {
+      // Check if Timeline.js is already loaded
+      if ((window as any).TL) {
+        initializeTimeline();
+        return;
+      }
+
+      // Load Timeline.js CSS first
+      const existingCSS = document.querySelector('link[href*="timeline.css"]');
+      if (!existingCSS) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.knightlab.com/libs/timeline3/latest/css/timeline.css';
+        document.head.appendChild(link);
+      }
+
       // Load Timeline.js script
-      const script = document.createElement('script');
-      script.src = 'https://cdn.knightlab.com/libs/timeline3/latest/js/timeline-min.js';
-      script.onload = () => {
-        // Initialize timeline
-        const timelineContainer = document.getElementById('timeline-embed');
-        if (timelineContainer && (window as any).TL) {
-          (window as any).TL.timeline(timelineContainer, timelineData);
-        }
-      };
-      document.head.appendChild(script);
-
-      // Load Timeline.js CSS
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.knightlab.com/libs/timeline3/latest/css/timeline.css';
-      document.head.appendChild(link);
-
-      return () => {
-        // Cleanup
-        document.head.removeChild(script);
-        document.head.removeChild(link);
-      };
+      const existingScript = document.querySelector('script[src*="timeline-min.js"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.knightlab.com/libs/timeline3/latest/js/timeline-min.js';
+        script.onload = () => {
+          console.log('Timeline.js loaded successfully');
+          initializeTimeline();
+        };
+        script.onerror = () => {
+          console.error('Failed to load Timeline.js');
+          setTimelineError(true);
+        };
+        document.head.appendChild(script);
+      } else {
+        // Script already exists, try to initialize
+        setTimeout(initializeTimeline, 100);
+      }
     }
   }, [isTimelineLoaded, timelineData]);
+
+  const initializeTimeline = () => {
+    const timelineContainer = document.getElementById('timeline-embed');
+    if (timelineContainer && (window as any).TL && timelineData) {
+      try {
+        // Clear any existing timeline
+        timelineContainer.innerHTML = '';
+        
+        // Initialize new timeline
+        (window as any).TL.timeline(timelineContainer, timelineData);
+        console.log('Timeline initialized successfully');
+      } catch (error) {
+        console.error('Error initializing timeline:', error);
+        setTimelineError(true);
+      }
+    } else {
+      console.log('Timeline container or TL not ready:', {
+        container: !!timelineContainer,
+        TL: !!(window as any).TL,
+        data: !!timelineData
+      });
+    }
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -420,7 +454,47 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
               <Clock className="w-6 h-6 text-orange-500" />
               Astros Timeline
             </h2>
-            <div id="timeline-embed" className="w-full" style={{ height: '600px' }} />
+            <div className="relative">
+              <div id="timeline-embed" className="w-full" style={{ height: '600px' }} />
+              {!isTimelineLoaded && !timelineError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading Timeline...</p>
+                  </div>
+                </div>
+              )}
+              {timelineError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 mb-4">Timeline.js failed to load. Showing fallback timeline:</p>
+                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                      {timelineData?.events?.map((event: any, index: number) => (
+                        <div key={index} className="flex items-start gap-4 p-4 bg-white rounded-lg border border-orange-100">
+                          <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white font-bold text-sm">{event.start_date?.year || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 mb-1">{event.text?.headline}</h3>
+                            <p className="text-gray-600 text-sm">{event.text?.text}</p>
+                            {event.start_date && (
+                              <p className="text-xs text-orange-600 mt-2">
+                                {event.start_date.month && event.start_date.day 
+                                  ? `${event.start_date.month}/${event.start_date.day}/${event.start_date.year}`
+                                  : event.start_date.year
+                                }
+                                {event.end_date && ` - ${event.end_date.year}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
