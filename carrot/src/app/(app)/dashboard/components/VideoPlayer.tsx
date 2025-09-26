@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import MediaStateCache from '@/lib/MediaStateCache';
 
 // Resolve public env at build time to avoid using `process` at runtime on the client
 // Use the same logic as firebase.ts to ensure .firebasestorage.app bucket names
@@ -526,12 +527,36 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
             }
           }}
           onLoadedMetadata={() => {
+            // Restore cached video state if available
+            if (postId && videoRef.current) {
+              const cachedState = MediaStateCache.instance.get(postId);
+              if (cachedState && cachedState.currentTime > 0) {
+                videoRef.current.currentTime = cachedState.currentTime;
+                console.log('[VideoPlayer] Restored cached video state', {
+                  postId,
+                  currentTime: cachedState.currentTime
+                });
+              }
+            }
+            
             // Attempt to begin playback as soon as metadata is available and element is in view
             if (videoRef.current && isInView) {
               safePlay();
             }
           }}
           onCanPlay={() => {
+            // Restore cached video state if available (backup in case onLoadedMetadata didn't fire)
+            if (postId && videoRef.current) {
+              const cachedState = MediaStateCache.instance.get(postId);
+              if (cachedState && cachedState.currentTime > 0 && videoRef.current.currentTime === 0) {
+                videoRef.current.currentTime = cachedState.currentTime;
+                console.log('[VideoPlayer] Restored cached video state in onCanPlay', {
+                  postId,
+                  currentTime: cachedState.currentTime
+                });
+              }
+            }
+            
             if (videoRef.current && isInView) {
               safePlay();
             }

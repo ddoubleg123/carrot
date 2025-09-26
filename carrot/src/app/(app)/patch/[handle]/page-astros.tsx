@@ -164,9 +164,9 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
     loadTimeline();
   }, []);
 
-  // Initialize Timeline.js when data is ready
+  // Initialize Timeline.js when data is ready AND timeline tab is active
   useEffect(() => {
-    if (isTimelineLoaded && timelineData && typeof window !== 'undefined') {
+    if (isTimelineLoaded && timelineData && activeTab === 'timeline' && typeof window !== 'undefined') {
       // Check if Timeline.js is already loaded
       if ((window as any).TL) {
         initializeTimeline();
@@ -201,7 +201,15 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         setTimeout(initializeTimeline, 100);
       }
     }
-  }, [isTimelineLoaded, timelineData]);
+  }, [isTimelineLoaded, timelineData, activeTab]);
+
+  // Initialize timeline when user switches to timeline tab
+  useEffect(() => {
+    if (activeTab === 'timeline' && isTimelineLoaded && timelineData && (window as any).TL) {
+      // Small delay to ensure DOM is ready
+      setTimeout(initializeTimeline, 100);
+    }
+  }, [activeTab]);
 
   const initializeTimeline = () => {
     const timelineContainer = document.getElementById('timeline-embed');

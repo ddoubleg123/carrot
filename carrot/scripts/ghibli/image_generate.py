@@ -12,6 +12,29 @@ except Exception:
     _PIL_AVAILABLE = False
 
 
+# --- Minimal PNG writer (solid color) ---
+# Writes a valid PNG with a single IDAT chunk containing zlib-compressed raw RGB scanlines.
+def write_solid_png(path: str, w: int, h: int, rgb: tuple):
+    import struct, zlib, binascii
+
+    r, g, b = rgb
+    # Each scanline: filter byte (0) + RGB bytes
+    raw = bytearray()
+    row = bytes([0] + [r, g, b] * w)
+    for _ in range(h):
+        raw.extend(row)
+    compressed = zlib.compress(bytes(raw), level=6)
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", binascii.crc32(tag + data) & 0xffffffff)
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)  # 8-bit, RGB
+    png = sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
+    with open(path, 'wb') as f:
+        f.write(png)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prompt', type=str, default='')
@@ -81,26 +104,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# --- Minimal PNG writer (solid color) ---
-# Writes a valid PNG with a single IDAT chunk containing zlib-compressed raw RGB scanlines.
-def write_solid_png(path: str, w: int, h: int, rgb: tuple):
-    import struct, zlib, binascii
-
-    r, g, b = rgb
-    # Each scanline: filter byte (0) + RGB bytes
-    raw = bytearray()
-    row = bytes([0] + [r, g, b] * w)
-    for _ in range(h):
-        raw.extend(row)
-    compressed = zlib.compress(bytes(raw), level=6)
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", binascii.crc32(tag + data) & 0xffffffff)
-
-    sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)  # 8-bit, RGB
-    png = sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
-    with open(path, 'wb') as f:
-        f.write(png)
