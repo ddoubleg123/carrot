@@ -60,8 +60,17 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     return NextResponse.json({ results });
   } catch (error) {
     console.error('Error processing batch operation:', error);
+    
+    // Provide more detailed error information
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
     return NextResponse.json(
-      { error: 'Failed to process batch operation' },
+      { 
+        error: 'Failed to process batch operation',
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     );
   }

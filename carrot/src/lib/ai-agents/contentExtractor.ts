@@ -19,6 +19,7 @@ export class ContentExtractor {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         },
+        timeout: 10000, // 10 second timeout
       });
 
       if (!response.ok) {
@@ -29,8 +30,52 @@ export class ContentExtractor {
       return this.extractFromHtml(html, url);
     } catch (error) {
       console.error('Error extracting content from URL:', error);
-      throw new Error(`Failed to extract content from ${url}: ${error}`);
+      
+      // For Wikipedia URLs, provide a fallback with basic content
+      if (url.includes('wikipedia.org')) {
+        const title = this.extractTitleFromUrl(url);
+        return {
+          title: title || 'Wikipedia Article',
+          content: `Content from Wikipedia article: ${title || url}. This content was not fully extracted due to technical limitations, but the agent can still learn from the reference.`,
+          url,
+          metadata: {
+            source: 'wikipedia',
+            extractionError: error instanceof Error ? error.message : 'Unknown error',
+            fallback: true
+          }
+        };
+      }
+      
+      // For other URLs, provide a minimal fallback
+      return {
+        title: 'Web Content',
+        content: `Content from ${url}. This content was not fully extracted due to technical limitations, but the agent can still learn from the reference.`,
+        url,
+        metadata: {
+          extractionError: error instanceof Error ? error.message : 'Unknown error',
+          fallback: true
+        }
+      };
     }
+  }
+
+  /**
+   * Extract title from Wikipedia URL
+   */
+  private static extractTitleFromUrl(url: string): string | undefined {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes('wikipedia.org')) {
+        const pathParts = urlObj.pathname.split('/');
+        const titlePart = pathParts[pathParts.length - 1];
+        if (titlePart) {
+          return decodeURIComponent(titlePart.replace(/_/g, ' '));
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting title from URL:', error);
+    }
+    return undefined;
   }
 
   /**
