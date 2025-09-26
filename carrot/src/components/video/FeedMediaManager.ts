@@ -394,6 +394,16 @@ class FeedMediaManager {
           id: next.id, 
           currentTime: cachedState.currentTime 
         });
+        
+        // Restore the video state from cache
+        try {
+          const video = next.el?.querySelector('video');
+          if (video && cachedState.currentTime > 0) {
+            video.currentTime = cachedState.currentTime;
+          }
+        } catch (e) {
+          console.warn('[FeedMediaManager] Failed to restore video time from cache', { id: next.id, error: e });
+        }
       }
       if (opts?.manual) {
         this._manualActive = next;
