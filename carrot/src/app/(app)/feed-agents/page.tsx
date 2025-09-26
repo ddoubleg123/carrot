@@ -519,7 +519,10 @@ export default function FeedAgentsPage() {
 
           {/* Training Tracker Tab */}
           <TabsContent value="training" className="space-y-6">
-            <TrainingTracker agents={agents} />
+            <div className="text-center py-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Training Tracker</h3>
+              <p className="text-gray-600">Training tracking functionality coming soon.</p>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
