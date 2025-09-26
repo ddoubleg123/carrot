@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
+import TrainingTracker from '@/components/ai-agents/TrainingTracker';
 
 interface Agent {
   id: string;
@@ -47,6 +48,9 @@ export default function FeedAgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
+  
+  // Check if we're on Render (where AI training is disabled)
+  const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceAuthor, setSourceAuthor] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -146,6 +150,34 @@ export default function FeedAgentsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* AI Training Disabled Banner */}
+        {isProduction && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <Zap className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-yellow-800">AI Training Disabled on Free Tier</h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  AI agent training is disabled on the free tier due to memory limitations. 
+                  For full AI training capabilities, please run locally or upgrade to a paid server.
+                </p>
+                <div className="mt-2">
+                  <a 
+                    href="/AI_TRAINING_SETUP.md" 
+                    className="text-sm text-yellow-800 underline hover:text-yellow-900"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View setup instructions →
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -156,6 +188,7 @@ export default function FeedAgentsPage() {
             <Button
               onClick={() => setShowBatchModal(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+              disabled={isProduction}
             >
               <Zap className="w-4 h-4" />
               Batch Feed
@@ -164,10 +197,11 @@ export default function FeedAgentsPage() {
         </div>
 
         <Tabs defaultValue="agents" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="agents">Agent Registry</TabsTrigger>
             <TabsTrigger value="feed">Feed Content</TabsTrigger>
             <TabsTrigger value="memories">Memory Viewer</TabsTrigger>
+            <TabsTrigger value="training">Training Tracker</TabsTrigger>
           </TabsList>
 
           {/* Agent Registry Tab */}
@@ -430,6 +464,11 @@ export default function FeedAgentsPage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Training Tracker Tab */}
+          <TabsContent value="training" className="space-y-6">
+            <TrainingTracker agents={agents} />
           </TabsContent>
         </Tabs>
       </div>

@@ -8,20 +8,20 @@ export const dynamic = 'force-dynamic';
 // POST /api/agents/batch - Process batch feed operations
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
-    // Check memory usage before processing
-    const memUsage = process.memoryUsage();
-    const memUsageMB = memUsage.heapUsed / 1024 / 1024;
-    const MEMORY_LIMIT_MB = 400; // Leave 100MB buffer for 512MB limit
+    // DISABLE AI TRAINING ON RENDER FREE TIER
+    // The embedding generation and batch processing is too memory-intensive
+    // for Render's 512MB limit and causes server crashes
+    const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
     
-    if (memUsageMB > MEMORY_LIMIT_MB) {
-      console.warn(`[Batch API] Memory usage too high: ${memUsageMB.toFixed(2)}MB, skipping batch processing`);
-      return NextResponse.json(
-        { 
-          error: 'Server memory usage too high. Please try again in a moment.',
-          memoryUsage: `${memUsageMB.toFixed(2)}MB`
-        },
-        { status: 503 }
-      );
+    if (isRender) {
+      console.log('[Batch API] AI training disabled on Render - returning mock response');
+      return NextResponse.json({
+        results: {
+          message: 'AI agent training is disabled on the free tier due to memory limitations.',
+          suggestion: 'For full AI training capabilities, please run locally or upgrade to a paid server with more memory.',
+          mockResults: true
+        }
+      });
     }
 
     const body = await req.json();

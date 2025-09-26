@@ -10,6 +10,23 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
+    // DISABLE AI TRAINING ON RENDER FREE TIER
+    const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
+    
+    if (isRender) {
+      console.log('[Feed API] AI training disabled on Render - returning mock response');
+      return NextResponse.json({
+        result: {
+          message: 'AI agent training is disabled on the free tier due to memory limitations.',
+          suggestion: 'For full AI training capabilities, please run locally or upgrade to a paid server with more memory.',
+          mockResult: true,
+          memoryIds: [],
+          feedEvent: { id: 'mock-event' },
+          chunkCount: 0
+        }
+      }, { status: 201 });
+    }
+
     const { id } = await ctx.params;
     const body = await req.json();
     
