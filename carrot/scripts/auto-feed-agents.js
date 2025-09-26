@@ -14,7 +14,7 @@
 
 const fetch = require('node-fetch');
 
-const API_BASE = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const API_BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://carrot-app.onrender.com';
 
 async function getAgents() {
   try {

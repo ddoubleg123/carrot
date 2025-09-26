@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
+import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
 
 interface Agent {
   id: string;
@@ -50,6 +51,8 @@ export default function FeedAgentsPage() {
   const [sourceAuthor, setSourceAuthor] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
+  const [selectedAgentForTraining, setSelectedAgentForTraining] = useState<Agent | null>(null);
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFeeding, setIsFeeding] = useState(false);
@@ -219,7 +222,7 @@ export default function FeedAgentsPage() {
                         </Badge>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
@@ -227,6 +230,17 @@ export default function FeedAgentsPage() {
                       >
                         <Brain className="w-4 h-4 mr-1" />
                         Feed
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedAgentForTraining(agent);
+                          setShowTrainingWorkflow(true);
+                        }}
+                      >
+                        <Zap className="w-4 h-4 mr-1" />
+                        Train
                       </Button>
                       <Button size="sm" variant="outline">
                         <BookOpen className="w-4 h-4 mr-1" />
@@ -426,6 +440,17 @@ export default function FeedAgentsPage() {
         onClose={() => setShowBatchModal(false)}
         agents={agents}
       />
+
+      {/* Agent Training Workflow Modal */}
+      {selectedAgentForTraining && (
+        <AgentTrainingWorkflow
+          agent={selectedAgentForTraining}
+          onClose={() => {
+            setShowTrainingWorkflow(false);
+            setSelectedAgentForTraining(null);
+          }}
+        />
+      )}
     </div>
   );
 }
