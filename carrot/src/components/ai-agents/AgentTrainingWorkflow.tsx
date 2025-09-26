@@ -335,11 +335,11 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
       const data = await response.json();
       
-      // Handle mock responses when AI training is disabled
+      // Handle any error responses
       if (data.results?.mockResults || data.results?.mockResult) {
         return { 
           success: false, 
-          error: data.results.message || 'AI training is disabled on this server' 
+          error: data.results.message || 'AI training encountered an issue' 
         };
       }
       

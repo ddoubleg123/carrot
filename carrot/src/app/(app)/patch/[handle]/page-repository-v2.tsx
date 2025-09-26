@@ -230,12 +230,12 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
         </div>
 
         {/* Main Content Area */}
-        <div className="max-w-7xl mx-auto px-12 py-8 relative z-10 mt-8">
+        <div className="max-w-7xl mx-auto px-12 py-8 relative z-10" style={{ marginTop: '280px' }}>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Main Content Column */}
             <div className="lg:col-span-3 space-y-8">
               {/* Sticky Pill Nav */}
-              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[240px] z-10">
+              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[280px] z-10">
                 {[
                   { id: 'overview', label: 'Overview', icon: Grid },
                   { id: 'timeline', label: 'Timeline', icon: Calendar },

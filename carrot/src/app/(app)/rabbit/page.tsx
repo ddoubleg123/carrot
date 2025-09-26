@@ -346,10 +346,12 @@ function ConversationThread({
   const checkIfNearBottom = () => {
     if (!messageContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-    const threshold = 150; // Increased threshold for better detection
+    const threshold = 100; // Smaller threshold for more sensitive detection
     const nearBottom = scrollHeight - scrollTop - clientHeight < threshold;
     setIsNearBottom(nearBottom);
-    setShowScrollButton(!nearBottom && scrollHeight > clientHeight);
+    
+    // Only show scroll button if user has scrolled up significantly
+    setShowScrollButton(!nearBottom && scrollTop > 200);
     
     // Track if user has manually scrolled up
     if (!nearBottom && scrollTop > 0) {
@@ -359,57 +361,44 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: always scroll to show new messages
+  // SIMPLE AUTO-SCROLL: Always scroll to bottom when messages change
   useEffect(() => {
     if (thread.messages.length > 0) {
-      // Immediate scroll for new messages
-      const immediateScroll = () => {
-        if (messageContainerRef.current) {
-          const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-          const inputAreaHeight = 120; // Approximate height of input area + padding
-          const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
-          
-          // Always auto-scroll to bottom when new messages arrive
-          // This ensures the latest message is always visible
-          if (latestMessageWouldBeHidden) {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            setIsNearBottom(true);
-            setShowScrollButton(false);
-            setHasUserScrolled(false); // Reset user scroll state since we're auto-scrolling
-          }
+      console.log('[Auto-scroll] New message detected, forcing scroll to bottom');
+      
+      // Force scroll to bottom immediately
+      const forceScrollToBottom = () => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+          console.log('[Auto-scroll] Scrolled to bottom');
         }
       };
 
       // Immediate scroll
-      immediateScroll();
+      forceScrollToBottom();
       
-      // Delayed scroll to handle dynamic content loading
-      const timeout = setTimeout(immediateScroll, 100);
+      // Additional scroll after a short delay to handle dynamic content
+      const timeout = setTimeout(forceScrollToBottom, 200);
       return () => clearTimeout(timeout);
     }
   }, [thread.messages.length]);
 
-  // Additional auto-scroll for streaming messages (when content is actively changing)
+  // AGGRESSIVE AUTO-SCROLL: For streaming messages
   useEffect(() => {
     if (thread.messages.length > 0) {
       const lastMessage = thread.messages[thread.messages.length - 1];
-      // If the last message is from an agent and is being streamed (content is changing)
       if (lastMessage.type === 'agent' && lastMessage.content) {
-        const scrollToBottom = () => {
-          if (messageContainerRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-            const inputAreaHeight = 120;
-            const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
-            
-            if (latestMessageWouldBeHidden) {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }
+        console.log('[Auto-scroll] Streaming message detected, forcing scroll');
+        
+        // Force scroll for streaming content
+        const forceScroll = () => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
           }
         };
         
-        // Scroll immediately and with a small delay for streaming content
-        scrollToBottom();
-        const timeout = setTimeout(scrollToBottom, 50);
+        forceScroll();
+        const timeout = setTimeout(forceScroll, 100);
         return () => clearTimeout(timeout);
       }
     }

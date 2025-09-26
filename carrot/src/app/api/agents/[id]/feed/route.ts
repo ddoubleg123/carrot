@@ -21,25 +21,9 @@ export async function POST(
     
     console.log(`[Feed API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // For now, disable AI training on all Render deployments due to memory constraints
-    if (isRender) {
-      console.log('[Feed API] AI training disabled on Render - returning mock response');
-      return NextResponse.json({
-        result: {
-          message: 'AI agent training is temporarily disabled on Render due to memory constraints.',
-          suggestion: 'The AI training system requires more memory than available on current Render plans. Consider running locally for full functionality.',
-          mockResult: true,
-          memoryIds: [],
-          feedEvent: { id: 'mock-event' },
-          chunkCount: 0,
-          serverInfo: {
-            isRender,
-            isFreeTier: isRenderFreeTier,
-            memoryUsage: `${memUsageMB.toFixed(2)}MB`,
-            totalMemory: `${totalMemMB.toFixed(2)}MB`
-          }
-        }
-      }, { status: 201 });
+    // Check memory usage and warn if high, but don't disable
+    if (memUsageMB > 800) { // Warn if using more than 800MB
+      console.warn(`[Feed API] High memory usage detected: ${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     }
 
     const { id } = await ctx.params;

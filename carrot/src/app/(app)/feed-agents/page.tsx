@@ -48,7 +48,7 @@ export default function FeedAgentsPage() {
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
   
-  // Check if we're on Render (where AI training might be disabled)
+  // Check if we're on Render (AI training is now enabled with memory management)
   const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
   const [serverInfo, setServerInfo] = useState<any>(null);
   const [sourceTitle, setSourceTitle] = useState('');
@@ -178,32 +178,18 @@ export default function FeedAgentsPage() {
         {/* AI Training Status Banner */}
         {isProduction && (
           <div className={`mb-6 p-4 rounded-lg border ${
-            serverInfo?.isFreeTier 
-              ? 'bg-yellow-50 border-yellow-200' 
-              : 'bg-green-50 border-green-200'
+            'bg-green-50 border-green-200'
           }`}>
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
-                <Zap className={`w-5 h-5 ${
-                  serverInfo?.isFreeTier ? 'text-yellow-600' : 'text-green-600'
-                }`} />
+                <Zap className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <h3 className={`text-sm font-medium ${
-                  serverInfo?.isFreeTier ? 'text-yellow-800' : 'text-green-800'
-                }`}>
-                  {serverInfo?.isFreeTier 
-                    ? 'AI Training Disabled on Free Tier' 
-                    : 'AI Training Available (Paid Server)'
-                  }
+                <h3 className="text-sm font-medium text-green-800">
+                  AI Training Available
                 </h3>
-                <p className={`text-sm mt-1 ${
-                  serverInfo?.isFreeTier ? 'text-yellow-700' : 'text-green-700'
-                }`}>
-                  {serverInfo?.isFreeTier 
-                    ? 'AI agent training is disabled on the free tier due to memory limitations. For full AI training capabilities, please run locally or upgrade to a paid server.'
-                    : 'AI agent training is available on this paid server. You can use all training features.'
-                  }
+                <p className="text-sm mt-1 text-green-700">
+                  AI agent training is now enabled on this server. You can use all training features with improved memory management.
                 </p>
                 {serverInfo && (
                   <div className="mt-2 text-xs text-gray-600">

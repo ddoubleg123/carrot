@@ -19,24 +19,9 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     
     console.log(`[Batch API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // For now, disable AI training on all Render deployments due to memory constraints
-    // Even paid plans are having issues with the current AI training implementation
-    if (isRender) {
-      console.log('[Batch API] AI training disabled on Render - returning mock response');
-      return NextResponse.json({
-        results: {
-          message: 'AI agent training is temporarily disabled on Render due to memory constraints.',
-          suggestion: 'The AI training system requires more memory than available on current Render plans. Consider running locally for full functionality.',
-          mockResults: true,
-          serverInfo: {
-            isRender,
-            isFreeTier: isRenderFreeTier,
-            memoryUsage: `${memUsageMB.toFixed(2)}MB`,
-            totalMemory: `${totalMemMB.toFixed(2)}MB`,
-            plan: isRenderFreeTier ? 'Free' : 'Paid'
-          }
-        }
-      });
+    // Check memory usage and warn if high, but don't disable
+    if (memUsageMB > 800) { // Warn if using more than 800MB
+      console.warn(`[Batch API] High memory usage detected: ${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     }
 
     const body = await req.json();
@@ -97,7 +82,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
               message: 'AI training failed due to server limitations. The training process is too resource-intensive for the current server configuration.',
               suggestion: 'Try training one agent at a time or use a more powerful server.',
               mockResults: true,
-              error: error.message,
+              error: error instanceof Error ? error.message : String(error),
               serverInfo: {
                 isRender,
                 isFreeTier: isRenderFreeTier,

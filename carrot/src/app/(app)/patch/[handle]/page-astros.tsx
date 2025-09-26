@@ -24,8 +24,6 @@ import {
   Award,
   TrendingUp,
   BarChart3,
-  FileText,
-  Image as ImageIcon,
   Video,
   Link as LinkIcon,
   Plus,
@@ -213,17 +211,44 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         const script = document.createElement('script');
         script.src = 'https://cdn.knightlab.com/libs/timeline3/latest/js/timeline-min.js';
         script.onload = () => {
-          console.log('Timeline.js loaded successfully');
-          initializeTimeline();
+          console.log('Timeline.js script loaded successfully');
+          // Wait a bit for the script to fully initialize
+          setTimeout(() => {
+            if ((window as any).TL) {
+              console.log('Timeline.js TL object is available');
+              setIsTimelineLoaded(true);
+              initializeTimeline();
+            } else {
+              console.error('Timeline.js TL object not found after script load');
+              setTimelineError(true);
+            }
+          }, 100);
         };
-        script.onerror = () => {
-          console.error('Failed to load Timeline.js');
+        script.onerror = (error) => {
+          console.error('Failed to load Timeline.js script:', error);
           setTimelineError(true);
         };
         document.head.appendChild(script);
       } else {
-        // Script already exists, try to initialize
-        setTimeout(initializeTimeline, 100);
+        // Script already exists, check if TL is available
+        if ((window as any).TL) {
+          console.log('Timeline.js already loaded and available');
+          setIsTimelineLoaded(true);
+          initializeTimeline();
+        } else {
+          console.log('Timeline.js script exists but TL not ready, waiting...');
+          // Wait for TL to become available
+          const checkTL = setInterval(() => {
+            if ((window as any).TL) {
+              console.log('Timeline.js TL object became available');
+              clearInterval(checkTL);
+              setIsTimelineLoaded(true);
+              initializeTimeline();
+            }
+          }, 100);
+          // Clear interval after 5 seconds
+          setTimeout(() => clearInterval(checkTL), 5000);
+        }
       }
     }
   }, [isTimelineLoaded, timelineData, activeTab]);
