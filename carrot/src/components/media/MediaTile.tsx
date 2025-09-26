@@ -24,8 +24,16 @@ export default function MediaTile({ m, onOpen, onRename, onToggleHidden }: {
   const [menu, setMenu] = useState(false);
   const thumbUrl = useMemo(() => {
     if (m.thumbPath) return `/api/img?path=${encodeURIComponent(m.thumbPath)}`;
-    if (m.posterUrl) return `/api/img?url=${encodeURIComponent(m.posterUrl)}`;
-    if (m.url) return `/api/img?url=${encodeURIComponent(m.url)}`;
+    if (m.posterUrl) {
+      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(m.posterUrl);
+      return `/api/img?url=${isAlreadyEncoded ? m.posterUrl : encodeURIComponent(m.posterUrl)}`;
+    }
+    if (m.url) {
+      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(m.url);
+      return `/api/img?url=${isAlreadyEncoded ? m.url : encodeURIComponent(m.url)}`;
+    }
     return "/thumb-placeholder.png";
   }, [m.thumbPath, m.posterUrl, m.url]);
   const label = `${m.kind === 'video' ? 'Video' : 'Image'}${m.duration ? ` · ${fmt(m.duration)}` : ''} · ${m.title || 'Untitled'}`;

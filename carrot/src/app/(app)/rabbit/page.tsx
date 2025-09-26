@@ -359,27 +359,35 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: always keep latest message visible when it would be hidden below input
+  // Auto-scroll behavior: always scroll to show new messages
   useEffect(() => {
     if (thread.messages.length > 0) {
-      const timeout = setTimeout(() => {
+      // Immediate scroll for new messages
+      const immediateScroll = () => {
         if (messageContainerRef.current) {
           const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
           const inputAreaHeight = 120; // Approximate height of input area + padding
           const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
           
           // Always scroll to show latest message if it would be hidden below input area
-          if (latestMessageWouldBeHidden) {
+          // OR if user hasn't manually scrolled up (keep them at bottom for new messages)
+          if (latestMessageWouldBeHidden || !hasUserScrolled) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             setIsNearBottom(true);
             setShowScrollButton(false);
             setHasUserScrolled(false);
           }
         }
-      }, 100);
+      };
+
+      // Immediate scroll
+      immediateScroll();
+      
+      // Delayed scroll to handle dynamic content loading
+      const timeout = setTimeout(immediateScroll, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length]);
+  }, [thread.messages.length, hasUserScrolled]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -626,19 +634,7 @@ function AgentRoster({
 export default function RabbitPage() {
   const { data: session } = useSession();
   
-  // Debug: Log session data to see what avatar fields are available
-  React.useEffect(() => {
-    if (session?.user) {
-      console.log('[RabbitPage] Session user data:', {
-        id: session.user.id,
-        email: session.user.email,
-        username: session.user.username,
-        profilePhoto: (session.user as any)?.profilePhoto,
-        image: (session.user as any)?.image,
-        allFields: Object.keys(session.user)
-      });
-    }
-  }, [session]);
+  // Session data is available for avatar fallback
   const [currentView, setCurrentView] = useState<'grid' | 'conversation'>('grid');
   const [agents, setAgents] = useState(AGENTS);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
@@ -721,16 +717,54 @@ export default function RabbitPage() {
       const thread = currentThread;
       if (!thread) return;
       
-      // Get the first active agent to respond (or use a default)
-      const respondingAgent = activeAgents.length > 0 
-        ? getAgentById(activeAgents[0]) 
-        : getAgentById('brzezinski'); // Default to Brzezinski for geopolitics
+      // Get responses from ALL active agents, not just the first one
+      const agentsToRespond = activeAgents.length > 0 
+        ? activeAgents.map(id => getAgentById(id)).filter(Boolean)
+        : [getAgentById('brzezinski')]; // Default to Brzezinski for geopolitics
       
-      if (!respondingAgent) {
-        console.warn('[Rabbit] No agent found to respond');
+      if (agentsToRespond.length === 0) {
+        console.warn('[Rabbit] No agents found to respond');
         return;
       }
 
+      // Get responses from each active agent
+      for (const respondingAgent of agentsToRespond) {
+        if (!respondingAgent) continue;
+        
+        await getAgentResponse(respondingAgent, userMsg, thread);
+      }
+    } catch (e) {
+      // Soft-fail with better error handling
+      console.warn('[Rabbit] streamAssistantReply error', e);
+      
+      // Add error message to the thread if we have a current thread
+      if (currentThread) {
+        const respondingAgent = activeAgents.length > 0 
+          ? getAgentById(activeAgents[0]) 
+          : getAgentById('brzezinski');
+        
+        if (respondingAgent) {
+          setCurrentThread(prev => {
+            if (!prev) return prev;
+            const msgs = prev.messages.slice();
+            // Find the last agent message to update it with error
+            const lastAgentMsg = msgs.reverse().find(m => m.type === 'agent');
+            if (lastAgentMsg) {
+              const idx = msgs.findIndex(m => m.id === lastAgentMsg.id);
+              if (idx >= 0) {
+                msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.` } as any;
+              }
+            }
+            return { ...prev, messages: msgs, updatedAt: new Date() };
+          });
+        }
+      }
+    }
+  }
+
+  // Helper function to get response from a single agent
+  async function getAgentResponse(respondingAgent: any, userMsg: string, thread: Thread) {
+    try {
       const payload = {
         provider: 'deepseek',
         model: 'deepseek-chat',
@@ -778,7 +812,7 @@ export default function RabbitPage() {
       let buf = '';
 
       // Insert placeholder agent message with correct agent data
-      const agentMsgId = `a-${Date.now()}`;
+      const agentMsgId = `a-${Date.now()}-${respondingAgent.id}`;
       setCurrentThread(prev => prev ? {
         ...prev,
         messages: [...prev.messages, { 
@@ -848,31 +882,7 @@ export default function RabbitPage() {
         }
       }
     } catch (e) {
-      // Soft-fail with better error handling
-      console.warn('[Rabbit] streamAssistantReply error', e);
-      
-      // Add error message to the thread if we have a current thread
-      if (currentThread) {
-        const respondingAgent = activeAgents.length > 0 
-          ? getAgentById(activeAgents[0]) 
-          : getAgentById('brzezinski');
-        
-        if (respondingAgent) {
-          setCurrentThread(prev => {
-            if (!prev) return prev;
-            const msgs = prev.messages.slice();
-            // Find the last agent message to update it with error
-            const lastAgentMsg = msgs.reverse().find(m => m.type === 'agent');
-            if (lastAgentMsg) {
-              const idx = msgs.findIndex(m => m.id === lastAgentMsg.id);
-              if (idx >= 0) {
-                msgs[idx] = { ...msgs[idx], content: `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.` } as any;
-              }
-            }
-            return { ...prev, messages: msgs, updatedAt: new Date() };
-          });
-        }
-      }
+      console.warn('[Rabbit] getAgentResponse error for', respondingAgent.name, e);
     }
   }
 

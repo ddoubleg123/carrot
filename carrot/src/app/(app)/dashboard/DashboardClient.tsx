@@ -75,7 +75,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
-    const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
+    const prox = (u?: string | null) => {
+      if (!u) return null;
+      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
+      return `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+    };
     const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
       if (!post?.imageUrls) return [] as string[];

@@ -47,6 +47,12 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       return <RepositoryPage params={params} searchParams={searchParams} />;
     }
 
+    // Use Astros template for Houston Astros handle
+    if (handle === 'houston-astros') {
+      const AstrosPage = (await import('./page-astros')).default;
+      return <AstrosPage params={params} searchParams={searchParams} />;
+    }
+
     // Simple patch query without complex includes
     let patch = await prisma.patch.findUnique({
       where: { handle },

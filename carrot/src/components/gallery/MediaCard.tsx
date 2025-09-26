@@ -36,7 +36,15 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
     if (raw.startsWith('/api/img') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       return raw;
     }
-    return `/api/img?url=${encodeURIComponent(raw)}`;
+    // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+    const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(raw);
+    if (isAlreadyEncoded) {
+      // URL is already encoded, pass it directly to avoid double-encoding
+      return `/api/img?url=${raw}`;
+    } else {
+      // URL is not encoded, encode it once
+      return `/api/img?url=${encodeURIComponent(raw)}`;
+    }
   })();
 
   return (
