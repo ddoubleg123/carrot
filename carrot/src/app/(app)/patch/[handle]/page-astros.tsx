@@ -85,8 +85,8 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
                 day: "9"
               },
               text: {
-                headline: "Astrodome Opens",
-                text: "The 'Eighth Wonder of the World' opens as the first domed stadium in baseball, revolutionizing the sport."
+                headline: "APRIL 9, 1965 - ASTRODOME OPENS",
+                text: "The 'Eighth Wonder of the World' opens as the first domed stadium in baseball, revolutionizing the sport with air conditioning, artificial turf, and a retractable roof. This engineering marvel set the standard for modern stadiums worldwide."
               }
             },
             {
@@ -218,8 +218,22 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         // Clear any existing timeline
         timelineContainer.innerHTML = '';
         
-        // Initialize new timeline
-        new (window as any).TL.Timeline(timelineContainer, timelineData);
+        // Initialize new timeline with custom options
+        new (window as any).TL.Timeline(timelineContainer, timelineData, {
+          timenav_position: 'top',        // Move timeline navigation to top
+          default_zoom: 2,                // Set initial zoom level
+          start_at_end: false,            // Start at beginning
+          hash_bookmark: true,            // Update URL hash for each event
+          font: 'default',                // Font family
+          scale_factor: 1,                // Scale factor for timeline
+          marker_height_min: 30,          // Minimum marker height
+          marker_width_min: 100,          // Minimum marker width
+          marker_padding: 5,              // Padding around markers
+          start_at_slide: 0,              // Start at first slide
+          duration: 1000,                 // Animation duration
+          ease: 'easeInOut',              // Animation easing
+          debug: false                    // Debug mode
+        });
         console.log('Timeline initialized successfully');
       } catch (error) {
         console.error('Error initializing timeline:', error);
@@ -462,8 +476,62 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
               <Clock className="w-6 h-6 text-orange-500" />
               Astros Timeline
             </h2>
-            <div className="relative">
-              <div id="timeline-embed" className="w-full" style={{ height: '600px' }} />
+        <div className="relative">
+          {/* Custom Timeline.js Styles */}
+          <style jsx>{`
+            #timeline-embed {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            }
+            
+            #timeline-embed .tl-timeline {
+              background: linear-gradient(135deg, #FF6A00 0%, #FF8A33 100%);
+              border-radius: 16px;
+              padding: 20px;
+            }
+            
+            #timeline-embed .tl-timenav {
+              background: rgba(255, 255, 255, 0.95);
+              border-radius: 12px;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            }
+            
+            #timeline-embed .tl-slide {
+              background: white;
+              border-radius: 12px;
+              box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+              border: 1px solid rgba(255, 106, 0, 0.1);
+            }
+            
+            #timeline-embed .tl-slide-content {
+              padding: 24px;
+            }
+            
+            #timeline-embed .tl-headline {
+              color: #FF6A00;
+              font-weight: 700;
+              font-size: 1.5rem;
+              margin-bottom: 12px;
+            }
+            
+            #timeline-embed .tl-text {
+              color: #374151;
+              line-height: 1.6;
+              font-size: 1rem;
+            }
+            
+            #timeline-embed .tl-timemarker {
+              background: #FF6A00;
+              border: 3px solid white;
+              box-shadow: 0 4px 12px rgba(255, 106, 0, 0.3);
+            }
+            
+            #timeline-embed .tl-timemarker:hover {
+              background: #FF8A33;
+              transform: scale(1.1);
+              transition: all 0.3s ease;
+            }
+          `}</style>
+          <div id="timeline-embed" className="w-full" style={{ height: '600px' }} />
               {!isTimelineLoaded && !timelineError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
                   <div className="text-center">
