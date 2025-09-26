@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import type { StorageOptions } from '@google-cloud/storage'
 let GCS: any = null; // lazy import to avoid bundling when unused
 
@@ -153,7 +153,7 @@ function clampQuality(q?: number) {
   return Math.min(95, Math.max(30, Math.round(q)))
 }
 
-async function fetchUpstream(req: NextRequest, target: URL) {
+async function fetchUpstream(req: Request, target: URL) {
   const upstream = await fetch(target.toString(), {
     headers: {
       ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
@@ -196,7 +196,7 @@ function svgPlaceholder(seed: string) {
   return svg;
 }
 
-export async function GET(_req: NextRequest, _ctx: { params: Promise<{}> }) {
+export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   const url = new URL(_req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')
