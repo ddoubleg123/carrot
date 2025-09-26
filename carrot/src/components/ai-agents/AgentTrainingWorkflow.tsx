@@ -44,7 +44,7 @@ interface AgentTrainingWorkflowProps {
 
 export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingWorkflowProps) {
   const [workflow, setWorkflow] = useState<TrainingWorkflow | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [isRunning, setIsRunning] = useState(false);
 
   // Predefined training workflows for different agent types
@@ -275,6 +275,7 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
           ...trainingWorkflow,
           totalSteps: trainingWorkflow.steps.length
         });
+        setIsLoading(false); // Set loading to false after workflow is created
       } catch (error) {
         console.error('Error creating training workflow:', error);
         // Set a safe default workflow
@@ -290,7 +291,10 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
           completedSteps: 0,
           steps: []
         });
+        setIsLoading(false); // Set loading to false even on error
       }
+    } else {
+      setIsLoading(false); // Set loading to false if no agent
     }
   }, [agent]);
 
@@ -430,15 +434,66 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
     });
   };
 
+  // Show loading state while workflow is being created
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Training Program</h2>
+              <p className="text-gray-600">Preparing {agent?.name}'s training workflow...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!workflow || !workflow.steps) {
-    console.log('AgentTrainingWorkflow: No workflow or steps available');
-    return null;
+    console.log('AgentTrainingWorkflow: No workflow or steps available after loading');
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">No Training Available</h2>
+              <p className="text-gray-600 mb-4">No training steps could be generated for this agent.</p>
+              <button
+                onClick={onClose}
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Additional safety check
   if (!Array.isArray(workflow.steps)) {
     console.error('AgentTrainingWorkflow: workflow.steps is not an array', workflow.steps);
-    return null;
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Invalid Training Data</h2>
+              <p className="text-gray-600 mb-4">The training workflow data is invalid.</p>
+              <button
+                onClick={onClose}
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -21,8 +21,8 @@ export async function POST(
     
     console.log(`[Feed API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // Only disable on free tier or if memory is very low
-    if (isRenderFreeTier || (isRender && totalMemMB < 1000)) {
+    // Only disable on free tier - don't check memory limits for paid plans
+    if (isRenderFreeTier) {
       console.log('[Feed API] AI training disabled on Render free tier - returning mock response');
       return NextResponse.json({
         result: {

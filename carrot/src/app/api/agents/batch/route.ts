@@ -19,8 +19,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     
     console.log(`[Batch API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // Only disable on free tier or if memory is very low
-    if (isRenderFreeTier || (isRender && totalMemMB < 1000)) {
+    // Only disable on free tier - don't check memory limits for paid plans
+    if (isRenderFreeTier) {
       console.log('[Batch API] AI training disabled on Render free tier - returning mock response');
       return NextResponse.json({
         results: {
