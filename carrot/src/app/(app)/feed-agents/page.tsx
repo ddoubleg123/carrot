@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Users, Brain, BookOpen, Upload } from 'lucide-react';
+import { Plus, Search, Filter, Users, Brain, BookOpen, Upload, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
+import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 
 interface Agent {
   id: string;
@@ -48,6 +49,7 @@ export default function FeedAgentsPage() {
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceAuthor, setSourceAuthor] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [showBatchModal, setShowBatchModal] = useState(false);
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFeeding, setIsFeeding] = useState(false);
@@ -143,8 +145,19 @@ export default function FeedAgentsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Agent Training</h1>
-          <p className="text-gray-600">Feed knowledge to AI agents and manage their memories</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Agent Training</h1>
+              <p className="text-gray-600">Feed knowledge to AI agents and manage their memories</p>
+            </div>
+            <Button
+              onClick={() => setShowBatchModal(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+            >
+              <Zap className="w-4 h-4" />
+              Batch Feed
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="agents" className="space-y-6">
@@ -406,6 +419,13 @@ export default function FeedAgentsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Batch Feed Modal */}
+      <BatchFeedModal
+        isOpen={showBatchModal}
+        onClose={() => setShowBatchModal(false)}
+        agents={agents}
+      />
     </div>
   );
 }
