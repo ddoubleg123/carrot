@@ -19,19 +19,21 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     
     console.log(`[Batch API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // Only disable on free tier - don't check memory limits for paid plans
-    if (isRenderFreeTier) {
-      console.log('[Batch API] AI training disabled on Render free tier - returning mock response');
+    // For now, disable AI training on all Render deployments due to memory constraints
+    // Even paid plans are having issues with the current AI training implementation
+    if (isRender) {
+      console.log('[Batch API] AI training disabled on Render - returning mock response');
       return NextResponse.json({
         results: {
-          message: 'AI agent training is disabled on the free tier due to memory limitations.',
-          suggestion: 'For full AI training capabilities, please run locally or upgrade to a paid server with more memory.',
+          message: 'AI agent training is temporarily disabled on Render due to memory constraints.',
+          suggestion: 'The AI training system requires more memory than available on current Render plans. Consider running locally for full functionality.',
           mockResults: true,
           serverInfo: {
             isRender,
             isFreeTier: isRenderFreeTier,
             memoryUsage: `${memUsageMB.toFixed(2)}MB`,
-            totalMemory: `${totalMemMB.toFixed(2)}MB`
+            totalMemory: `${totalMemMB.toFixed(2)}MB`,
+            plan: isRenderFreeTier ? 'Free' : 'Paid'
           }
         }
       });
@@ -78,7 +80,33 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           );
         }
 
-        results = await BatchProcessor.processMultiAgentFeed(agentIds, feedItem);
+        // Add timeout to prevent server crashes
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout - AI training took too long')), 30000); // 30 second timeout
+        });
+        
+        try {
+          results = await Promise.race([
+            BatchProcessor.processMultiAgentFeed(agentIds, feedItem),
+            timeoutPromise
+          ]);
+        } catch (error) {
+          console.error('[Batch API] Error processing multi-agent feed:', error);
+          return NextResponse.json({
+            results: {
+              message: 'AI training failed due to server limitations. The training process is too resource-intensive for the current server configuration.',
+              suggestion: 'Try training one agent at a time or use a more powerful server.',
+              mockResults: true,
+              error: error.message,
+              serverInfo: {
+                isRender,
+                isFreeTier: isRenderFreeTier,
+                memoryUsage: `${memUsageMB.toFixed(2)}MB`,
+                totalMemory: `${totalMemMB.toFixed(2)}MB`
+              }
+            }
+          }, { status: 503 });
+        }
         break;
 
       case 'expertise':

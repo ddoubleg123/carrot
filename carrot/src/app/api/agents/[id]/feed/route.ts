@@ -21,13 +21,13 @@ export async function POST(
     
     console.log(`[Feed API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     
-    // Only disable on free tier - don't check memory limits for paid plans
-    if (isRenderFreeTier) {
-      console.log('[Feed API] AI training disabled on Render free tier - returning mock response');
+    // For now, disable AI training on all Render deployments due to memory constraints
+    if (isRender) {
+      console.log('[Feed API] AI training disabled on Render - returning mock response');
       return NextResponse.json({
         result: {
-          message: 'AI agent training is disabled on the free tier due to memory limitations.',
-          suggestion: 'For full AI training capabilities, please run locally or upgrade to a paid server with more memory.',
+          message: 'AI agent training is temporarily disabled on Render due to memory constraints.',
+          suggestion: 'The AI training system requires more memory than available on current Render plans. Consider running locally for full functionality.',
           mockResult: true,
           memoryIds: [],
           feedEvent: { id: 'mock-event' },
