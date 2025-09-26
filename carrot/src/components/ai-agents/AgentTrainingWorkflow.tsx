@@ -240,11 +240,28 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
   useEffect(() => {
     if (agent) {
-      const trainingWorkflow = getTrainingWorkflow(agent);
-      setWorkflow({
-        ...trainingWorkflow,
-        totalSteps: trainingWorkflow.steps.length
-      });
+      try {
+        const trainingWorkflow = getTrainingWorkflow(agent);
+        setWorkflow({
+          ...trainingWorkflow,
+          totalSteps: trainingWorkflow.steps.length
+        });
+      } catch (error) {
+        console.error('Error creating training workflow:', error);
+        // Set a safe default workflow
+        setWorkflow({
+          id: `workflow-${agent.id}`,
+          name: `${agent.name} Training Program`,
+          description: `Comprehensive training program for ${agent.name}`,
+          agentId: agent.id,
+          agentName: agent.name,
+          isRunning: false,
+          currentStep: 0,
+          totalSteps: 0,
+          completedSteps: 0,
+          steps: []
+        });
+      }
     }
   }, [agent]);
 
@@ -273,10 +290,21 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
       const data = await response.json();
       
+      // Handle mock responses when AI training is disabled
+      if (data.results?.mockResults || data.results?.mockResult) {
+        return { 
+          success: false, 
+          error: data.results.message || 'AI training is disabled on this server' 
+        };
+      }
+      
       if (response.ok && data.results && data.results[0]?.success) {
         return { success: true, memoriesCreated: data.results[0].memoriesCreated };
       } else {
-        return { success: false, error: data.results?.[0]?.error || 'Unknown error' };
+        return { 
+          success: false, 
+          error: data.results?.[0]?.error || data.error || 'Unknown error' 
+        };
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -346,7 +374,7 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
     });
   };
 
-  if (!workflow) return null;
+  if (!workflow || !workflow.steps) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -384,7 +412,7 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
           {/* Training Steps */}
           <div className="space-y-4 mb-6">
-            {workflow.steps.map((step, index) => (
+            {workflow.steps && workflow.steps.length > 0 ? workflow.steps.map((step, index) => (
               <div 
                 key={step.id} 
                 className={`p-4 rounded-lg border-2 transition-all ${
@@ -445,7 +473,11 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>No training steps available for this agent.</p>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
