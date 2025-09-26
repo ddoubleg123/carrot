@@ -172,8 +172,9 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         let prev = candidate;
         for (let i = 0; i < 5; i++) {
           if (/%[0-9A-Fa-f]{2}/.test(candidate)) {
-            candidate = decodeURIComponent(candidate);
-            if (prev === candidate) break; // No more decoding needed
+            const decoded = decodeURIComponent(candidate);
+            if (prev === decoded) break; // No more decoding needed
+            candidate = decoded;
             prev = candidate;
             decodedOnce = true;
           } else {
@@ -324,11 +325,17 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         mode,
       });
     } catch {}
+    
+    // Add timeout and better error handling for the fetch
     const upstream = await fetchDedupe(k, () => fetch(k, {
       method: 'GET',
       headers: fwdHeaders,
       redirect: 'follow',
       cache: 'no-store',
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    }).catch(error => {
+      console.error('[api/video] Fetch error:', error);
+      throw new Error(`Failed to fetch video: ${error.message}`);
     }));
 
     const status = upstream.status;

@@ -91,13 +91,29 @@ export default function NeverBlackVideo({
   const videoUrl = (() => {
     if (bucket && path) return `/api/video?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`;
     if (!src) return null;
+    
+    // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
+    const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(src);
+    
     try {
       const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
       if (u.pathname.startsWith('/api/video')) return u.toString();
-      // Use the original src string instead of u.toString() to avoid double-encoding
-      return `/api/video?url=${encodeURIComponent(src)}`;
+      
+      if (isAlreadyEncoded) {
+        // URL is already encoded, pass it directly to avoid double-encoding
+        return `/api/video?url=${src}`;
+      } else {
+        // URL is not encoded, encode it once
+        return `/api/video?url=${encodeURIComponent(src)}`;
+      }
     } catch {
-      return `/api/video?url=${encodeURIComponent(src)}`;
+      if (isAlreadyEncoded) {
+        // URL is already encoded, pass it directly to avoid double-encoding
+        return `/api/video?url=${src}`;
+      } else {
+        // URL is not encoded, encode it once
+        return `/api/video?url=${encodeURIComponent(src)}`;
+      }
     }
   })();
 

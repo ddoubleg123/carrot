@@ -105,6 +105,10 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   // since the server now supports Admin SDK streaming with Range for private objects. Fallback to url-mode only if needed.
   const resolvedSrc = React.useMemo(() => {
     if (!videoUrl) return '';
+    
+    // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
+    const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(videoUrl);
+    
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
       const u = new URL(videoUrl, base);
@@ -117,24 +121,26 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
         return u.toString();
       }
       // Not proxied: wrap with /api/video?url=...
-      // Use the original videoUrl instead of u.toString() to avoid double-encoding
       const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
-      return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+      
+      if (isAlreadyEncoded) {
+        // URL is already encoded, pass it directly to avoid double-encoding
+        return `/api/video?url=${videoUrl}${pidPart}`;
+      } else {
+        // URL is not encoded, encode it once
+        return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+      }
     } catch {
-      try {
-        // Last resort: string wrap without URL parsing
-        // Check if the URL is already heavily encoded (triple+ encoding)
-        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(videoUrl);
-        const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
-        
-        if (isAlreadyEncoded) {
-          // URL is already encoded, pass it directly to avoid double-encoding
-          return `/api/video?url=${videoUrl}${pidPart}`;
-        } else {
-          // URL is not encoded, encode it once
-          return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
-        }
-      } catch { return videoUrl; }
+      // Last resort: string wrap without URL parsing
+      const pidPart = postId ? `&pid=${encodeURIComponent(String(postId))}` : '';
+      
+      if (isAlreadyEncoded) {
+        // URL is already encoded, pass it directly to avoid double-encoding
+        return `/api/video?url=${videoUrl}${pidPart}`;
+      } else {
+        // URL is not encoded, encode it once
+        return `/api/video?url=${encodeURIComponent(videoUrl)}${pidPart}`;
+      }
     }
   }, [videoUrl, postId]);
 
