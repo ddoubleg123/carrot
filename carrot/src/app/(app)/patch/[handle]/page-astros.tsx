@@ -219,7 +219,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         timelineContainer.innerHTML = '';
         
         // Initialize new timeline
-        (window as any).TL.timeline(timelineContainer, timelineData);
+        new (window as any).TL.Timeline(timelineContainer, timelineData);
         console.log('Timeline initialized successfully');
       } catch (error) {
         console.error('Error initializing timeline:', error);

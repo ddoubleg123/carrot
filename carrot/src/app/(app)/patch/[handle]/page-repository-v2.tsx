@@ -48,7 +48,9 @@ import {
   Link2,
   Send,
   X,
-  Check
+  Check,
+  ArrowLeft,
+  Palette
 } from 'lucide-react';
 
 interface PatchPageProps {
@@ -158,38 +160,55 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
 
     return (
       <div className={`min-h-screen ${getBackgroundClass(patch.theme)}`}>
-        {/* Compact Header (max 88px) */}
-        <div className="bg-white border-b border-[#E6E8EC] sticky top-0 z-20 shadow-sm">
-          <div className="max-w-7xl mx-auto px-6 py-4">
+        {/* Navigation Breadcrumb */}
+        <div className="bg-white/80 backdrop-blur-sm border-b border-[#E6E8EC] sticky top-0 z-30">
+          <div className="max-w-7xl mx-auto px-6 py-3">
+            <div className="flex items-center gap-2 text-sm text-[#60646C]">
+              <a href="/patch" className="flex items-center gap-2 hover:text-[#FF6A00] transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Patches</span>
+              </a>
+              <span className="text-[#E6E8EC]">/</span>
+              <span className="text-[#0B0B0F] font-medium">{patch.name}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Compact Header with Color Background */}
+        <div className="bg-gradient-to-r from-[#FF6A00] to-[#FF8A33] border-b border-[#E6E8EC] sticky top-[60px] z-20 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-6">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold text-[#0B0B0F] truncate">{patch.name}</h1>
+                <h1 className="text-2xl font-bold text-white truncate">{patch.name}</h1>
                 {patch.tagline && (
-                  <p className="text-[#60646C] text-sm mt-1 line-clamp-1">{patch.tagline}</p>
+                  <p className="text-white/90 text-sm mt-1 line-clamp-1">{patch.tagline}</p>
                 )}
-                <div className="flex gap-2 mt-2">
+                <div className="flex gap-2 mt-3">
                   {patch.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="px-2 py-1 bg-[#E6E8EC] text-[#60646C] rounded-lg text-xs font-medium">
+                    <span key={tag} className="px-2 py-1 bg-white/20 text-white rounded-lg text-xs font-medium">
                       {tag}
                     </span>
                   ))}
                 </div>
               </div>
               <div className="flex items-center gap-3 ml-4">
-                <button className="px-4 py-2 bg-[#0A5AFF] text-white rounded-xl hover:bg-[#0047CC] transition-colors text-sm font-semibold">
+                <button className="px-4 py-2 bg-white text-[#FF6A00] rounded-xl hover:bg-white/90 transition-colors text-sm font-semibold">
                   <UserPlus className="w-4 h-4 inline-block mr-2" /> Join
                 </button>
-                <button className="p-2 text-[#60646C] hover:bg-[#E6E8EC] rounded-xl transition-colors">
+                <button className="p-2 text-white hover:bg-white/20 rounded-xl transition-colors">
                   <Share2 className="w-4 h-4" />
                 </button>
-                <button className="p-2 text-[#60646C] hover:bg-[#E6E8EC] rounded-xl transition-colors">
+                <button className="p-2 text-white hover:bg-white/20 rounded-xl transition-colors">
+                  <Zap className="w-4 h-4" />
+                </button>
+                <button className="p-2 text-white hover:bg-white/20 rounded-xl transition-colors">
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
               </div>
             </div>
             
             {/* Metric Bar */}
-            <div className="flex items-center gap-6 text-[#60646C] text-sm mt-4">
+            <div className="flex items-center gap-6 text-white/90 text-sm mt-4">
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
                 <span>{patch._count?.members || 0} members</span>
@@ -216,7 +235,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
             {/* Main Content Column */}
             <div className="lg:col-span-3 space-y-8">
               {/* Sticky Pill Nav */}
-              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[120px] z-10">
+              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[180px] z-10">
                 {[
                   { id: 'overview', label: 'Overview', icon: Grid },
                   { id: 'timeline', label: 'Timeline', icon: Calendar },
@@ -228,7 +247,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                     href={`?tab=${tab.id}`}
                     className={`flex-1 text-center py-3 px-2 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-[#0A5AFF] text-white shadow-sm'
+                        ? 'bg-[#FF6A00] text-white shadow-sm'
                         : 'text-[#60646C] hover:bg-[#E6E8EC] hover:text-[#0B0B0F]'
                     }`}
                   >
@@ -254,7 +273,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                             </div>
                             {fact.source && (
                               <div className="ml-3">
-                                <span className="px-2 py-1 bg-[#0A5AFF]/10 text-[#0A5AFF] rounded-lg text-xs font-medium">
+                                <span className="px-2 py-1 bg-[#FF6A00]/10 text-[#FF6A00] rounded-lg text-xs font-medium">
                                   {fact.source.title}
                                 </span>
                               </div>
@@ -277,8 +296,8 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                     <div className="space-y-4">
                       {patch.events.slice(0, 3).map((event) => (
                         <div key={event.id} className="flex items-start gap-3 p-3 hover:bg-[#F7F8FA] rounded-xl transition-colors">
-                          <div className="w-8 h-8 bg-[#0A5AFF]/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <Calendar className="w-4 h-4 text-[#0A5AFF]" />
+                          <div className="w-8 h-8 bg-[#FF6A00]/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Calendar className="w-4 h-4 text-[#FF6A00]" />
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold text-[#0B0B0F] text-sm">{event.title}</div>
@@ -323,7 +342,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                       <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-[#E6E8EC]"></div>
                       {patch.events.map((event, index) => (
                         <div key={event.id} className="mb-8 relative">
-                          <div className="absolute -left-2 top-1 w-4 h-4 bg-[#0A5AFF] rounded-full border-2 border-white"></div>
+                          <div className="absolute -left-2 top-1 w-4 h-4 bg-[#FF6A00] rounded-full border-2 border-white"></div>
                           <div className="ml-6 bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-4 hover:shadow-md transition-shadow">
                             <h3 className="text-lg font-bold text-[#0B0B0F] mb-2">{event.title}</h3>
                             <p className="text-[#60646C] text-sm mb-3">
@@ -346,7 +365,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                                 </span>
                               ))}
                               {event.sources.length > 0 && (
-                                <span className="px-2 py-1 bg-[#0A5AFF]/10 text-[#0A5AFF] rounded-lg text-xs font-medium">
+                                <span className="px-2 py-1 bg-[#FF6A00]/10 text-[#FF6A00] rounded-lg text-xs font-medium">
                                   {event.sources.length} sources
                                 </span>
                               )}
@@ -379,7 +398,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                         <input
                           type="text"
                           placeholder="Search resources..."
-                          className="w-64 pl-10 pr-4 py-2 border border-[#E6E8EC] rounded-xl focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent outline-none text-sm bg-white"
+                          className="w-64 pl-10 pr-4 py-2 border border-[#E6E8EC] rounded-xl focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent outline-none text-sm bg-white"
                         />
                       </div>
                     </div>
@@ -428,7 +447,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                     <div className="flex items-center justify-between mb-6">
                       <h2 className="text-xl font-bold text-[#0B0B0F]">Community Posts</h2>
                       <div className="flex items-center gap-3">
-                        <button className="px-3 py-1 bg-[#0A5AFF] text-white rounded-lg text-sm font-medium">
+                        <button className="px-3 py-1 bg-[#FF6A00] text-white rounded-lg text-sm font-medium">
                           <TrendingUp className="w-4 h-4 inline-block mr-1" /> Top
                         </button>
                         <button className="px-3 py-1 bg-[#E6E8EC] text-[#60646C] rounded-lg text-sm hover:bg-[#D1D5DB] transition-colors">
@@ -442,7 +461,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                         {patch.posts.map((post) => (
                           <div key={post.id} className="bg-[#F7F8FA] rounded-xl p-4 hover:bg-[#E6E8EC] transition-colors">
                             <div className="flex items-start gap-3 mb-3">
-                              <div className="w-8 h-8 bg-[#0A5AFF] rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                              <div className="w-8 h-8 bg-[#FF6A00] rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
                                 {post.author.name?.charAt(0) || 'U'}
                               </div>
                               <div className="flex-1">
@@ -514,8 +533,8 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                     <span className="text-sm font-semibold text-[#0B0B0F]">Add Fact</span>
                   </button>
                   <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-[#F7F8FA] rounded-xl transition-colors">
-                    <div className="w-8 h-8 bg-[#0A5AFF]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Calendar className="w-4 h-4 text-[#0A5AFF]" />
+                    <div className="w-8 h-8 bg-[#FF6A00]/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-4 h-4 text-[#FF6A00]" />
                     </div>
                     <span className="text-sm font-semibold text-[#0B0B0F]">Add Event</span>
                   </button>
@@ -538,8 +557,8 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
                     { name: 'Source Validator', role: 'Citation Check', icon: Check }
                   ].map((agent, index) => (
                     <div key={index} className="flex items-center gap-3 p-2 hover:bg-[#F7F8FA] rounded-lg transition-colors">
-                      <div className="w-8 h-8 bg-[#0A5AFF]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <agent.icon className="w-4 h-4 text-[#0A5AFF]" />
+                      <div className="w-8 h-8 bg-[#FF6A00]/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <agent.icon className="w-4 h-4 text-[#FF6A00]" />
                       </div>
                       <div className="flex-1">
                         <p className="font-semibold text-[#0B0B0F] text-sm">{agent.name}</p>
@@ -557,16 +576,16 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
         <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-30">
           <div className="bg-white rounded-2xl shadow-lg border border-[#E6E8EC] p-2">
             <div className="space-y-2">
-              <button className="w-12 h-12 bg-[#0A5AFF]/10 text-[#0A5AFF] rounded-xl hover:bg-[#0A5AFF]/20 transition-colors flex items-center justify-center" title="Summarize">
+              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Summarize">
                 <Sparkles className="w-5 h-5" />
               </button>
               <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Add Fact">
                 <Plus className="w-5 h-5" />
               </button>
-              <button className="w-12 h-12 bg-green-500/10 text-green-500 rounded-xl hover:bg-green-500/20 transition-colors flex items-center justify-center" title="Add Event">
+              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Add Event">
                 <Calendar className="w-5 h-5" />
               </button>
-              <button className="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl hover:bg-purple-500/20 transition-colors flex items-center justify-center" title="Find Sources">
+              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Find Sources">
                 <Search className="w-5 h-5" />
               </button>
             </div>
