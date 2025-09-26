@@ -1,0 +1,17 @@
+# Minimal SD + LoRA requirements (CPU or CUDA)
+# For CUDA, install torch matching your CUDA version from https://pytorch.org/get-started/locally/
+# Example (CUDA 12.1): pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+
+# Core
+accelerate==0.33.0
+safetensors==0.4.4
+transformers==4.43.3
+diffusers==0.29.2
+
+# CPU fallback
+torch==2.3.1; platform_system != 'Windows'  # pin CPU by default for linux/macos
+# On Windows, please install torch via the official instructions for your CUDA/CPU.
+
+# Utilities
+Pillow==10.4.0
+numpy==1.26.4

@@ -35,6 +35,75 @@ def write_solid_png(path: str, w: int, h: int, rgb: tuple):
         f.write(png)
 
 
+# --- Stable Diffusion + LoRA helper ---
+def run_sd_lora(prompt: str, out: str, init_image_path: str = '') -> str:
+    """
+    Generate a PNG using Stable Diffusion v1.5 (by default) with optional LoRA weights.
+    If init_image_path exists, use img2img. Requires torch+diffusers installed.
+    Config via env:
+      GHIBLI_SD_MODEL: base model repo or path (default: runwayml/stable-diffusion-v1-5)
+      GHIBLI_LORA_WEIGHTS: optional local path or repo id to LoRA safetensors
+      GHIBLI_SD_SCHEDULER: (optional) scheduler name, defaults to EulerAncestralDiscreteScheduler
+    """
+    base_model = os.environ.get('GHIBLI_SD_MODEL', 'runwayml/stable-diffusion-v1-5')
+    lora_path = os.environ.get('GHIBLI_LORA_WEIGHTS', '')
+    steps = int(os.environ.get('GHIBLI_SD_STEPS', '25'))
+    guidance = float(os.environ.get('GHIBLI_SD_GUIDANCE', '7.5'))
+    seed_env = os.environ.get('GHIBLI_SD_SEED', '')
+    seed = int(seed_env) if seed_env.strip().isdigit() else None
+
+    try:
+        import torch  # type: ignore
+        from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, EulerAncestralDiscreteScheduler  # type: ignore
+    except Exception as ex:
+        raise RuntimeError('Stable Diffusion not available. Install requirements-sd.txt and set GHIBLI_SD_MODEL/GHIBLI_LORA_WEIGHTS as needed.') from ex
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    if init_image_path and os.path.exists(init_image_path):
+        pipe = StableDiffusionImg2ImgPipeline.from_pretrained(base_model, torch_dtype=torch.float16 if device=='cuda' else torch.float32)
+    else:
+        pipe = StableDiffusionPipeline.from_pretrained(base_model, torch_dtype=torch.float16 if device=='cuda' else torch.float32)
+    pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
+
+    if lora_path:
+        try:
+            pipe.load_lora_weights(lora_path)
+            # fuse if supported to speed up
+            if hasattr(pipe, 'fuse_lora'):  # diffusers >=0.24
+                pipe.fuse_lora()
+        except Exception as ex:
+            raise RuntimeError(f'Failed to load LoRA weights from {lora_path}: {ex}')
+
+    if device == 'cuda':
+        pipe = pipe.to('cuda')
+        pipe.enable_attention_slicing()
+    else:
+        pipe = pipe.to('cpu')
+        pipe.enable_attention_slicing()
+
+    generator = torch.Generator(device=device)
+    if seed is not None:
+        generator = generator.manual_seed(seed)
+
+    # Defaults tuned for speed; can be exposed later
+    width = int(os.environ.get('GHIBLI_SD_WIDTH', '768'))
+    height = int(os.environ.get('GHIBLI_SD_HEIGHT', '512'))
+
+    if init_image_path and os.path.exists(init_image_path):
+        if not _PIL_AVAILABLE:
+            raise RuntimeError('Pillow required for img2img init image. Install requirements.txt')
+        init_img = Image.open(init_image_path).convert('RGB')  # type: ignore
+        strength = float(os.environ.get('GHIBLI_SD_STRENGTH', '0.65'))
+        out_img = pipe(prompt=prompt, image=init_img, num_inference_steps=steps, guidance_scale=guidance, generator=generator, strength=strength).images[0]
+    else:
+        out_img = pipe(prompt=prompt, width=width, height=height, num_inference_steps=steps, guidance_scale=guidance, generator=generator).images[0]
+
+    out_path = out if out.lower().endswith('.png') else (out + '.png')
+    out_img.save(out_path)
+    return out_path
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prompt', type=str, default='')
@@ -52,6 +121,12 @@ def main():
     }
 
     try:
+        # Stable Diffusion + LoRA path (text-to-image, optional img2img when input provided)
+        if args.model == 'sd-lora':
+            out_path = run_sd_lora(args.prompt, args.out, args.input_image)
+            print(json.dumps({'ok': True, 'outputPath': out_path, 'meta': meta}))
+            return
+
         # If an input image is provided, we require Pillow
         if args.input_image and os.path.exists(args.input_image):
             if not _PIL_AVAILABLE:

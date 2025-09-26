@@ -121,7 +121,11 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
       if ((data as any)?.videoBucket && (data as any)?.videoPath) {
         const b = String((data as any).videoBucket);
         const p = String((data as any).videoPath);
-        const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
+        const poster = data.thumbnailUrl ? (() => {
+          if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
+          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
+          return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
+        })() : undefined;
         return (
           <video
             controls
@@ -184,7 +188,11 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
         resolved = needsProxy ? `/api/video?url=${encodeURIComponent(u2)}` : url;
       }
       // Proxy poster image to avoid CORS
-      const poster = data.thumbnailUrl ? `/api/img?url=${encodeURIComponent(data.thumbnailUrl)}` : undefined;
+      const poster = data.thumbnailUrl ? (() => {
+        if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
+        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
+        return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
+      })() : undefined;
       return (
         <video
           controls

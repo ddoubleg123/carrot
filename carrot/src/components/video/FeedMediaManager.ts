@@ -186,9 +186,13 @@ class FeedMediaManager {
         // 3) If only videoUrl exists, ask /api/img to generate a poster from videoUrl (fallback may be SVG)
         let posterUrl: string | null = null;
         if (post.thumbnailUrl) {
-          posterUrl = post.thumbnailUrl.startsWith('/api/img')
-            ? post.thumbnailUrl
-            : `/api/img?url=${encodeURIComponent(post.thumbnailUrl)}`;
+          if (post.thumbnailUrl.startsWith('/api/img')) {
+            posterUrl = post.thumbnailUrl;
+          } else {
+            // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+            const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.thumbnailUrl);
+            posterUrl = `/api/img?url=${isAlreadyEncoded ? post.thumbnailUrl : encodeURIComponent(post.thumbnailUrl)}`;
+          }
         } else if (post.bucket && post.path) {
           posterUrl = `/api/img?bucket=${encodeURIComponent(post.bucket)}&path=${encodeURIComponent(post.path)}/thumb.jpg&generatePoster=1`;
         } else if (post.videoUrl) {

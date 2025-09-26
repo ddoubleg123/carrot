@@ -162,7 +162,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
       <div className={`min-h-screen ${getBackgroundClass(patch.theme)}`}>
         {/* Navigation Breadcrumb */}
         <div className="bg-white/80 backdrop-blur-sm border-b border-[#E6E8EC] sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="max-w-7xl mx-auto px-12 py-4">
             <div className="flex items-center gap-2 text-sm text-[#60646C]">
               <a href="/patch" className="flex items-center gap-2 hover:text-[#FF6A00] transition-colors">
                 <ArrowLeft className="w-4 h-4" />
@@ -176,7 +176,7 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
 
         {/* Compact Header with Color Background */}
         <div className="bg-gradient-to-r from-[#FF6A00] to-[#FF8A33] border-b border-[#E6E8EC] sticky top-[72px] z-20 shadow-sm">
-          <div className="max-w-7xl mx-auto px-8 py-8">
+          <div className="max-w-7xl mx-auto px-12 py-8">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <h1 className="text-2xl font-bold text-white truncate">{patch.name}</h1>
@@ -230,12 +230,12 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
         </div>
 
         {/* Main Content Area */}
-        <div className="max-w-7xl mx-auto px-8 py-8 relative z-10">
+        <div className="max-w-7xl mx-auto px-12 py-8 relative z-10 mt-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Main Content Column */}
             <div className="lg:col-span-3 space-y-8">
               {/* Sticky Pill Nav */}
-              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[200px] z-10">
+              <div className="bg-white rounded-2xl shadow-sm border border-[#E6E8EC] p-1 flex justify-around sticky top-[240px] z-10">
                 {[
                   { id: 'overview', label: 'Overview', icon: Grid },
                   { id: 'timeline', label: 'Timeline', icon: Calendar },

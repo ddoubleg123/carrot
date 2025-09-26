@@ -8,18 +8,31 @@ export const dynamic = 'force-dynamic';
 // POST /api/agents/batch - Process batch feed operations
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
-    // DISABLE AI TRAINING ON RENDER FREE TIER
-    // The embedding generation and batch processing is too memory-intensive
-    // for Render's 512MB limit and causes server crashes
+    // Check if we're on Render and what tier
     const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
+    const isRenderFreeTier = isRender && (!process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_ID.includes('free'));
     
-    if (isRender) {
-      console.log('[Batch API] AI training disabled on Render - returning mock response');
+    // Check memory limit - paid Render plans have more memory
+    const memUsage = process.memoryUsage();
+    const memUsageMB = memUsage.heapUsed / 1024 / 1024;
+    const totalMemMB = memUsage.heapTotal / 1024 / 1024;
+    
+    console.log(`[Batch API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
+    
+    // Only disable on free tier or if memory is very low
+    if (isRenderFreeTier || (isRender && totalMemMB < 1000)) {
+      console.log('[Batch API] AI training disabled on Render free tier - returning mock response');
       return NextResponse.json({
         results: {
           message: 'AI agent training is disabled on the free tier due to memory limitations.',
           suggestion: 'For full AI training capabilities, please run locally or upgrade to a paid server with more memory.',
-          mockResults: true
+          mockResults: true,
+          serverInfo: {
+            isRender,
+            isFreeTier: isRenderFreeTier,
+            memoryUsage: `${memUsageMB.toFixed(2)}MB`,
+            totalMemory: `${totalMemMB.toFixed(2)}MB`
+          }
         }
       });
     }

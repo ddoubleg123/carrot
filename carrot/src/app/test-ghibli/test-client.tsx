@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 type JobResult = {
   ok: boolean
@@ -21,7 +21,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 export default function TestGhibliClient() {
   const [tab, setTab] = useState<'image' | 'video'>('image')
   const [prompt, setPrompt] = useState('Ghibli style, peaceful countryside with windmills at sunset')
-  const [model, setModel] = useState<'animeganv3' | 'sd-lora' | 'diffutoon'>('animeganv3')
+  const [model, setModel] = useState<'animeganv3' | 'sd-lora' | 'diffutoon'>('sd-lora')
   const [log, setLog] = useState<string>('Ready.')
   const [imageOut, setImageOut] = useState<string | null>(null)
   const [videoOut, setVideoOut] = useState<string | null>(null)
@@ -30,6 +30,20 @@ export default function TestGhibliClient() {
   const vidFileRef = useRef<HTMLInputElement>(null)
   const [metrics, setMetrics] = useState<any>(null)
   const [imageMode, setImageMode] = useState<'prompt' | 'upload'>('prompt')
+  const [status, setStatus] = useState<any>(null)
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const r = await fetch('/api/ghibli/status', { cache: 'no-store' })
+        const j = await r.json()
+        setStatus(j)
+      } catch (e) {
+        setStatus({ ok: false, error: String(e) })
+      }
+    }
+    run()
+  }, [])
 
   const appendLog = (line: string) => setLog((l) => l + "\n" + line)
 
@@ -43,7 +57,7 @@ export default function TestGhibliClient() {
     const t0 = performance.now()
     appendLog('[Image] Submitting job...')
     if (imageMode === 'prompt' || !imgFileRef.current?.files?.[0]) {
-      appendLog('[Image] No upload provided: will generate a prompt-based SVG placeholder (Pillow not required).')
+      appendLog('[Image] No upload provided: will generate a prompt-based PNG placeholder (Pillow not required).')
     }
     const res = await fetch('/api/ghibli/image', { method: 'POST', body: form })
     const t1 = performance.now()
@@ -88,6 +102,32 @@ export default function TestGhibliClient() {
       <h1>Ghibli Style Lab</h1>
       <p>Minimal test bench for Ghibli-style image and video generation using open-source models.</p>
 
+      {status && (
+        <div style={{
+          border: '1px solid ' + (status.torch && status.loraExists ? '#2e7d32' : '#8a1f11'),
+          background: (status.torch && status.loraExists ? '#e8f5e9' : '#fdecea'),
+          color: (status.torch && status.loraExists ? '#1b5e20' : '#611a15'),
+          padding: 12, borderRadius: 8, marginBottom: 12
+        }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <strong>Model Status</strong>
+            <button onClick={async()=>{ setStatus(null); try{ const r=await fetch('/api/ghibli/status',{cache:'no-store'}); setStatus(await r.json()); }catch(e){ setStatus({ok:false,error:String(e)}) } }} style={{ padding:'4px 8px' }}>Refresh</button>
+          </div>
+          <div>Python: {String(status.python)}</div>
+          <div>Torch: {String(status.torch)}</div>
+          <div>SD Model: {status.sdModel}</div>
+          <div>LoRA path: {status.loraPath || '(not set)'}</div>
+          <div>LoRA exists: {String(status.loraExists)}</div>
+          <div>Device hint: {status.deviceHint}</div>
+          {(!status.torch || !status.loraExists) && (
+            <div style={{ marginTop: 6 }}>
+              {!status.torch && <div>Install SD deps on the server (GPU recommended): see scripts/ghibli/requirements-sd.txt and matching torch wheel for your CUDA.</div>}
+              {!status.loraExists && <div>Set GHIBLI_LORA_WEIGHTS to a valid .safetensors path on the server.</div>}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => setTab('image')} style={{ padding: '8px 12px', background: tab==='image'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Image Generator</button>
         <button disabled title="Temporarily disabled while we focus on images" style={{ padding: '8px 12px', background:'#555', color:'#aaa', border:0, borderRadius:6, cursor:'not-allowed' }}>Video Animator</button>
@@ -98,7 +138,7 @@ export default function TestGhibliClient() {
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li>Enter a prompt (required).</li>
             <li>Choose mode: Prompt-only (no upload) or Upload + Stylize.</li>
-            <li>Prompt-only works everywhere and returns an SVG quickly. Upload + Stylize requires Pillow on the backend (and an AnimeGAN command if configured).</li>
+            <li>Prompt-only works everywhere and returns a PNG quickly. Upload + Stylize requires Pillow on the backend (and an AnimeGAN command if configured).</li>
             <li>Click "Run Image Pipeline".</li>
           </ol>
         ) : (
@@ -158,7 +198,16 @@ export default function TestGhibliClient() {
       <Panel title="Output Preview">
         {tab==='image' ? (
           imageOut ? (
-            <img src={imageOut} alt="output" style={{ maxWidth:'100%' }} />
+            <div style={{ display:'grid', gap:8 }}>
+              <div style={{ display:'flex', gap:8 }}>
+                <a href={imageOut + (imageOut.includes('?') ? '&' : '?') + 'download=1'}
+                   download
+                   style={{ padding:'6px 10px', background:'#333', color:'#fff', borderRadius:6, textDecoration:'none' }}>Download PNG</a>
+                <a href={imageOut} target="_blank" rel="noreferrer"
+                   style={{ padding:'6px 10px', background:'#555', color:'#fff', borderRadius:6, textDecoration:'none' }}>Open</a>
+              </div>
+              <img src={imageOut} alt="output" style={{ maxWidth:'100%' }} />
+            </div>
           ) : <div>No image yet.</div>
         ) : (
           videoOut ? (

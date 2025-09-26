@@ -346,7 +346,7 @@ function ConversationThread({
   const checkIfNearBottom = () => {
     if (!messageContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-    const threshold = 100; // pixels from bottom
+    const threshold = 150; // Increased threshold for better detection
     const nearBottom = scrollHeight - scrollTop - clientHeight < threshold;
     setIsNearBottom(nearBottom);
     setShowScrollButton(!nearBottom && scrollHeight > clientHeight);
@@ -359,7 +359,7 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: scroll to show new messages appropriately
+  // Auto-scroll behavior: always scroll to show new messages
   useEffect(() => {
     if (thread.messages.length > 0) {
       // Immediate scroll for new messages
@@ -369,13 +369,13 @@ function ConversationThread({
           const inputAreaHeight = 120; // Approximate height of input area + padding
           const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
           
-          // Only auto-scroll to bottom if:
-          // 1. The latest message would be hidden below the input area, AND
-          // 2. The user hasn't manually scrolled up from the bottom
-          if (latestMessageWouldBeHidden && !hasUserScrolled) {
+          // Always auto-scroll to bottom when new messages arrive
+          // This ensures the latest message is always visible
+          if (latestMessageWouldBeHidden) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             setIsNearBottom(true);
             setShowScrollButton(false);
+            setHasUserScrolled(false); // Reset user scroll state since we're auto-scrolling
           }
         }
       };
@@ -387,7 +387,33 @@ function ConversationThread({
       const timeout = setTimeout(immediateScroll, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, hasUserScrolled]);
+  }, [thread.messages.length]);
+
+  // Additional auto-scroll for streaming messages (when content is actively changing)
+  useEffect(() => {
+    if (thread.messages.length > 0) {
+      const lastMessage = thread.messages[thread.messages.length - 1];
+      // If the last message is from an agent and is being streamed (content is changing)
+      if (lastMessage.type === 'agent' && lastMessage.content) {
+        const scrollToBottom = () => {
+          if (messageContainerRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+            const inputAreaHeight = 120;
+            const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
+            
+            if (latestMessageWouldBeHidden) {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }
+        };
+        
+        // Scroll immediately and with a small delay for streaming content
+        scrollToBottom();
+        const timeout = setTimeout(scrollToBottom, 50);
+        return () => clearTimeout(timeout);
+      }
+    }
+  }, [thread.messages[thread.messages.length - 1]?.content]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {

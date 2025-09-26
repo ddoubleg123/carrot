@@ -267,11 +267,16 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
   const executeStep = async (step: TrainingStep) => {
     try {
+      // Validate step data
+      if (!step || !step.content || !step.sourceType) {
+        return { success: false, error: 'Invalid step data' };
+      }
+
       const feedItem = {
         content: step.content,
         sourceType: step.sourceType,
-        sourceUrl: step.sourceUrl,
-        sourceTitle: step.sourceTitle || step.name,
+        sourceUrl: step.sourceUrl || undefined,
+        sourceTitle: step.sourceTitle || step.name || 'Unknown Source',
         sourceAuthor: 'Training System',
         tags: []
       };
@@ -287,6 +292,13 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
           feedItem
         }),
       });
+
+      if (!response.ok) {
+        return { 
+          success: false, 
+          error: `HTTP ${response.status}: ${response.statusText}` 
+        };
+      }
 
       const data = await response.json();
       
@@ -307,52 +319,67 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
         };
       }
     } catch (error) {
+      console.error('Error executing training step:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   };
 
   const runWorkflow = async () => {
-    if (!workflow) return;
-
-    setIsRunning(true);
-    setWorkflow(prev => prev ? { ...prev, isRunning: true, currentStep: 0 } : null);
-
-    for (let i = 0; i < workflow.steps.length; i++) {
-      const step = workflow.steps[i];
-      
-      // Update current step
-      setWorkflow(prev => prev ? { 
-        ...prev, 
-        currentStep: i + 1 
-      } : null);
-
-      // Execute step
-      const result = await executeStep(step);
-
-      // Update step result
-      setWorkflow(prev => {
-        if (!prev) return null;
-        const updatedSteps = [...prev.steps];
-        updatedSteps[i] = {
-          ...updatedSteps[i],
-          completed: true,
-          success: result.success,
-          error: result.error
-        };
-        
-        return {
-          ...prev,
-          steps: updatedSteps,
-          completedSteps: updatedSteps.filter(s => s.completed).length
-        };
-      });
-
-      // Small delay between steps
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!workflow || !workflow.steps || workflow.steps.length === 0) {
+      console.error('Cannot run workflow: invalid workflow or no steps');
+      return;
     }
 
-    setIsRunning(false);
-    setWorkflow(prev => prev ? { ...prev, isRunning: false } : null);
+    try {
+      setIsRunning(true);
+      setWorkflow(prev => prev ? { ...prev, isRunning: true, currentStep: 0 } : null);
+
+      for (let i = 0; i < workflow.steps.length; i++) {
+        const step = workflow.steps[i];
+        
+        if (!step) {
+          console.error(`Invalid step at index ${i}`);
+          continue;
+        }
+        
+        // Update current step
+        setWorkflow(prev => prev ? { 
+          ...prev, 
+          currentStep: i + 1 
+        } : null);
+
+        // Execute step
+        const result = await executeStep(step);
+
+        // Update step result
+        setWorkflow(prev => {
+          if (!prev || !prev.steps) return null;
+          const updatedSteps = [...prev.steps];
+          if (updatedSteps[i]) {
+            updatedSteps[i] = {
+              ...updatedSteps[i],
+              completed: true,
+              success: result.success,
+              error: result.error
+            };
+          }
+          
+          return {
+            ...prev,
+            steps: updatedSteps,
+            completedSteps: updatedSteps.filter(s => s && s.completed).length
+          };
+        });
+
+        // Small delay between steps
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.error('Error running workflow:', error);
+    } finally {
+      setIsRunning(false);
+      setWorkflow(prev => prev ? { ...prev, isRunning: false } : null);
+    }
   };
 
   const resetWorkflow = () => {
@@ -374,7 +401,16 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
     });
   };
 
-  if (!workflow || !workflow.steps) return null;
+  if (!workflow || !workflow.steps) {
+    console.log('AgentTrainingWorkflow: No workflow or steps available');
+    return null;
+  }
+
+  // Additional safety check
+  if (!Array.isArray(workflow.steps)) {
+    console.error('AgentTrainingWorkflow: workflow.steps is not an array', workflow.steps);
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

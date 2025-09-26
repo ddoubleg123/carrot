@@ -10,11 +10,20 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    // DISABLE AI TRAINING ON RENDER FREE TIER
+    // Check if we're on Render and what tier
     const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
+    const isRenderFreeTier = isRender && (!process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_ID.includes('free'));
     
-    if (isRender) {
-      console.log('[Feed API] AI training disabled on Render - returning mock response');
+    // Check memory limit - paid Render plans have more memory
+    const memUsage = process.memoryUsage();
+    const memUsageMB = memUsage.heapUsed / 1024 / 1024;
+    const totalMemMB = memUsage.heapTotal / 1024 / 1024;
+    
+    console.log(`[Feed API] Server info: Render=${isRender}, FreeTier=${isRenderFreeTier}, Memory=${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
+    
+    // Only disable on free tier or if memory is very low
+    if (isRenderFreeTier || (isRender && totalMemMB < 1000)) {
+      console.log('[Feed API] AI training disabled on Render free tier - returning mock response');
       return NextResponse.json({
         result: {
           message: 'AI agent training is disabled on the free tier due to memory limitations.',
@@ -22,7 +31,13 @@ export async function POST(
           mockResult: true,
           memoryIds: [],
           feedEvent: { id: 'mock-event' },
-          chunkCount: 0
+          chunkCount: 0,
+          serverInfo: {
+            isRender,
+            isFreeTier: isRenderFreeTier,
+            memoryUsage: `${memUsageMB.toFixed(2)}MB`,
+            totalMemory: `${totalMemMB.toFixed(2)}MB`
+          }
         }
       }, { status: 201 });
     }

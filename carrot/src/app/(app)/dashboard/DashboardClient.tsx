@@ -148,10 +148,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       timestamp: post.createdAt,
       imageUrls: imageUrlsFinal,
       gifUrl: prox(post.gifUrl) || null,
-      // Prefer durable path-mode if server provided bucket+path, else fallback to URL
+      // Prefer durable path-mode if server provided bucket+path, else proxy the URL
       videoUrl: (post?.videoBucket && post?.videoPath)
         ? `/api/video?path=${encodeURIComponent(String(post.videoPath))}&bucket=${encodeURIComponent(String(post.videoBucket))}`
-        : (post.videoUrl || null),
+        : (post.videoUrl ? `/api/video?url=${encodeURIComponent(post.videoUrl)}` : null),
       thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
