@@ -64,8 +64,29 @@ export default function NeverBlackVideo({
     if (poster) {
       try {
         if (poster.startsWith('/api/img') || poster.startsWith('data:') || poster.startsWith('blob:')) return poster;
-        return `/api/img?url=${encodeURIComponent(poster)}`;
-      } catch { return `/api/img?url=${encodeURIComponent(poster)}`; }
+        
+        // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
+        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(poster);
+        
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          return `/api/img?url=${poster}`;
+        } else {
+          // URL is not encoded, encode it once
+          return `/api/img?url=${encodeURIComponent(poster)}`;
+        }
+      } catch { 
+        // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
+        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(poster);
+        
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          return `/api/img?url=${poster}`;
+        } else {
+          // URL is not encoded, encode it once
+          return `/api/img?url=${encodeURIComponent(poster)}`;
+        }
+      }
     }
     // 2nd Priority: Durable bucket/path via proxy with generatePoster fallback
     if (bucket && path) {
