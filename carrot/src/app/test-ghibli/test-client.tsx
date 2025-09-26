@@ -1,0 +1,159 @@
+"use client"
+
+import React, { useState, useRef } from 'react'
+
+type JobResult = {
+  ok: boolean
+  message?: string
+  outputPath?: string
+  meta?: any
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ border: '1px solid #333', borderRadius: 8, padding: 16, marginTop: 16 }}>
+      <h3 style={{ margin: 0, marginBottom: 8 }}>{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+export default function TestGhibliClient() {
+  const [tab, setTab] = useState<'image' | 'video'>('image')
+  const [prompt, setPrompt] = useState('Ghibli style, peaceful countryside with windmills at sunset')
+  const [model, setModel] = useState<'animeganv3' | 'sd-lora' | 'diffutoon'>('animeganv3')
+  const [log, setLog] = useState<string>('Ready.')
+  const [imageOut, setImageOut] = useState<string | null>(null)
+  const [videoOut, setVideoOut] = useState<string | null>(null)
+  const [origVideo, setOrigVideo] = useState<string | null>(null)
+  const imgFileRef = useRef<HTMLInputElement>(null)
+  const vidFileRef = useRef<HTMLInputElement>(null)
+  const [metrics, setMetrics] = useState<any>(null)
+
+  const appendLog = (line: string) => setLog((l) => l + "\n" + line)
+
+  const submitImage = async () => {
+    const form = new FormData()
+    form.append('prompt', prompt)
+    form.append('model', model)
+    if (imgFileRef.current?.files?.[0]) form.append('image', imgFileRef.current.files[0])
+    const t0 = performance.now()
+    appendLog('[Image] Submitting job...')
+    const res = await fetch('/api/ghibli/image', { method: 'POST', body: form })
+    const t1 = performance.now()
+    const data: JobResult = await res.json()
+    if (!data.ok) {
+      appendLog('[Image] Failed: ' + (data.message || res.statusText))
+      return
+    }
+    appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
+    setImageOut(data.outputPath || null)
+    setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0) })
+  }
+
+  const submitVideo = async () => {
+    const form = new FormData()
+    form.append('prompt', prompt)
+    form.append('model', model)
+    const file = vidFileRef.current?.files?.[0]
+    if (!file) { appendLog('[Video] Please choose a file'); return }
+    form.append('video', file)
+    const t0 = performance.now()
+    appendLog('[Video] Submitting job...')
+    const res = await fetch('/api/ghibli/video', { method: 'POST', body: form })
+    const t1 = performance.now()
+    const data: JobResult = await res.json()
+    if (!data.ok) {
+      appendLog('[Video] Failed: ' + (data.message || res.statusText))
+      return
+    }
+    appendLog(`[Video] Done in ${(t1 - t0).toFixed(0)}ms`)
+    setVideoOut(data.outputPath || null)
+    setOrigVideo(data.meta?.originalPath || null)
+    setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0) })
+  }
+
+  return (
+    <div style={{ maxWidth: 900, margin: '24px auto', padding: 16, fontFamily: 'system-ui, sans-serif' }}>
+      <h1>Ghibli Style Lab</h1>
+      <p>Minimal test bench for Ghibli-style image and video generation using open-source models.</p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => setTab('image')} style={{ padding: '8px 12px', background: tab==='image'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Image Generator</button>
+        <button onClick={() => setTab('video')} style={{ padding: '8px 12px', background: tab==='video'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Video Animator</button>
+      </div>
+
+      <Panel title="Controls">
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label>
+            <div>Prompt</div>
+            <input value={prompt} onChange={(e)=>setPrompt(e.target.value)} style={{ width:'100%', padding:8 }} />
+          </label>
+          <label>
+            <div>Model</div>
+            <select value={model} onChange={(e)=>setModel(e.target.value as any)}>
+              <option value="animeganv3">AnimeGANv3 (fast)</option>
+              <option value="sd-lora">Stable Diffusion + Ghibli LoRA</option>
+              <option value="diffutoon">Diffutoon (slow)</option>
+            </select>
+          </label>
+          {tab === 'image' ? (
+            <label>
+              <div>Optional input image</div>
+              <input type="file" accept="image/*" ref={imgFileRef} />
+            </label>
+          ) : (
+            <label>
+              <div>Input video (&lt;=60s, &lt;=720p)</div>
+              <input type="file" accept="video/*" ref={vidFileRef} />
+            </label>
+          )}
+
+          <div>
+            {tab==='image' ? (
+              <button onClick={submitImage} style={{ padding:'8px 14px' }}>Run Image Pipeline</button>
+            ) : (
+              <button onClick={submitVideo} style={{ padding:'8px 14px' }}>Run Video Pipeline</button>
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Output Preview">
+        {tab==='image' ? (
+          imageOut ? (
+            <img src={imageOut} alt="output" style={{ maxWidth:'100%' }} />
+          ) : <div>No image yet.</div>
+        ) : (
+          videoOut ? (
+            <div style={{ display:'grid', gap:12 }}>
+              {origVideo && (
+                <div>
+                  <div>Original</div>
+                  <video src={origVideo} controls style={{ width:'100%' }} />
+                </div>
+              )}
+              <div>
+                <div>Stylized</div>
+                <video src={videoOut} controls style={{ width:'100%' }} />
+              </div>
+            </div>
+          ) : <div>No video yet.</div>
+        )}
+      </Panel>
+
+      <Panel title="Logs & Metrics">
+        <pre style={{ whiteSpace:'pre-wrap', background:'#111', color:'#0f0', padding:12, borderRadius:6, maxHeight:240, overflow:'auto' }}>{log}</pre>
+        {metrics && (
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            <div>Model: {model}</div>
+            {metrics.durationMs ? <div>Duration: {metrics.durationMs} ms</div> : null}
+            {metrics.frames ? <div>Frames: {metrics.frames}</div> : null}
+            {metrics.fps ? <div>FPS: {metrics.fps}</div> : null}
+            {metrics.size ? <div>Size: {metrics.size}</div> : null}
+          </div>
+        )}
+      </Panel>
+    </div>
+  )
+}

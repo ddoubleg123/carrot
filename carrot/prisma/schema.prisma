@@ -562,3 +562,79 @@ enum PostType {
   IMAGE
   VIDEO
 }
+
+// AI Agent System Models
+model Agent {
+  id                String   @id @default(cuid())
+  name              String
+  persona           String   // Detailed personality and expertise description
+  domainExpertise   String[] // Taxonomy tags for expertise areas
+  associatedPatches String[] // Group pages or topic areas this agent covers
+  vectorDbRef       String?  // Reference to vector DB collection
+  knowledgeProfile  Json?    // Current belief map or knowledge profile
+  feedSubscriptions Json?    // RSS feeds, webhooks, etc.
+  metadata          Json     @default("{}") // Council membership, visibility, training enabled, etc.
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  memories     AgentMemory[]
+  feedEvents   AgentFeedEvent[]
+  conversations AgentConversation[]
+
+  @@map("agents")
+}
+
+model AgentMemory {
+  id          String   @id @default(cuid())
+  agentId     String   @map("agent_id")
+  content     String   // The actual memory content
+  embedding   Float[]  // Vector embedding of the content
+  sourceType  String   // "url", "file", "post", "manual", etc.
+  sourceUrl   String?  // Original source URL
+  sourceTitle String?  // Title of the source
+  sourceAuthor String? // Author of the source
+  tags        String[] // Topic tags, sentiment, bias labels, etc.
+  confidence  Float    @default(1.0) // Confidence score for this memory
+  threadId    String?  // Associated Carrot group page thread ID
+  topicId     String?  // Associated topic ID
+  fedBy       String?  // User ID who fed this memory
+  createdAt   DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_memories")
+}
+
+model AgentFeedEvent {
+  id          String   @id @default(cuid())
+  agentId     String   @map("agent_id")
+  eventType   String   // "feed", "forget", "reweight", etc.
+  content     String   // Description of what was fed
+  sourceUrl   String?  // Source URL if applicable
+  sourceTitle String?  // Source title if applicable
+  memoryIds   String[] // IDs of memories created/affected
+  fedBy       String?  // User ID who performed the action
+  metadata    Json     @default("{}") // Additional event metadata
+  createdAt   DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_feed_events")
+}
+
+model AgentConversation {
+  id          String   @id @default(cuid())
+  agentId     String   @map("agent_id")
+  threadId    String?  // Carrot thread ID if connected
+  query       String   // The user's query
+  response    String   // Agent's response
+  context     Json?    // Additional context for the conversation
+  memoryIds   String[] // Memory IDs that influenced this response
+  createdAt   DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_conversations")
+}

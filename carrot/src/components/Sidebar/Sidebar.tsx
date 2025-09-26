@@ -36,6 +36,11 @@ const MENU = [
     label: 'Rabbit (AI)',
   },
   {
+    href: '/feed-agents',
+    icon: <SidebarIcons.Rabbit />, // Using Rabbit icon for now
+    label: 'Feed Agents',
+  },
+  {
     href: '/dashboard/funds',
     icon: <SidebarIcons.Funds />,
     label: 'Funds',
