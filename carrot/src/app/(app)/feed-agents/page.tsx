@@ -14,7 +14,6 @@ import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
-import TrainingTracker from '@/components/ai-agents/TrainingTracker';
 
 interface Agent {
   id: string;
@@ -49,13 +48,39 @@ export default function FeedAgentsPage() {
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
   
-  // Check if we're on Render (where AI training is disabled)
+  // Check if we're on Render (where AI training might be disabled)
   const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
+  const [serverInfo, setServerInfo] = useState<any>(null);
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceAuthor, setSourceAuthor] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
+
+  // Check server info on mount
+  useEffect(() => {
+    if (isProduction) {
+      // Try to get server info by making a test request
+      fetch('/api/agents/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          operation: 'feed',
+          agentIds: ['test'],
+          feedItem: { content: 'test', sourceType: 'manual' }
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.results?.serverInfo) {
+          setServerInfo(data.results.serverInfo);
+        }
+      })
+      .catch(() => {
+        // Ignore errors - just means we can't get server info
+      });
+    }
+  }, [isProduction]);
   const [selectedAgentForTraining, setSelectedAgentForTraining] = useState<Agent | null>(null);
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -150,29 +175,55 @@ export default function FeedAgentsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* AI Training Disabled Banner */}
+        {/* AI Training Status Banner */}
         {isProduction && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className={`mb-6 p-4 rounded-lg border ${
+            serverInfo?.isFreeTier 
+              ? 'bg-yellow-50 border-yellow-200' 
+              : 'bg-green-50 border-green-200'
+          }`}>
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
-                <Zap className="w-5 h-5 text-yellow-600" />
+                <Zap className={`w-5 h-5 ${
+                  serverInfo?.isFreeTier ? 'text-yellow-600' : 'text-green-600'
+                }`} />
               </div>
               <div>
-                <h3 className="text-sm font-medium text-yellow-800">AI Training Disabled on Free Tier</h3>
-                <p className="text-sm text-yellow-700 mt-1">
-                  AI agent training is disabled on the free tier due to memory limitations. 
-                  For full AI training capabilities, please run locally or upgrade to a paid server.
+                <h3 className={`text-sm font-medium ${
+                  serverInfo?.isFreeTier ? 'text-yellow-800' : 'text-green-800'
+                }`}>
+                  {serverInfo?.isFreeTier 
+                    ? 'AI Training Disabled on Free Tier' 
+                    : 'AI Training Available (Paid Server)'
+                  }
+                </h3>
+                <p className={`text-sm mt-1 ${
+                  serverInfo?.isFreeTier ? 'text-yellow-700' : 'text-green-700'
+                }`}>
+                  {serverInfo?.isFreeTier 
+                    ? 'AI agent training is disabled on the free tier due to memory limitations. For full AI training capabilities, please run locally or upgrade to a paid server.'
+                    : 'AI agent training is available on this paid server. You can use all training features.'
+                  }
                 </p>
-                <div className="mt-2">
-                  <a 
-                    href="/AI_TRAINING_SETUP.md" 
-                    className="text-sm text-yellow-800 underline hover:text-yellow-900"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View setup instructions →
-                  </a>
-                </div>
+                {serverInfo && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    Server: {serverInfo.isRender ? 'Render' : 'Unknown'} | 
+                    Memory: {serverInfo.memoryUsage} / {serverInfo.totalMemory} | 
+                    Tier: {serverInfo.isFreeTier ? 'Free' : 'Paid'}
+                  </div>
+                )}
+                {serverInfo?.isFreeTier && (
+                  <div className="mt-2">
+                    <a 
+                      href="/AI_TRAINING_SETUP.md" 
+                      className="text-sm text-yellow-800 underline hover:text-yellow-900"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View setup instructions →
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -188,7 +239,7 @@ export default function FeedAgentsPage() {
             <Button
               onClick={() => setShowBatchModal(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-              disabled={isProduction}
+              disabled={isProduction && serverInfo?.isFreeTier}
             >
               <Zap className="w-4 h-4" />
               Batch Feed
