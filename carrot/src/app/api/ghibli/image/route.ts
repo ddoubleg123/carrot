@@ -42,6 +42,37 @@ export async function POST(req: Request) {
     const imageFile = fd.get('image') as unknown as File | null
     let inputImagePath = ''
 
+    // If configured, forward sd-lora jobs to a remote GPU worker (FastAPI)
+    const workerUrl = process.env.GHIBLI_WORKER_URL || ''
+    if (workerUrl && model === 'sd-lora') {
+      const payload: any = { prompt }
+      // If an image is uploaded, attach as multipart; otherwise send JSON only
+      if (imageFile && typeof imageFile.arrayBuffer === 'function') {
+        const wf = new FormData()
+        wf.append('prompt', prompt)
+        wf.append('model', 'sd-lora')
+        wf.append('image', imageFile as any)
+        const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', { method: 'POST', body: wf })
+        const data = await res.json()
+        if (!data.ok) {
+          return NextResponse.json({ ok: false, message: data.message || 'worker failed' }, { status: 500 })
+        }
+        // Worker returns a direct URL; pass through
+        return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
+      } else {
+        const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt, model: 'sd-lora' })
+        })
+        const data = await res.json()
+        if (!data.ok) {
+          return NextResponse.json({ ok: false, message: data.message || 'worker failed' }, { status: 500 })
+        }
+        return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
+      }
+    }
+
     if (imageFile && typeof imageFile.arrayBuffer === 'function') {
       const ext = (imageFile.name && imageFile.name.includes('.')) ? `.${imageFile.name.split('.').pop()}` : '.png'
       inputImagePath = await saveBlobToTmp('input-image', imageFile as unknown as Blob, ext)

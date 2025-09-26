@@ -8,6 +8,8 @@ import {
   Users, 
   Star, 
   ChevronRight,
+  FileText,
+  Image,
   Play,
   Pause,
   Volume2,
@@ -41,6 +43,10 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   const [isTimelineLoaded, setIsTimelineLoaded] = useState(false);
   const [timelineData, setTimelineData] = useState<any>(null);
   const [timelineError, setTimelineError] = useState(false);
+  
+  // New state for content management
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [contentType, setContentType] = useState<'text' | 'image' | 'video' | 'pdf' | 'embed'>('text');
 
   // Load Timeline.js dynamically
   useEffect(() => {
@@ -87,6 +93,25 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
               text: {
                 headline: "APRIL 9, 1965 - ASTRODOME OPENS",
                 text: "The 'Eighth Wonder of the World' opens as the first domed stadium in baseball, revolutionizing the sport with air conditioning, artificial turf, and a retractable roof. This engineering marvel set the standard for modern stadiums worldwide."
+              },
+              // Custom content data for our system
+              contentData: {
+                type: 'video',
+                videoUrl: 'https://www.youtube.com/embed/example-astrodome-video',
+                title: 'Astrodome Opening Ceremony',
+                description: 'Historic footage of the Astrodome opening ceremony',
+                additionalMedia: [
+                  {
+                    type: 'pdf',
+                    url: '/documents/astrodome-blueprints.pdf',
+                    title: 'Astrodome Blueprints'
+                  },
+                  {
+                    type: 'image',
+                    url: 'https://images.unsplash.com/photo-1446776877081-d282a0f896e2?w=1200',
+                    title: 'Astrodome Interior'
+                  }
+                ]
               }
             },
             {
@@ -219,7 +244,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         timelineContainer.innerHTML = '';
         
         // Initialize new timeline with custom options
-        new (window as any).TL.Timeline(timelineContainer, timelineData, {
+        const timeline = new (window as any).TL.Timeline(timelineContainer, timelineData, {
           timenav_position: 'top',        // Move timeline navigation to top
           default_zoom: 2,                // Set initial zoom level
           start_at_end: false,            // Start at beginning
@@ -234,6 +259,24 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
           ease: 'easeInOut',              // Animation easing
           debug: false                    // Debug mode
         });
+
+        // Listen for timeline events to update our content
+        timeline.on('change', (event: any) => {
+          console.log('Timeline event changed:', event);
+          if (event && event.data && event.data.contentData) {
+            setSelectedEvent(event.data);
+            setContentType(event.data.contentData.type);
+          }
+        });
+
+        // Set initial event
+        if (timelineData.events && timelineData.events.length > 0) {
+          const firstEvent = timelineData.events[0];
+          if (firstEvent.contentData) {
+            setSelectedEvent(firstEvent);
+            setContentType(firstEvent.contentData.type);
+          }
+        }
         console.log('Timeline initialized successfully');
       } catch (error) {
         console.error('Error initializing timeline:', error);
@@ -531,7 +574,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
               transition: all 0.3s ease;
             }
           `}</style>
-          <div id="timeline-embed" className="w-full" style={{ height: '600px' }} />
+          <div id="timeline-embed" className="w-full" style={{ height: '400px' }} />
               {!isTimelineLoaded && !timelineError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
                   <div className="text-center">
@@ -565,11 +608,90 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
                             )}
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      )            )}
+          </div>
+        </div>
+
+        {/* Content Display Area */}
+        {selectedEvent && (
+          <div className="mt-8 bg-white rounded-2xl p-6 border border-orange-100">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-orange-500" />
+              {selectedEvent.text?.headline}
+            </h3>
+            
+            {/* Content Type Display */}
+            <div className="space-y-4">
+              {contentType === 'video' && selectedEvent.contentData?.videoUrl && (
+                <div className="aspect-video rounded-lg overflow-hidden">
+                  <iframe
+                    src={selectedEvent.contentData.videoUrl}
+                    title={selectedEvent.contentData.title}
+                    className="w-full h-full"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              
+              {contentType === 'image' && selectedEvent.contentData?.imageUrl && (
+                <div className="rounded-lg overflow-hidden">
+                  <img
+                    src={selectedEvent.contentData.imageUrl}
+                    alt={selectedEvent.contentData.title}
+                    className="w-full h-auto max-h-96 object-cover"
+                  />
+                </div>
+              )}
+              
+              {contentType === 'pdf' && selectedEvent.contentData?.pdfUrl && (
+                <div className="aspect-[4/3] rounded-lg overflow-hidden border">
+                  <iframe
+                    src={`/api/pdf-viewer?url=${encodeURIComponent(selectedEvent.contentData.pdfUrl)}`}
+                    title={selectedEvent.contentData.title}
+                    className="w-full h-full"
+                  />
+                </div>
+              )}
+              
+              {contentType === 'embed' && selectedEvent.contentData?.embedCode && (
+                <div className="rounded-lg overflow-hidden">
+                  <div dangerouslySetInnerHTML={{ __html: selectedEvent.contentData.embedCode }} />
+                </div>
+              )}
+              
+              {/* Default text content */}
+              <div className="prose max-w-none">
+                <p className="text-gray-700 leading-relaxed">
+                  {selectedEvent.text?.text}
+                </p>
+              </div>
+              
+              {/* Additional Media */}
+              {selectedEvent.contentData?.additionalMedia && (
+                <div className="mt-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Additional Resources</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {selectedEvent.contentData.additionalMedia.map((media: any, index: number) => (
+                      <div key={index} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center gap-3">
+                          {media.type === 'pdf' && <FileText className="w-5 h-5 text-red-500" />}
+                          {media.type === 'image' && <Image className="w-5 h-5 text-blue-500" />}
+                          {media.type === 'video' && <Play className="w-5 h-5 text-green-500" />}
+                          <div>
+                            <h5 className="font-medium text-gray-900">{media.title}</h5>
+                            <p className="text-sm text-gray-600 capitalize">{media.type}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
             </div>
           </div>
         )}
