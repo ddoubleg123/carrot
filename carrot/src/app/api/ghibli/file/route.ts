@@ -40,5 +40,6 @@ function guessContentType(name: string) {
   if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg'
   if (n.endsWith('.gif')) return 'image/gif'
   if (n.endsWith('.webp')) return 'image/webp'
+  if (n.endsWith('.svg')) return 'image/svg+xml'
   return 'application/octet-stream'
 }

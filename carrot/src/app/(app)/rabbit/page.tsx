@@ -359,7 +359,7 @@ function ConversationThread({
     }
   };
 
-  // Auto-scroll behavior: always scroll to show new messages
+  // Auto-scroll behavior: scroll to show new messages appropriately
   useEffect(() => {
     if (thread.messages.length > 0) {
       // Immediate scroll for new messages
@@ -369,13 +369,13 @@ function ConversationThread({
           const inputAreaHeight = 120; // Approximate height of input area + padding
           const latestMessageWouldBeHidden = scrollHeight - scrollTop - clientHeight > inputAreaHeight;
           
-          // Always scroll to show latest message if it would be hidden below input area
-          // OR if user hasn't manually scrolled up (keep them at bottom for new messages)
-          if (latestMessageWouldBeHidden || !hasUserScrolled) {
+          // Only auto-scroll to bottom if:
+          // 1. The latest message would be hidden below the input area, AND
+          // 2. The user hasn't manually scrolled up from the bottom
+          if (latestMessageWouldBeHidden && !hasUserScrolled) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             setIsNearBottom(true);
             setShowScrollButton(false);
-            setHasUserScrolled(false);
           }
         }
       };
@@ -408,6 +408,16 @@ function ConversationThread({
       setShowScrollButton(false);
     }
   }, [thread.id]);
+
+  // Reset scroll state when starting a new conversation
+  useEffect(() => {
+    if (currentView === 'conversation' && thread.messages.length === 1) {
+      // This is a new conversation with just the initial user message
+      setHasUserScrolled(false);
+      setIsNearBottom(false);
+      setShowScrollButton(false);
+    }
+  }, [currentView, thread.messages.length]);
 
 
   const scrollToBottom = () => {

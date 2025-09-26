@@ -29,6 +29,7 @@ export default function TestGhibliClient() {
   const imgFileRef = useRef<HTMLInputElement>(null)
   const vidFileRef = useRef<HTMLInputElement>(null)
   const [metrics, setMetrics] = useState<any>(null)
+  const [imageMode, setImageMode] = useState<'prompt' | 'upload'>('prompt')
 
   const appendLog = (line: string) => setLog((l) => l + "\n" + line)
 
@@ -36,10 +37,12 @@ export default function TestGhibliClient() {
     const form = new FormData()
     form.append('prompt', prompt)
     form.append('model', model)
-    if (imgFileRef.current?.files?.[0]) form.append('image', imgFileRef.current.files[0])
+    if (imageMode === 'upload' && imgFileRef.current?.files?.[0]) {
+      form.append('image', imgFileRef.current.files[0])
+    }
     const t0 = performance.now()
     appendLog('[Image] Submitting job...')
-    if (!imgFileRef.current?.files?.[0]) {
+    if (imageMode === 'prompt' || !imgFileRef.current?.files?.[0]) {
       appendLog('[Image] No upload provided: will generate a prompt-based SVG placeholder (Pillow not required).')
     }
     const res = await fetch('/api/ghibli/image', { method: 'POST', body: form })
@@ -87,15 +90,16 @@ export default function TestGhibliClient() {
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => setTab('image')} style={{ padding: '8px 12px', background: tab==='image'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Image Generator</button>
-        <button onClick={() => setTab('video')} style={{ padding: '8px 12px', background: tab==='video'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Video Animator</button>
+        <button disabled title="Temporarily disabled while we focus on images" style={{ padding: '8px 12px', background:'#555', color:'#aaa', border:0, borderRadius:6, cursor:'not-allowed' }}>Video Animator</button>
       </div>
 
       <Panel title={tab === 'image' ? 'How to use (Image)' : 'How to use (Video)'}>
         {tab === 'image' ? (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li>Enter a prompt (required).</li>
-            <li>Optionally upload an image if you want the pipeline to stylize your input. This requires Pillow on the backend.</li>
-            <li>Click "Run Image Pipeline". If you didn’t upload, the server will generate a prompt-based SVG placeholder (works everywhere).</li>
+            <li>Choose mode: Prompt-only (no upload) or Upload + Stylize.</li>
+            <li>Prompt-only works everywhere and returns an SVG quickly. Upload + Stylize requires Pillow on the backend (and an AnimeGAN command if configured).</li>
+            <li>Click "Run Image Pipeline".</li>
           </ol>
         ) : (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -108,6 +112,15 @@ export default function TestGhibliClient() {
 
       <Panel title="Controls">
         <div style={{ display: 'grid', gap: 8 }}>
+          {tab === 'image' && (
+            <div>
+              <strong>Mode</strong>
+              <div style={{ display:'flex', gap:12, marginTop:6 }}>
+                <label><input type="radio" name="imgmode" checked={imageMode==='prompt'} onChange={()=>setImageMode('prompt')} /> Prompt-only</label>
+                <label><input type="radio" name="imgmode" checked={imageMode==='upload'} onChange={()=>setImageMode('upload')} /> Upload + Stylize</label>
+              </div>
+            </div>
+          )}
           <label>
             <div>Prompt</div>
             <input value={prompt} onChange={(e)=>setPrompt(e.target.value)} style={{ width:'100%', padding:8 }} />
@@ -122,8 +135,8 @@ export default function TestGhibliClient() {
           </label>
           {tab === 'image' ? (
             <label>
-              <div>Optional input image (not required for prompt-only)</div>
-              <input type="file" accept="image/*" ref={imgFileRef} />
+              <div>Optional input image (disabled unless Upload + Stylize)</div>
+              <input type="file" accept="image/*" ref={imgFileRef} disabled={imageMode!=='upload'} />
             </label>
           ) : (
             <label>

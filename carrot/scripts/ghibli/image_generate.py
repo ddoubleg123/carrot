@@ -57,29 +57,23 @@ def main():
             print(json.dumps({'ok': True, 'outputPath': out_path, 'meta': meta}))
             return
 
-        # No input image: generate a lightweight SVG placeholder so PIL is not required
-        caption = (args.prompt or 'Ghibli style scene')[:160]
-        svg = f"""
-<?xml version='1.0' encoding='UTF-8'?>
-<svg xmlns='http://www.w3.org/2000/svg' width='768' height='512' viewBox='0 0 768 512'>
-  <defs>
-    <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>
-      <stop offset='0%' stop-color='hsl(210,40%,88%)'/>
-      <stop offset='100%' stop-color='hsl(200,42%,82%)'/>
-    </linearGradient>
-  </defs>
-  <rect width='100%' height='100%' fill='url(#g)'/>
-  <g fill='hsl(210,50%,20%)' font-family='sans-serif'>
-    <text x='24' y='40' font-size='20'>Model: {args.model}</text>
-    <text x='24' y='70' font-size='16'>Prompt: {caption}</text>
-  </g>
-</svg>
-""".strip()
-        out_path = args.out
-        if not out_path.lower().endswith('.svg'):
-            out_path += '.svg'
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(svg)
+        # No input image: produce a PNG file
+        out_path = args.out if args.out.lower().endswith('.png') else (args.out + '.png')
+        if _PIL_AVAILABLE:
+            # Render a simple PNG with prompt and model text
+            img = Image.new('RGB', (768, 512), color=(220, 230, 240))  # type: ignore
+            draw = ImageDraw.Draw(img)  # type: ignore
+            caption = (args.prompt or 'Ghibli style scene')[:160]
+            try:
+                font = ImageFont.load_default()  # type: ignore
+            except Exception:
+                font = None
+            draw.text((24, 24), f"Model: {args.model}", fill=(20, 60, 90), font=font)  # type: ignore
+            draw.text((24, 56), f"Prompt: {caption}", fill=(20, 60, 90), font=font)  # type: ignore
+            img.save(out_path, format='PNG')  # type: ignore
+        else:
+            # Fallback: write a solid-color PNG without external libs
+            write_solid_png(out_path, 768, 512, (220, 230, 240))
         print(json.dumps({'ok': True, 'outputPath': out_path, 'meta': meta}))
     except Exception as e:
         print(json.dumps({'ok': False, 'message': str(e)}))
@@ -87,3 +81,26 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# --- Minimal PNG writer (solid color) ---
+# Writes a valid PNG with a single IDAT chunk containing zlib-compressed raw RGB scanlines.
+def write_solid_png(path: str, w: int, h: int, rgb: tuple):
+    import struct, zlib, binascii
+
+    r, g, b = rgb
+    # Each scanline: filter byte (0) + RGB bytes
+    raw = bytearray()
+    row = bytes([0] + [r, g, b] * w)
+    for _ in range(h):
+        raw.extend(row)
+    compressed = zlib.compress(bytes(raw), level=6)
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", binascii.crc32(tag + data) & 0xffffffff)
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)  # 8-bit, RGB
+    png = sig + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
+    with open(path, 'wb') as f:
+        f.write(png)
