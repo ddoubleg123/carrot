@@ -49,6 +49,12 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
   // Predefined training workflows for different agent types
   const getTrainingWorkflow = (agent: Agent): TrainingWorkflow => {
+    console.log('getTrainingWorkflow called with agent:', {
+      id: agent.id,
+      name: agent.name,
+      domainExpertise: agent.domainExpertise
+    });
+    
     const baseWorkflow = {
       id: `workflow-${agent.id}`,
       name: `${agent.name} Training Program`,
@@ -63,7 +69,10 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
     };
 
     // Customize training based on agent expertise
-    if (agent.domainExpertise.some(exp => exp.toLowerCase().includes('physics'))) {
+    const hasPhysics = agent.domainExpertise.some(exp => exp.toLowerCase().includes('physics'));
+    console.log('Physics check:', { hasPhysics, domainExpertise: agent.domainExpertise });
+    
+    if (hasPhysics) {
       return {
         ...baseWorkflow,
         steps: [
@@ -115,7 +124,10 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
       };
     }
 
-    if (agent.domainExpertise.some(exp => exp.toLowerCase().includes('economics'))) {
+    const hasEconomics = agent.domainExpertise.some(exp => exp.toLowerCase().includes('economics'));
+    console.log('Economics check:', { hasEconomics });
+    
+    if (hasEconomics) {
       return {
         ...baseWorkflow,
         steps: [
@@ -167,7 +179,10 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
       };
     }
 
-    if (agent.domainExpertise.some(exp => exp.toLowerCase().includes('mathematics'))) {
+    const hasMathematics = agent.domainExpertise.some(exp => exp.toLowerCase().includes('mathematics'));
+    console.log('Mathematics check:', { hasMathematics });
+    
+    if (hasMathematics) {
       return {
         ...baseWorkflow,
         steps: [
@@ -209,6 +224,7 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
     }
 
     // Default general knowledge workflow
+    console.log('Using default general knowledge workflow');
     return {
       ...baseWorkflow,
       steps: [
@@ -240,8 +256,21 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
   useEffect(() => {
     if (agent) {
+      console.log('Creating training workflow for agent:', {
+        id: agent.id,
+        name: agent.name,
+        domainExpertise: agent.domainExpertise
+      });
+      
       try {
         const trainingWorkflow = getTrainingWorkflow(agent);
+        console.log('Generated training workflow:', {
+          id: trainingWorkflow.id,
+          name: trainingWorkflow.name,
+          stepsCount: trainingWorkflow.steps.length,
+          steps: trainingWorkflow.steps.map(s => ({ id: s.id, name: s.name }))
+        });
+        
         setWorkflow({
           ...trainingWorkflow,
           totalSteps: trainingWorkflow.steps.length
