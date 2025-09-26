@@ -8,6 +8,22 @@ export const dynamic = 'force-dynamic';
 // POST /api/agents/batch - Process batch feed operations
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   try {
+    // Check memory usage before processing
+    const memUsage = process.memoryUsage();
+    const memUsageMB = memUsage.heapUsed / 1024 / 1024;
+    const MEMORY_LIMIT_MB = 400; // Leave 100MB buffer for 512MB limit
+    
+    if (memUsageMB > MEMORY_LIMIT_MB) {
+      console.warn(`[Batch API] Memory usage too high: ${memUsageMB.toFixed(2)}MB, skipping batch processing`);
+      return NextResponse.json(
+        { 
+          error: 'Server memory usage too high. Please try again in a moment.',
+          memoryUsage: `${memUsageMB.toFixed(2)}MB`
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await req.json();
     const { 
       agentIds, 
@@ -25,6 +41,19 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         if (!agentIds || !Array.isArray(agentIds) || agentIds.length === 0) {
           return NextResponse.json(
             { error: 'agentIds array is required' },
+            { status: 400 }
+          );
+        }
+
+        // Limit number of agents to prevent memory issues
+        const MAX_AGENTS = 10;
+        if (agentIds.length > MAX_AGENTS) {
+          return NextResponse.json(
+            { 
+              error: `Too many agents. Maximum ${MAX_AGENTS} agents allowed per batch.`,
+              provided: agentIds.length,
+              maxAllowed: MAX_AGENTS
+            },
             { status: 400 }
           );
         }

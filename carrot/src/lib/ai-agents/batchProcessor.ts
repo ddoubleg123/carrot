@@ -73,7 +73,7 @@ export class BatchProcessor {
         throw new Error(`Agent with ID ${job.agentId} not found`);
       }
 
-      // Process each feed item
+      // Process each feed item with memory management
       for (let i = 0; i < job.feedItems.length; i++) {
         const feedItem = job.feedItems[i];
         
@@ -95,9 +95,14 @@ export class BatchProcessor {
         job.processedItems = result.processedItems;
         job.updatedAt = new Date();
 
-        // Add a small delay to prevent overwhelming the system
+        // Force garbage collection every few items
+        if (i % 5 === 0 && global.gc) {
+          global.gc();
+        }
+
+        // Add a delay to prevent overwhelming the system
         if (i < job.feedItems.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 150));
         }
       }
 
@@ -124,7 +129,7 @@ export class BatchProcessor {
   }
 
   /**
-   * Process multiple agents with the same content
+   * Process multiple agents with the same content (memory-efficient)
    */
   static async processMultiAgentFeed(
     agentIds: string[],
@@ -132,23 +137,46 @@ export class BatchProcessor {
   ): Promise<Record<string, BatchFeedResult>> {
     const results: Record<string, BatchFeedResult> = {};
 
-    // Process each agent
-    for (const agentId of agentIds) {
-      try {
-        const job = await this.createBatchJob(agentId, [feedItem]);
-        const result = await this.processBatchJob(job);
-        results[agentId] = result;
-      } catch (error) {
-        results[agentId] = {
-          jobId: `error-${Date.now()}`,
-          status: 'failed',
-          totalItems: 1,
-          processedItems: 0,
-          successCount: 0,
-          errorCount: 1,
-          errors: [`Failed to process agent ${agentId}: ${error}`],
-          memoryIds: [],
-        };
+    // Process agents in small batches to avoid memory issues
+    const BATCH_SIZE = 3; // Process max 3 agents at a time
+    const batches = [];
+    
+    for (let i = 0; i < agentIds.length; i += BATCH_SIZE) {
+      batches.push(agentIds.slice(i, i + BATCH_SIZE));
+    }
+
+    for (const batch of batches) {
+      // Process batch sequentially to avoid memory spikes
+      for (const agentId of batch) {
+        try {
+          const job = await this.createBatchJob(agentId, [feedItem]);
+          const result = await this.processBatchJob(job);
+          results[agentId] = result;
+          
+          // Force garbage collection between agents
+          if (global.gc) {
+            global.gc();
+          }
+          
+          // Small delay to prevent overwhelming the system
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error) {
+          results[agentId] = {
+            jobId: `error-${Date.now()}`,
+            status: 'failed',
+            totalItems: 1,
+            processedItems: 0,
+            successCount: 0,
+            errorCount: 1,
+            errors: [`Failed to process agent ${agentId}: ${error}`],
+            memoryIds: [],
+          };
+        }
+      }
+      
+      // Longer delay between batches
+      if (batches.indexOf(batch) < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
