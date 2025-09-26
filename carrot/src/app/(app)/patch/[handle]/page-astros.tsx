@@ -39,7 +39,7 @@ interface AstrosPageProps {
 export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [isTimelineLoaded, setIsTimelineLoaded] = useState(false);
-  const [timelineData, setTimelineData] = useState(null);
+  const [timelineData, setTimelineData] = useState<any>(null);
 
   // Load Timeline.js dynamically
   useEffect(() => {
