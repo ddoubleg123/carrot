@@ -53,7 +53,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75 border-b border-[#E6E8EC]">
+      <div className="sticky top-[128px] z-30 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75 border-b border-[#E6E8EC] shadow-sm">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-4 bg-transparent p-0 h-auto">
             {tabs.map((tab) => {

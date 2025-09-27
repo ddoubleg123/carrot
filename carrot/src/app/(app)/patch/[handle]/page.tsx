@@ -30,11 +30,11 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       return <RomePage params={params} searchParams={searchParams} />;
     }
 
-    // Use Repository template for History handle
-    if (handle === 'history') {
-      const RepositoryPage = (await import('./page-repository-v2')).default;
-      return <RepositoryPage params={params} searchParams={searchParams} />;
-    }
+    // Use standard template for History handle (with new components)
+    // if (handle === 'history') {
+    //   const RepositoryPage = (await import('./page-repository-v2')).default;
+    //   return <RepositoryPage params={params} searchParams={searchParams} />;
+    // }
 
     // Use Astros template for Houston Astros handle
     if (handle === 'houston-astros') {

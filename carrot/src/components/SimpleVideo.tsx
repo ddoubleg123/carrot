@@ -37,7 +37,10 @@ export default function SimpleVideo({
     let proxyUrl: string;
     
     if (src.startsWith('/api/video-simple')) {
-      // Already proxied
+      // Already proxied through video-simple
+      proxyUrl = src;
+    } else if (src.startsWith('/api/video')) {
+      // Already proxied through video endpoint, use it directly
       proxyUrl = src;
     } else if (src.includes('firebasestorage.googleapis.com')) {
       // Check if this is a properly formatted Firebase URL (has alt=media)

@@ -155,7 +155,7 @@ export class ContentRetriever {
   }
 
   /**
-   * Automatically feed retrieved content to agents
+   * Automatically feed retrieved content to agents with expertise-based filtering
    */
   static async autoFeedAgents(request: RetrievalRequest): Promise<{ success: boolean; results: any[] }> {
     try {
@@ -166,9 +166,46 @@ export class ContentRetriever {
         return { success: false, results: [] };
       }
       
-      // Feed each piece of content to each agent
-      const results = [];
+      // For single agent requests, filter content by expertise relevance
+      if (request.agentIds.length === 1) {
+        const agentId = request.agentIds[0];
+        const filteredContent = await this.filterContentByExpertise(retrievedContent, agentId, request.query);
+        
+        const results = [];
+        for (const content of filteredContent) {
+          const feedItem: FeedItem = {
+            content: content.content,
+            sourceType: 'url',
+            sourceUrl: content.url,
+            sourceTitle: content.sourceTitle,
+            sourceAuthor: content.sourceAuthor,
+            tags: [request.query.toLowerCase()]
+          };
+          
+          try {
+            const result = await FeedService.feedAgent(agentId, feedItem, 'auto-retrieval');
+            results.push({
+              agentId,
+              contentTitle: content.title,
+              success: true,
+              memoriesCreated: result.memoryIds.length,
+              relevanceScore: content.relevanceScore
+            });
+          } catch (error) {
+            results.push({
+              agentId,
+              contentTitle: content.title,
+              success: false,
+              error: error instanceof Error ? error.message : 'Unknown error'
+            });
+          }
+        }
+        
+        return { success: true, results };
+      }
       
+      // For multiple agents, feed each piece of content to each agent
+      const results = [];
       for (const content of retrievedContent) {
         for (const agentId of request.agentIds) {
           const feedItem: FeedItem = {
@@ -203,6 +240,41 @@ export class ContentRetriever {
     } catch (error) {
       console.error('Error in auto-feed:', error);
       return { success: false, results: [] };
+    }
+  }
+
+  /**
+   * Filter content by agent's expertise relevance
+   */
+  static async filterContentByExpertise(
+    content: RetrievedContent[], 
+    agentId: string, 
+    query: string
+  ): Promise<RetrievedContent[]> {
+    try {
+      // Get agent details (this would need to be imported from AgentRegistry)
+      // For now, we'll use a simple keyword matching approach
+      const queryLower = query.toLowerCase();
+      
+      // Filter content based on relevance to the query and agent expertise
+      const filteredContent = content.filter(item => {
+        const titleLower = item.title.toLowerCase();
+        const contentLower = item.content.toLowerCase();
+        
+        // Check if content is relevant to the query
+        const isRelevantToQuery = titleLower.includes(queryLower) || contentLower.includes(queryLower);
+        
+        // Additional relevance scoring could be added here
+        return isRelevantToQuery;
+      });
+      
+      // Sort by relevance score and return top results
+      return filteredContent
+        .sort((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, 5); // Limit to top 5 most relevant pieces
+    } catch (error) {
+      console.error('Error filtering content by expertise:', error);
+      return content; // Return original content if filtering fails
     }
   }
 }

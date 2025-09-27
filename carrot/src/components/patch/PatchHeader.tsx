@@ -46,7 +46,7 @@ export default function PatchHeader({
   };
 
   return (
-    <div className="relative z-30 isolation-isolate bg-[linear-gradient(180deg,#FF6A00,rgba(255,106,0,0.92))] text-white">
+    <div className="sticky top-[40px] z-40 bg-[linear-gradient(180deg,#FF6A00,rgba(255,106,0,0.92))] text-white shadow-lg">
       <div className="px-6 md:px-10 py-6 md:py-8">
         {/* Title Row */}
         <div className="flex flex-wrap items-center justify-between gap-3">

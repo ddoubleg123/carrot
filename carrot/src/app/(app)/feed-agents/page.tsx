@@ -170,18 +170,17 @@ export default function FeedAgentsPage() {
   };
 
   const handleAutoRetrieve = async () => {
-    if (!retrievalQuery.trim() || agents.length === 0) return;
+    if (!retrievalQuery.trim() || !selectedAgent) return;
 
     setIsRetrieving(true);
     try {
-      const response = await fetch('/api/agents/retrieve', {
+      const response = await fetch(`/api/agents/${selectedAgent.id}/retrieve-specific`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: retrievalQuery,
           sourceTypes: ['wikipedia', 'arxiv'],
           maxResults: 5,
-          agentIds: agents.map(agent => agent.id),
           autoFeed: true
         }),
       });
@@ -190,7 +189,7 @@ export default function FeedAgentsPage() {
       
       if (response.ok) {
         setRetrievalResults(data.results || []);
-        alert(`Successfully retrieved and fed content to ${data.results?.length || 0} agents`);
+        alert(`Successfully retrieved and fed ${data.results?.length || 0} pieces of content to ${selectedAgent.name}`);
         setRetrievalQuery('');
       } else {
         alert('Error retrieving content: ' + data.error);
@@ -365,43 +364,92 @@ export default function FeedAgentsPage() {
 
           {/* Feed Content Tab */}
           <TabsContent value="feed" className="space-y-6">
-            {/* Automated Content Retrieval */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Search className="w-5 h-5" />
-                  Automated Content Retrieval
-                </CardTitle>
-                <CardDescription>
-                  Automatically find and feed content to all agents based on a search query
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Search for content (e.g., 'quantum mechanics', 'economic theory')"
-                    value={retrievalQuery}
-                    onChange={(e) => setRetrievalQuery(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    onClick={handleAutoRetrieve}
-                    disabled={!retrievalQuery.trim() || isRetrieving}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {isRetrieving ? 'Retrieving...' : 'Auto-Feed All Agents'}
-                  </Button>
-                </div>
-                {retrievalResults.length > 0 && (
-                  <div className="mt-4 p-3 bg-green-50 rounded-lg">
-                    <h4 className="font-medium text-green-800 mb-2">Retrieval Results</h4>
-                    <div className="text-sm text-green-700">
-                      Successfully fed content to {retrievalResults.length} agents
+            {selectedAgent ? (
+              <>
+                {/* Agent Context Header */}
+                <Card className="border-blue-200 bg-blue-50">
+                  <CardHeader>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl">
+                        {selectedAgent.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-xl text-blue-900">
+                          Training {selectedAgent.name}
+                        </CardTitle>
+                        <CardDescription className="text-blue-700">
+                          {selectedAgent.metadata.role || 'AI Agent'} • {selectedAgent.domainExpertise.slice(0, 3).join(', ')}
+                          {selectedAgent.domainExpertise.length > 3 && ` +${selectedAgent.domainExpertise.length - 3} more`}
+                        </CardDescription>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-blue-600">Expertise Areas</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedAgent.domainExpertise.slice(0, 4).map((expertise) => (
+                            <Badge key={expertise} variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                              {expertise}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardHeader>
+                </Card>
+
+                {/* Agent-Specific Automated Content Retrieval */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Search className="w-5 h-5" />
+                      Smart Content Retrieval for {selectedAgent.name}
+                    </CardTitle>
+                    <CardDescription>
+                      Automatically find and feed content relevant to {selectedAgent.name}'s expertise areas
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder={`Search for content relevant to ${selectedAgent.name} (e.g., '${selectedAgent.domainExpertise[0] || 'quantum mechanics'}')`}
+                        value={retrievalQuery}
+                        onChange={(e) => setRetrievalQuery(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleAutoRetrieve}
+                        disabled={!retrievalQuery.trim() || isRetrieving}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {isRetrieving ? 'Retrieving...' : `Auto-Feed ${selectedAgent.name}`}
+                      </Button>
+                    </div>
+                    {retrievalResults.length > 0 && (
+                      <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                        <h4 className="font-medium text-green-800 mb-2">Retrieval Results</h4>
+                        <div className="text-sm text-green-700">
+                          Successfully fed {retrievalResults.length} pieces of content to {selectedAgent.name}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Brain className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Select an Agent to Begin Training
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Choose an agent from the registry to start feeding content and training
+                  </p>
+                  <Button onClick={() => setSelectedAgent(agents[0])}>
+                    Select First Agent
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             {selectedAgent ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

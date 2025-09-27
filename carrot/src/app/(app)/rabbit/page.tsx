@@ -387,10 +387,16 @@ function ConversationThread({
     setHasUserScrolled(false);
     setShowScrollButton(false);
     
-    // Always scroll to bottom when conversation loads
+    // Force scroll to bottom when conversation loads - use immediate scroll first, then smooth
+    if (messageContainerRef.current) {
+      // Immediate scroll to ensure we're at bottom
+      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+    }
+    
+    // Then smooth scroll for better UX
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 200);
+    }, 100);
   }, [thread.id]);
 
 
@@ -403,7 +409,7 @@ function ConversationThread({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-4">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-24">
         {thread.messages.map((message) => (
           <div
             key={message.id}
