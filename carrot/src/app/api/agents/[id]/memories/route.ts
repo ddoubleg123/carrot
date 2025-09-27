@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import FeedService from '@/lib/ai-agents/feedService';
+import { FeedService } from '@/lib/ai-agents/feedService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

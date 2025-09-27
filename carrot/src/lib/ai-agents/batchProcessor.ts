@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import FeedService, { FeedItem } from './feedService';
+import { FeedService, FeedItem } from './feedService';
 import AgentRegistry from './agentRegistry';
 
 const prisma = new PrismaClient();

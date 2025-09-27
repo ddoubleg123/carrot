@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import BatchProcessor from '@/lib/ai-agents/batchProcessor';
-import FeedService, { FeedItem } from '@/lib/ai-agents/feedService';
+import { FeedService, FeedItem } from '@/lib/ai-agents/feedService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
