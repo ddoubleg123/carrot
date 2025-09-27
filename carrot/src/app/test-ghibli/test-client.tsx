@@ -33,6 +33,7 @@ export default function TestGhibliClient() {
   const [status, setStatus] = useState<any>(null)
   const [loraPath, setLoraPath] = useState<string>('')
   const [loraAlpha, setLoraAlpha] = useState<number>(1.0)
+  const [loraOptions, setLoraOptions] = useState<string[]>([])
 
   useEffect(() => {
     const run = async () => {
@@ -45,6 +46,17 @@ export default function TestGhibliClient() {
       }
     }
     run()
+  }, [])
+
+  useEffect(() => {
+    const loadLoras = async () => {
+      try {
+        const r = await fetch('/api/ghibli/loras', { cache: 'no-store' })
+        const j = await r.json()
+        if (Array.isArray(j.items)) setLoraOptions(j.items)
+      } catch {}
+    }
+    loadLoras()
   }, [])
 
   const appendLog = (line: string) => setLog((l) => l + "\n" + line)
@@ -179,6 +191,16 @@ export default function TestGhibliClient() {
             <label>
               <span style={{ display:'block' }}>LoRA path (on worker)</span>
               <input placeholder="/models/your_lora.safetensors" value={loraPath} onChange={(e)=>setLoraPath(e.target.value)} style={{ width: 340 }} />
+            </label>
+
+            <label>
+              <span style={{ display:'block' }}>LoRA files on worker</span>
+              <select value={loraPath} onChange={(e)=>setLoraPath(e.target.value)}>
+                <option value="">(none)</option>
+                {loraOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
             </label>
 
             <label>
