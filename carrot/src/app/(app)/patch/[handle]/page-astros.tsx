@@ -677,7 +677,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
                           {content.type === 'image' && <Image className="w-4 h-4 text-blue-500" />}
                           {content.type === 'video' && <Video className="w-4 h-4 text-green-500" />}
                           {content.type === 'pdf' && <FileText className="w-4 h-4 text-red-500" />}
-                          {content.type === 'link' && <Link className="w-4 h-4 text-purple-500" />}
+                          {content.type === 'link' && <LinkIcon className="w-4 h-4 text-purple-500" />}
                           {content.type === 'text' && <FileText className="w-4 h-4 text-gray-500" />}
                           <span className="text-sm font-medium text-gray-600 capitalize">{content.type}</span>
                         </div>

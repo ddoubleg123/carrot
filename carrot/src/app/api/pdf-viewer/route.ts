@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // GET /api/pdf-viewer - Serve PDF viewer page
-export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
+export async function GET(request: Request) {
+  const url = new URL(request.url);
   const pdfUrl = url.searchParams.get('url');
   
   if (!pdfUrl) {

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import SimpleVideo from '../../SimpleVideo';
+import SimpleVideo from '@/components/SimpleVideo';
 
 interface VideoPlayerProps {
   videoUrl: string;
