@@ -1,5 +1,5 @@
 import AgentRegistry from './agentRegistry';
-import EmbeddingService from './embeddingService';
+import { EmbeddingService } from './embeddingService';
 
 export interface AgentMatch {
   agent: any;
