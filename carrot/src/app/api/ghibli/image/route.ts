@@ -45,36 +45,25 @@ export async function POST(req: Request) {
     // If configured, forward sd-lora jobs to a remote GPU worker (FastAPI)
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
     if (workerUrl && model === 'sd-lora') {
-      const payload: any = { prompt }
       const lora = (fd.get('lora') as string) || ''
       const loraAlpha = (fd.get('lora_alpha') as string) || ''
-      // If an image is uploaded, attach as multipart; otherwise send JSON only
+      // Always send multipart form-data since worker expects Form(...) fields
+      const wf = new FormData()
+      wf.append('prompt', prompt)
+      wf.append('model', 'sd-lora')
+      if (lora) wf.append('lora', lora)
+      if (loraAlpha) wf.append('lora_alpha', loraAlpha)
       if (imageFile && typeof imageFile.arrayBuffer === 'function') {
-        const wf = new FormData()
-        wf.append('prompt', prompt)
-        wf.append('model', 'sd-lora')
-        if (lora) wf.append('lora', lora)
-        if (loraAlpha) wf.append('lora_alpha', loraAlpha)
         wf.append('image', imageFile as any)
-        const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', { method: 'POST', body: wf })
-        const data = await res.json()
-        if (!data.ok) {
-          return NextResponse.json({ ok: false, message: data.message || 'worker failed' }, { status: 500 })
-        }
-        // Worker returns a direct URL; pass through
-        return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
-      } else {
-        const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ prompt, model: 'sd-lora', lora, lora_alpha: loraAlpha })
-        })
-        const data = await res.json()
-        if (!data.ok) {
-          return NextResponse.json({ ok: false, message: data.message || 'worker failed' }, { status: 500 })
-        }
-        return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
       }
+      const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', { method: 'POST', body: wf })
+      let data: any = null
+      try { data = await res.json() } catch {}
+      if (!res.ok || !data?.ok) {
+        return NextResponse.json({ ok: false, status: res.status, message: data?.message || 'worker failed' }, { status: 500 })
+      }
+      // Worker returns a direct URL; pass through
+      return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
     }
 
     if (imageFile && typeof imageFile.arrayBuffer === 'function') {

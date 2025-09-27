@@ -500,52 +500,15 @@ export default function VideoPlayer({ videoUrl, thumbnailUrl, postId, initialTra
   return (
     <div className="w-full">
       <div className="relative">
-        <video
-          ref={videoRef}
-          controls={!disableNativeControls}
-          muted
-          loop
-          playsInline
-          autoPlay
-          preload={process.env.NEXT_PUBLIC_FEED_HLS === '0' ? 'metadata' : 'none'}
-          crossOrigin="anonymous"
-          poster={resolvedPoster}
+        <SimpleVideo
           src={resolvedSrc}
-          style={{ 
-            width: '100%',
-            maxWidth: '100%',
-            height: 'auto',
-            maxHeight: 'min(70vh, 600px)',
-            borderRadius: '8px',
-            objectFit: 'contain',
-            objectPosition: 'center',
-            display: 'block',
-            margin: '0 auto',
-            opacity: showThumbnailOverlay ? 0.7 : 1
-          }}
-          onError={handleError}
-          onLoadedData={() => {
-            setVideoLoaded(true);
-            if (!isPaused) setShowInitialPoster(false);
-            // Hide overlay when video is ready to play (upload complete)
-            if (uploadStatus === 'ready' || !uploadStatus) {
-              setShowThumbnailOverlay(false);
-            }
-          }}
-          onLoadedMetadata={() => {
-            // Restore cached video state if available
-            if (postId && videoRef.current) {
-              const cachedState = MediaStateCache.instance.get(postId);
-              if (cachedState && cachedState.currentTime > 0) {
-                videoRef.current.currentTime = cachedState.currentTime;
-                console.log('[VideoPlayer] Restored cached video state', {
-                  postId,
-                  currentTime: cachedState.currentTime
-                });
-              }
-            }
-            
-            // Attempt to begin playback as soon as metadata is available and element is in view
+          poster={resolvedPoster}
+          controls={!disableNativeControls}
+          autoPlay={true}
+          muted={true}
+          playsInline={true}
+          className="w-full rounded-xl"
+        />
             if (videoRef.current && isInView) {
               safePlay();
             }

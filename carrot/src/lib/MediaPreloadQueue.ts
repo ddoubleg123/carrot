@@ -96,8 +96,8 @@ class MediaPreloadQueue {
     maxConcurrentPosters: 6,
     maxConcurrentVideos: 2,
     maxSequentialGap: 10,       
-    posterBlocksProgression: true, 
-    videoBlocksProgression: false  
+    posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
+    videoBlocksProgression: true     // Videos should download in order
   };
   
   private readonly ESTIMATED_SIZES = {
@@ -433,7 +433,7 @@ class MediaPreloadQueue {
           const videoResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
-              'Range': 'bytes=0-2097152', 
+              'Range': 'bytes=0-1572864', // 1.5MB to match estimated size
               'Accept': 'video/*'
             }
           });

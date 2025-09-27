@@ -332,7 +332,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       headers: fwdHeaders,
       redirect: 'follow',
       cache: 'no-store',
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(15000), // 15 second timeout
     }).catch(error => {
       console.error('[api/video] Fetch error:', error);
       throw new Error(`Failed to fetch video: ${error.message}`);

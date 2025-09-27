@@ -351,7 +351,7 @@ function ConversationThread({
     setIsNearBottom(nearBottom);
     
     // Only show scroll button if user has scrolled up significantly
-    setShowScrollButton(!nearBottom && scrollTop > 200);
+    setShowScrollButton(!nearBottom && scrollTop > 100);
     
     // Track if user has manually scrolled up
     if (!nearBottom && scrollTop > 0) {
@@ -361,48 +361,24 @@ function ConversationThread({
     }
   };
 
-  // SIMPLE AUTO-SCROLL: Always scroll to bottom when messages change
+  // SIMPLE AUTO-SCROLL: Only scroll to bottom for new conversations or when user is already at bottom
   useEffect(() => {
     if (thread.messages.length > 0) {
-      console.log('[Auto-scroll] New message detected, forcing scroll to bottom');
-      
-      // Force scroll to bottom immediately
-      const forceScrollToBottom = () => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-          console.log('[Auto-scroll] Scrolled to bottom');
-        }
+      // Only auto-scroll if user is already near the bottom (hasn't manually scrolled up)
+      const isNearBottom = () => {
+        if (!messageContainerRef.current) return true;
+        const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+        return scrollHeight - scrollTop - clientHeight < 100;
       };
 
-      // Immediate scroll
-      forceScrollToBottom();
-      
-      // Additional scroll after a short delay to handle dynamic content
-      const timeout = setTimeout(forceScrollToBottom, 200);
-      return () => clearTimeout(timeout);
-    }
-  }, [thread.messages.length]);
-
-  // AGGRESSIVE AUTO-SCROLL: For streaming messages
-  useEffect(() => {
-    if (thread.messages.length > 0) {
-      const lastMessage = thread.messages[thread.messages.length - 1];
-      if (lastMessage.type === 'agent' && lastMessage.content) {
-        console.log('[Auto-scroll] Streaming message detected, forcing scroll');
-        
-        // Force scroll for streaming content
-        const forceScroll = () => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-          }
-        };
-        
-        forceScroll();
-        const timeout = setTimeout(forceScroll, 100);
-        return () => clearTimeout(timeout);
+      if (isNearBottom()) {
+        console.log('[Auto-scroll] User at bottom, scrolling to new message');
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        console.log('[Auto-scroll] User scrolled up, not auto-scrolling');
       }
     }
-  }, [thread.messages[thread.messages.length - 1]?.content]);
+  }, [thread.messages.length]);
 
   // Listen for scroll events to track if user is near bottom
   useEffect(() => {
@@ -413,15 +389,11 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // When starting a new conversation, scroll to top immediately
+  // When starting a new conversation, reset scroll state
   useEffect(() => {
-    if (messageContainerRef.current) {
-      // Immediate scroll to top without animation to prevent visual jumping
-      messageContainerRef.current.scrollTop = 0;
-      setIsNearBottom(false);
-      setHasUserScrolled(false);
-      setShowScrollButton(false);
-    }
+    setIsNearBottom(true);
+    setHasUserScrolled(false);
+    setShowScrollButton(false);
   }, [thread.id]);
 
 
@@ -434,7 +406,7 @@ function ConversationThread({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-32">
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-4">
         {thread.messages.map((message) => (
           <div
             key={message.id}

@@ -85,6 +85,9 @@ export default function FeedAgentsPage() {
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFeeding, setIsFeeding] = useState(false);
+  const [retrievalQuery, setRetrievalQuery] = useState('');
+  const [isRetrieving, setIsRetrieving] = useState(false);
+  const [retrievalResults, setRetrievalResults] = useState<any[]>([]);
 
   // Load agents on component mount
   useEffect(() => {
@@ -162,6 +165,40 @@ export default function FeedAgentsPage() {
       alert('Error feeding agent');
     } finally {
       setIsFeeding(false);
+    }
+  };
+
+  const handleAutoRetrieve = async () => {
+    if (!retrievalQuery.trim() || agents.length === 0) return;
+
+    setIsRetrieving(true);
+    try {
+      const response = await fetch('/api/agents/retrieve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: retrievalQuery,
+          sourceTypes: ['wikipedia', 'arxiv'],
+          maxResults: 5,
+          agentIds: agents.map(agent => agent.id),
+          autoFeed: true
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setRetrievalResults(data.results || []);
+        alert(`Successfully retrieved and fed content to ${data.results?.length || 0} agents`);
+        setRetrievalQuery('');
+      } else {
+        alert('Error retrieving content: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error in auto-retrieve:', error);
+      alert('Error retrieving content');
+    } finally {
+      setIsRetrieving(false);
     }
   };
 
@@ -326,6 +363,44 @@ export default function FeedAgentsPage() {
 
           {/* Feed Content Tab */}
           <TabsContent value="feed" className="space-y-6">
+            {/* Automated Content Retrieval */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="w-5 h-5" />
+                  Automated Content Retrieval
+                </CardTitle>
+                <CardDescription>
+                  Automatically find and feed content to all agents based on a search query
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search for content (e.g., 'quantum mechanics', 'economic theory')"
+                    value={retrievalQuery}
+                    onChange={(e) => setRetrievalQuery(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleAutoRetrieve}
+                    disabled={!retrievalQuery.trim() || isRetrieving}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {isRetrieving ? 'Retrieving...' : 'Auto-Feed All Agents'}
+                  </Button>
+                </div>
+                {retrievalResults.length > 0 && (
+                  <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                    <h4 className="font-medium text-green-800 mb-2">Retrieval Results</h4>
+                    <div className="text-sm text-green-700">
+                      Successfully fed content to {retrievalResults.length} agents
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {selectedAgent ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Feed Form */}

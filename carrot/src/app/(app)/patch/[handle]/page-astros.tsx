@@ -28,8 +28,10 @@ import {
   Link as LinkIcon,
   Plus,
   Settings,
-  MoreHorizontal
+  MoreHorizontal,
+  Edit3
 } from 'lucide-react';
+import TimelineContentManager from '@/components/timeline/TimelineContentManager';
 
 interface AstrosPageProps {
   params: Promise<{ handle: string }>;
@@ -45,6 +47,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   // New state for content management
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [contentType, setContentType] = useState<'text' | 'image' | 'video' | 'pdf' | 'embed'>('text');
+  const [showContentManager, setShowContentManager] = useState(false);
 
   // Load Timeline.js dynamically
   useEffect(() => {
@@ -640,50 +643,22 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
         {/* Content Display Area */}
         {selectedEvent && (
           <div className="mt-8 bg-white rounded-2xl p-6 border border-orange-100">
-            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-orange-500" />
-              {selectedEvent.text?.headline}
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-500" />
+                {selectedEvent.text?.headline}
+              </h3>
+              <button
+                onClick={() => setShowContentManager(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm"
+              >
+                <Edit3 className="w-4 h-4" />
+                Manage Content
+              </button>
+            </div>
             
-            {/* Content Type Display */}
-            <div className="space-y-4">
-              {contentType === 'video' && selectedEvent.contentData?.videoUrl && (
-                <div className="aspect-video rounded-lg overflow-hidden">
-                  <iframe
-                    src={selectedEvent.contentData.videoUrl}
-                    title={selectedEvent.contentData.title}
-                    className="w-full h-full"
-                    allowFullScreen
-                  />
-                </div>
-              )}
-              
-              {contentType === 'image' && selectedEvent.contentData?.imageUrl && (
-                <div className="rounded-lg overflow-hidden">
-                  <img
-                    src={selectedEvent.contentData.imageUrl}
-                    alt={selectedEvent.contentData.title}
-                    className="w-full h-auto max-h-96 object-cover"
-                  />
-                </div>
-              )}
-              
-              {contentType === 'pdf' && selectedEvent.contentData?.pdfUrl && (
-                <div className="aspect-[4/3] rounded-lg overflow-hidden border">
-                  <iframe
-                    src={`/api/pdf-viewer?url=${encodeURIComponent(selectedEvent.contentData.pdfUrl)}`}
-                    title={selectedEvent.contentData.title}
-                    className="w-full h-full"
-                  />
-                </div>
-              )}
-              
-              {contentType === 'embed' && selectedEvent.contentData?.embedCode && (
-                <div className="rounded-lg overflow-hidden">
-                  <div dangerouslySetInnerHTML={{ __html: selectedEvent.contentData.embedCode }} />
-                </div>
-              )}
-              
+            {/* Content Display */}
+            <div className="space-y-6">
               {/* Default text content */}
               <div className="prose max-w-none">
                 <p className="text-gray-700 leading-relaxed">
@@ -691,25 +666,94 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
                 </p>
               </div>
               
-              {/* Additional Media */}
-              {selectedEvent.contentData?.additionalMedia && (
-                <div className="mt-6">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Additional Resources</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {selectedEvent.contentData.additionalMedia.map((media: any, index: number) => (
-                      <div key={index} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          {media.type === 'pdf' && <FileText className="w-5 h-5 text-red-500" />}
-                          {media.type === 'image' && <Image className="w-5 h-5 text-blue-500" />}
-                          {media.type === 'video' && <Play className="w-5 h-5 text-green-500" />}
-                          <div>
-                            <h5 className="font-medium text-gray-900">{media.title}</h5>
-                            <p className="text-sm text-gray-600 capitalize">{media.type}</p>
-                          </div>
+              {/* Dynamic Content Grid */}
+              {selectedEvent.content && selectedEvent.content.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {selectedEvent.content.map((content: any, index: number) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                      {/* Content Header */}
+                      <div className="p-4 border-b border-gray-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          {content.type === 'image' && <Image className="w-4 h-4 text-blue-500" />}
+                          {content.type === 'video' && <Video className="w-4 h-4 text-green-500" />}
+                          {content.type === 'pdf' && <FileText className="w-4 h-4 text-red-500" />}
+                          {content.type === 'link' && <Link className="w-4 h-4 text-purple-500" />}
+                          {content.type === 'text' && <FileText className="w-4 h-4 text-gray-500" />}
+                          <span className="text-sm font-medium text-gray-600 capitalize">{content.type}</span>
                         </div>
+                        <h4 className="font-semibold text-gray-900">{content.title}</h4>
+                        {content.description && (
+                          <p className="text-sm text-gray-600 mt-1">{content.description}</p>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                      
+                      {/* Content Body */}
+                      <div className="p-4">
+                        {content.type === 'image' && content.url && (
+                          <img
+                            src={content.url}
+                            alt={content.title}
+                            className="w-full h-48 object-cover rounded-lg"
+                          />
+                        )}
+                        
+                        {content.type === 'video' && content.url && (
+                          <div className="aspect-video rounded-lg overflow-hidden bg-gray-100">
+                            <video
+                              src={content.url}
+                              controls
+                              className="w-full h-full"
+                              poster={content.thumbnail}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          </div>
+                        )}
+                        
+                        {content.type === 'pdf' && content.url && (
+                          <div className="aspect-[4/3] rounded-lg overflow-hidden border bg-gray-50 flex items-center justify-center">
+                            <div className="text-center">
+                              <FileText className="w-12 h-12 text-red-500 mx-auto mb-2" />
+                              <p className="text-sm text-gray-600">PDF Document</p>
+                              <a
+                                href={content.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-orange-500 hover:text-orange-600 text-sm font-medium"
+                              >
+                                Open PDF
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {content.type === 'link' && content.url && (
+                          <div className="p-4 bg-gray-50 rounded-lg">
+                            <a
+                              href={content.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-orange-500 hover:text-orange-600 font-medium"
+                            >
+                              {content.url}
+                            </a>
+                          </div>
+                        )}
+                        
+                        {content.type === 'text' && (
+                          <div className="prose prose-sm max-w-none">
+                            <p className="text-gray-700">{content.description}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No additional content for this event</p>
+                  <p className="text-sm">Click "Manage Content" to add videos, images, documents, and more</p>
                 </div>
               )}
             </div>
@@ -811,6 +855,27 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
           </div>
         )}
       </div>
+
+      {/* Content Manager Modal */}
+      {showContentManager && selectedEvent && (
+        <TimelineContentManager
+          event={{
+            id: selectedEvent.unique_id || 'event-1',
+            date: selectedEvent.start_date?.year || '1965',
+            title: selectedEvent.text?.headline || 'Event',
+            description: selectedEvent.text?.text || '',
+            content: selectedEvent.content || []
+          }}
+          onUpdate={(updatedEvent) => {
+            // Update the selected event with new content
+            setSelectedEvent({
+              ...selectedEvent,
+              content: updatedEvent.content
+            });
+          }}
+          onClose={() => setShowContentManager(false)}
+        />
+      )}
     </div>
   );
 }

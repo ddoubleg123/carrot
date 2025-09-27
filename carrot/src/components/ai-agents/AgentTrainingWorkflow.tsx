@@ -46,6 +46,33 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
   const [workflow, setWorkflow] = useState<TrainingWorkflow | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [isRunning, setIsRunning] = useState(false);
+  const [existingMemories, setExistingMemories] = useState<any[]>([]);
+  const [existingFeedHistory, setExistingFeedHistory] = useState<any[]>([]);
+
+  // Load existing training data
+  const loadExistingTrainingData = async () => {
+    try {
+      console.log('Loading existing training data for agent:', agent.id);
+      
+      // Load memories
+      const memoriesResponse = await fetch(`/api/agents/${agent.id}/memories?limit=50`);
+      if (memoriesResponse.ok) {
+        const memoriesData = await memoriesResponse.json();
+        setExistingMemories(memoriesData.memories || []);
+        console.log('Loaded memories:', memoriesData.memories?.length || 0);
+      }
+
+      // Load feed history
+      const feedResponse = await fetch(`/api/agents/${agent.id}/feed?limit=50`);
+      if (feedResponse.ok) {
+        const feedData = await feedResponse.json();
+        setExistingFeedHistory(feedData.feedHistory || []);
+        console.log('Loaded feed history:', feedData.feedHistory?.length || 0);
+      }
+    } catch (error) {
+      console.error('Error loading existing training data:', error);
+    }
+  };
 
   // Predefined training workflows for different agent types
   const getTrainingWorkflow = (agent: Agent): TrainingWorkflow => {
@@ -256,45 +283,53 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
 
   useEffect(() => {
     if (agent) {
-      console.log('Creating training workflow for agent:', {
-        id: agent.id,
-        name: agent.name,
-        domainExpertise: agent.domainExpertise
-      });
-      
-      try {
-        const trainingWorkflow = getTrainingWorkflow(agent);
-        console.log('Generated training workflow:', {
-          id: trainingWorkflow.id,
-          name: trainingWorkflow.name,
-          stepsCount: trainingWorkflow.steps.length,
-          steps: trainingWorkflow.steps.map(s => ({ id: s.id, name: s.name }))
+      const initializeWorkflow = async () => {
+        console.log('Creating training workflow for agent:', {
+          id: agent.id,
+          name: agent.name,
+          domainExpertise: agent.domainExpertise
         });
         
-        setWorkflow({
-          ...trainingWorkflow,
-          totalSteps: trainingWorkflow.steps.length
-        });
-        setIsLoading(false); // Set loading to false after workflow is created
-      } catch (error) {
-        console.error('Error creating training workflow:', error);
-        // Set a safe default workflow
-        setWorkflow({
-          id: `workflow-${agent.id}`,
-          name: `${agent.name} Training Program`,
-          description: `Comprehensive training program for ${agent.name}`,
-          agentId: agent.id,
-          agentName: agent.name,
-          isRunning: false,
-          currentStep: 0,
-          totalSteps: 0,
-          completedSteps: 0,
-          steps: []
-        });
-        setIsLoading(false); // Set loading to false even on error
-      }
+        try {
+          // Load existing training data first
+          await loadExistingTrainingData();
+          
+          // Create workflow with existing data
+          const trainingWorkflow = getTrainingWorkflow(agent);
+          console.log('Generated training workflow:', {
+            id: trainingWorkflow.id,
+            name: trainingWorkflow.name,
+            stepsCount: trainingWorkflow.steps.length,
+            steps: trainingWorkflow.steps.map(s => ({ id: s.id, name: s.name }))
+          });
+          
+          setWorkflow({
+            ...trainingWorkflow,
+            totalSteps: trainingWorkflow.steps.length
+          });
+        } catch (error) {
+          console.error('Error creating training workflow:', error);
+          // Set a safe default workflow
+          setWorkflow({
+            id: `workflow-${agent.id}`,
+            name: `${agent.name} Training Program`,
+            description: `Comprehensive training program for ${agent.name}`,
+            agentId: agent.id,
+            agentName: agent.name,
+            isRunning: false,
+            currentStep: 0,
+            totalSteps: 0,
+            completedSteps: 0,
+            steps: []
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      initializeWorkflow();
     } else {
-      setIsLoading(false); // Set loading to false if no agent
+      setIsLoading(false);
     }
   }, [agent]);
 
@@ -547,6 +582,45 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
               />
             </div>
           </div>
+
+          {/* Existing Training History */}
+          {(existingMemories.length > 0 || existingFeedHistory.length > 0) && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Previous Training</h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-2">Memories ({existingMemories.length})</h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {existingMemories.slice(0, 5).map((memory, index) => (
+                        <div key={index} className="text-sm text-gray-600 bg-white p-2 rounded border">
+                          <div className="font-medium truncate">{memory.sourceTitle || 'Untitled'}</div>
+                          <div className="text-xs text-gray-500 truncate">{memory.content?.substring(0, 100)}...</div>
+                        </div>
+                      ))}
+                      {existingMemories.length > 5 && (
+                        <div className="text-xs text-gray-500">+{existingMemories.length - 5} more memories</div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-2">Feed History ({existingFeedHistory.length})</h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {existingFeedHistory.slice(0, 5).map((feed, index) => (
+                        <div key={index} className="text-sm text-gray-600 bg-white p-2 rounded border">
+                          <div className="font-medium truncate">{feed.sourceTitle || 'Manual Feed'}</div>
+                          <div className="text-xs text-gray-500">{feed.sourceType} • {new Date(feed.createdAt).toLocaleDateString()}</div>
+                        </div>
+                      ))}
+                      {existingFeedHistory.length > 5 && (
+                        <div className="text-xs text-gray-500">+{existingFeedHistory.length - 5} more feeds</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Training Steps */}
           <div className="space-y-4 mb-6">

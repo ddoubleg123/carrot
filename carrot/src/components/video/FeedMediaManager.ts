@@ -244,8 +244,8 @@ class FeedMediaManager {
   }
 
   private cancelDistantTasks(): void {
-    const keepRange = 15;
-    const minIndex = Math.max(0, this._currentViewportIndex - keepRange);
+    const keepRange = 10; // Keep 10 posts ahead as specified
+    const minIndex = Math.max(0, this._currentViewportIndex - 5); // Keep 5 posts behind
     const maxIndex = Math.min(this._posts.length - 1, this._currentViewportIndex + keepRange);
 
     for (const post of this._posts) {
