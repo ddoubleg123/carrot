@@ -109,7 +109,19 @@ export class FeedService {
     }
 
     // Extract and clean content
-    const extractedContent = await this.extractContent(feedItem);
+    let extractedContent;
+    try {
+      extractedContent = await this.extractContent(feedItem);
+    } catch (error) {
+      console.error('[FeedService] Error extracting content:', error);
+      // Provide fallback content if extraction fails
+      extractedContent = {
+        content: feedItem.content || 'Content extraction failed, using provided content',
+        title: feedItem.sourceTitle || 'Unknown Title',
+        author: feedItem.sourceAuthor,
+        url: feedItem.sourceUrl
+      };
+    }
     
     // Chunk the content
     const chunks = EmbeddingService.chunkText(extractedContent.content);
@@ -135,8 +147,13 @@ export class FeedService {
           fedBy,
         };
 
-        const memory = await EmbeddingService.storeMemory(memoryData);
-        memoryIds.push(memory.id);
+        try {
+          const memory = await EmbeddingService.storeMemory(memoryData);
+          memoryIds.push(memory.id);
+        } catch (memoryError) {
+          console.error('[FeedService] Error storing memory:', memoryError);
+          // Continue with other chunks even if one fails
+        }
       }
       
       // Force garbage collection between chunk batches

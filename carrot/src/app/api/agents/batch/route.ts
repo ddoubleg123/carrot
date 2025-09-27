@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import BatchProcessor from '@/lib/ai-agents/batchProcessor';
-import { FeedItem } from '@/lib/ai-agents/feedService';
+import FeedService, { FeedItem } from '@/lib/ai-agents/feedService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,8 +34,6 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       operation = 'feed' 
     } = body;
 
-    let results;
-
     switch (operation) {
       case 'feed':
         if (!agentIds || !Array.isArray(agentIds) || agentIds.length === 0) {
@@ -65,21 +63,45 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           );
         }
 
-        // Add timeout to prevent server crashes
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Request timeout - AI training took too long')), 30000); // 30 second timeout
-        });
-        
         try {
-          results = await Promise.race([
-            BatchProcessor.processMultiAgentFeed(agentIds, feedItem),
-            timeoutPromise
-          ]);
-        } catch (error) {
-          console.error('[Batch API] Error processing multi-agent feed:', error);
+          // Process agents one at a time to avoid memory issues
+          const results = [];
+          for (const agentId of agentIds) {
+            try {
+              console.log(`[Batch API] Processing agent ${agentId}...`);
+              const result = await FeedService.feedAgent(agentId, feedItem);
+              results.push({
+                agentId,
+                success: true,
+                memoriesCreated: result.memoryIds.length,
+                memoryIds: result.memoryIds
+              });
+            } catch (agentError) {
+              console.error(`[Batch API] Error processing agent ${agentId}:`, agentError);
+              results.push({
+                agentId,
+                success: false,
+                error: agentError instanceof Error ? agentError.message : String(agentError),
+                memoriesCreated: 0,
+                memoryIds: []
+              });
+            }
+          }
+          
           return NextResponse.json({
             results: {
-              message: 'AI training failed due to server limitations. The training process is too resource-intensive for the current server configuration.',
+              message: `Processed ${agentIds.length} agents`,
+              totalAgents: agentIds.length,
+              successfulAgents: results.filter(r => r.success).length,
+              failedAgents: results.filter(r => !r.success).length,
+              results
+            }
+          });
+        } catch (error) {
+          console.error('[Batch API] Error processing batch feed:', error);
+          return NextResponse.json({
+            results: {
+              message: 'AI training failed due to server limitations.',
               suggestion: 'Try training one agent at a time or use a more powerful server.',
               mockResults: true,
               error: error instanceof Error ? error.message : String(error),
@@ -102,8 +124,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           );
         }
 
-        results = await BatchProcessor.processByExpertise(content, sourceType, expertiseTags);
-        break;
+        const expertiseResults = await BatchProcessor.processByExpertise(content, sourceType, expertiseTags);
+        return NextResponse.json({ results: expertiseResults });
 
       default:
         return NextResponse.json(
@@ -111,8 +133,6 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           { status: 400 }
         );
     }
-
-    return NextResponse.json({ results });
   } catch (error) {
     console.error('Error processing batch operation:', error);
     
