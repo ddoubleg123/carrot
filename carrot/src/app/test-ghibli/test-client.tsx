@@ -31,6 +31,8 @@ export default function TestGhibliClient() {
   const [metrics, setMetrics] = useState<any>(null)
   const [imageMode, setImageMode] = useState<'prompt' | 'upload'>('prompt')
   const [status, setStatus] = useState<any>(null)
+  const [loraPath, setLoraPath] = useState<string>('')
+  const [loraAlpha, setLoraAlpha] = useState<number>(1.0)
 
   useEffect(() => {
     const run = async () => {
@@ -51,6 +53,8 @@ export default function TestGhibliClient() {
     const form = new FormData()
     form.append('prompt', prompt)
     form.append('model', model)
+    if (loraPath) form.append('lora', loraPath)
+    if (loraAlpha !== undefined) form.append('lora_alpha', String(loraAlpha))
     if (imageMode === 'upload' && imgFileRef.current?.files?.[0]) {
       form.append('image', imgFileRef.current.files[0])
     }
@@ -132,20 +136,18 @@ export default function TestGhibliClient() {
         <button onClick={() => setTab('image')} style={{ padding: '8px 12px', background: tab==='image'?'#111':'#333', color:'#fff', border:0, borderRadius:6 }}>Image Generator</button>
         <button disabled title="Temporarily disabled while we focus on images" style={{ padding: '8px 12px', background:'#555', color:'#aaa', border:0, borderRadius:6, cursor:'not-allowed' }}>Video Animator</button>
       </div>
-
       <Panel title={tab === 'image' ? 'How to use (Image)' : 'How to use (Video)'}>
         {tab === 'image' ? (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li>Enter a prompt (required).</li>
             <li>Choose mode: Prompt-only (no upload) or Upload + Stylize.</li>
-            <li>Prompt-only works everywhere and returns a PNG quickly. Upload + Stylize requires Pillow on the backend (and an AnimeGAN command if configured).</li>
-            <li>Click "Run Image Pipeline".</li>
+            <li>Optional: specify a LoRA file path available on the worker and a strength.</li>
           </ol>
         ) : (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
-            <li>Enter a prompt (optional).</li>
-            <li>Upload a video (≤60s, ≤720p target). The server pre-limits automatically.</li>
-            <li>Click "Run Video Pipeline" to stylize and preview original vs stylized.</li>
+            <li>Upload an MP4 (max ~60s).</li>
+            <li>Pick a style model.</li>
+            <li>Click "Run Video Pipeline".</li>
           </ol>
         )}
       </Panel>
@@ -165,24 +167,36 @@ export default function TestGhibliClient() {
             <div>Prompt</div>
             <input value={prompt} onChange={(e)=>setPrompt(e.target.value)} style={{ width:'100%', padding:8 }} />
           </label>
-          <label>
-            <div>Model</div>
-            <select value={model} onChange={(e)=>setModel(e.target.value as any)}>
-              <option value="animeganv3">AnimeGANv3 (fast)</option>
-              <option value="sd-lora">Stable Diffusion + Ghibli LoRA</option>
-              <option value="diffutoon">Diffutoon (slow)</option>
-            </select>
-          </label>
-          {tab === 'image' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label>
+              <span>Model </span>
+              <select value={model} onChange={(e)=>setModel(e.target.value as any)}>
+                <option value="sd-lora">Stable Diffusion + Ghibli LoRA</option>
+                <option value="animeganv3">AnimeGANv3 (upload+stylize)</option>
+              </select>
+            </label>
+
+            <label>
+              <span style={{ display:'block' }}>LoRA path (on worker)</span>
+              <input placeholder="/models/your_lora.safetensors" value={loraPath} onChange={(e)=>setLoraPath(e.target.value)} style={{ width: 340 }} />
+            </label>
+
+            <label>
+              <span style={{ display:'block' }}>LoRA strength</span>
+              <input type="range" min={0} max={1} step={0.05} value={loraAlpha} onChange={(e)=>setLoraAlpha(parseFloat(e.target.value))} />
+              <span style={{ marginLeft: 6 }}>{loraAlpha.toFixed(2)}</span>
+            </label>
+          </div>
+{tab === 'image' ? (
             <label>
               <div>Optional input image (disabled unless Upload + Stylize)</div>
               <input type="file" accept="image/*" ref={imgFileRef} disabled={imageMode!=='upload'} />
             </label>
           ) : (
-            <label>
+            <div>
               <div>Input video (&lt;=60s, &lt;=720p)</div>
               <input type="file" accept="video/*" ref={vidFileRef} />
-            </label>
+            </div>
           )}
 
           <div>

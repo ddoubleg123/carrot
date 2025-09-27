@@ -28,45 +28,13 @@ export class EmbeddingService {
    * For now, using a sophisticated mock embedding - can be replaced with OpenAI, DeepSeek, or local model
    */
   static async generateEmbedding(text: string): Promise<number[]> {
-    // Enhanced mock embedding generation
-    // This creates a more realistic embedding based on text characteristics
-    const words = text.toLowerCase().split(/\s+/);
-    const embedding = new Array(384).fill(0);
+    // Simplified mock embedding to avoid memory issues on Render
+    const textHash = this.simpleHash(text);
+    const embedding = new Array(128).fill(0); // Smaller embedding size
     
-    // Create embeddings based on word frequency and position
-    const wordFreq: Record<string, number> = {};
-    words.forEach(word => {
-      wordFreq[word] = (wordFreq[word] || 0) + 1;
-    });
-    
-    // Generate embedding based on word characteristics
-    Object.entries(wordFreq).forEach(([word, freq], index) => {
-      const wordHash = this.simpleHash(word);
-      const normalizedFreq = Math.log(freq + 1) / Math.log(words.length + 1);
-      
-      // Distribute word influence across multiple dimensions
-      for (let i = 0; i < 10; i++) {
-        const dim = (wordHash + i) % embedding.length;
-        embedding[dim] += normalizedFreq * Math.sin(wordHash + i) * 0.1;
-      }
-    });
-    
-    // Add text length and structure features
-    const textLength = text.length;
-    const sentenceCount = text.split(/[.!?]+/).length;
-    const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length;
-    
-    // Add these features to specific dimensions
-    embedding[0] = Math.tanh(textLength / 1000); // Normalize text length
-    embedding[1] = Math.tanh(sentenceCount / 50); // Normalize sentence count
-    embedding[2] = Math.tanh(avgWordLength / 10); // Normalize average word length
-    
-    // Normalize the embedding
-    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    if (magnitude > 0) {
-      for (let i = 0; i < embedding.length; i++) {
-        embedding[i] = embedding[i] / magnitude;
-      }
+    // Create a simple deterministic embedding
+    for (let i = 0; i < embedding.length; i++) {
+      embedding[i] = Math.sin(textHash + i) * 0.1;
     }
     
     return embedding;
@@ -160,29 +128,8 @@ export class EmbeddingService {
    * Chunk text content for better embedding
    */
   static chunkText(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
-    const chunks: string[] = [];
-    let start = 0;
-    
-    while (start < text.length) {
-      const end = Math.min(start + chunkSize, text.length);
-      let chunk = text.slice(start, end);
-      
-      // Try to break at sentence boundaries
-      if (end < text.length) {
-        const lastSentence = chunk.lastIndexOf('.');
-        const lastNewline = chunk.lastIndexOf('\n');
-        const breakPoint = Math.max(lastSentence, lastNewline);
-        
-        if (breakPoint > start + chunkSize * 0.5) {
-          chunk = chunk.slice(0, breakPoint + 1);
-        }
-      }
-      
-      chunks.push(chunk.trim());
-      start = start + chunk.length - overlap;
-    }
-    
-    return chunks.filter(chunk => chunk.length > 0);
+    // Simplified to avoid memory issues - just return single chunk
+    return [text.substring(0, chunkSize)];
   }
 
   /**

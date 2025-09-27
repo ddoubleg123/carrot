@@ -175,3 +175,32 @@ $env:GHIBLI_LORA_WEIGHTS = "C:\\absolute\\path\\ghibli_style_lora.safetensors"
 Start-Process "http://localhost:3000/api/ghibli/status"
 ```
 
+---
+
+## Using LoRAs (style adapters)
+
+LoRA files let you switch visual styles without retraining the whole model.
+
+Where to place LoRA files on the worker
+- Copy `.safetensors` files into `/models` on the Vast worker (or a different directory; set `GHIBLI_LORA_DIR` accordingly).
+
+How to enable a LoRA
+- Easiest (fixed LoRA): set an env var on the worker shell and restart the worker:
+  - `export GHIBLI_LORA_WEIGHTS=/models/your_style.safetensors`
+- Per-request (dynamic): in the Test UI (`/test-ghibli`), set:
+  - LoRA path (on worker): `/models/your_style.safetensors`
+  - LoRA strength: `0.0`–`1.0`
+  - These are forwarded by the app route to the worker.
+
+Server behavior
+- If a LoRA path is provided in the request, the worker loads and applies it for that generation.
+- Otherwise, if `GHIBLI_LORA_WEIGHTS` is set, the worker uses that as a default.
+- If neither is set, generation uses the base model.
+
+Optional worker update (minimal FastAPI)
+If you bootstrapped a minimal worker, ensure its `/generate-image` accepts `lora` and `lora_alpha` form fields and loads them per request. See `scripts/ghibli/worker_app.py` for a reference implementation.
+
+Prompting tips
+- With strong LoRAs, keep prompts simple; the LoRA provides the aesthetic.
+- Start with LoRA strength `0.8–1.0`, reduce if the look is too strong.
+

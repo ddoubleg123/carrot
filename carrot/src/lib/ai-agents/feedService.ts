@@ -123,48 +123,35 @@ export class FeedService {
       };
     }
     
-    // Chunk the content
-    const chunks = EmbeddingService.chunkText(extractedContent.content);
-    
-    // Store each chunk as a memory (in smaller batches to avoid memory issues)
+    // Simplified approach: Store content as single memory to avoid memory issues
     const memoryIds: string[] = [];
-    const CHUNK_BATCH_SIZE = 5; // Process max 5 chunks at a time
     
-    for (let i = 0; i < chunks.length; i += CHUNK_BATCH_SIZE) {
-      const chunkBatch = chunks.slice(i, i + CHUNK_BATCH_SIZE);
-      
-      for (const chunk of chunkBatch) {
-        const memoryData: MemoryData = {
-          agentId,
-          content: chunk,
-          sourceType: feedItem.sourceType,
-          sourceUrl: extractedContent.url || feedItem.sourceUrl,
-          sourceTitle: extractedContent.title || feedItem.sourceTitle,
-          sourceAuthor: extractedContent.author || feedItem.sourceAuthor,
-          tags: feedItem.tags,
-          threadId: feedItem.threadId,
-          topicId: feedItem.topicId,
-          fedBy,
-        };
+    try {
+      // Limit content length to prevent memory issues
+      const maxContentLength = 5000; // 5KB limit
+      const contentToStore = extractedContent.content.length > maxContentLength 
+        ? extractedContent.content.substring(0, maxContentLength) + '...'
+        : extractedContent.content;
 
-        try {
-          const memory = await EmbeddingService.storeMemory(memoryData);
-          memoryIds.push(memory.id);
-        } catch (memoryError) {
-          console.error('[FeedService] Error storing memory:', memoryError);
-          // Continue with other chunks even if one fails
-        }
-      }
-      
-      // Force garbage collection between chunk batches
-      if (global.gc && i + CHUNK_BATCH_SIZE < chunks.length) {
-        global.gc();
-      }
-      
-      // Small delay between chunk batches
-      if (i + CHUNK_BATCH_SIZE < chunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      const memoryData: MemoryData = {
+        agentId,
+        content: contentToStore,
+        sourceType: feedItem.sourceType,
+        sourceUrl: extractedContent.url || feedItem.sourceUrl,
+        sourceTitle: extractedContent.title || feedItem.sourceTitle,
+        sourceAuthor: extractedContent.author || feedItem.sourceAuthor,
+        tags: feedItem.tags,
+        threadId: feedItem.threadId,
+        topicId: feedItem.topicId,
+        fedBy,
+      };
+
+      const memory = await EmbeddingService.storeMemory(memoryData);
+      memoryIds.push(memory.id);
+      console.log(`[FeedService] Successfully stored memory for agent ${agentId}`);
+    } catch (memoryError) {
+      console.error('[FeedService] Error storing memory:', memoryError);
+      // Return empty array but don't fail the entire operation
     }
 
     // Log the feed event

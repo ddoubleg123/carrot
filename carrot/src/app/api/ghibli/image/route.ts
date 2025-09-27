@@ -46,11 +46,15 @@ export async function POST(req: Request) {
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
     if (workerUrl && model === 'sd-lora') {
       const payload: any = { prompt }
+      const lora = (fd.get('lora') as string) || ''
+      const loraAlpha = (fd.get('lora_alpha') as string) || ''
       // If an image is uploaded, attach as multipart; otherwise send JSON only
       if (imageFile && typeof imageFile.arrayBuffer === 'function') {
         const wf = new FormData()
         wf.append('prompt', prompt)
         wf.append('model', 'sd-lora')
+        if (lora) wf.append('lora', lora)
+        if (loraAlpha) wf.append('lora_alpha', loraAlpha)
         wf.append('image', imageFile as any)
         const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', { method: 'POST', body: wf })
         const data = await res.json()
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
         const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ prompt, model: 'sd-lora' })
+          body: JSON.stringify({ prompt, model: 'sd-lora', lora, lora_alpha: loraAlpha })
         })
         const data = await res.json()
         if (!data.ok) {
