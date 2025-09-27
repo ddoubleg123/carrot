@@ -42,14 +42,46 @@ interface Post {
   createdAt: Date;
 }
 
-interface OverviewProps {
-  facts: Fact[];
-  recentEvents: Event[];
-  recentSources: Source[];
-  recentPosts: Post[];
+interface Patch {
+  id: string;
+  name: string;
+  description?: string | null;
+  tags: string[];
+  _count: {
+    members: number;
+    posts: number;
+    events: number;
+    sources: number;
+  };
 }
 
-export default function Overview({ facts, recentEvents, recentSources, recentPosts }: OverviewProps) {
+interface OverviewProps {
+  patch: Patch;
+}
+
+export default function Overview({ patch }: OverviewProps) {
+  // Mock data for now - in real implementation, this would come from props or API
+  const facts: Fact[] = [
+    { id: '1', label: 'Current Status', value: 'Active Movement' },
+    { id: '2', label: 'Primary Goal', value: 'Congressional Term Limits' },
+    { id: '3', label: 'Proposed Limit', value: '12 Years Maximum' },
+    { id: '4', label: 'Support Level', value: '78% Public Support' },
+  ];
+
+  const recentEvents: Event[] = [
+    { id: '1', title: 'New research paper added', dateStart: new Date(), summary: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen', tags: ['research'] },
+    { id: '2', title: 'New discussion started', dateStart: new Date(), summary: '"What would be the ideal term limit structure?"', tags: ['discussion'] },
+  ];
+
+  const recentSources: Source[] = [
+    { id: '1', title: 'Congressional Research Service Report', url: '#', author: 'CRS' },
+    { id: '2', title: 'Public Opinion Poll Results', url: '#', author: 'Gallup' },
+  ];
+
+  const recentPosts: Post[] = [
+    { id: '1', title: 'New research paper added', content: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen', createdAt: new Date(), author: { name: 'Dr. Sarah Chen' } },
+    { id: '2', title: 'New discussion started', content: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
+  ];
   return (
     <div className="space-y-8">
       {/* Key Facts Grid */}

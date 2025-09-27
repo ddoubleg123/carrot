@@ -2,12 +2,13 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Users, MessageSquare, Calendar, BookOpen } from 'lucide-react';
+import { MoreHorizontal, Users, MessageSquare, Calendar, BookOpen, Share2, Zap } from 'lucide-react';
+import { useState } from 'react';
 
 interface Patch {
   id: string;
   name: string;
-  tagline?: string | null;
+  description?: string | null;
   tags: string[];
   _count: {
     members: number;
@@ -22,59 +23,123 @@ interface PatchHeaderProps {
   isMember?: boolean;
   onJoin?: () => void;
   onLeave?: () => void;
+  onShare?: () => void;
+  onThemeChange?: (theme: 'light' | 'warm' | 'stone') => void;
 }
 
-export default function PatchHeader({ patch, isMember = false, onJoin, onLeave }: PatchHeaderProps) {
+export default function PatchHeader({ 
+  patch, 
+  isMember = false, 
+  onJoin, 
+  onLeave, 
+  onShare,
+  onThemeChange 
+}: PatchHeaderProps) {
+  const [currentTheme, setCurrentTheme] = useState<'light' | 'warm' | 'stone'>('light');
+
+  const handleThemeChange = () => {
+    const themes: ('light' | 'warm' | 'stone')[] = ['light', 'warm', 'stone'];
+    const currentIndex = themes.indexOf(currentTheme);
+    const nextTheme = themes[(currentIndex + 1) % themes.length];
+    setCurrentTheme(nextTheme);
+    onThemeChange?.(nextTheme);
+  };
+
   return (
-    <div className="h-20 flex items-center justify-between px-6">
-      {/* Left side: Name, tagline, tags */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-2xl font-bold text-[#0B0B0F] truncate">
-            {patch.name}
-          </h1>
-          {patch.tagline && (
-            <span className="text-[#60646C] text-sm line-clamp-1 hidden sm:block">
-              {patch.tagline}
-            </span>
-          )}
+    <div className="relative z-30 isolation-isolate bg-[linear-gradient(180deg,#FF6A00,rgba(255,106,0,0.92))] text-white">
+      <div className="px-6 md:px-10 py-6 md:py-8">
+        {/* Title Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl font-bold text-white truncate">
+              {patch.name}
+            </h1>
+            {patch.description && (
+              <p className="text-white/90 text-lg line-clamp-1 mt-1">
+                {patch.description}
+              </p>
+            )}
+          </div>
+          
+          {/* Right side: Actions */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={isMember ? onLeave : onJoin}
+              variant={isMember ? "outline" : "default"}
+              className={isMember 
+                ? "border-white/30 text-white hover:bg-white/10 bg-transparent" 
+                : "bg-white text-[#FF6A00] hover:bg-white/90"
+              }
+            >
+              {isMember ? 'Leave' : 'Join'}
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onShare}
+              className="text-white hover:bg-white/10 p-2"
+            >
+              <Share2 className="w-4 h-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleThemeChange}
+              className="text-white hover:bg-white/10 p-2"
+              title="Change theme"
+            >
+              <Zap className="w-4 h-4" />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-white hover:bg-white/10 p-2"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
-        
+
         {/* Tags */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap mt-4">
           {patch.tags.slice(0, 4).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
-              className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700"
+              className="text-xs px-2 py-1 rounded-full bg-white/20 text-white border-white/30"
             >
               {tag}
             </Badge>
           ))}
           {patch.tags.length > 4 && (
-            <span className="text-xs text-[#60646C]">
+            <span className="text-xs text-white/70">
               +{patch.tags.length - 4} more
             </span>
           )}
         </div>
-      </div>
 
-      {/* Right side: Join/Leave button and menu */}
-      <div className="flex items-center gap-3">
-        <Button
-          onClick={isMember ? onLeave : onJoin}
-          variant={isMember ? "outline" : "primary"}
-          className={isMember 
-            ? "border-[#E6E8EC] text-[#60646C] hover:bg-gray-50" 
-            : "bg-[#0A5AFF] hover:bg-[#0A5AFF]/90 text-white"
-          }
-        >
-          {isMember ? 'Leave' : 'Join'}
-        </Button>
-        
-        <Button variant="ghost" size="sm" className="p-2">
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
+        {/* Counts Row */}
+        <div className="mt-3 flex flex-wrap gap-3 text-white/90 text-sm">
+          <div className="flex items-center gap-1">
+            <Users className="w-4 h-4" />
+            <span>{patch._count.members} members</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <MessageSquare className="w-4 h-4" />
+            <span>{patch._count.posts} posts</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Calendar className="w-4 h-4" />
+            <span>{patch._count.events} events</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <BookOpen className="w-4 h-4" />
+            <span>{patch._count.sources} sources</span>
+          </div>
+        </div>
       </div>
     </div>
   );

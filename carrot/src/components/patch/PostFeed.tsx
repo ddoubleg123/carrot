@@ -50,16 +50,39 @@ interface Patch {
 
 interface PostFeedProps {
   patch: Patch
-  posts: Post[]
+  posts?: Post[]
 }
 
-export default function PostFeed({ patch, posts }: PostFeedProps) {
+export default function PostFeed({ patch, posts = [] }: PostFeedProps) {
+  // Mock data if no posts provided
+  const mockPosts: Post[] = posts.length > 0 ? posts : [
+    {
+      id: '1',
+      title: 'New research paper added',
+      content: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen',
+      createdAt: new Date(),
+      author: { name: 'Dr. Sarah Chen', username: 'sarahchen' },
+      metrics: { likes: 12, comments: 3, shares: 1 },
+      tags: ['research', 'academic']
+    },
+    {
+      id: '2',
+      title: 'New discussion started',
+      content: '"What would be the ideal term limit structure?"',
+      createdAt: new Date(),
+      author: { name: 'John Doe', username: 'johndoe' },
+      metrics: { likes: 8, comments: 5, shares: 2 },
+      tags: ['discussion', 'policy']
+    }
+  ];
+
+  const displayPosts = posts.length > 0 ? posts : mockPosts;
   const [sortBy, setSortBy] = useState<'top' | 'new' | 'ending-soon'>('top')
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set())
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set())
 
   // Sort posts based on selected criteria
-  const sortedPosts = posts.sort((a, b) => {
+  const sortedPosts = displayPosts.sort((a, b) => {
     switch (sortBy) {
       case 'new':
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

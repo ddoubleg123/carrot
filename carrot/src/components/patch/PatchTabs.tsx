@@ -53,7 +53,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75 border-b border-[#E6E8EC]">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-4 bg-transparent p-0 h-auto">
             {tabs.map((tab) => {
@@ -62,7 +62,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
-                  className="flex items-center gap-2 px-6 py-4 text-base font-medium data-[state=active]:border-b-2 data-[state=active]:border-orange-500 data-[state=active]:bg-transparent data-[state=active]:text-orange-600 rounded-none border-b-2 border-transparent hover:text-gray-700 transition-colors"
+                  className="flex items-center gap-2 px-6 py-4 text-base font-medium data-[state=active]:border-b-2 data-[state=active]:border-[#FF6A00] data-[state=active]:bg-transparent data-[state=active]:text-[#FF6A00] rounded-none border-b-2 border-transparent hover:text-gray-700 transition-colors"
                 >
                   <Icon className="w-4 h-4" />
                   <span>{tab.label}</span>
@@ -74,7 +74,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-[400px]">
+      <div className="min-h-[400px] pt-6 md:pt-8">
         {children}
       </div>
     </div>

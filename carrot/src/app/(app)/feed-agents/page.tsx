@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
+import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
 
 interface Agent {
   id: string;
@@ -271,11 +272,12 @@ export default function FeedAgentsPage() {
         </div>
 
         <Tabs defaultValue="agents" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="agents">Agent Registry</TabsTrigger>
             <TabsTrigger value="feed">Feed Content</TabsTrigger>
             <TabsTrigger value="memories">Memory Viewer</TabsTrigger>
             <TabsTrigger value="training">Training Tracker</TabsTrigger>
+            <TabsTrigger value="dashboard">Training Dashboard</TabsTrigger>
           </TabsList>
 
           {/* Agent Registry Tab */}
@@ -584,6 +586,17 @@ export default function FeedAgentsPage() {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Training Tracker</h3>
               <p className="text-gray-600">Training tracking functionality coming soon.</p>
             </div>
+          </TabsContent>
+
+          {/* Training Dashboard Tab */}
+          <TabsContent value="dashboard" className="space-y-6">
+            <AgentTrainingDashboard 
+              selectedAgentId={selectedAgent?.id}
+              onAgentSelect={(agentId) => {
+                const agent = agents.find(a => a.id === agentId);
+                setSelectedAgent(agent || null);
+              }}
+            />
           </TabsContent>
         </Tabs>
       </div>

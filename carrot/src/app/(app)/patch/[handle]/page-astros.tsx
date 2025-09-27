@@ -32,6 +32,7 @@ import {
   Edit3
 } from 'lucide-react';
 import TimelineContentManager from '@/components/timeline/TimelineContentManager';
+import PostTimelineIntegration from '@/components/timeline/PostTimelineIntegration';
 
 interface AstrosPageProps {
   params: Promise<{ handle: string }>;
@@ -48,6 +49,37 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [contentType, setContentType] = useState<'text' | 'image' | 'video' | 'pdf' | 'embed'>('text');
   const [showContentManager, setShowContentManager] = useState(false);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [showPostIntegration, setShowPostIntegration] = useState(false);
+
+  // Load posts for this patch
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        const response = await fetch(`/api/patch/houston-astros/posts`);
+        const data = await response.json();
+        if (data.success) {
+          setPosts(data.posts);
+        }
+      } catch (error) {
+        console.error('Error loading posts:', error);
+      }
+    };
+    loadPosts();
+  }, []);
+
+  // Convert timeline data to work with posts integration
+  const getTimelineEventsForPosts = () => {
+    if (!timelineData?.events) return [];
+    
+    return timelineData.events.map((event: any) => ({
+      id: event.unique_id || `event-${Date.now()}`,
+      date: event.start_date?.year || '1962',
+      title: event.text?.headline || 'Astros Event',
+      description: event.text?.text || '',
+      content: event.content || []
+    }));
+  };
 
   // Load Timeline.js dynamically
   useEffect(() => {
@@ -322,6 +354,7 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'timeline', label: 'Timeline', icon: Clock },
+    { id: 'posts', label: 'Posts & Timeline', icon: MessageSquare },
     { id: 'roster', label: 'Current Roster', icon: Users },
     { id: 'stats', label: 'Statistics', icon: TrendingUp },
     { id: 'discussion', label: 'Discussion', icon: MessageSquare }
@@ -762,6 +795,34 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
       </div>
     )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'posts' && (
+          <div className="space-y-6">
+            <PostTimelineIntegration
+              posts={posts}
+              timelineEvents={getTimelineEventsForPosts()}
+              onEventUpdate={(eventId, updatedEvent) => {
+                // Update the timeline data with new content
+                setTimelineData(prev => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    events: prev.events.map(event => 
+                      event.unique_id === eventId ? {
+                        ...event,
+                        content: updatedEvent.content
+                      } : event
+                    )
+                  };
+                });
+              }}
+              onPostToTimeline={(postId, eventId) => {
+                console.log(`Added post ${postId} to timeline event ${eventId}`);
+                // You can add additional logic here, like updating a database
+              }}
+            />
           </div>
         )}
 

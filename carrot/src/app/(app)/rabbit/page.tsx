@@ -361,22 +361,14 @@ function ConversationThread({
     }
   };
 
-  // SIMPLE AUTO-SCROLL: Only scroll to bottom for new conversations or when user is already at bottom
+  // AGGRESSIVE AUTO-SCROLL: Always scroll to bottom when new messages arrive
   useEffect(() => {
     if (thread.messages.length > 0) {
-      // Only auto-scroll if user is already near the bottom (hasn't manually scrolled up)
-      const isNearBottom = () => {
-        if (!messageContainerRef.current) return true;
-        const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-        return scrollHeight - scrollTop - clientHeight < 100;
-      };
-
-      if (isNearBottom()) {
-        console.log('[Auto-scroll] User at bottom, scrolling to new message');
+      // Always scroll to bottom for new messages - this ensures the latest message is always visible
+      console.log('[Auto-scroll] New message arrived, scrolling to bottom');
+      setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        console.log('[Auto-scroll] User scrolled up, not auto-scrolling');
-      }
+      }, 100); // Small delay to ensure DOM is updated
     }
   }, [thread.messages.length]);
 
@@ -389,11 +381,16 @@ function ConversationThread({
     return () => container.removeEventListener('scroll', checkIfNearBottom);
   }, []);
 
-  // When starting a new conversation, reset scroll state
+  // When starting a new conversation, reset scroll state and scroll to bottom
   useEffect(() => {
     setIsNearBottom(true);
     setHasUserScrolled(false);
     setShowScrollButton(false);
+    
+    // Always scroll to bottom when conversation loads
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 200);
   }, [thread.id]);
 
 
@@ -753,16 +750,26 @@ export default function RabbitPage() {
   // Helper function to get response from a single agent
   async function getAgentResponse(respondingAgent: any, userMsg: string, thread: Thread) {
     try {
+      // Get information about other active agents for context
+      const otherActiveAgents = activeAgents
+        .filter(id => id !== respondingAgent.id)
+        .map(id => getAgentById(id))
+        .filter(Boolean);
+      
+      const otherAgentsContext = otherActiveAgents.length > 0 
+        ? `\n\nIMPORTANT: You are currently in a conversation with these other experts: ${otherActiveAgents.map(agent => `${agent.name} (${agent.role})`).join(', ')}. You can reference their expertise, build on their ideas, or respectfully disagree with their perspectives. This is a collaborative discussion.`
+        : '';
+
       const payload = {
         provider: 'deepseek',
         model: 'deepseek-chat',
         temperature: 0.3,
         max_tokens: 512,
         messages: [
-          // System message to set the agent's personality
+          // System message to set the agent's personality with awareness of other agents
           { 
             role: 'system', 
-            content: `You are ${respondingAgent.name}, an expert in ${respondingAgent.role}. Respond in character as this historical figure, drawing from their expertise and perspective. Keep responses concise and engaging.` 
+            content: `You are ${respondingAgent.name}, an expert in ${respondingAgent.role}. Respond in character as this historical figure, drawing from their expertise and perspective. Keep responses concise and engaging.${otherAgentsContext}` 
           },
           ...thread.messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.content })),
           { role: 'user', content: userMsg }

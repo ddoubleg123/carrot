@@ -572,25 +572,6 @@ export default async function RepositoryPatchPage({ params, searchParams }: Patc
           </div>
         </div>
 
-        {/* AI Agent Dock (right-edge floating) */}
-        <div className="fixed right-6 top-1/2 transform -translate-y-1/2 z-30">
-          <div className="bg-white rounded-2xl shadow-lg border border-[#E6E8EC] p-2">
-            <div className="space-y-2">
-              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Summarize">
-                <Sparkles className="w-5 h-5" />
-              </button>
-              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Add Fact">
-                <Plus className="w-5 h-5" />
-              </button>
-              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Add Event">
-                <Calendar className="w-5 h-5" />
-              </button>
-              <button className="w-12 h-12 bg-[#FF6A00]/10 text-[#FF6A00] rounded-xl hover:bg-[#FF6A00]/20 transition-colors flex items-center justify-center" title="Find Sources">
-                <Search className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     );
   } catch (error) {

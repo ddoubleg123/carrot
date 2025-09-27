@@ -33,15 +33,34 @@ export default function SimpleVideo({
       return;
     }
 
-    // Simple URL construction - no complex encoding
+    // Simple URL construction - handle Firebase URLs properly
     let proxyUrl: string;
     
     if (src.startsWith('/api/video-simple')) {
       // Already proxied
       proxyUrl = src;
     } else if (src.includes('firebasestorage.googleapis.com')) {
-      // Firebase URL - proxy it simply
-      proxyUrl = `/api/video-simple?url=${encodeURIComponent(src)}`;
+      // Check if this is a properly formatted Firebase URL (has alt=media)
+      if (src.includes('alt=media')) {
+        // This is a properly formatted Firebase URL, use it directly
+        proxyUrl = src;
+      } else {
+        // This is an old Firebase URL, proxy it
+        let cleanSrc = src;
+        
+        // If the URL is already encoded (contains %2F), decode it first
+        if (src.includes('%2F') || src.includes('%3F') || src.includes('%3D')) {
+          try {
+            cleanSrc = decodeURIComponent(src);
+          } catch (e) {
+            // If decoding fails, use original
+            cleanSrc = src;
+          }
+        }
+        
+        // Now encode it properly for the proxy
+        proxyUrl = `/api/video-simple?url=${encodeURIComponent(cleanSrc)}`;
+      }
     } else {
       // Direct URL
       proxyUrl = src;

@@ -23,11 +23,30 @@ interface Source {
   } | null;
 }
 
-interface ResourcesListProps {
-  sources: Source[];
+interface Patch {
+  id: string;
+  name: string;
+  description?: string | null;
+  tags: string[];
+  _count: {
+    members: number;
+    posts: number;
+    events: number;
+    sources: number;
+  };
 }
 
-export default function ResourcesList({ sources }: ResourcesListProps) {
+interface ResourcesListProps {
+  patch: Patch;
+}
+
+export default function ResourcesList({ patch }: ResourcesListProps) {
+  // Mock data for now - in real implementation, this would come from props or API
+  const sources: Source[] = [
+    { id: '1', title: 'Congressional Research Service Report', url: 'https://example.com/crs-report', author: 'CRS', publishedAt: new Date() },
+    { id: '2', title: 'Public Opinion Poll Results', url: 'https://example.com/gallup-poll', author: 'Gallup', publishedAt: new Date() },
+    { id: '3', title: 'Academic Study on Term Limits', url: 'https://example.com/academic-study', author: 'Dr. Smith', publishedAt: new Date() },
+  ];
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 

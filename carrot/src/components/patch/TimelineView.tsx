@@ -94,7 +94,7 @@ export default function TimelineView({ events }: TimelineViewProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mt-4 md:mt-6">
       {/* Header with controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -105,16 +105,18 @@ export default function TimelineView({ events }: TimelineViewProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'compact' ? 'primary' : 'outline'}
+            variant={viewMode === 'compact' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('compact')}
+            className={viewMode === 'compact' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}
           >
             Compact
           </Button>
           <Button
-            variant={viewMode === 'expanded' ? 'primary' : 'outline'}
+            variant={viewMode === 'expanded' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setViewMode('expanded')}
+            className={viewMode === 'expanded' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}
           >
             Expanded
           </Button>
@@ -223,7 +225,7 @@ export default function TimelineView({ events }: TimelineViewProps) {
       {/* Timeline */}
       <div className="space-y-4">
         {filteredEvents.length === 0 ? (
-          <div className={cardVariants.default}>
+          <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 md:p-5">
             <div className="text-center py-8">
               <Calendar className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">No events found</h3>
@@ -235,90 +237,92 @@ export default function TimelineView({ events }: TimelineViewProps) {
             </div>
           </div>
         ) : (
-          filteredEvents.map((event, index) => (
-            <div key={event.id} className={cardVariants.default}>
-              <div className="flex gap-4">
-                {/* Timeline indicator */}
-                <div className="flex-shrink-0">
-                  <div className="w-3 h-3 bg-[#0A5AFF] rounded-full mt-2"></div>
-                  {index < filteredEvents.length - 1 && (
-                    <div className="w-px h-full bg-[#E6E8EC] ml-1 mt-2"></div>
-                  )}
+          <div className="relative">
+            {/* Timeline line */}
+            <div className="absolute left-6 top-0 bottom-0 w-px bg-[#E6E8EC]"></div>
+            
+            {filteredEvents.map((event, index) => (
+              <div key={event.id} className="relative flex gap-4 mb-6">
+                {/* Timeline indicator - centered on line */}
+                <div className="flex-shrink-0 w-12 flex justify-center">
+                  <div className="w-3 h-3 bg-[#FF6A00] rounded-full mt-2 relative z-10"></div>
                 </div>
 
                 {/* Event content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold text-[#0B0B0F]">
-                          {event.title}
-                        </h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {event.dateStart.toLocaleDateString()}
-                          {event.dateEnd && ` - ${event.dateEnd.toLocaleDateString()}`}
-                        </Badge>
-                      </div>
-
-                      <p className={`text-[#60646C] mb-4 ${
-                        viewMode === 'compact' ? 'line-clamp-3' : ''
-                      }`}>
-                        {event.summary}
-                      </p>
-
-                      {/* Tags */}
-                      {event.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-4">
-                          {event.tags.map(tag => (
-                            <Badge
-                              key={tag}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
+                  <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 md:p-5">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-lg font-semibold text-[#0B0B0F]">
+                            {event.title}
+                          </h3>
+                          <Badge variant="secondary" className="text-xs">
+                            {event.dateStart.toLocaleDateString()}
+                            {event.dateEnd && ` - ${event.dateEnd.toLocaleDateString()}`}
+                          </Badge>
                         </div>
-                      )}
 
-                      {/* Sources */}
-                      {event.sources.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium text-[#0B0B0F]">Sources:</h4>
-                          <div className="space-y-1">
-                            {event.sources.map(source => (
-                              <div key={source.id} className="flex items-center gap-2 text-sm">
-                                <a
-                                  href={source.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[#0A5AFF] hover:text-[#0A5AFF]/80 flex items-center gap-1"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                  {source.title}
-                                </a>
-                              </div>
+                        <p className={`text-[#60646C] mb-4 ${
+                          viewMode === 'compact' ? 'line-clamp-3' : ''
+                        }`}>
+                          {event.summary}
+                        </p>
+
+                        {/* Tags */}
+                        {event.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-4">
+                            {event.tags.map(tag => (
+                              <Badge
+                                key={tag}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {tag}
+                              </Badge>
                             ))}
                           </div>
+                        )}
+
+                        {/* Sources */}
+                        {event.sources.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-[#0B0B0F]">Sources:</h4>
+                            <div className="space-y-1">
+                              {event.sources.map(source => (
+                                <div key={source.id} className="flex items-center gap-2 text-sm">
+                                  <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[#FF6A00] hover:text-[#FF6A00]/80 flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    {source.title}
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Media */}
+                      {event.media && (
+                        <div className="flex-shrink-0">
+                          <img
+                            src={event.media.url}
+                            alt={event.media.alt || event.title}
+                            className="w-32 h-24 object-cover rounded-lg"
+                          />
                         </div>
                       )}
                     </div>
-
-                    {/* Media */}
-                    {event.media && (
-                      <div className="flex-shrink-0">
-                        <img
-                          src={event.media.url}
-                          alt={event.media.alt || event.title}
-                          className="w-32 h-24 object-cover rounded-lg"
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>
