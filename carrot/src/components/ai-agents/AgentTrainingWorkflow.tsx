@@ -334,6 +334,7 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
       }
 
       const data = await response.json();
+      console.log('Training step response:', data);
       
       // Handle any error responses
       if (data.results?.mockResults || data.results?.mockResult) {
@@ -343,6 +344,23 @@ export default function AgentTrainingWorkflow({ agent, onClose }: AgentTrainingW
         };
       }
       
+      // Check for successful response - the new format has results.results array
+      if (response.ok && data.results?.results && Array.isArray(data.results.results)) {
+        const firstResult = data.results.results[0];
+        if (firstResult?.success) {
+          return { 
+            success: true, 
+            memoriesCreated: firstResult.memoriesCreated || 1 
+          };
+        } else {
+          return { 
+            success: false, 
+            error: firstResult?.error || 'Training step failed' 
+          };
+        }
+      }
+      
+      // Fallback for old format or direct results
       if (response.ok && data.results && data.results[0]?.success) {
         return { success: true, memoriesCreated: data.results[0].memoriesCreated };
       } else {
