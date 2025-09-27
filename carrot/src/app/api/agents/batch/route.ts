@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import BatchProcessor from '@/lib/ai-agents/batchProcessor';
 import { FeedService, FeedItem } from '@/lib/ai-agents/feedService';
 
@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // POST /api/agents/batch - Process batch feed operations
-export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
+export async function POST(request: Request, _context: { params: Promise<{}> }) {
   try {
     // Check if we're on Render and what tier
     const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
@@ -24,7 +24,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       console.warn(`[Batch API] High memory usage detected: ${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     }
 
-    const body = await req.json();
+    const body = await request.json();
     const { 
       agentIds, 
       feedItem, 

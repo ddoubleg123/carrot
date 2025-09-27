@@ -79,8 +79,8 @@ export default function Overview({ patch }: OverviewProps) {
   ];
 
   const recentPosts: Post[] = [
-    { id: '1', title: 'New research paper added', content: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen', createdAt: new Date(), author: { name: 'Dr. Sarah Chen' } },
-    { id: '2', title: 'New discussion started', content: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
+    { id: '1', title: 'New research paper added', body: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen', createdAt: new Date(), author: { name: 'Dr. Sarah Chen' } },
+    { id: '2', title: 'New discussion started', body: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
   ];
   return (
     <div className="space-y-8">

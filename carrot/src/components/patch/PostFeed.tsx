@@ -58,20 +58,22 @@ export default function PostFeed({ patch, posts = [] }: PostFeedProps) {
   const mockPosts: Post[] = posts.length > 0 ? posts : [
     {
       id: '1',
+      type: 'TEXT',
       title: 'New research paper added',
-      content: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen',
+      body: '"Term Limits and Congressional Effectiveness" by Dr. Sarah Chen',
       createdAt: new Date(),
-      author: { name: 'Dr. Sarah Chen', username: 'sarahchen' },
-      metrics: { likes: 12, comments: 3, shares: 1 },
+      author: { id: '1', name: 'Dr. Sarah Chen', username: 'sarahchen' },
+      metrics: { likes: 12, comments: 3, reposts: 1, views: 45 },
       tags: ['research', 'academic']
     },
     {
       id: '2',
+      type: 'TEXT',
       title: 'New discussion started',
-      content: '"What would be the ideal term limit structure?"',
+      body: '"What would be the ideal term limit structure?"',
       createdAt: new Date(),
-      author: { name: 'John Doe', username: 'johndoe' },
-      metrics: { likes: 8, comments: 5, shares: 2 },
+      author: { id: '2', name: 'John Doe', username: 'johndoe' },
+      metrics: { likes: 8, comments: 5, reposts: 2, views: 32 },
       tags: ['discussion', 'policy']
     }
   ];

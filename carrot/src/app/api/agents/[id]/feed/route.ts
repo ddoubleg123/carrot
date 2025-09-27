@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { FeedService, FeedItem } from '@/lib/ai-agents/feedService';
 
 export const runtime = 'nodejs';
@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic';
 
 // POST /api/agents/[id]/feed - Feed content to agent
 export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check if we're on Render and what tier
@@ -26,8 +26,8 @@ export async function POST(
       console.warn(`[Feed API] High memory usage detected: ${memUsageMB.toFixed(2)}MB/${totalMemMB.toFixed(2)}MB`);
     }
 
-    const { id } = await ctx.params;
-    const body = await req.json();
+    const { id } = await context.params;
+    const body = await request.json();
     
     const feedItem: FeedItem = {
       content: body.content,
@@ -62,12 +62,12 @@ export async function POST(
 
 // GET /api/agents/[id]/feed - Get feed history
 export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await ctx.params;
-    const { searchParams } = new URL(req.url);
+    const { id } = await context.params;
+    const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '20');
 
     const feedHistory = await FeedService.getFeedHistory(id, limit);

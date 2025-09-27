@@ -65,7 +65,7 @@ export default function PatchHeader({
           <div className="flex items-center gap-3">
             <Button
               onClick={isMember ? onLeave : onJoin}
-              variant={isMember ? "outline" : "default"}
+              variant={isMember ? "outline" : "primary"}
               className={isMember 
                 ? "border-white/30 text-white hover:bg-white/10 bg-transparent" 
                 : "bg-white text-[#FF6A00] hover:bg-white/90"

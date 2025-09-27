@@ -105,7 +105,7 @@ export default function TimelineView({ events }: TimelineViewProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'compact' ? 'default' : 'outline'}
+            variant={viewMode === 'compact' ? 'primary' : 'outline'}
             size="sm"
             onClick={() => setViewMode('compact')}
             className={viewMode === 'compact' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}
@@ -113,7 +113,7 @@ export default function TimelineView({ events }: TimelineViewProps) {
             Compact
           </Button>
           <Button
-            variant={viewMode === 'expanded' ? 'default' : 'outline'}
+            variant={viewMode === 'expanded' ? 'primary' : 'outline'}
             size="sm"
             onClick={() => setViewMode('expanded')}
             className={viewMode === 'expanded' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}

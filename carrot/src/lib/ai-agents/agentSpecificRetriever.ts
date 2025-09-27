@@ -74,7 +74,7 @@ export class AgentSpecificRetriever {
   }> {
     try {
       // Get agent details
-      const agent = await AgentRegistry.getAgent(request.agentId);
+      const agent = await AgentRegistry.getAgentById(request.agentId);
       if (!agent) {
         throw new Error(`Agent ${request.agentId} not found`);
       }
@@ -407,7 +407,7 @@ export class AgentSpecificRetriever {
    */
   static async getAgentTrainingRecord(agentId: string): Promise<AgentTrainingRecord> {
     try {
-      const agent = await AgentRegistry.getAgent(agentId);
+      const agent = await AgentRegistry.getAgentById(agentId);
       if (!agent) {
         throw new Error(`Agent ${agentId} not found`);
       }
@@ -417,7 +417,7 @@ export class AgentSpecificRetriever {
       const memories = await FeedService.getRecentMemories(agentId, 50);
       
       // Calculate expertise coverage
-      const expertiseCoverage = agent.domainExpertise.map(domain => ({
+      const expertiseCoverage = agent.domainExpertise.map((domain: string) => ({
         domain,
         coverage: Math.min(100, (memories.length * 10)), // Mock calculation
         lastUpdated: new Date()
@@ -425,10 +425,10 @@ export class AgentSpecificRetriever {
 
       // Build training history
       const trainingHistory = feedHistory.map(feed => ({
-        date: new Date(feed.createdAt),
-        sourceType: feed.sourceType,
-        sourceTitle: feed.sourceTitle || 'Unknown',
-        contentPreview: feed.content?.substring(0, 100) + '...' || '',
+        date: new Date((feed as any).createdAt),
+        sourceType: (feed as any).sourceType,
+        sourceTitle: (feed as any).sourceTitle || 'Unknown',
+        contentPreview: (feed as any).content?.substring(0, 100) + '...' || '',
         relevanceScore: 0.8 // Mock score
       }));
 

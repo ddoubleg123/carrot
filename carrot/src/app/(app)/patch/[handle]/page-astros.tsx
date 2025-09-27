@@ -805,11 +805,11 @@ export default function AstrosPage({ params, searchParams }: AstrosPageProps) {
               timelineEvents={getTimelineEventsForPosts()}
               onEventUpdate={(eventId, updatedEvent) => {
                 // Update the timeline data with new content
-                setTimelineData(prev => {
+                setTimelineData((prev: any) => {
                   if (!prev) return prev;
                   return {
                     ...prev,
-                    events: prev.events.map(event => 
+                    events: prev.events.map((event: any) => 
                       event.unique_id === eventId ? {
                         ...event,
                         content: updatedEvent.content

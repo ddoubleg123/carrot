@@ -757,7 +757,7 @@ export default function RabbitPage() {
         .filter(Boolean);
       
       const otherAgentsContext = otherActiveAgents.length > 0 
-        ? `\n\nIMPORTANT: You are currently in a conversation with these other experts: ${otherActiveAgents.map(agent => `${agent.name} (${agent.role})`).join(', ')}. You can reference their expertise, build on their ideas, or respectfully disagree with their perspectives. This is a collaborative discussion.`
+        ? `\n\nIMPORTANT: You are currently in a conversation with these other experts: ${otherActiveAgents.map(agent => agent ? `${agent.name} (${agent.role})` : '').filter(Boolean).join(', ')}. You can reference their expertise, build on their ideas, or respectfully disagree with their perspectives. This is a collaborative discussion.`
         : '';
 
       const payload = {
