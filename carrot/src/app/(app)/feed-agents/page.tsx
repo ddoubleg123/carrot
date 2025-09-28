@@ -100,7 +100,13 @@ export default function FeedAgentsPage() {
     try {
       const response = await fetch('/api/agents');
       const data = await response.json();
-      setAgents(data.agents || []);
+      const agentsList = data.agents || [];
+      setAgents(agentsList);
+      
+      // Auto-select the first agent if none is selected
+      if (agentsList.length > 0 && !selectedAgent) {
+        setSelectedAgent(agentsList[0]);
+      }
     } catch (error) {
       console.error('Error loading agents:', error);
     }
@@ -357,6 +363,39 @@ export default function FeedAgentsPage() {
               <Zap className="w-4 h-4" />
               Batch Feed
             </Button>
+          </div>
+
+          {/* Agent Selector */}
+          <div className="mt-6 mb-6">
+            <Label htmlFor="agent-select" className="text-sm font-medium text-gray-700 mb-2 block">
+              Select Agent to Train
+            </Label>
+            <Select
+              value={selectedAgent?.id || ''}
+              onValueChange={(agentId) => {
+                const agent = agents.find(a => a.id === agentId);
+                setSelectedAgent(agent || null);
+              }}
+            >
+              <SelectTrigger className="w-full max-w-md">
+                <SelectValue placeholder="Choose an agent to train..." />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-medium text-sm">
+                        {agent.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <div className="font-medium">{agent.name}</div>
+                        <div className="text-xs text-gray-500">{agent.domainExpertise.slice(0, 2).join(', ')}</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
