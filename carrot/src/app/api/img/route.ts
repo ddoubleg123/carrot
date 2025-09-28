@@ -9,7 +9,9 @@ let GCS: any = null; // lazy import to avoid bundling when unused
 // Avoids cross-origin access issues for Firebase/GCS.
 
 const PUBLIC_BASE = process.env.STORAGE_PUBLIC_BASE
-  || 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/';
+  || 'https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/';
+
+const ENV_BUCKET = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
 
 const PUBLIC_THUMBNAIL_BASE = process.env.PUBLIC_THUMBNAIL_BASE
   || 'https://storage.googleapis.com/carrot-public-thumbnails/';
@@ -311,8 +313,22 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     if (publicUrl) {
       try { const test = await fetch(publicUrl, { method: 'HEAD' }); if (test.ok) target = new URL(publicUrl); } catch {}
     }
+    // Prefer env bucket if available
+    if (!target && ENV_BUCKET) {
+      // Try a fresh signed URL first
+      const signed = await getFreshSignedUrl(ENV_BUCKET, safe).catch(() => null);
+      if (signed) {
+        try { target = new URL(signed); } catch {}
+      }
+      if (!target) {
+        const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ENV_BUCKET)}/o/${encodeURIComponent(safe)}?alt=media`
+        try { target = new URL(constructed) } catch {}
+      }
+    }
+    // Last resort, construct from PUBLIC_BASE template (if BUCKET placeholder present, drop it)
     if (!target) {
-      const base = PUBLIC_BASE.endsWith('/') ? PUBLIC_BASE : PUBLIC_BASE + '/'
+      const baseRaw = PUBLIC_BASE.endsWith('/') ? PUBLIC_BASE : PUBLIC_BASE + '/'
+      const base = baseRaw.replace('${BUCKET}', ENV_BUCKET || '')
       const constructed = base + encodeURIComponent(safe) + (base.includes('?') ? '&' : '?') + 'alt=media'
       try { target = new URL(constructed) } catch {
         return new NextResponse('Bad path', { status: 400 })

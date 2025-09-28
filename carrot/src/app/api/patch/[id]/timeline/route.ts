@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: patchId } = await context.params;
-    const { searchParams } = new URL(request.url);
+    const { id: patchId } = await params;
+    const { searchParams } = new URL(req.url);
     
     const tag = searchParams.get('tag');
     const from = searchParams.get('from');

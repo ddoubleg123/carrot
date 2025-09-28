@@ -61,7 +61,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
             {/* Create Post Button */}
             <Button
               onClick={handleCreatePost}
-              variant="default"
+              variant="primary"
               size="sm"
               className="ml-auto bg-[#FF6A00] hover:bg-[#E55A00] text-white"
             >

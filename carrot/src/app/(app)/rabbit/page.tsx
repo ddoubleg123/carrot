@@ -475,7 +475,7 @@ function ConversationThread({
                   alt={message.user.name}
                   className="w-10 h-10 rounded-full object-cover"
                   onError={(e) => {
-                    console.error('User avatar failed to load:', message.user.avatar);
+                    console.error('User avatar failed to load:', message.user?.avatar);
                     e.currentTarget.style.display = 'none';
                   }}
                 />
@@ -490,7 +490,7 @@ function ConversationThread({
                   alt={message.agent.name}
                   className="w-10 h-10 rounded-full object-cover"
                   onError={(e) => {
-                    console.error('Agent avatar failed to load:', message.agent.avatar);
+                    console.error('Agent avatar failed to load:', message.agent?.avatar);
                     e.currentTarget.style.display = 'none';
                   }}
                 />

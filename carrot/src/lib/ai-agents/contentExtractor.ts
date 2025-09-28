@@ -15,6 +15,11 @@ export class ContentExtractor {
    */
   static async extractFromUrl(url: string): Promise<ExtractedContent> {
     try {
+      // Special handling for YouTube URLs
+      if (this.isYouTubeUrl(url)) {
+        return await this.extractFromYouTube(url)
+      }
+
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -56,6 +61,87 @@ export class ContentExtractor {
           fallback: true
         }
       };
+    }
+  }
+
+  private static isYouTubeUrl(url: string): boolean {
+    try {
+      const u = new URL(url)
+      return /(^|\.)youtube\.com$/.test(u.hostname) || u.hostname === 'youtu.be'
+    } catch { return false }
+  }
+
+  private static extractYouTubeId(url: string): string | null {
+    try {
+      const u = new URL(url)
+      if (u.hostname === 'youtu.be') {
+        return u.pathname.slice(1) || null
+      }
+      if (/(^|\.)youtube\.com$/.test(u.hostname)) {
+        if (u.pathname === '/watch') return u.searchParams.get('v')
+        const match = u.pathname.match(/\/shorts\/([\w-]{6,})/)
+        if (match) return match[1]
+      }
+    } catch {}
+    return null
+  }
+
+  private static async extractFromYouTube(url: string): Promise<ExtractedContent> {
+    const videoId = this.extractYouTubeId(url)
+    const metadata: Record<string, any> = { source: 'youtube', videoId }
+    let title: string | undefined
+    let author: string | undefined
+    let description = ''
+    let thumbnail: string | undefined
+
+    // Try oEmbed for title/author/thumbnail
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(8000) })
+      if (res.ok) {
+        const j = await res.json() as any
+        title = j.title
+        author = j.author_name
+        thumbnail = j.thumbnail_url
+        metadata.oembed = j
+      }
+    } catch {}
+
+    // Fetch watch page to extract description and meta
+    try {
+      const watchUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : url
+      const page = await fetch(watchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) })
+      if (page.ok) {
+        const html = await page.text()
+        const dom = new JSDOM(html)
+        const doc = dom.window.document
+        // Description meta
+        const metaDesc = doc.querySelector('meta[name="description"]')?.getAttribute('content')
+          || doc.querySelector('meta[property="og:description"]')?.getAttribute('content')
+          || undefined
+        if (metaDesc) description = metaDesc
+        // Title override if missing
+        if (!title) title = doc.querySelector('meta[property="og:title"]')?.getAttribute('content') || doc.title || undefined
+        // Thumbnail
+        const ogImg = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || undefined
+        thumbnail = thumbnail || ogImg || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined)
+        metadata.thumbnail = thumbnail
+      }
+    } catch {}
+
+    // Build content body
+    const body: string[] = []
+    if (title) body.push(`# ${title}`)
+    body.push(`YouTube video: ${url}`)
+    if (author) body.push(`By: ${author}`)
+    if (description) body.push('\n' + description)
+
+    return {
+      title: title || 'YouTube Video',
+      content: body.join('\n'),
+      author,
+      url,
+      metadata,
     }
   }
 

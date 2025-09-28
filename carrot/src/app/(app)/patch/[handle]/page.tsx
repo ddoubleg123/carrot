@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
@@ -83,7 +83,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     if (session?.user?.id) {
       userTheme = await prisma.userPatchTheme.findUnique({
         where: {
-          userId_patchId: {
+          user_patch_theme_unique: {
             userId: session.user.id,
             patchId: patch.id
           }
@@ -127,6 +127,17 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       }
     });
 
+    // Add mock bot data to match the expected interface
+    const botSubscriptionsWithBotData = botSubscriptions.map(sub => ({
+      ...sub,
+      bot: {
+        id: sub.botId,
+        name: `AI Bot ${sub.botId.slice(-4)}`,
+        avatar: undefined,
+        lastIndexed: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString()
+      }
+    }));
+
     // Get events for timeline
     const events = await prisma.event.findMany({
       where: { patchId: patch.id },
@@ -147,20 +158,44 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     // Check if user is a member
     const isMember = session?.user?.id ? await prisma.patchMember.findUnique({
       where: {
-        patchId_userId: {
+        patch_user_member_unique: {
           patchId: patch.id,
           userId: session.user.id
         }
       }
     }) : null;
 
+    // Convert events to the format expected by TimelineView
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      title: event.title,
+      dateStart: event.dateStart.toISOString(),
+      dateEnd: event.dateEnd?.toISOString(),
+      summary: event.summary,
+      media: event.media ? (event.media as any) : undefined,
+      tags: event.tags,
+      sources: event.sources.map(source => ({
+        id: source.id,
+        title: source.title,
+        url: source.url,
+        author: source.author || undefined
+      }))
+    }));
+
     return (
       <div className="min-h-screen bg-white">
         {/* Header */}
-        <PatchHeader 
-          patch={patch}
+        <PatchHeader
+          patch={{
+            ...patch,
+            updatedAt: patch.updatedAt.toISOString()
+          }}
           isMember={!!isMember}
-          userTheme={userTheme}
+          userTheme={userTheme ? {
+            mode: userTheme.mode as 'preset' | 'image',
+            preset: userTheme.preset as 'light' | 'warm' | 'stone' | 'civic' | 'ink' | undefined,
+            imageUrl: userTheme.imageUrl || undefined
+          } : null}
         />
 
         {/* Main Content */}
@@ -171,7 +206,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               <PatchTabs activeTab={activeTab} patch={patch}>
                 {activeTab === 'overview' && <Overview patch={patch} />}
                 {activeTab === 'documents' && <ResourcesList patch={patch} />}
-                {activeTab === 'timeline' && <TimelineView events={events} patchId={patch.id} />}
+                {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
                 {activeTab === 'sources' && <ResourcesList patch={patch} />}
                 {activeTab === 'discussions' && <PostFeed patch={patch} />}
               </PatchTabs>
@@ -179,10 +214,10 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
             {/* Right Rail */}
             <div className="lg:col-span-1">
-              <RightRail 
+              <RightRail
                 patch={patch}
                 followers={followers}
-                botSubscriptions={botSubscriptions}
+                botSubscriptions={botSubscriptionsWithBotData as any}
                 followerCount={followerCount}
               />
             </div>
