@@ -63,7 +63,62 @@ export class AgentSpecificRetriever {
       keywords: ['politics', 'government', 'policy', 'democracy', 'governance'],
       searchTerms: ['political science', 'government policy', 'democratic theory']
     }
-  };
+  } as const
+
+  /**
+   * Topic-specific retrieval with optional auto-feed.
+   * Searches multiple sources for a given topic, applies quality filter, and (optionally) feeds results.
+   */
+  static async retrieveForTopic(params: {
+    agentId: string;
+    topic: string;
+    maxResults?: number;
+    autoFeed?: boolean;
+    sourceTypes?: string[]; // subset of ['wikipedia','arxiv','news','github','pubmed','books']
+  }): Promise<{ success: boolean; results: any[]; fedCount: number }>{
+    const { agentId, topic } = params
+    const maxResults = params.maxResults ?? 20
+    const autoFeed = !!params.autoFeed
+    const allowed = new Set((params.sourceTypes && params.sourceTypes.length ? params.sourceTypes : ['wikipedia','arxiv','news','github','pubmed','books']))
+    try {
+      const results: any[] = []
+      // per-source query
+      if (allowed.has('wikipedia')) results.push(...await this.searchWikipedia(topic, maxResults))
+      if (allowed.has('arxiv')) results.push(...await this.searchArxiv(topic, maxResults))
+      if (allowed.has('news')) results.push(...await this.searchNews(topic, maxResults))
+      if (allowed.has('github')) results.push(...await this.searchGitHub(topic, maxResults))
+      if (allowed.has('pubmed')) results.push(...await this.searchPubMed(topic, maxResults))
+      if (allowed.has('books')) results.push(...await this.searchBooks(topic, maxResults))
+
+      const filtered = await this.applyQualityFilter(results, [topic])
+      // de-dupe by URL
+      const unique = filtered.filter((r, i, self)=> i===self.findIndex(x=> x.url===r.url))
+
+      let fedCount = 0
+      if (autoFeed) {
+        const existing = await FeedService.getRecentMemories(agentId, 200)
+        const existingUrls = new Set(existing.map((m:any)=> m.sourceUrl).filter(Boolean))
+        const existingTitles = new Set(existing.map((m:any)=> m.sourceTitle).filter(Boolean))
+        for (const item of unique.slice(0, maxResults)) {
+          if (existingUrls.has(item.url) || existingTitles.has(item.title)) continue
+          const feedItem: FeedItem = {
+            content: item.content,
+            sourceType: item.sourceType || 'url',
+            sourceUrl: item.url,
+            sourceTitle: item.sourceTitle || item.title,
+            sourceAuthor: item.sourceAuthor,
+            tags: [topic]
+          }
+          try { await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); fedCount++ } catch {}
+        }
+      }
+
+      return { success: true, results: unique.slice(0, maxResults), fedCount }
+    } catch (e) {
+      console.error('[AgentSpecificRetriever] retrieveForTopic error', e)
+      return { success: false, results: [], fedCount: 0 }
+    }
+  }
 
   /**
    * Get agent-specific content based on their domain expertise
@@ -598,15 +653,36 @@ export class AgentSpecificRetriever {
    */
   static async getAllTrainingRecords(): Promise<AgentTrainingRecord[]> {
     try {
-      const agents = await AgentRegistry.getAllAgents();
-      const records = [];
-      
-      for (const agent of agents) {
+      const dbAgents = await AgentRegistry.getAllAgents();
+      const records: AgentTrainingRecord[] = [];
+      const seen = new Set<string>();
+      // DB agents first
+      for (const agent of dbAgents) {
         const record = await this.getAgentTrainingRecord(agent.id);
         records.push(record);
+        seen.add(agent.id);
       }
-      
-      return records.sort((a, b) => b.totalMemories - a.totalMemories);
+
+      // Include featured agents that are not in DB
+      try {
+        const { FEATURED_AGENTS } = await import('@/lib/agents');
+        for (const f of FEATURED_AGENTS) {
+          if (seen.has(f.id)) continue;
+          const base = await this.getAgentTrainingRecord(f.id);
+          // If DB not found, override with featured metadata
+          const merged: AgentTrainingRecord = {
+            ...base,
+            agentId: f.id,
+            agentName: f.name || base.agentName || 'Unknown',
+            domainExpertise: Array.isArray(f.domains) ? f.domains : base.domainExpertise,
+          };
+          records.push(merged);
+          seen.add(f.id);
+        }
+      } catch {}
+
+      return records
+        .sort((a, b) => b.totalMemories - a.totalMemories);
     } catch (error) {
       console.error('Error getting all training records:', error);
       return [];

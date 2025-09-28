@@ -36,7 +36,7 @@ import {
   File,
   ExternalLink
 } from 'lucide-react';
-import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
+// import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
 import { useSession } from 'next-auth/react';
 
@@ -103,13 +103,14 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
       <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-[280px] flex flex-col">
         {/* Avatar - Main Focus - Fixed height for consistency */}
         <div className="h-[200px] relative">
-          <OptimizedImage
+          <img
             src={agent.avatar}
             alt={agent.name}
-            fill
-            className="object-cover object-top"
-            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-            priority={false}
+            className="w-full h-full object-cover object-top"
+            onError={(e) => {
+              console.error('Image failed to load:', agent.avatar);
+              e.currentTarget.style.display = 'none';
+            }}
           />
           {/* Subtle overlay on hover */}
           <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
@@ -341,26 +342,23 @@ function ConversationThread({
   onSendMessage: (content: string) => void;
 }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const lastMessageCountRef = useRef(0);
 
   // Check if user is at the bottom of the chat
   const checkIfAtBottom = () => {
-    if (!messageContainerRef.current) return false;
-    const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-    const threshold = 10; // Small threshold for precision
-    return scrollHeight - scrollTop <= clientHeight + threshold;
+    const el = scrollContainerRef.current;
+    if (!el) return false;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 30; // allow buffer
   };
 
-  // Smooth scroll to bottom
+  // Bulletproof scroll to bottom with DOM timing
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (!messagesEndRef.current) return;
+    messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
   };
 
   // Handle scroll events
@@ -369,8 +367,8 @@ function ConversationThread({
     setIsAtBottom(atBottom);
     
     // Show scroll button if user has scrolled up significantly
-    if (messageContainerRef.current) {
-      const { scrollTop } = messageContainerRef.current;
+    if (scrollContainerRef.current) {
+      const { scrollTop } = scrollContainerRef.current;
       setShowScrollButton(!atBottom && scrollTop > 100);
       
       // Track user scroll behavior
@@ -384,61 +382,85 @@ function ConversationThread({
 
   // Initialize scroll behavior for new thread
   useEffect(() => {
-    if (!messageContainerRef.current) return;
-    
-    setIsInitialLoad(true);
     setIsAtBottom(true);
     setHasUserScrolled(false);
     setShowScrollButton(false);
     
-    // For new conversations, ensure we start at the bottom
-    if (thread.messages.length === 0) {
-      // New conversation - scroll to bottom immediately
-      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
-    } else {
-      // Existing conversation - scroll to bottom to show latest messages
-      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
-    }
-    
-    // Mark initial load as complete after DOM update
-    requestAnimationFrame(() => {
-      setIsInitialLoad(false);
-    });
+    // Delay scroll until DOM is painted
+    const timeout = setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+
+    return () => clearTimeout(timeout);
   }, [thread.id]);
 
-  // Handle new messages
+  // Handle new messages with proper DOM timing
   useEffect(() => {
     const currentMessageCount = thread.messages.length;
     const hasNewMessages = currentMessageCount > lastMessageCountRef.current;
     
-    if (hasNewMessages && messageContainerRef.current) {
-      // Only auto-scroll if user is at bottom or it's initial load
-      if (isAtBottom || isInitialLoad) {
-        // Use requestAnimationFrame to ensure DOM is updated
-        requestAnimationFrame(() => {
+    if (hasNewMessages) {
+      // Only auto-scroll if user is at bottom
+      if (isAtBottom) {
+        // Delay scroll until DOM is painted
+        const timeout = setTimeout(() => {
           scrollToBottom();
-        });
+        }, 100);
+        
+        return () => clearTimeout(timeout);
       }
     }
     
     lastMessageCountRef.current = currentMessageCount;
-  }, [thread.messages.length, isAtBottom, isInitialLoad]);
+  }, [thread.messages.length, isAtBottom]);
 
   // Set up scroll event listener
   useEffect(() => {
-    const container = messageContainerRef.current;
+    const container = scrollContainerRef.current;
     if (!container) return;
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Optional: ResizeObserver for dynamic content (images, markdown, etc.)
+  useEffect(() => {
+    if (!scrollContainerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Only auto-scroll if user is at bottom
+      if (isAtBottom) {
+        const timeout = setTimeout(() => {
+          scrollToBottom();
+        }, 50);
+        
+        return () => clearTimeout(timeout);
+      }
+    });
+
+    resizeObserver.observe(scrollContainerRef.current);
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isAtBottom]);
+
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4 pb-24">
-        {thread.messages.map((message) => (
+      <div 
+        ref={scrollContainerRef}
+        style={{
+          height: '100%',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        className="flex-1 px-6 py-6 pb-24"
+      >
+        <div className="space-y-4">
+          {thread.messages.map((message) => (
           <div
             key={message.id}
             className={`flex gap-4 ${
@@ -448,10 +470,14 @@ function ConversationThread({
             {/* User Avatar */}
             {message.type === 'user' && message.user && (
               <div className="flex-shrink-0">
-                <AvatarImage
+                <img
                   src={message.user.avatar}
                   alt={message.user.name}
-                  size={40}
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(e) => {
+                    console.error('User avatar failed to load:', message.user.avatar);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
               </div>
             )}
@@ -459,10 +485,14 @@ function ConversationThread({
             {/* Agent Avatar */}
             {message.type === 'agent' && message.agent && (
               <div className="flex-shrink-0">
-                <AvatarImage
+                <img
                   src={message.agent.avatar}
                   alt={message.agent.name}
-                  size={40}
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(e) => {
+                    console.error('Agent avatar failed to load:', message.agent.avatar);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
               </div>
             )}
@@ -498,7 +528,8 @@ function ConversationThread({
               </p>
             </div>
           </div>
-        ))}
+          ))}
+        </div>
         <div ref={messagesEndRef} />
       </div>
 
@@ -506,7 +537,11 @@ function ConversationThread({
       {showScrollButton && (
         <div className="fixed bottom-24 right-6 z-30">
           <button
-            onClick={scrollToBottom}
+            onClick={() => {
+              if (messagesEndRef.current) {
+                messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
             className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105"
             title="Scroll to latest messages"
           >
@@ -594,10 +629,14 @@ function AgentRoster({
                   className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
                 >
                   <div className="relative">
-                    <AvatarImage
+                    <img
                       src={agent.avatar}
                       alt={agent.name}
-                      size={40}
+                      className="w-10 h-10 rounded-full object-cover"
+                      onError={(e) => {
+                        console.error('Agent avatar failed to load:', agent.avatar);
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
             </div>
@@ -630,10 +669,14 @@ function AgentRoster({
                   onClick={() => onToggleAgent(agent.id)}
                   className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <AvatarImage
+                  <img
                     src={agent.avatar}
                     alt={agent.name}
-                    size={32}
+                    className="w-8 h-8 rounded-full object-cover"
+                    onError={(e) => {
+                      console.error('Agent avatar failed to load:', agent.avatar);
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-gray-900">{agent.name}</p>

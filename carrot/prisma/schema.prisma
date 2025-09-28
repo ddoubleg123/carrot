@@ -102,6 +102,10 @@ model User {
   addedSources      Source[] @relation("SourceAdder")
   patchPosts        PatchPost[] @relation("PatchPostAuthor")
   patchMemberships  PatchMember[] @relation("PatchMembers")
+  // New patch system relations
+  patchThemes       UserPatchTheme[]
+  patchFollowers    Follower[]
+  botSubscriptions  BotSubscription[]
 }
 
 model Post {
@@ -453,6 +457,10 @@ model Patch {
   sources Source[]
   posts   PatchPost[]
   members PatchMember[]
+  // New relations
+  userThemes       UserPatchTheme[]
+  followers        Follower[]
+  botSubscriptions BotSubscription[]
 
   @@index([handle])
   @@index([createdBy])
@@ -637,4 +645,54 @@ model AgentConversation {
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@map("agent_conversations")
+}
+
+// New Patch System Models
+model UserPatchTheme {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  patchId   String   @map("patch_id")
+  mode      String   // 'preset' | 'image'
+  preset    String?  // 'light' | 'warm' | 'stone' | 'civic' | 'ink'
+  imageUrl  String?  @map("image_url")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, patchId], name: "user_patch_theme_unique")
+  @@index([userId])
+  @@index([patchId])
+  @@map("user_patch_themes")
+}
+
+model Follower {
+  id        String   @id @default(cuid())
+  patchId   String   @map("patch_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, userId], name: "patch_user_follower_unique")
+  @@index([patchId])
+  @@index([userId])
+  @@map("followers")
+}
+
+model BotSubscription {
+  id          String   @id @default(cuid())
+  patchId     String   @map("patch_id")
+  botId       String   @map("bot_id")
+  ownerUserId String   @map("owner_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  owner User  @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, botId], name: "patch_bot_subscription_unique")
+  @@index([patchId])
+  @@index([ownerUserId])
+  @@map("bot_subscriptions")
 }

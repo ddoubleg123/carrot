@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
-import { getPatchThemeClass } from '@/lib/patch-theme'
-import BreadcrumbBar from '@/components/patch/BreadcrumbBar'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
-import Sidebar from '@/components/patch/Sidebar'
+import RightRail from '@/components/patch/RightRail'
 import TimelineView from '@/components/patch/TimelineView'
 import Overview from '@/components/patch/Overview'
 import ResourcesList from '@/components/patch/ResourcesList'
@@ -21,6 +21,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     const { handle } = await params
     const search = await searchParams
     const activeTab = (search.tab as string) || 'overview'
+    const session = await getServerSession(authOptions)
 
     console.log('[PatchPage] Loading patch with handle:', handle)
 
@@ -42,7 +43,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       return <AstrosPage params={params} searchParams={searchParams} />;
     }
 
-    // Simple patch query with counts
+    // Enhanced patch query with all needed data
     let patch = await prisma.patch.findUnique({
       where: { handle },
       select: {
@@ -54,6 +55,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
         tags: true,
         createdBy: true,
         createdAt: true,
+        updatedAt: true,
         _count: {
           select: {
             members: true,
@@ -76,36 +78,113 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       );
     }
 
-    // Get theme class
-    const themeClass = getPatchThemeClass(patch.theme as string | null);
+    // Get user theme if logged in
+    let userTheme = null;
+    if (session?.user?.id) {
+      userTheme = await prisma.userPatchTheme.findUnique({
+        where: {
+          userId_patchId: {
+            userId: session.user.id,
+            patchId: patch.id
+          }
+        }
+      });
+    }
+
+    // Get followers data
+    const followers = await prisma.follower.findMany({
+      where: { patchId: patch.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            username: true
+          }
+        }
+      },
+      take: 10,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const followerCount = await prisma.follower.count({
+      where: { patchId: patch.id }
+    });
+
+    // Get bot subscriptions
+    const botSubscriptions = await prisma.botSubscription.findMany({
+      where: { patchId: patch.id },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true
+          }
+        }
+      }
+    });
+
+    // Get events for timeline
+    const events = await prisma.event.findMany({
+      where: { patchId: patch.id },
+      include: {
+        sources: {
+          select: {
+            id: true,
+            title: true,
+            url: true,
+            author: true
+          }
+        }
+      },
+      orderBy: { dateStart: 'desc' },
+      take: 50
+    });
+
+    // Check if user is a member
+    const isMember = session?.user?.id ? await prisma.patchMember.findUnique({
+      where: {
+        patchId_userId: {
+          patchId: patch.id,
+          userId: session.user.id
+        }
+      }
+    }) : null;
 
     return (
-      <div className={`min-h-screen ${themeClass}`}>
-        {/* Breadcrumb Bar */}
-        <BreadcrumbBar />
-        
+      <div className="min-h-screen bg-white">
         {/* Header */}
         <PatchHeader 
           patch={patch}
-          isMember={false}
+          isMember={!!isMember}
+          userTheme={userTheme}
         />
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Content Area */}
             <div className="lg:col-span-2">
               <PatchTabs activeTab={activeTab} patch={patch}>
                 {activeTab === 'overview' && <Overview patch={patch} />}
-                {activeTab === 'timeline' && <TimelineView events={[]} />}
-                {activeTab === 'resources' && <ResourcesList patch={patch} />}
-                {activeTab === 'posts' && <PostFeed patch={patch} />}
+                {activeTab === 'documents' && <ResourcesList patch={patch} />}
+                {activeTab === 'timeline' && <TimelineView events={events} patchId={patch.id} />}
+                {activeTab === 'sources' && <ResourcesList patch={patch} />}
+                {activeTab === 'discussions' && <PostFeed patch={patch} />}
               </PatchTabs>
             </div>
 
-            {/* Sidebar */}
+            {/* Right Rail */}
             <div className="lg:col-span-1">
-              <Sidebar patch={patch} />
+              <RightRail 
+                patch={patch}
+                followers={followers}
+                botSubscriptions={botSubscriptions}
+                followerCount={followerCount}
+              />
             </div>
           </div>
         </div>

@@ -51,6 +51,7 @@ export default function FeedAgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
+  const [activeTab, setActiveTab] = useState<'agents'|'feed'|'memories'|'training'|'dashboard'>('agents');
   const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
   // Restored state
   const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
@@ -60,6 +61,77 @@ export default function FeedAgentsPage() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [tagsInput, setTagsInput] = useState('');
+  // Learn topics modal & tracker
+  const [showLearnModal, setShowLearnModal] = useState(false);
+  const [assessmentText, setAssessmentText] = useState('');
+  const [lastPlanId, setLastPlanId] = useState<string | null>(null);
+  const [planStatus, setPlanStatus] = useState<any>(null);
+
+  // Learn topics: parse + create training plan
+  const extractTopicsFromAssessment = (text: string): string[] => {
+    // Collect bullet lines and headings as topics; simple heuristic
+    const lines = text.split(/\r?\n/);
+    const topics: string[] = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (/^[-*•]\s+/.test(line)) {
+        const t = line.replace(/^[-*•]\s+/, '').replace(/^[**_`\-\d.\)]+\s*/, '').trim();
+        if (t) topics.push(t);
+      } else if (/^##?\s+/.test(line)) {
+        // Include H2/H3 section titles as higher-level topics optionally
+        const t = line.replace(/^##?\s+/, '').trim();
+        if (t && !/^recommended resources|professional|how to use/i.test(t)) topics.push(t);
+      }
+    }
+    // Normalize, dedupe, limit length
+    const norm = topics
+      .map(t => t.replace(/[:\-–—]+$/, '').trim())
+      .filter(Boolean)
+      .map(t => t.length > 140 ? t.slice(0, 140) : t);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const t of norm) {
+      const key = t.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); out.push(t); }
+    }
+    return out;
+  };
+
+  const submitTrainingPlan = async () => {
+    if (!selectedAgent) return;
+    const topics = extractTopicsFromAssessment(assessmentText);
+    if (!topics.length) { alert('No topics detected. Paste the self-assessment text.'); return; }
+    try {
+      const res = await fetch(`/api/agents/${selectedAgent.id}/training-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topics, options: { perTopicMax: 200 } }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { alert('Failed to create training plan: ' + (data.error || res.statusText)); return; }
+      setLastPlanId(data.planId);
+      setShowLearnModal(false);
+      alert(`Training plan created with ${topics.length} topics. Tracking progress in Training tab.`);
+    } catch (e) {
+      alert('Error creating training plan');
+    }
+  };
+
+  // Poll plan status when lastPlanId is set
+  useEffect(() => {
+    if (!selectedAgent || !lastPlanId) return;
+    let t: any;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/agents/${selectedAgent.id}/training-plan/${lastPlanId}`, { cache: 'no-store' });
+        const j = await r.json();
+        if (j.ok) setPlanStatus(j); else setPlanStatus(null);
+      } catch {}
+      t = setTimeout(poll, 3000);
+    };
+    poll();
+    return () => { if (t) clearTimeout(t); };
+  }, [selectedAgent?.id, lastPlanId]);
 
   // Check server info on mount
   useEffect(() => {
@@ -461,7 +533,7 @@ export default function FeedAgentsPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="agents" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={(v)=> setActiveTab(v as any)} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="agents">Agent Registry</TabsTrigger>
             <TabsTrigger value="feed">Feed Content</TabsTrigger>
@@ -534,23 +606,18 @@ export default function FeedAgentsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setSelectedAgent(agent)}
+                        onClick={() => { setSelectedAgent(agent); setActiveTab('feed'); }}
+                        title="Feed content to this agent"
                       >
                         <Brain className="w-4 h-4 mr-1" />
                         Feed
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setSelectedAgentForTraining(agent);
-                          setShowTrainingWorkflow(true);
-                        }}
+                        onClick={() => { setSelectedAgent(agent); setActiveTab('memories'); }}
+                        title="Open memory viewer for this agent"
                       >
-                        <Zap className="w-4 h-4 mr-1" />
-                        Train
-                      </Button>
-                      <Button size="sm" variant="outline">
                         <BookOpen className="w-4 h-4 mr-1" />
                         View Memories
                       </Button>
@@ -608,6 +675,11 @@ export default function FeedAgentsPage() {
                   </CardHeader>
                   <CardContent>
                     <AgentSelfAssessmentChat agent={selectedAgent} />
+                    <div className="mt-4 flex justify-end">
+                      <Button className="bg-green-600 hover:bg-green-700" onClick={() => setShowLearnModal(true)}>
+                        Learn these topics
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -873,11 +945,61 @@ export default function FeedAgentsPage() {
             )}
           </TabsContent>
 
-          {/* Training Tracker Tab */}
+          {/* Training Tracker Tab (single-agent focus) */}
           <TabsContent value="training" className="space-y-6">
-            <div className="text-center py-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Training Tracker</h3>
-              <p className="text-gray-600">Training tracking functionality coming soon.</p>
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Training Tracker {selectedAgent ? `• ${selectedAgent.name}` : ''}</h3>
+              {!selectedAgent && (
+                <p className="text-gray-600">Select an agent to view their training progress.</p>
+              )}
+
+              {selectedAgent && !lastPlanId && (
+                <p className="text-gray-600">Create a training plan from the self-assessment to see live progress here.</p>
+              )}
+
+              {selectedAgent && planStatus && (
+                <>
+                  <div className="text-sm">
+                    <div className="mb-2">Plan: <span className="font-mono">{lastPlanId}</span> • Status: <span className="font-medium">{planStatus.plan.status}</span></div>
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                      <div className="p-2 bg-gray-50 rounded">Queued: {planStatus.plan.totals.queued}</div>
+                      <div className="p-2 bg-gray-50 rounded">Running: {planStatus.plan.totals.running}</div>
+                      <div className="p-2 bg-gray-50 rounded">Done: {planStatus.plan.totals.done}</div>
+                      <div className="p-2 bg-gray-50 rounded">Failed: {planStatus.plan.totals.failed}</div>
+                      <div className="p-2 bg-gray-50 rounded">Skipped: {planStatus.plan.totals.skipped}</div>
+                      <div className="p-2 bg-gray-50 rounded">Fed: {planStatus.plan.totals.fed}</div>
+                    </div>
+                  </div>
+
+                  {/* Per-topic progress list */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Trainable topics</h4>
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {planStatus.tasks?.map((t: any) => (
+                        <div key={t.id} className="text-sm flex items-center justify-between border rounded px-2 py-1 bg-white">
+                          <div className="truncate mr-3" title={`${t.topic} (page ${t.page})`}>{t.topic}</div>
+                          <div className="text-xs text-gray-600">pg {t.page} • {t.status} • fed {t.itemsFed||0}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Reuse dashboard chart for the single agent */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Coverage by expertise</h4>
+                    <AgentTrainingDashboard 
+                      selectedAgentId={selectedAgent?.id}
+                      onAgentSelect={(agentId)=>{
+                        const a = agents.find(a=> a.id===agentId); setSelectedAgent(a||null);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {selectedAgent && !planStatus && lastPlanId && (
+                <p className="text-gray-600">Loading plan status…</p>
+              )}
             </div>
           </TabsContent>
 
@@ -911,6 +1033,24 @@ export default function FeedAgentsPage() {
           }}
         />
       )}
+
+      {/* Learn Topics Modal */}
+      <Sheet open={showLearnModal} onOpenChange={setShowLearnModal}>
+        <SheetContent side="right" className="w-full sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Learn these topics</SheetTitle>
+            <SheetDescription>Paste the self-assessment text. We will extract topics and create a durable training plan (200 items per topic by default).</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-3">
+            <Label htmlFor="assessmentText">Self-assessment text</Label>
+            <Textarea id="assessmentText" rows={14} value={assessmentText} onChange={(e)=> setAssessmentText(e.target.value)} placeholder="Paste the self-assessment here…" />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={()=> setShowLearnModal(false)}>Cancel</Button>
+              <Button onClick={submitTrainingPlan} className="bg-green-600 hover:bg-green-700">Create Training Plan</Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

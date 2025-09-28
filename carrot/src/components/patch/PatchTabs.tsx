@@ -1,82 +1,88 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { BookOpen, Calendar, MessageSquare, FileText } from 'lucide-react'
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import PatchComposer from './PatchComposer';
 
 interface Patch {
-  id: string
-  handle: string
-  name: string
+  id: string;
+  handle: string;
+  name: string;
 }
 
 interface PatchTabsProps {
-  activeTab: string
-  patch: Patch
-  children: React.ReactNode
+  activeTab: string;
+  patch: Patch;
+  children: React.ReactNode;
 }
 
+const tabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'sources', label: 'Sources' },
+  { id: 'discussions', label: 'Discussions' }
+];
+
 export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
 
-  const handleTabChange = (value: string) => {
-    const params = new URLSearchParams(searchParams?.toString() || '')
-    params.set('tab', value)
-    router.push(`/patch/${patch.handle}?${params.toString()}`)
-  }
-
-  const tabs = [
-    {
-      value: 'overview',
-      label: 'Overview',
-      icon: BookOpen,
-    },
-    {
-      value: 'timeline',
-      label: 'Timeline',
-      icon: Calendar,
-    },
-    {
-      value: 'posts',
-      label: 'Posts',
-      icon: MessageSquare,
-    },
-    {
-      value: 'references',
-      label: 'References',
-      icon: FileText,
-    },
-  ]
+  const handleCreatePost = () => {
+    setIsComposerOpen(true);
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Tab Navigation */}
-      <div className="sticky top-[128px] z-30 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75 border-b border-[#E6E8EC] shadow-sm">
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-4 bg-transparent p-0 h-auto">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              return (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="flex items-center gap-2 px-6 py-4 text-base font-medium data-[state=active]:border-b-2 data-[state=active]:border-[#FF6A00] data-[state=active]:bg-transparent data-[state=active]:text-[#FF6A00] rounded-none border-b-2 border-transparent hover:text-gray-700 transition-colors"
+    <>
+      {/* Tabs Bar */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
+        <div className="max-w-[880px] mx-auto px-6 md:px-10">
+          <div className="flex items-center justify-between py-4">
+            {/* Tabs */}
+            <div className="flex items-center gap-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-[#FF6A00] text-white'
+                      : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100'
+                  }`}
+                  onClick={() => {
+                    // TODO: Navigate to tab
+                    console.log('Navigate to tab:', tab.id);
+                  }}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.label}</span>
-                </TabsTrigger>
-              )
-            })}
-          </TabsList>
-        </Tabs>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Create Post Button */}
+            <Button
+              onClick={handleCreatePost}
+              variant="default"
+              size="sm"
+              className="ml-auto bg-[#FF6A00] hover:bg-[#E55A00] text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Post
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-[400px] pt-6 md:pt-8">
+      <div className="max-w-[880px] mx-auto px-6 md:px-10 py-6 md:py-8">
         {children}
       </div>
-    </div>
-  )
+
+      {/* Composer Modal */}
+      <PatchComposer
+        isOpen={isComposerOpen}
+        onClose={() => setIsComposerOpen(false)}
+        patch={patch}
+      />
+    </>
+  );
 }

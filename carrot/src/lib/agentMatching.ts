@@ -6,7 +6,7 @@ export const ENHANCED_AGENTS = [
     id: 'madison',
     name: 'James Madison',
     role: 'Democracy',
-    avatar: '/agents/James Madison.png',
+    avatar: '/agents/James Madison.jpg',
     expertise: ['Constitution', 'Federalism', 'Democracy'],
     expandedKeywords: [
       'constitution', 'federalism', 'democracy', 'republic', 'government',
@@ -21,7 +21,7 @@ export const ENHANCED_AGENTS = [
     id: 'mlk',
     name: 'MLK',
     role: 'Black Liberation',
-    avatar: '/agents/MLK.png',
+    avatar: '/agents/MLK.jpg',
     expertise: ['Civil Rights', 'Nonviolence', 'Equality'],
     expandedKeywords: [
       'civil rights', 'nonviolence', 'equality', 'justice', 'freedom',
@@ -36,7 +36,7 @@ export const ENHANCED_AGENTS = [
     id: 'mandela',
     name: 'Nelson Mandela',
     role: 'Colonialism',
-    avatar: '/agents/Nelson Mandela.png',
+    avatar: '/agents/Nelson Mandela.jpg',
     expertise: ['Liberation', 'Reconciliation', 'Social Justice'],
     expandedKeywords: [
       'liberation', 'reconciliation', 'social justice', 'apartheid', 'freedom',
@@ -51,7 +51,7 @@ export const ENHANCED_AGENTS = [
     id: 'brzezinski',
     name: 'Zbigniew Brzezinski',
     role: 'Geopolitics',
-    avatar: '/agents/Zbigniew Brzezinski.png',
+    avatar: '/agents/Zbigniew Brzezinski.jpg',
     expertise: ['Geopolitics', 'International Relations', 'Strategy'],
     expandedKeywords: [
       'geopolitics', 'international relations', 'strategy', 'foreign policy',

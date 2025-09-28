@@ -56,41 +56,64 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         ? `/api/img?url=${encodeURIComponent(p.profilePhoto)}`
         : null;
       const avatar = proxiedFromPath || proxiedFromUrl || '/avatar-placeholder.svg';
+      
+      // Ensure we have safe defaults for all properties
+      const safePost = {
+        id: post.id || 'unknown',
+        content: post.content || '',
+        carrotText: post.carrotText || '',
+        stickText: post.stickText || '',
+        userId: post.userId || 'unknown',
+        createdAt: post.createdAt || new Date().toISOString(),
+        imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
+        gifUrl: post.gifUrl || null,
+        videoUrl: post.videoUrl || null,
+        thumbnailUrl: post.thumbnailUrl || null,
+        audioUrl: post.audioUrl || null,
+        audioTranscription: post.audioTranscription || null,
+        transcriptionStatus: post.transcriptionStatus || null,
+        emoji: post.emoji || '🎯',
+        gradientFromColor: post.gradientFromColor || null,
+        gradientToColor: post.gradientToColor || null,
+        gradientViaColor: post.gradientViaColor || null,
+        gradientDirection: post.gradientDirection || null,
+      };
+      
       return ({
-      id: post.id,
-      content: post.content || '',
-      carrotText: post.carrotText || '',
-      stickText: post.stickText || '',
-      author: {
-        name: '',
-        username: post.User?.username || 'daniel',
-        avatar,
-        flag: post.User?.country || null,
-        id: post.userId,
-      },
-      homeCountry: post.User?.country || null,
-      location: { zip: '10001', city: 'New York', state: 'NY' },
-      stats: {
-        likes: Math.floor(Math.random() * 50),
-        comments: Math.floor(Math.random() * 20),
-        reposts: Math.floor(Math.random() * 10),
-        views: Math.floor(Math.random() * 200) + 50,
-      },
-      userVote: null,
-      timestamp: post.createdAt,
-      imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
-      gifUrl: post.gifUrl || null,
-      videoUrl: post.videoUrl || null,
-      thumbnailUrl: post.thumbnailUrl || null,
-      audioUrl: post.audioUrl || null,
-      audioTranscription: post.audioTranscription || null,
-      transcriptionStatus: post.transcriptionStatus || null,
-      emoji: post.emoji || '🎯',
-      gradientFromColor: post.gradientFromColor || null,
-      gradientToColor: post.gradientToColor || null,
-      gradientViaColor: post.gradientViaColor || null,
-      gradientDirection: post.gradientDirection || null,
-    });
+        id: safePost.id,
+        content: safePost.content,
+        carrotText: safePost.carrotText,
+        stickText: safePost.stickText,
+        author: {
+          name: '',
+          username: (post.User && post.User.username) || 'daniel',
+          avatar,
+          flag: (post.User && post.User.country) || null,
+          id: safePost.userId,
+        },
+        homeCountry: (post.User && post.User.country) || null,
+        location: { zip: '10001', city: 'New York', state: 'NY' },
+        stats: {
+          likes: Math.floor(Math.random() * 50),
+          comments: Math.floor(Math.random() * 20),
+          reposts: Math.floor(Math.random() * 10),
+          views: Math.floor(Math.random() * 200) + 50,
+        },
+        userVote: null,
+        timestamp: safePost.createdAt,
+        imageUrls: safePost.imageUrls,
+        gifUrl: safePost.gifUrl,
+        videoUrl: safePost.videoUrl,
+        thumbnailUrl: safePost.thumbnailUrl,
+        audioUrl: safePost.audioUrl,
+        audioTranscription: safePost.audioTranscription,
+        transcriptionStatus: safePost.transcriptionStatus,
+        emoji: safePost.emoji,
+        gradientFromColor: safePost.gradientFromColor,
+        gradientToColor: safePost.gradientToColor,
+        gradientViaColor: safePost.gradientViaColor,
+        gradientDirection: safePost.gradientDirection,
+      });
     });
   } catch (e) {
     console.error('Error fetching posts for /home:', e);

@@ -1,85 +1,134 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { cardVariants, sectionHeading } from '@/styles/cards';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Calendar, Filter, Search, ExternalLink, Tag, ChevronDown, ChevronUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, Filter, ExternalLink, FileText, Image, Video, File } from 'lucide-react';
 
 interface Event {
   id: string;
   title: string;
-  dateStart: Date;
-  dateEnd?: Date | null;
+  dateStart: string;
+  dateEnd?: string;
   summary: string;
-  tags: string[];
   media?: {
-    type: 'image' | 'video';
+    type: 'image' | 'video' | 'pdf';
     url: string;
     alt?: string;
-  } | null;
-  sources: Array<{
+  };
+  tags: string[];
+  sources: {
     id: string;
     title: string;
     url: string;
-  }>;
+    author?: string;
+  }[];
 }
 
 interface TimelineViewProps {
   events: Event[];
+  patchId: string;
 }
 
-export default function TimelineView({ events }: TimelineViewProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+interface TimelineJSData {
+  events: {
+    start_date: {
+      year: number;
+      month?: number;
+      day?: number;
+    };
+    end_date?: {
+      year: number;
+      month?: number;
+      day?: number;
+    };
+    text: {
+      headline: string;
+      text: string;
+    };
+    media?: {
+      url: string;
+      caption?: string;
+      credit?: string;
+    };
+    group?: string;
+  }[];
+}
+
+export default function TimelineView({ events, patchId }: TimelineViewProps) {
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>(events);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({});
-  const [viewMode, setViewMode] = useState<'compact' | 'expanded'>('compact');
+  const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [showFilters, setShowFilters] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
 
   // Get all unique tags from events
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    events.forEach(event => {
-      event.tags.forEach(tag => tagSet.add(tag));
-    });
-    return Array.from(tagSet).sort();
-  }, [events]);
+  const allTags = Array.from(new Set(events.flatMap(event => event.tags)));
 
-  // Filter events based on search, tags, and date range
-  const filteredEvents = useMemo(() => {
-    return events.filter(event => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          event.title.toLowerCase().includes(query) ||
-          event.summary.toLowerCase().includes(query) ||
-          event.tags.some(tag => tag.toLowerCase().includes(query));
-        if (!matchesSearch) return false;
-      }
+  // Filter events based on selected tags and date range
+  useEffect(() => {
+    let filtered = events;
 
-      // Tag filter
-      if (selectedTags.length > 0) {
-        const hasSelectedTag = selectedTags.some(tag => event.tags.includes(tag));
-        if (!hasSelectedTag) return false;
-      }
+    // Filter by tags
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(event => 
+        event.tags.some(tag => selectedTags.includes(tag))
+      );
+    }
 
-      // Date range filter
-      if (dateRange.from) {
-        const fromDate = new Date(dateRange.from);
-        if (event.dateStart < fromDate) return false;
-      }
-      if (dateRange.to) {
-        const toDate = new Date(dateRange.to);
-        if (event.dateStart > toDate) return false;
-      }
+    // Filter by date range
+    if (dateRange.from) {
+      filtered = filtered.filter(event => 
+        new Date(event.dateStart) >= new Date(dateRange.from)
+      );
+    }
+    if (dateRange.to) {
+      filtered = filtered.filter(event => 
+        new Date(event.dateStart) <= new Date(dateRange.to)
+      );
+    }
 
-      return true;
-    });
-  }, [events, searchQuery, selectedTags, dateRange]);
+    setFilteredEvents(filtered);
+  }, [events, selectedTags, dateRange]);
 
-  const toggleTag = (tag: string) => {
+  // Convert events to TimelineJS format
+  const convertToTimelineJS = (events: Event[]): TimelineJSData => {
+    return {
+      events: events.map(event => ({
+        start_date: {
+          year: new Date(event.dateStart).getFullYear(),
+          month: new Date(event.dateStart).getMonth() + 1,
+          day: new Date(event.dateStart).getDate()
+        },
+        end_date: event.dateEnd ? {
+          year: new Date(event.dateEnd).getFullYear(),
+          month: new Date(event.dateEnd).getMonth() + 1,
+          day: new Date(event.dateEnd).getDate()
+        } : undefined,
+        text: {
+          headline: event.title,
+          text: event.summary
+        },
+        media: event.media ? {
+          url: event.media.url,
+          caption: event.media.alt || '',
+          credit: event.sources[0]?.author || ''
+        } : undefined,
+        group: event.tags[0] || 'General'
+      }))
+    };
+  };
+
+  // Initialize TimelineJS (placeholder - would need actual TimelineJS integration)
+  useEffect(() => {
+    if (timelineRef.current && filteredEvents.length > 0) {
+      // TODO: Initialize TimelineJS with convertToTimelineJS(filteredEvents)
+      console.log('TimelineJS data:', convertToTimelineJS(filteredEvents));
+    }
+  }, [filteredEvents]);
+
+  const handleTagToggle = (tag: string) => {
     setSelectedTags(prev => 
       prev.includes(tag) 
         ? prev.filter(t => t !== tag)
@@ -88,88 +137,66 @@ export default function TimelineView({ events }: TimelineViewProps) {
   };
 
   const clearFilters = () => {
-    setSearchQuery('');
     setSelectedTags([]);
-    setDateRange({});
+    setDateRange({ from: '', to: '' });
+  };
+
+  const getMediaIcon = (type?: string) => {
+    switch (type) {
+      case 'image': return <Image className="w-4 h-4" />;
+      case 'video': return <Video className="w-4 h-4" />;
+      case 'pdf': return <FileText className="w-4 h-4" />;
+      default: return <File className="w-4 h-4" />;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
-    <div className="space-y-6 mt-4 md:mt-6">
-      {/* Header with controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className={sectionHeading}>Timeline</h2>
-          <p className="text-sm text-[#60646C]">
-            Chronological events and milestones
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === 'compact' ? 'primary' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('compact')}
-            className={viewMode === 'compact' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}
-          >
-            Compact
-          </Button>
-          <Button
-            variant={viewMode === 'expanded' ? 'primary' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('expanded')}
-            className={viewMode === 'expanded' ? 'bg-[#FF6A00] hover:bg-[#FF6A00]/90' : ''}
-          >
-            Expanded
-          </Button>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       {/* Filters */}
-      <div className={cardVariants.default}>
+      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-[#0B0B0F]">Filters</h3>
+          <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Timeline Filters
+          </h3>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-1"
           >
-            <Filter className="w-4 h-4" />
-            {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {showFilters ? 'Hide' : 'Show'} Filters
           </Button>
         </div>
 
         {showFilters && (
           <div className="space-y-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#60646C] w-4 h-4" />
-              <Input
-                placeholder="Search events..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
             {/* Date Range */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#0B0B0F] mb-1">
+                <label className="text-sm font-medium text-[#0B0B0F] mb-2 block">
                   From Date
                 </label>
                 <Input
                   type="date"
-                  value={dateRange.from || ''}
+                  value={dateRange.from}
                   onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#0B0B0F] mb-1">
+                <label className="text-sm font-medium text-[#0B0B0F] mb-2 block">
                   To Date
                 </label>
                 <Input
                   type="date"
-                  value={dateRange.to || ''}
+                  value={dateRange.to}
                   onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
                 />
               </div>
@@ -177,22 +204,21 @@ export default function TimelineView({ events }: TimelineViewProps) {
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-[#0B0B0F] mb-2">
+              <label className="text-sm font-medium text-[#0B0B0F] mb-2 block">
                 Filter by Tags
               </label>
               <div className="flex flex-wrap gap-2">
                 {allTags.map(tag => (
                   <Badge
                     key={tag}
-                    variant={selectedTags.includes(tag) ? 'default' : 'secondary'}
-                    className={`cursor-pointer hover:bg-gray-100 transition-colors ${
+                    variant={selectedTags.includes(tag) ? "default" : "outline"}
+                    className={`cursor-pointer transition-colors ${
                       selectedTags.includes(tag) 
-                        ? 'bg-[#0A5AFF] text-white' 
-                        : 'bg-gray-100 text-gray-700'
+                        ? 'bg-[#FF6A00] text-white' 
+                        : 'hover:bg-gray-100'
                     }`}
-                    onClick={() => toggleTag(tag)}
+                    onClick={() => handleTagToggle(tag)}
                   >
-                    <Tag className="w-3 h-3 mr-1" />
                     {tag}
                   </Badge>
                 ))}
@@ -200,128 +226,110 @@ export default function TimelineView({ events }: TimelineViewProps) {
             </div>
 
             {/* Clear Filters */}
-            {(searchQuery || selectedTags.length > 0 || dateRange.from || dateRange.to) && (
+            <div className="flex justify-end">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={clearFilters}
-                className="flex items-center gap-2"
+                disabled={selectedTags.length === 0 && !dateRange.from && !dateRange.to}
               >
-                <Filter className="w-4 h-4" />
                 Clear Filters
               </Button>
-            )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Results Count */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-[#60646C]">
-          Showing {filteredEvents.length} of {events.length} events
-        </p>
+      {/* TimelineJS Container */}
+      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm overflow-hidden">
+        <div className="p-5 md:p-6 border-b border-[#E6E8EC]">
+          <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Timeline
+          </h3>
+          <p className="text-sm text-[#60646C] mt-1">
+            {filteredEvents.length} events found
+          </p>
+        </div>
+        
+        {/* TimelineJS will be rendered here */}
+        <div 
+          ref={timelineRef}
+          className="h-96 bg-gray-50 flex items-center justify-center"
+        >
+          <div className="text-center text-[#60646C]">
+            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>TimelineJS integration placeholder</p>
+            <p className="text-sm mt-1">
+              {filteredEvents.length} events ready to display
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Timeline */}
+      {/* Events List */}
       <div className="space-y-4">
-        {filteredEvents.length === 0 ? (
-          <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 md:p-5">
-            <div className="text-center py-8">
-              <Calendar className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">No events found</h3>
-              <p className="text-[#60646C]">
-                {searchQuery || selectedTags.length > 0 || dateRange.from || dateRange.to
-                  ? 'Try adjusting your filters to see more events.'
-                  : 'No events have been added to this patch yet.'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="relative">
-            {/* Timeline line */}
-            <div className="absolute left-6 top-0 bottom-0 w-px bg-[#E6E8EC]"></div>
-            
-            {filteredEvents.map((event, index) => (
-              <div key={event.id} className="relative flex gap-4 mb-6">
-                {/* Timeline indicator - centered on line */}
-                <div className="flex-shrink-0 w-12 flex justify-center">
-                  <div className="w-3 h-3 bg-[#FF6A00] rounded-full mt-2 relative z-10"></div>
-                </div>
-
-                {/* Event content */}
-                <div className="flex-1 min-w-0">
-                  <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 md:p-5">
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-lg font-semibold text-[#0B0B0F]">
-                            {event.title}
-                          </h3>
-                          <Badge variant="secondary" className="text-xs">
-                            {event.dateStart.toLocaleDateString()}
-                            {event.dateEnd && ` - ${event.dateEnd.toLocaleDateString()}`}
-                          </Badge>
-                        </div>
-
-                        <p className={`text-[#60646C] mb-4 ${
-                          viewMode === 'compact' ? 'line-clamp-3' : ''
-                        }`}>
-                          {event.summary}
-                        </p>
-
-                        {/* Tags */}
-                        {event.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-4">
-                            {event.tags.map(tag => (
-                              <Badge
-                                key={tag}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Sources */}
-                        {event.sources.length > 0 && (
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-[#0B0B0F]">Sources:</h4>
-                            <div className="space-y-1">
-                              {event.sources.map(source => (
-                                <div key={source.id} className="flex items-center gap-2 text-sm">
-                                  <a
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[#FF6A00] hover:text-[#FF6A00]/80 flex items-center gap-1"
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                    {source.title}
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Media */}
-                      {event.media && (
-                        <div className="flex-shrink-0">
-                          <img
-                            src={event.media.url}
-                            alt={event.media.alt || event.title}
-                            className="w-32 h-24 object-cover rounded-lg"
-                          />
-                        </div>
+        <h3 className="text-lg font-semibold text-[#0B0B0F]">Recent Events</h3>
+        {filteredEvents.length > 0 ? (
+          <div className="space-y-3">
+            {filteredEvents.slice(0, 10).map(event => (
+              <div key={event.id} className="rounded-xl border border-[#E6E8EC] bg-white p-4 hover:shadow-sm transition-shadow">
+                <div className="flex items-start gap-4">
+                  {/* Media Thumbnail */}
+                  {event.media && (
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {getMediaIcon(event.media.type)}
+                    </div>
+                  )}
+                  
+                  {/* Event Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-medium text-[#0B0B0F] line-clamp-1">
+                        {event.title}
+                      </h4>
+                      <span className="text-sm text-[#60646C] flex-shrink-0">
+                        {formatDate(event.dateStart)}
+                      </span>
+                    </div>
+                    
+                    <p className="text-sm text-[#60646C] mt-1 line-clamp-2">
+                      {event.summary}
+                    </p>
+                    
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {event.tags.slice(0, 3).map(tag => (
+                        <Badge key={tag} variant="outline" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                      {event.tags.length > 3 && (
+                        <span className="text-xs text-[#60646C]">
+                          +{event.tags.length - 3} more
+                        </span>
                       )}
                     </div>
+                    
+                    {/* Sources */}
+                    {event.sources.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <ExternalLink className="w-3 h-3 text-[#60646C]" />
+                        <span className="text-xs text-[#60646C]">
+                          {event.sources.length} source{event.sources.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-[#60646C]">
+            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No events found</p>
+            <p className="text-sm mt-1">Try adjusting your filters</p>
           </div>
         )}
       </div>

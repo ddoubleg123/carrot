@@ -71,12 +71,12 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       stickText: post.stickText || '',
       author: {
         name: '', // Remove name display per user request
-        username: post.User?.username || 'daniel', // FIXED: Use actual username from database, not name
-        avatar: post.User?.profilePhoto || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
-        flag: post.User?.country || null,
+        username: (post.User && post.User.username) || 'daniel', // FIXED: Use actual username from database, not name
+        avatar: (post.User && post.User.profilePhoto) || (session?.user as any)?.profilePhoto || (session?.user as any)?.image || '/avatar-placeholder.svg',
+        flag: (post.User && post.User.country) || null,
         id: post.userId, // Add the author ID for ownership comparison
       },
-      homeCountry: post.User?.country || null,
+      homeCountry: (post.User && post.User.country) || null,
       location: {
         zip: '10001',
         city: 'New York',
