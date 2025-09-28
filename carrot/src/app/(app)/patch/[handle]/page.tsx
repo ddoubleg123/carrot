@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
+import { auth } from '@/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
@@ -21,7 +20,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     const { handle } = await params
     const search = await searchParams
     const activeTab = (search.tab as string) || 'overview'
-    const session = await getServerSession(authOptions)
+    const session = await auth()
 
     console.log('[PatchPage] Loading patch with handle:', handle)
 
