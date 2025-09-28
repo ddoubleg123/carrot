@@ -1,8 +1,10 @@
 import { FeedService, FeedItem } from './feedService';
+import { RealContentFetcher } from './realContentFetcher';
+import { ContentSources } from './contentSources';
 
 export interface RetrievalRequest {
   query: string;
-  sourceTypes: ('wikipedia' | 'arxiv' | 'news' | 'web')[];
+  sourceTypes: ('wikipedia' | 'arxiv' | 'news' | 'web' | 'academic' | 'books' | 'papers' | 'stackoverflow' | 'github' | 'pubmed')[];
   maxResults: number;
   agentIds: string[];
 }
@@ -136,15 +138,31 @@ export class ContentRetriever {
           results = await this.searchWikipedia(request.query, request.maxResults);
           break;
         case 'arxiv':
+        case 'papers':
           results = await this.searchArxiv(request.query, request.maxResults);
           break;
         case 'web':
           results = await this.searchWeb(request.query, request.maxResults);
           break;
         case 'news':
-          // Placeholder for news search
-          console.log(`News search for "${request.query}" not implemented yet`);
+          results = await this.searchNews(request.query, request.maxResults);
           break;
+        case 'academic':
+        case 'pubmed':
+          results = await this.searchAcademic(request.query, request.maxResults);
+          break;
+        case 'books':
+          results = await this.searchBooks(request.query, request.maxResults);
+          break;
+        case 'stackoverflow':
+          results = await this.searchStackOverflow(request.query, request.maxResults);
+          break;
+        case 'github':
+          results = await this.searchGitHub(request.query, request.maxResults);
+          break;
+        default:
+          console.warn(`Unknown source type: ${sourceType}`);
+          results = [];
       }
       
       allResults.push(...results);
@@ -275,6 +293,116 @@ export class ContentRetriever {
     } catch (error) {
       console.error('Error filtering content by expertise:', error);
       return content; // Return original content if filtering fails
+    }
+  }
+
+  /**
+   * Search news sources using News API
+   */
+  static async searchNews(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
+    try {
+      const apiKey = process.env.NEWS_API_KEY;
+      if (!apiKey) {
+        console.warn('News API key not configured, using mock data');
+        return [{
+          title: `Latest News: ${query}`,
+          url: `https://news.example.com/search?q=${encodeURIComponent(query)}`,
+          content: `Recent developments in ${query} have shown significant progress in the field.`,
+          sourceType: 'url' as const,
+          sourceTitle: 'News Article',
+          sourceAuthor: 'News Source',
+          relevanceScore: 0.7
+        }];
+      }
+
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'newsapi',
+        maxResults,
+        config: { apiKey }
+      });
+    } catch (error) {
+      console.error('Error searching news:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search academic databases using PubMed
+   */
+  static async searchAcademic(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
+    try {
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'pubmed',
+        maxResults
+      });
+    } catch (error) {
+      console.error('Error searching academic:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search books using Project Gutenberg
+   */
+  static async searchBooks(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
+    try {
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'project gutenberg',
+        maxResults
+      });
+    } catch (error) {
+      console.error('Error searching books:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search Stack Overflow for technical content
+   */
+  static async searchStackOverflow(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
+    try {
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'stackoverflow',
+        maxResults
+      });
+    } catch (error) {
+      console.error('Error searching Stack Overflow:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search GitHub repositories
+   */
+  static async searchGitHub(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
+    try {
+      const apiKey = process.env.GITHUB_API_KEY;
+      if (!apiKey) {
+        console.warn('GitHub API key not configured, using mock data');
+        return [{
+          title: `GitHub Repository: ${query}`,
+          url: `https://github.com/search?q=${encodeURIComponent(query)}`,
+          content: `GitHub repositories related to ${query} with code examples and documentation.`,
+          sourceType: 'url' as const,
+          sourceTitle: 'GitHub Repository',
+          sourceAuthor: 'GitHub User',
+          relevanceScore: 0.8
+        }];
+      }
+
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'github',
+        maxResults,
+        config: { apiKey }
+      });
+    } catch (error) {
+      console.error('Error searching GitHub:', error);
+      return [];
     }
   }
 }

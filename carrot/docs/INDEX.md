@@ -14,6 +14,7 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 ### 🤖 **AI & Automation**
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
+| [**AI_AGENT_DEEP_KNOWLEDGE_PROGRAM.md**](./AI_AGENT_DEEP_KNOWLEDGE_PROGRAM.md) | Comprehensive AI agent training system with real content sources | Jan 2025 |
 | [**AGENT_AUTO_JOIN_LOGIC.md**](./AGENT_AUTO_JOIN_LOGIC.md) | Smart agent matching system for the Rabbit AI Council | Jan 2025 |
 
 ### 🔧 **Services & Infrastructure**
@@ -81,7 +82,8 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 - [STYLES_README.md](./STYLES_README.md) - Component tokens and examples
 
 ### **AI & Agents**
-- [AGENT_AUTO_JOIN_LOGIC.md](./AGENT_AUTO_JOIN_LOGIC.md) - Complete agent system
+- [AI_AGENT_DEEP_KNOWLEDGE_PROGRAM.md](./AI_AGENT_DEEP_KNOWLEDGE_PROGRAM.md) - Comprehensive training system
+- [AGENT_AUTO_JOIN_LOGIC.md](./AGENT_AUTO_JOIN_LOGIC.md) - Smart agent matching
 - [README.md](./README.md) - AI system overview
 
 ### **Media & Video**
@@ -94,9 +96,10 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 
 ## 📊 **Documentation Stats**
 
-- **Total Documents**: 6
+- **Total Documents**: 7
 - **Design Documents**: 3
 - **Technical Documents**: 2
+- **AI Documents**: 2
 - **Project Documents**: 1
 - **Last Updated**: January 2025
 

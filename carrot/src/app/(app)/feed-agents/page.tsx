@@ -180,8 +180,8 @@ export default function FeedAgentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: retrievalQuery,
-          sourceTypes: ['wikipedia', 'arxiv'],
-          maxResults: 5,
+          sourceTypes: ['wikipedia', 'arxiv', 'news', 'academic', 'pubmed', 'stackoverflow', 'github', 'books'],
+          maxResults: 20, // Increased from 5 to 20
           autoFeed: true
         }),
       });
@@ -198,6 +198,38 @@ export default function FeedAgentsPage() {
     } catch (error) {
       console.error('Error in auto-retrieve:', error);
       alert('Error retrieving content');
+    } finally {
+      setIsRetrieving(false);
+    }
+  };
+
+  const handleDeepLearning = async () => {
+    if (!selectedAgent) return;
+
+    setIsRetrieving(true);
+    try {
+      // Deep learning mode: comprehensive training across all expertise areas
+      const response = await fetch(`/api/agents/${selectedAgent.id}/deep-learning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceTypes: ['wikipedia', 'arxiv', 'news', 'academic', 'pubmed', 'stackoverflow', 'github', 'books', 'papers'],
+          maxResults: 50, // Much more comprehensive
+          autoFeed: true
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setRetrievalResults(data.results || []);
+        alert(`Deep learning complete! Fed ${data.results?.length || 0} pieces of content to ${selectedAgent.name}`);
+      } else {
+        alert('Error in deep learning: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error in deep learning:', error);
+      alert('Error in deep learning');
     } finally {
       setIsRetrieving(false);
     }
@@ -409,21 +441,29 @@ export default function FeedAgentsPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={`Search for content relevant to ${selectedAgent.name} (e.g., '${selectedAgent.domainExpertise[0] || 'quantum mechanics'}')`}
-                        value={retrievalQuery}
-                        onChange={(e) => setRetrievalQuery(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        onClick={handleAutoRetrieve}
-                        disabled={!retrievalQuery.trim() || isRetrieving}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {isRetrieving ? 'Retrieving...' : `Auto-Feed ${selectedAgent.name}`}
-                      </Button>
-                    </div>
+        <div className="flex gap-2">
+          <Input
+            placeholder={`Search for content relevant to ${selectedAgent.name} (e.g., '${selectedAgent.domainExpertise[0] || 'quantum mechanics'}')`}
+            value={retrievalQuery}
+            onChange={(e) => setRetrievalQuery(e.target.value)}
+            className="flex-1"
+          />
+          <Button
+            onClick={handleAutoRetrieve}
+            disabled={!retrievalQuery.trim() || isRetrieving}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {isRetrieving ? 'Retrieving...' : `Auto-Feed ${selectedAgent.name}`}
+          </Button>
+          <Button
+            onClick={handleDeepLearning}
+            disabled={isRetrieving}
+            className="bg-blue-600 hover:bg-blue-700"
+            title="Comprehensive learning with 50+ sources"
+          >
+            {isRetrieving ? 'Learning...' : 'Deep Learning'}
+          </Button>
+        </div>
                     {retrievalResults.length > 0 && (
                       <div className="mt-4 p-3 bg-green-50 rounded-lg">
                         <h4 className="font-medium text-green-800 mb-2">Retrieval Results</h4>

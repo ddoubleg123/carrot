@@ -97,7 +97,19 @@ export class AgentSpecificRetriever {
 
       // Auto-feed if requested
       if (request.autoFeed) {
+        // Get existing memories to avoid duplicates
+        const existingMemories = await FeedService.getRecentMemories(request.agentId, 100);
+        const existingUrls = new Set(existingMemories.map(m => m.sourceUrl).filter(Boolean));
+        const existingTitles = new Set(existingMemories.map(m => m.sourceTitle).filter(Boolean));
+        
+        let fedCount = 0;
         for (const content of uniqueResults.slice(0, request.maxResults || 5)) {
+          // Skip if we already have this content
+          if (existingUrls.has(content.url) || existingTitles.has(content.title)) {
+            console.log(`[AgentSpecificRetriever] Skipping duplicate content: ${content.title}`);
+            continue;
+          }
+          
           const feedItem: FeedItem = {
             content: content.content,
             sourceType: 'url',
@@ -107,8 +119,16 @@ export class AgentSpecificRetriever {
             tags: [agent.name.toLowerCase(), ...agent.domainExpertise]
           };
           
-          await FeedService.feedAgent(request.agentId, feedItem, 'agent-specific-retrieval');
+          try {
+            await FeedService.feedAgent(request.agentId, feedItem, 'agent-specific-retrieval');
+            console.log(`[AgentSpecificRetriever] Fed NEW content to ${request.agentId}: ${content.title}`);
+            fedCount++;
+          } catch (error) {
+            console.error(`[AgentSpecificRetriever] Error feeding content:`, error);
+          }
         }
+        
+        console.log(`[AgentSpecificRetriever] Fed ${fedCount} new pieces of content to ${request.agentId}`);
       }
 
       // Get training record
