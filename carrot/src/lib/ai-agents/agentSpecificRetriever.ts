@@ -33,32 +33,32 @@ export class AgentSpecificRetriever {
   // Domain-specific search strategies for different agent types
   private static readonly DOMAIN_STRATEGIES = {
     'Physics': {
-      sources: ['arxiv', 'wikipedia', 'physics-news'],
+      sources: ['arxiv', 'wikipedia', 'news', 'pubmed', 'books'],
       keywords: ['quantum', 'relativity', 'particle', 'cosmology', 'thermodynamics'],
       searchTerms: ['physics research', 'scientific papers', 'theoretical physics']
     },
     'Civil Rights': {
-      sources: ['wikipedia', 'news', 'academic'],
+      sources: ['wikipedia', 'news', 'academic', 'books'],
       keywords: ['civil rights', 'social justice', 'equality', 'discrimination', 'activism'],
       searchTerms: ['civil rights movement', 'social justice', 'equality studies']
     },
     'Economics': {
-      sources: ['arxiv', 'wikipedia', 'economic-news'],
+      sources: ['arxiv', 'wikipedia', 'news', 'academic', 'books'],
       keywords: ['economics', 'finance', 'market', 'investment', 'monetary policy'],
       searchTerms: ['economic theory', 'financial markets', 'economic policy']
     },
     'Computer Science': {
-      sources: ['arxiv', 'github', 'wikipedia', 'tech-news'],
+      sources: ['arxiv', 'github', 'wikipedia', 'news', 'books'],
       keywords: ['algorithm', 'programming', 'software', 'artificial intelligence', 'computing'],
       searchTerms: ['computer science research', 'software engineering', 'AI research']
     },
     'Biology': {
-      sources: ['arxiv', 'wikipedia', 'biology-news'],
+      sources: ['arxiv', 'wikipedia', 'news', 'pubmed', 'books'],
       keywords: ['biology', 'evolution', 'genetics', 'ecology', 'molecular biology'],
       searchTerms: ['biological research', 'evolutionary biology', 'genetics studies']
     },
     'Politics': {
-      sources: ['wikipedia', 'news', 'academic'],
+      sources: ['wikipedia', 'news', 'academic', 'books'],
       keywords: ['politics', 'government', 'policy', 'democracy', 'governance'],
       searchTerms: ['political science', 'government policy', 'democratic theory']
     }
@@ -87,10 +87,17 @@ export class AgentSpecificRetriever {
       
       // Retrieve content for each query
       const allResults = [];
+      console.log(`[AgentSpecificRetriever] Starting retrieval for ${agent.name} with ${searchQueries.length} queries`);
+      console.log(`[AgentSpecificRetriever] Search strategy sources: ${searchStrategy.sources.join(', ')}`);
+      
       for (const query of searchQueries) {
+        console.log(`[AgentSpecificRetriever] Processing query: "${query}"`);
         const results = await this.searchWithStrategy(query, searchStrategy, request.maxResults || 5);
+        console.log(`[AgentSpecificRetriever] Query "${query}" returned ${results.length} results`);
         allResults.push(...results);
       }
+      
+      console.log(`[AgentSpecificRetriever] Total results before deduplication: ${allResults.length}`);
 
       // Remove duplicates and sort by relevance
       const uniqueResults = this.deduplicateAndRank(allResults, agent.domainExpertise);
@@ -228,30 +235,57 @@ export class AgentSpecificRetriever {
   private static async searchWithStrategy(query: string, strategy: any, maxResults: number): Promise<any[]> {
     const results = [];
     
+    // Map strategy sources to our content retriever source types
+    const sourceMapping: Record<string, string[]> = {
+      'wikipedia': ['wikipedia'],
+      'arxiv': ['arxiv'],
+      'news': ['news'],
+      'physics-news': ['news'],
+      'economic-news': ['news'],
+      'biology-news': ['news'],
+      'tech-news': ['news'],
+      'github': ['github'],
+      'academic': ['pubmed', 'arxiv'],
+      'books': ['books']
+    };
+    
     for (const source of strategy.sources) {
       try {
-        let sourceResults = [];
+        const sourceTypes = sourceMapping[source] || ['wikipedia']; // Default to wikipedia if unknown
         
-        switch (source) {
-          case 'wikipedia':
-            sourceResults = await this.searchWikipedia(query, maxResults);
-            break;
-          case 'arxiv':
-            sourceResults = await this.searchArxiv(query, maxResults);
-            break;
-          case 'news':
-            sourceResults = await this.searchNews(query, maxResults);
-            break;
-          case 'github':
-            sourceResults = await this.searchGitHub(query, maxResults);
-            break;
-          default:
-            console.log(`Source ${source} not implemented yet`);
+        for (const sourceType of sourceTypes) {
+          console.log(`[AgentSpecificRetriever] Searching ${sourceType} for query: "${query}"`);
+          
+          let sourceResults = [];
+          
+          switch (sourceType) {
+            case 'wikipedia':
+              sourceResults = await this.searchWikipedia(query, maxResults);
+              break;
+            case 'arxiv':
+              sourceResults = await this.searchArxiv(query, maxResults);
+              break;
+            case 'news':
+              sourceResults = await this.searchNews(query, maxResults);
+              break;
+            case 'github':
+              sourceResults = await this.searchGitHub(query, maxResults);
+              break;
+            case 'pubmed':
+              sourceResults = await this.searchPubMed(query, maxResults);
+              break;
+            case 'books':
+              sourceResults = await this.searchBooks(query, maxResults);
+              break;
+            default:
+              console.log(`[AgentSpecificRetriever] Source ${sourceType} not implemented yet`);
+          }
+          
+          console.log(`[AgentSpecificRetriever] Found ${sourceResults.length} results from ${sourceType}`);
+          results.push(...sourceResults);
         }
-        
-        results.push(...sourceResults);
       } catch (error) {
-        console.error(`Error searching ${source}:`, error);
+        console.error(`[AgentSpecificRetriever] Error searching ${source}:`, error);
       }
     }
     
@@ -338,22 +372,57 @@ export class AgentSpecificRetriever {
   }
 
   /**
-   * Search news (placeholder - would integrate with news API)
+   * Search news using News API
    */
   private static async searchNews(query: string, maxResults: number): Promise<any[]> {
-    // Placeholder for news search
-    console.log(`News search for "${query}" would return ${maxResults} results`);
-    return [];
+    try {
+      const { ContentRetriever } = await import('./contentRetriever');
+      return await ContentRetriever.searchNews(query, maxResults);
+    } catch (error) {
+      console.error('Error searching news:', error);
+      return [];
+    }
   }
 
   /**
-   * Search GitHub (placeholder - would integrate with GitHub API)
+   * Search PubMed for biomedical research
+   */
+  private static async searchPubMed(query: string, maxResults: number): Promise<any[]> {
+    try {
+      const { ContentRetriever } = await import('./contentRetriever');
+      return await ContentRetriever.searchAcademic(query, maxResults);
+    } catch (error) {
+      console.error('Error searching PubMed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search books using Project Gutenberg
+   */
+  private static async searchBooks(query: string, maxResults: number): Promise<any[]> {
+    try {
+      const { ContentRetriever } = await import('./contentRetriever');
+      return await ContentRetriever.searchBooks(query, maxResults);
+    } catch (error) {
+      console.error('Error searching books:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search GitHub repositories
    */
   private static async searchGitHub(query: string, maxResults: number): Promise<any[]> {
-    // Placeholder for GitHub search
-    console.log(`GitHub search for "${query}" would return ${maxResults} results`);
-    return [];
+    try {
+      const { ContentRetriever } = await import('./contentRetriever');
+      return await ContentRetriever.searchGitHub(query, maxResults);
+    } catch (error) {
+      console.error('Error searching GitHub:', error);
+      return [];
+    }
   }
+
 
   /**
    * Detect domain from content
@@ -494,6 +563,44 @@ export class AgentSpecificRetriever {
     } catch (error) {
       console.error('Error getting all training records:', error);
       return [];
+    }
+  }
+
+  /**
+   * Perform deep Wikipedia learning with references
+   */
+  static async performWikipediaDeepLearning(
+    pageTitle: string,
+    agentId: string,
+    options: {
+      includeReferences?: boolean;
+      maxReferences?: number;
+      minReliability?: 'high' | 'medium' | 'low';
+    } = {}
+  ): Promise<any> {
+    try {
+      const { WikipediaDeepLearning } = await import('./wikipediaDeepLearning');
+      
+      console.log(`[AgentSpecificRetriever] Starting Wikipedia deep learning for "${pageTitle}"`);
+      
+      const result = await WikipediaDeepLearning.learnFromWikipediaPage(
+        pageTitle,
+        agentId,
+        {
+          includeReferences: true,
+          maxReferences: 15, // Limit to avoid overwhelming
+          minReliability: 'medium',
+          referenceTypes: ['academic', 'journal', 'news', 'book']
+        }
+      );
+      
+      console.log(`[AgentSpecificRetriever] Wikipedia deep learning complete for "${pageTitle}"`);
+      console.log(`[AgentSpecificRetriever] Processed ${result.processedReferences} references`);
+      
+      return result;
+    } catch (error) {
+      console.error(`[AgentSpecificRetriever] Error in Wikipedia deep learning:`, error);
+      throw error;
     }
   }
 }

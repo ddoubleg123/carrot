@@ -235,6 +235,63 @@ export default function FeedAgentsPage() {
     }
   };
 
+  const handleWikipediaDeepLearning = async () => {
+    if (!selectedAgent) return;
+
+    // Get a Wikipedia page suggestion based on agent expertise
+    const pageTitle = getWikipediaSuggestion(selectedAgent);
+    
+    setIsRetrieving(true);
+    try {
+      const response = await fetch(`/api/agents/${selectedAgent.id}/wikipedia-deep-learning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageTitle,
+          includeReferences: true,
+          maxReferences: 15,
+          minReliability: 'medium'
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert(`Wikipedia deep learning complete! Processed ${data.result?.processedReferences || 0} references for ${selectedAgent.name} from "${pageTitle}"`);
+      } else {
+        alert('Error in Wikipedia deep learning: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error in Wikipedia deep learning:', error);
+      alert('Error in Wikipedia deep learning');
+    } finally {
+      setIsRetrieving(false);
+    }
+  };
+
+  const getWikipediaSuggestion = (agent: any): string => {
+    // Generate a Wikipedia page suggestion based on agent expertise
+    for (const domain of agent.domainExpertise) {
+      switch (domain.toLowerCase()) {
+        case 'physics':
+          return 'Quantum mechanics';
+        case 'economics':
+          return 'Economics';
+        case 'computer science':
+          return 'Artificial intelligence';
+        case 'biology':
+          return 'Evolution';
+        case 'civil rights':
+          return 'Civil rights movement';
+        case 'politics':
+          return 'Democracy';
+        default:
+          return 'Science';
+      }
+    }
+    return 'Science';
+  };
+
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     agent.domainExpertise.some(expertise => 
@@ -462,6 +519,14 @@ export default function FeedAgentsPage() {
             title="Comprehensive learning with 50+ sources"
           >
             {isRetrieving ? 'Learning...' : 'Deep Learning'}
+          </Button>
+          <Button
+            onClick={handleWikipediaDeepLearning}
+            disabled={isRetrieving}
+            className="bg-purple-600 hover:bg-purple-700"
+            title="Deep Wikipedia learning with all references"
+          >
+            {isRetrieving ? 'Learning...' : 'Wikipedia Deep'}
           </Button>
         </div>
                     {retrievalResults.length > 0 && (
