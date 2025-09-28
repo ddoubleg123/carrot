@@ -1,5 +1,5 @@
 import { useState } from "react";
-import imageCompression from "browser-image-compression";
+import { optimizeImage, getOptimalDimensions, isSupportedImageType } from "@/lib/imageOptimization";
 
 export function useMediaUpload() {
   const [previewURL, setPreviewURL] = useState<string | null>(null);
@@ -23,19 +23,26 @@ export function useMediaUpload() {
 
     let toUpload = file;
     try {
-      // 2️⃣ compress images in-browser
-      if (file.type.startsWith("image/")) {
+      // 2️⃣ optimize images using our new system
+      if (isSupportedImageType(file)) {
         if (file.size > 10 * 1024 * 1024) {
           alert("Image exceeds 10 MB. Please use a smaller image.");
           setUploading(false);
           setUploadProgress(null);
           return;
         }
-        toUpload = await imageCompression(file, {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
+        
+        // Use our optimized image system
+        const dimensions = getOptimalDimensions('post');
+        const optimizationResult = await optimizeImage(file, {
+          maxSizeMB: dimensions.maxSizeMB,
+          maxWidthOrHeight: dimensions.maxWidthOrHeight,
+          quality: dimensions.quality,
+          useWebWorker: true
         });
+        
+        toUpload = optimizationResult.optimizedFile;
+        console.log(`Image optimized: ${(optimizationResult.originalSize / 1024 / 1024).toFixed(2)}MB → ${(optimizationResult.optimizedSize / 1024 / 1024).toFixed(2)}MB (${optimizationResult.compressionRatio.toFixed(1)}% smaller)`);
       } else if (file.type.startsWith("video/")) {
         if (file.size > 100 * 1024 * 1024) {
           alert("Video exceeds 100 MB. Please trim/compress first.");

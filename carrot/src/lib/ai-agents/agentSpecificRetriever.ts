@@ -1,5 +1,6 @@
 import { FeedService, FeedItem } from './feedService';
 import { AgentRegistry } from './agentRegistry';
+import { ContentQualityFilter, ContentMetadata } from './contentQualityFilter';
 
 export interface AgentSpecificRequest {
   agentId: string;
@@ -289,7 +290,53 @@ export class AgentSpecificRetriever {
       }
     }
     
-    return results;
+    // Apply content quality filtering
+    console.log(`[AgentSpecificRetriever] Applying quality filter to ${results.length} results`);
+    const filteredResults = await this.applyQualityFilter(results, strategy.domainExpertise);
+    console.log(`[AgentSpecificRetriever] Quality filter reduced results from ${results.length} to ${filteredResults.length}`);
+    
+    return filteredResults;
+  }
+
+  /**
+   * Apply content quality filtering to search results
+   */
+  private static async applyQualityFilter(results: any[], domainExpertise: string[]): Promise<any[]> {
+    const filteredResults = [];
+    
+    for (const result of results) {
+      try {
+        const contentMetadata: ContentMetadata = {
+          title: result.title,
+          content: result.content || result.summary || '',
+          sourceUrl: result.sourceUrl || result.url,
+          sourceType: result.sourceType || 'unknown',
+          author: result.author,
+          domain: result.domain,
+          tags: result.tags || []
+        };
+
+        const qualityResult = await ContentQualityFilter.filterContent(contentMetadata, domainExpertise);
+        
+        if (qualityResult.isRelevant) {
+          // Add quality metadata to the result
+          result.qualityScore = qualityResult.qualityScore;
+          result.qualityIssues = qualityResult.issues;
+          result.qualityRecommendations = qualityResult.recommendations;
+          filteredResults.push(result);
+          
+          console.log(`[AgentSpecificRetriever] Content passed quality filter: "${result.title}" (score: ${qualityResult.qualityScore.toFixed(2)})`);
+        } else {
+          console.log(`[AgentSpecificRetriever] Content filtered out: "${result.title}" - Issues: ${qualityResult.issues.join(', ')}`);
+        }
+      } catch (error) {
+        console.error(`[AgentSpecificRetriever] Error applying quality filter:`, error);
+        // If filtering fails, include the result to be safe
+        filteredResults.push(result);
+      }
+    }
+    
+    return filteredResults;
   }
 
   /**

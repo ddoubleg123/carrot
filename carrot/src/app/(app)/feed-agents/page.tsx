@@ -16,6 +16,7 @@ import StudyRecord from '@/components/ai-agents/StudyRecord';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
 import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
+import AgentSelfAssessmentChat from '@/components/ai-agents/AgentSelfAssessmentChat';
 import { FEATURED_AGENTS } from '@/lib/agents';
 import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 
@@ -31,7 +32,6 @@ interface Agent {
     avatar?: string;
     councilMembership?: string[];
     userVisibility?: string;
-    trainingEnabled?: boolean;
   };
   createdAt: string;
 }
@@ -51,15 +51,15 @@ export default function FeedAgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
-  
-  // Check if we're on Render (AI training is now enabled with memory management)
+  const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
+  // Restored state
   const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
   const [serverInfo, setServerInfo] = useState<any>(null);
   const [sourceTitle, setSourceTitle] = useState('');
   const [sourceAuthor, setSourceAuthor] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
+  const [tagsInput, setTagsInput] = useState('');
 
   // Check server info on mount
   useEffect(() => {
@@ -142,11 +142,31 @@ export default function FeedAgentsPage() {
     }
   };
 
+  // Parse comma/newline separated tags, dedupe while preserving order
+  const parseTags = (raw: string): string[] => {
+    try {
+      const items = raw
+        .split(/[\n,]/g)
+        .map(s => s.trim())
+        .filter(Boolean)
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const t of items) {
+        const key = t.toLowerCase()
+        if (!seen.has(key)) { seen.add(key); out.push(t) }
+      }
+      return out
+    } catch {
+      return []
+    }
+  }
+
   const handlePreview = async () => {
     if (!selectedAgent || !feedContent.trim()) return;
 
     setIsLoading(true);
     try {
+      const tags = parseTags(tagsInput);
       const response = await fetch(`/api/agents/${selectedAgent.id}/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,6 +176,7 @@ export default function FeedAgentsPage() {
           sourceTitle: sourceTitle || undefined,
           sourceAuthor: sourceAuthor || undefined,
           sourceUrl: sourceUrl || undefined,
+          tags,
         }),
       });
 
@@ -173,6 +194,7 @@ export default function FeedAgentsPage() {
 
     setIsFeeding(true);
     try {
+      const tags = parseTags(tagsInput);
       const response = await fetch(`/api/agents/${selectedAgent.id}/feed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -182,6 +204,7 @@ export default function FeedAgentsPage() {
           sourceTitle: sourceTitle || undefined,
           sourceAuthor: sourceAuthor || undefined,
           sourceUrl: sourceUrl || undefined,
+          tags,
         }),
       });
 
@@ -193,6 +216,7 @@ export default function FeedAgentsPage() {
         setSourceTitle('');
         setSourceAuthor('');
         setSourceUrl('');
+        setTagsInput('');
         setPreview(null);
         alert(`Successfully fed ${data.result.chunkCount} memory chunks to ${selectedAgent.name}`);
       } else {
@@ -571,6 +595,22 @@ export default function FeedAgentsPage() {
                   </CardHeader>
                 </Card>
 
+                {/* Agent Self-Assessment Chat */}
+                <Card className="border-green-200 bg-green-50">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-green-800 flex items-center gap-2">
+                      <Brain className="w-5 h-5" />
+                      {selectedAgent.name} Self-Assessment Chat
+                    </CardTitle>
+                    <CardDescription className="text-green-700">
+                      {selectedAgent.name} analyzes their current knowledge and identifies areas for deeper learning
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AgentSelfAssessmentChat agent={selectedAgent} />
+                  </CardContent>
+                </Card>
+
                 {/* Agent-Specific Automated Content Retrieval */}
                 <Card>
                   <CardHeader>
@@ -701,6 +741,18 @@ export default function FeedAgentsPage() {
                     </div>
 
                     <div>
+                      <Label htmlFor="tagsInput">Tags (comma or newline separated)</Label>
+                      <Textarea
+                        id="tagsInput"
+                        value={tagsInput}
+                        onChange={(e) => setTagsInput(e.target.value)}
+                        placeholder="Paste tags separated by commas or newlines"
+                        rows={4}
+                      />
+                      <div className="text-xs text-gray-500 mt-1">We split on commas/newlines and remove duplicates.</div>
+                    </div>
+
+                    <div>
                       <Label htmlFor="content">Content</Label>
                       <Textarea
                         id="content"
@@ -710,7 +762,6 @@ export default function FeedAgentsPage() {
                         rows={8}
                       />
                     </div>
-
                     <div className="flex gap-2">
                       <Button
                         onClick={handlePreview}

@@ -123,15 +123,35 @@ export default function SettingsPageUnified() {
   // Media upload helper -> returns public URL and durable storage path if available
   const uploadToStorage = async (file: File): Promise<{ publicURL: string; path?: string } | null> => {
     try {
-      const maxBytes = file.type.startsWith('image/') ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+      let fileToUpload = file;
+      
+      // Optimize images before upload
+      if (file.type.startsWith('image/')) {
+        const { optimizeImage, getOptimalDimensions, isSupportedImageType } = await import('@/lib/imageOptimization');
+        
+        if (isSupportedImageType(file)) {
+          const dimensions = getOptimalDimensions('avatar'); // Use avatar dimensions for profile images
+          const optimizationResult = await optimizeImage(file, {
+            maxSizeMB: dimensions.maxSizeMB,
+            maxWidthOrHeight: dimensions.maxWidthOrHeight,
+            quality: dimensions.quality,
+            useWebWorker: true
+          });
+          
+          fileToUpload = optimizationResult.optimizedFile;
+          console.log(`Profile image optimized: ${(optimizationResult.originalSize / 1024 / 1024).toFixed(2)}MB → ${(optimizationResult.optimizedSize / 1024 / 1024).toFixed(2)}MB`);
+        }
+      }
+      
+      const maxBytes = fileToUpload.type.startsWith('image/') ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
       const pres = await fetch('/api/getPresignedURL', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: file.type, maxBytes }),
+        body: JSON.stringify({ type: fileToUpload.type, maxBytes }),
       });
       if (!pres.ok) return null;
       const { uploadURL, publicURL, path } = await pres.json();
-      const put = await fetch(uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      const put = await fetch(uploadURL, { method: 'PUT', headers: { 'Content-Type': fileToUpload.type }, body: fileToUpload });
       if (!put.ok) return null;
       return { publicURL, path };
     } catch { return null; }

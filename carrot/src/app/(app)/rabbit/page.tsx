@@ -448,10 +448,10 @@ function ConversationThread({
             {/* User Avatar */}
             {message.type === 'user' && message.user && (
               <div className="flex-shrink-0">
-                <img
+                <AvatarImage
                   src={message.user.avatar}
                   alt={message.user.name}
-                  className="w-10 h-10 rounded-full object-cover"
+                  size={40}
                 />
               </div>
             )}

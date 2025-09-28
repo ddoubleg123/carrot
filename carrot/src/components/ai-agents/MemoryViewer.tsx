@@ -321,6 +321,36 @@ export default function MemoryViewer({ agentId, agentName }: MemoryViewerProps) 
                       
                       <p className="text-gray-900 mb-2">{memory.content}</p>
                       
+                      {/* Source Information */}
+                      {memory.sourceUrl && (
+                        <div className="mb-3 p-2 bg-gray-50 rounded border">
+                          <div className="flex items-center gap-2 text-xs text-gray-600">
+                            <ExternalLink className="w-3 h-3" />
+                            <span className="font-medium">Source:</span>
+                            <a 
+                              href={memory.sourceUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 underline truncate max-w-[200px]"
+                              title={memory.sourceUrl}
+                            >
+                              {memory.sourceTitle || (() => {
+                                try {
+                                  return new URL(memory.sourceUrl).hostname;
+                                } catch {
+                                  return memory.sourceUrl;
+                                }
+                              })()}
+                            </a>
+                          </div>
+                          {memory.sourceAuthor && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Author: {memory.sourceAuthor}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />

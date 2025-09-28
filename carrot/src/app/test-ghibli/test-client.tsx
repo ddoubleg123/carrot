@@ -22,6 +22,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 export default function TestGhibliClient() {
   const [tab, setTab] = useState<'image' | 'video'>('image')
   const [prompt, setPrompt] = useState('Ghibli style, peaceful countryside with windmills at sunset')
+  // Model is now chosen automatically by mode: prompt -> sd-lora, upload -> animeganv3
   const [model, setModel] = useState<'animeganv3' | 'sd-lora' | 'diffutoon'>('sd-lora')
   const [log, setLog] = useState<string>('Ready.')
   const [imageOut, setImageOut] = useState<string | null>(null)
@@ -32,9 +33,50 @@ export default function TestGhibliClient() {
   const [metrics, setMetrics] = useState<any>(null)
   const [imageMode, setImageMode] = useState<'prompt' | 'upload'>('prompt')
   const [status, setStatus] = useState<any>(null)
+  // LoRA: path is hidden; we just use whatever is on the worker when style preset requires it
   const [loraPath, setLoraPath] = useState<string>('')
   const [loraAlpha, setLoraAlpha] = useState<number>(1.0)
   const [loraOptions, setLoraOptions] = useState<string[]>([])
+  // Style presets
+  type StylePreset = { key: string; label: string; promptPrefix: string; negative: string; needsLora: boolean }
+  const stylePresets: StylePreset[] = [
+    {
+      key: 'ghibli',
+      label: 'Ghibli',
+      promptPrefix: 'Studio Ghibli style, cel-shaded, soft pastel palette, clean lineart, anime screencap, cinematic lighting',
+      negative: 'photorealistic, hyperrealistic, cgi, 3d, gritty, lowres, blurry, deformed, extra fingers, watermark, text, logo, nsfw',
+      needsLora: true,
+    },
+    {
+      key: 'miyazaki_pastel',
+      label: 'Miyazaki Pastel',
+      promptPrefix: 'soft pastel anime, gentle gradients, hand-painted feel, airy atmosphere, expressive eyes, subtle lineart, film-grain',
+      negative: 'photorealistic, harsh contrast, glossy 3d render, cgi, lowres, blurry, deformed, extra fingers, watermark, text, logo, nsfw',
+      needsLora: false,
+    },
+    {
+      key: 'cel_anime_90s',
+      label: 'Cel Anime 90s',
+      promptPrefix: '90s cel anime, bold clean lineart, limited palette shading, flat cel shading, anime screencap, retro TV frame, halftone grain',
+      negative: 'photorealistic, hyperrealistic, cinematic DOF, 3d render, noisy, extra limbs, watermark, text, logo, nsfw',
+      needsLora: false,
+    },
+    {
+      key: 'watercolor_anime',
+      label: 'Watercolor Anime',
+      promptPrefix: 'watercolor wash, soft bleeding pigments, paper texture, gentle linework, pastel anime aesthetic, storybook vibe',
+      negative: 'photorealistic, glossy cgi, high contrast, noisy artifacts, extra fingers, watermark, text, logo, nsfw',
+      needsLora: false,
+    },
+    {
+      key: 'storybook_pastel',
+      label: 'Storybook Pastel',
+      promptPrefix: 'storybook illustration, pastel palette, soft outlines, simple shapes, cozy and whimsical, children book style',
+      negative: 'photorealistic, harsh shadows, cgi render, cluttered details, watermark, text, logo, nsfw',
+      needsLora: false,
+    },
+  ]
+  const [styleKey, setStyleKey] = useState<string>('ghibli')
 
   useEffect(() => {
     const run = async () => {
@@ -63,11 +105,18 @@ export default function TestGhibliClient() {
   const appendLog = (line: string) => setLog((l) => l + "\n" + line)
 
   const submitImage = async () => {
+    // Choose model by mode
+    const chosenModel = imageMode === 'upload' ? 'animeganv3' : 'sd-lora'
+    setModel(chosenModel)
+    const preset = stylePresets.find(p => p.key === styleKey)!
+    // Compose final prompt
+    const finalPrompt = `${preset.promptPrefix}, ${prompt}` + (preset.negative ? ` --neg: ${preset.negative}` : '')
     const form = new FormData()
-    form.append('prompt', prompt)
-    form.append('model', model)
-    if (loraPath) form.append('lora', loraPath)
-    if (loraAlpha !== undefined) form.append('lora_alpha', String(loraAlpha))
+    form.append('prompt', finalPrompt)
+    form.append('model', chosenModel)
+    // If the preset expects a LoRA and the worker exposes any, include selection (optional)
+    if (preset.needsLora && loraPath) form.append('lora', loraPath)
+    if (preset.needsLora && loraAlpha !== undefined) form.append('lora_alpha', String(loraAlpha))
     if (imageMode === 'upload' && imgFileRef.current?.files?.[0]) {
       form.append('image', imgFileRef.current.files[0])
     }
@@ -89,7 +138,7 @@ export default function TestGhibliClient() {
     }
     appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
     setImageOut(data.outputUrl || data.outputPath || null)
-    setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0) })
+    setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0), style: preset.label, mode: imageMode, model: chosenModel })
   }
 
   const submitVideo = async () => {
@@ -169,7 +218,7 @@ export default function TestGhibliClient() {
         <div style={{ display: 'grid', gap: 8 }}>
           {tab === 'image' && (
             <div>
-              <strong>Mode</strong>
+              <strong>1) Mode</strong>
               <div style={{ display:'flex', gap:12, marginTop:6 }}>
                 <label><input type="radio" name="imgmode" checked={imageMode==='prompt'} onChange={()=>setImageMode('prompt')} /> Prompt-only</label>
                 <label><input type="radio" name="imgmode" checked={imageMode==='upload'} onChange={()=>setImageMode('upload')} /> Upload + Stylize</label>
@@ -177,54 +226,42 @@ export default function TestGhibliClient() {
             </div>
           )}
           <label>
-            <div>Prompt</div>
+            <div>2) Prompt</div>
             <input value={prompt} onChange={(e)=>setPrompt(e.target.value)} style={{ width:'100%', padding:8 }} />
           </label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <label>
-              <span>Model </span>
-              <select value={model} onChange={(e)=>setModel(e.target.value as any)}>
-                <option value="sd-lora">Stable Diffusion + Ghibli LoRA</option>
-                <option value="animeganv3">AnimeGANv3 (upload+stylize)</option>
-              </select>
-            </label>
-
-            <label>
-              <span style={{ display:'block' }}>LoRA path (on worker)</span>
-              <input placeholder="/models/your_lora.safetensors" value={loraPath} onChange={(e)=>setLoraPath(e.target.value)} style={{ width: 340 }} />
-            </label>
-
-            <label>
-              <span style={{ display:'block' }}>LoRA files on worker</span>
-              <select value={loraPath} onChange={(e)=>setLoraPath(e.target.value)}>
-                <option value="">(none)</option>
-                {loraOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
+              <span style={{ display:'block' }}>3) Style</span>
+              <select value={styleKey} onChange={(e)=>setStyleKey(e.target.value)}>
+                {stylePresets.map(p => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
                 ))}
               </select>
             </label>
 
-            <label>
-              <span style={{ display:'block' }}>LoRA strength</span>
-              <input type="range" min={0} max={1} step={0.05} value={loraAlpha} onChange={(e)=>setLoraAlpha(parseFloat(e.target.value))} />
-              <span style={{ marginLeft: 6 }}>{loraAlpha.toFixed(2)}</span>
-            </label>
+            {/* LoRA strength for styles that use LoRA; only relevant in Prompt-only (sd-lora) */}
+            {imageMode==='prompt' && (
+              <label title="LoRA strength: lower = subtler style; higher = stronger style but may distort anatomy (typical 0.6–1.0)">
+                <span style={{ display:'block' }}>5) LoRA strength</span>
+                <input type="range" min={0} max={1} step={0.05} value={loraAlpha} onChange={(e)=>setLoraAlpha(parseFloat(e.target.value))} title="LoRA strength: lower = subtler style; higher = stronger style but may distort anatomy (typical 0.6–1.0)" />
+                <span style={{ marginLeft: 6 }}>{loraAlpha.toFixed(2)}</span>
+              </label>
+            )}
           </div>
-{tab === 'image' ? (
+          {tab === 'image' ? (
             <label>
-              <div>Optional input image (disabled unless Upload + Stylize)</div>
+              <div>6) Optional input image (disabled unless Upload + Stylize)</div>
               <input type="file" accept="image/*" ref={imgFileRef} disabled={imageMode!=='upload'} />
             </label>
           ) : (
             <div>
               <div>Input video (&lt;=60s, &lt;=720p)</div>
-              <input type="file" accept="video/*" ref={vidFileRef} />
             </div>
           )}
 
           <div>
             {tab==='image' ? (
-              <button onClick={submitImage} style={{ padding:'8px 14px' }}>Run Image Pipeline</button>
+              <button onClick={submitImage} style={{ padding:'8px 14px' }}>7) Run Image Pipeline</button>
             ) : (
               <button onClick={submitVideo} style={{ padding:'8px 14px' }}>Run Video Pipeline</button>
             )}
