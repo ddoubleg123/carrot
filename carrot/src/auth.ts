@@ -23,7 +23,7 @@ const prisma = new PrismaClient(
     : undefined as any
 );
 
-import { patchAdapter } from "./adapterPatch";
+// import { patchAdapter } from "./adapterPatch";
 
 
 // Helper to refresh Google tokens inside the JWT callback
@@ -113,7 +113,7 @@ function logObjectSize(name: string, obj: any) {
 
 // Avoid eager adapter patching/logging in RSC import path
 // Enable by setting USE_PATCHED_ADAPTER=1 if you need it during local debugging
-const adapter = process.env.USE_PATCHED_ADAPTER === '1' ? patchAdapter(PrismaAdapter(prisma)) : undefined as any;
+const adapter = undefined as any;
 
 export const authOptions = {
   // adapter,
@@ -345,8 +345,8 @@ logger: {
   },
   debug(code: unknown, metadata?: unknown) {
     console.log('[NextAuth][logger][debug]', code, metadata);
-  },
-},
+  }
+}
 };
 
 // Use NextAuth helpers (provides typed handlers, auth(), signIn(), signOut())
