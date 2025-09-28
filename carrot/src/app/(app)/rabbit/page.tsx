@@ -387,16 +387,17 @@ function ConversationThread({
     setHasUserScrolled(false);
     setShowScrollButton(false);
     
-    // Force scroll to bottom when conversation loads - use immediate scroll first, then smooth
+    // For new conversations, start at the top to show the first message
+    // Only scroll to bottom if there are existing messages
     if (messageContainerRef.current) {
-      // Immediate scroll to ensure we're at bottom
-      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+      if (thread.messages.length === 0) {
+        // New conversation - start at top
+        messageContainerRef.current.scrollTop = 0;
+      } else {
+        // Existing conversation - scroll to bottom to show latest messages
+        messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+      }
     }
-    
-    // Then smooth scroll for better UX
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
   }, [thread.id]);
 
 

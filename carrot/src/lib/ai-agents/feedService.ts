@@ -69,7 +69,6 @@ export class FeedService {
       };
     }
     
-    // Simplified approach: Store content as single memory to avoid memory issues
     const memoryIds: string[] = [];
     
     try {
@@ -79,18 +78,55 @@ export class FeedService {
         ? extractedContent.content.substring(0, maxContentLength) + '...'
         : extractedContent.content;
 
-      // For now, create a mock memory ID to avoid Prisma build errors
-      const mockId = `memory-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      memoryIds.push(mockId);
-      console.log(`[FeedService] Successfully stored memory for agent ${agentId}: ${mockId}`);
+      // Create real memory in database
+      const memory = await prisma.agentMemory.create({
+        data: {
+          agentId,
+          content: contentToStore,
+          embedding: [], // Will be populated by embedding service later
+          sourceType: feedItem.sourceType,
+          sourceUrl: extractedContent.url || feedItem.sourceUrl,
+          sourceTitle: extractedContent.title || feedItem.sourceTitle,
+          sourceAuthor: extractedContent.author || feedItem.sourceAuthor,
+          tags: feedItem.tags || [],
+          confidence: 1.0,
+          threadId: feedItem.threadId,
+          topicId: feedItem.topicId,
+          fedBy: fedBy || 'system'
+        }
+      });
+
+      memoryIds.push(memory.id);
+      console.log(`[FeedService] Successfully stored memory for agent ${agentId}: ${memory.id}`);
     } catch (memoryError) {
       console.error('[FeedService] Error storing memory:', memoryError);
-      // Return empty array but don't fail the entire operation
+      throw memoryError; // Re-throw to indicate failure
     }
 
-    // For now, skip database logging to avoid build errors
-    const feedEvent = { id: 'mock-event', agentId };
-    console.log(`[FeedService] Feed event logged for agent ${agentId}`);
+    // Create feed event record
+    let feedEvent;
+    try {
+      feedEvent = await prisma.agentFeedEvent.create({
+        data: {
+          agentId,
+          eventType: 'feed',
+          content: `Fed content: ${extractedContent.title || 'Untitled'}`,
+          sourceUrl: extractedContent.url || feedItem.sourceUrl,
+          sourceTitle: extractedContent.title || feedItem.sourceTitle,
+          memoryIds,
+          fedBy: fedBy || 'system',
+          metadata: {
+            sourceType: feedItem.sourceType,
+            contentLength: extractedContent.content.length,
+            tags: feedItem.tags || []
+          }
+        }
+      });
+      console.log(`[FeedService] Feed event logged for agent ${agentId}: ${feedEvent.id}`);
+    } catch (eventError) {
+      console.error('[FeedService] Error logging feed event:', eventError);
+      // Don't fail the entire operation if event logging fails
+    }
 
     return {
       memoryIds,
@@ -142,50 +178,160 @@ export class FeedService {
 
   /**
    * Get agent's feed history
-   * Simplified to avoid Prisma build errors
    */
   static async getFeedHistory(agentId: string, limit: number = 20) {
-    console.log(`[FeedService] Mock getFeedHistory for agent ${agentId}`);
-    return [];
+    try {
+      const feedEvents = await prisma.agentFeedEvent.findMany({
+        where: { agentId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          eventType: true,
+          content: true,
+          sourceUrl: true,
+          sourceTitle: true,
+          memoryIds: true,
+          fedBy: true,
+          createdAt: true,
+          metadata: true
+        }
+      });
+      return feedEvents;
+    } catch (error) {
+      console.error('[FeedService] Error getting feed history:', error);
+      return [];
+    }
   }
 
   /**
    * Get agent's recent memories
-   * Simplified to avoid Prisma build errors
    */
   static async getRecentMemories(agentId: string, limit: number = 20) {
-    console.log(`[FeedService] Mock getRecentMemories for agent ${agentId}`);
-    return [];
+    try {
+      const memories = await prisma.agentMemory.findMany({
+        where: { agentId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          content: true,
+          sourceType: true,
+          sourceUrl: true,
+          sourceTitle: true,
+          sourceAuthor: true,
+          tags: true,
+          confidence: true,
+          createdAt: true
+        }
+      });
+      return memories;
+    } catch (error) {
+      console.error('[FeedService] Error getting recent memories:', error);
+      return [];
+    }
   }
 
   /**
    * Search agent's memories
-   * Simplified to avoid Prisma build errors
    */
   static async searchMemories(agentId: string, query: string, limit: number = 10) {
-    console.log(`[FeedService] Mock searchMemories for agent ${agentId}`);
-    return [];
+    try {
+      const memories = await prisma.agentMemory.findMany({
+        where: {
+          agentId,
+          OR: [
+            { content: { contains: query, mode: 'insensitive' } },
+            { sourceTitle: { contains: query, mode: 'insensitive' } },
+            { sourceAuthor: { contains: query, mode: 'insensitive' } },
+            { tags: { has: query } }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          content: true,
+          sourceType: true,
+          sourceUrl: true,
+          sourceTitle: true,
+          sourceAuthor: true,
+          tags: true,
+          confidence: true,
+          createdAt: true
+        }
+      });
+      return memories;
+    } catch (error) {
+      console.error('[FeedService] Error searching memories:', error);
+      return [];
+    }
   }
 
   /**
    * Get agent's memory statistics
-   * Simplified to avoid Prisma build errors
    */
   static async getMemoryStats(agentId: string) {
-    console.log(`[FeedService] Mock getMemoryStats for agent ${agentId}`);
-    return {
-      totalMemories: 0,
-      recentMemories: 0,
-      feedEvents: 0,
-    };
+    try {
+      const [totalMemories, recentMemories, highConfidenceMemories] = await Promise.all([
+        prisma.agentMemory.count({ where: { agentId } }),
+        prisma.agentMemory.count({
+          where: {
+            agentId,
+            createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
+          }
+        }),
+        prisma.agentMemory.count({
+          where: {
+            agentId,
+            confidence: { gte: 0.8 }
+          }
+        })
+      ]);
+
+      return {
+        totalMemories,
+        recentMemories,
+        highConfidenceMemories
+      };
+    } catch (error) {
+      console.error('[FeedService] Error getting memory stats:', error);
+      return {
+        totalMemories: 0,
+        recentMemories: 0,
+        highConfidenceMemories: 0
+      };
+    }
   }
 
   /**
    * Forget specific memories
-   * Simplified to avoid Prisma build errors
    */
   static async forgetMemories(agentId: string, memoryIds: string[], fedBy?: string) {
-    console.log(`[FeedService] Mock forgetMemories for agent ${agentId}`);
-    return { count: 0 };
+    try {
+      const result = await prisma.agentMemory.deleteMany({
+        where: {
+          id: { in: memoryIds },
+          agentId // Ensure we only delete memories for this agent
+        }
+      });
+
+      // Log the forget event
+      await prisma.agentFeedEvent.create({
+        data: {
+          agentId,
+          eventType: 'forget',
+          content: `Forgot ${result.count} memories`,
+          memoryIds,
+          fedBy: fedBy || 'system',
+          metadata: { deletedCount: result.count }
+        }
+      });
+
+      return { count: result.count };
+    } catch (error) {
+      console.error('[FeedService] Error forgetting memories:', error);
+      return { count: 0 };
+    }
   }
 }

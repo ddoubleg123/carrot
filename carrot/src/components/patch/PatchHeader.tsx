@@ -21,28 +21,36 @@ interface Patch {
 interface PatchHeaderProps {
   patch: Patch;
   isMember?: boolean;
-  onJoin?: () => void;
-  onLeave?: () => void;
-  onShare?: () => void;
-  onThemeChange?: (theme: 'light' | 'warm' | 'stone') => void;
 }
 
 export default function PatchHeader({ 
   patch, 
-  isMember = false, 
-  onJoin, 
-  onLeave, 
-  onShare,
-  onThemeChange 
+  isMember = false
 }: PatchHeaderProps) {
   const [currentTheme, setCurrentTheme] = useState<'light' | 'warm' | 'stone'>('light');
+
+  const handleJoin = () => {
+    console.log('Join clicked');
+    // TODO: Implement join functionality
+  };
+
+  const handleLeave = () => {
+    console.log('Leave clicked');
+    // TODO: Implement leave functionality
+  };
+
+  const handleShare = () => {
+    console.log('Share clicked');
+    // TODO: Implement share functionality
+  };
 
   const handleThemeChange = () => {
     const themes: ('light' | 'warm' | 'stone')[] = ['light', 'warm', 'stone'];
     const currentIndex = themes.indexOf(currentTheme);
     const nextTheme = themes[(currentIndex + 1) % themes.length];
     setCurrentTheme(nextTheme);
-    onThemeChange?.(nextTheme);
+    console.log('Theme changed to:', nextTheme);
+    // TODO: Implement theme change functionality
   };
 
   return (
@@ -64,7 +72,7 @@ export default function PatchHeader({
           {/* Right side: Actions */}
           <div className="flex items-center gap-3">
             <Button
-              onClick={isMember ? onLeave : onJoin}
+              onClick={isMember ? handleLeave : handleJoin}
               variant={isMember ? "outline" : "primary"}
               className={isMember 
                 ? "border-white/30 text-white hover:bg-white/10 bg-transparent" 
@@ -77,7 +85,7 @@ export default function PatchHeader({
             <Button
               variant="ghost"
               size="sm"
-              onClick={onShare}
+              onClick={handleShare}
               className="text-white hover:bg-white/10 p-2"
             >
               <Share2 className="w-4 h-4" />

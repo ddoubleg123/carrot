@@ -414,6 +414,7 @@ class FeedMediaManager {
       }
     }
 
+    // CRITICAL: Ensure only one video plays at a time
     if (this._active && this._active !== next) {
       try { 
         this._active.pause(); 
@@ -423,6 +424,8 @@ class FeedMediaManager {
         
         this._states.set(this._active, TileState.Paused);
         this._paused.add(this._active);
+        
+        console.log('[FeedMediaManager] Paused previous active video', { id: this._active.id });
       } catch {}
     }
     
@@ -432,11 +435,16 @@ class FeedMediaManager {
       if (this._warm === next) this._warm = undefined;
       
       this._states.set(next, TileState.Active);
+      
+      // Promote this video to full download since it's now active
+      this.promoteActiveVideoToFull(next);
+      
       try { void next.play(); } catch {}
       
       console.log('[FeedMediaManager] Active set', { 
         id: next.id, 
-        preloaded: this.preloadQueue.isCompleted(next.id, TaskType.VIDEO_PREROLL_6S) 
+        preloaded: this.preloadQueue.isCompleted(next.id, TaskType.VIDEO_PREROLL_6S),
+        fullVideoQueued: this.preloadQueue.isCompleted(next.id, TaskType.VIDEO_FULL)
       });
     }
   }
@@ -466,6 +474,41 @@ class FeedMediaManager {
     }
     if (best && best !== this._active) {
       this.setActive(best);
+    }
+  }
+
+  private promoteActiveVideoToFull(handle: VideoHandle): void {
+    // Find the post data for this handle
+    const post = this._posts.find(p => p.id === handle.id);
+    if (!post || post.type !== 'video') {
+      return;
+    }
+
+    // Check if we already have a full video task queued or completed
+    if (this.preloadQueue.isCompleted(handle.id, TaskType.VIDEO_FULL)) {
+      console.log('[FeedMediaManager] Full video already available', { id: handle.id });
+      return;
+    }
+
+    // Construct the video URL
+    const videoUrl = (post.bucket && post.path)
+      ? `/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4`
+      : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : `/api/video?url=${encodeURIComponent(post.videoUrl)}`) : null);
+
+    if (videoUrl) {
+      this.preloadQueue.promoteToFullVideo(handle.id, videoUrl, post.bucket, post.path);
+      console.log('[FeedMediaManager] Promoted active video to full download', { 
+        id: handle.id, 
+        videoUrl: videoUrl.substring(0, 100) + '...' 
+      });
+    }
+  }
+
+  private cancelFullVideoDownload(handle: VideoHandle): void {
+    const taskId = `${TaskType.VIDEO_FULL}:${handle.id}`;
+    const cancelled = this.preloadQueue.cancel(taskId);
+    if (cancelled) {
+      console.log('[FeedMediaManager] Cancelled full video download for paused video', { id: handle.id });
     }
   }
 
@@ -523,6 +566,9 @@ class FeedMediaManager {
         if (handle.setPaused) {
           handle.setPaused();
         }
+        
+        // Cancel any ongoing full video download for this paused video
+        this.cancelFullVideoDownload(handle);
         
         console.log('[FeedMediaManager] Video paused and state preserved', { 
           id: handle.id,

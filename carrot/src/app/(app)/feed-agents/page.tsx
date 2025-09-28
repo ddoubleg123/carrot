@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import MemoryViewer from '@/components/ai-agents/MemoryViewer';
+import StudyRecord from '@/components/ai-agents/StudyRecord';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
 import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
@@ -609,7 +610,10 @@ export default function FeedAgentsPage() {
           {/* Memory Viewer Tab */}
           <TabsContent value="memories" className="space-y-6">
             {selectedAgent ? (
-              <MemoryViewer agentId={selectedAgent.id} agentName={selectedAgent.name} />
+              <div className="space-y-6">
+                <MemoryViewer agentId={selectedAgent.id} agentName={selectedAgent.name} />
+                <StudyRecord agentId={selectedAgent.id} agentName={selectedAgent.name} />
+              </div>
             ) : (
               <Card>
                 <CardContent className="text-center py-12">
@@ -618,7 +622,7 @@ export default function FeedAgentsPage() {
                     Select an Agent
                   </h3>
                   <p className="text-gray-600 mb-4">
-                    Choose an agent from the registry to view their memories
+                    Choose an agent from the registry to view their memories and study record
                   </p>
                   <Button onClick={() => setSelectedAgent(agents[0])}>
                     Select First Agent

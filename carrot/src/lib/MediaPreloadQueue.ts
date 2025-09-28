@@ -1,6 +1,7 @@
 export enum TaskType {
   POSTER = 'POSTER',
   VIDEO_PREROLL_6S = 'VIDEO_PREROLL_6S', 
+  VIDEO_FULL = 'VIDEO_FULL',  // Full video download for active videos only
   IMAGE = 'IMAGE',
   AUDIO_META = 'AUDIO_META',
   TEXT_FULL = 'TEXT_FULL',
@@ -46,6 +47,7 @@ export interface TaskResult {
 interface ConcurrencyLimits {
   [TaskType.POSTER]: number;
   [TaskType.VIDEO_PREROLL_6S]: number;
+  [TaskType.VIDEO_FULL]: number;
   [TaskType.IMAGE]: number;
   [TaskType.AUDIO_META]: number;
   [TaskType.TEXT_FULL]: number;
@@ -86,6 +88,7 @@ class MediaPreloadQueue {
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
     [TaskType.POSTER]: 6,       
     [TaskType.VIDEO_PREROLL_6S]: 2, 
+    [TaskType.VIDEO_FULL]: 1,   // Only one full video download at a time
     [TaskType.IMAGE]: 4,
     [TaskType.AUDIO_META]: 3,
     [TaskType.TEXT_FULL]: 4,
@@ -103,6 +106,7 @@ class MediaPreloadQueue {
   private readonly ESTIMATED_SIZES = {
     [TaskType.POSTER]: 0.1, 
     [TaskType.VIDEO_PREROLL_6S]: 1.5, 
+    [TaskType.VIDEO_FULL]: 8.0,  // Full video can be much larger
     [TaskType.IMAGE]: 0.5, 
     [TaskType.AUDIO_META]: 0.5, 
     [TaskType.TEXT_FULL]: 0.2,
@@ -258,6 +262,30 @@ class MediaPreloadQueue {
       console.log('[MediaPreloadQueue] Promoted tasks', { postId, newPriority, count: promoted });
     }
     return promoted;
+  }
+
+  // Promote a video to full download (for active videos only)
+  promoteToFullVideo(postId: string, url: string, bucket?: string, path?: string): string {
+    const taskId = `${TaskType.VIDEO_FULL}:${postId}`;
+    
+    // Cancel any existing full video task for this post
+    this.cancel(taskId);
+    
+    // Find the original video task to get feedIndex
+    const originalTask = Array.from(this.tasks.values()).find(
+      task => task.postId === postId && task.type === TaskType.VIDEO_PREROLL_6S
+    );
+    
+    if (!originalTask) {
+      console.warn('[MediaPreloadQueue] Cannot promote to full video - no original task found', { postId });
+      return taskId;
+    }
+    
+    // Enqueue full video download with highest priority
+    this.enqueue(postId, TaskType.VIDEO_FULL, Priority.VISIBLE, originalTask.feedIndex, url, bucket, path);
+    
+    console.log('[MediaPreloadQueue] Promoted video to full download', { postId, taskId });
+    return taskId;
   }
 
   // Get task result
@@ -436,6 +464,18 @@ class MediaPreloadQueue {
               'Range': 'bytes=0-1572864', // 1.5MB to match estimated size
               'Accept': 'video/*'
             }
+          });
+          if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
+          const buf = await videoResponse.arrayBuffer();
+          data = buf;
+          actualSize = buf.byteLength;
+          break;
+        }
+
+        case TaskType.VIDEO_FULL: {
+          const videoResponse = await fetch(url, {
+            signal: abortController.signal,
+            headers: { 'Accept': 'video/*' }
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();

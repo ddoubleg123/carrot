@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect } from 'react'
 type JobResult = {
   ok: boolean
   message?: string
+  outputUrl?: string
   outputPath?: string
   meta?: any
 }
@@ -87,7 +88,7 @@ export default function TestGhibliClient() {
       return
     }
     appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
-    setImageOut(data.outputPath || null)
+    setImageOut(data.outputUrl || data.outputPath || null)
     setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0) })
   }
 
@@ -108,7 +109,7 @@ export default function TestGhibliClient() {
       return
     }
     appendLog(`[Video] Done in ${(t1 - t0).toFixed(0)}ms`)
-    setVideoOut(data.outputPath || null)
+    setVideoOut(data.outputUrl || data.outputPath || null)
     setOrigVideo(data.meta?.originalPath || null)
     setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0) })
   }

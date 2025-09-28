@@ -88,10 +88,6 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
         <PatchHeader 
           patch={patch}
           isMember={false}
-          onJoin={() => console.log('Join clicked')}
-          onLeave={() => console.log('Leave clicked')}
-          onShare={() => console.log('Share clicked')}
-          onThemeChange={(theme) => console.log('Theme changed to:', theme)}
         />
 
         {/* Main Content */}

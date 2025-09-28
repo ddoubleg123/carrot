@@ -56,14 +56,19 @@ export async function POST(req: Request) {
       if (imageFile && typeof imageFile.arrayBuffer === 'function') {
         wf.append('image', imageFile as any)
       }
-      const res = await fetch(workerUrl.replace(/\/$/, '') + '/generate-image', { method: 'POST', body: wf })
+      const workerBase = workerUrl.replace(/\/$/, '')
+      const res = await fetch(workerBase + '/generate-image', { method: 'POST', body: wf })
       let data: any = null
       try { data = await res.json() } catch {}
       if (!res.ok || !data?.ok) {
         return NextResponse.json({ ok: false, status: res.status, message: data?.message || 'worker failed' }, { status: 500 })
       }
-      // Worker returns a direct URL; pass through
-      return NextResponse.json({ ok: true, outputPath: data.outputUrl || data.outputPath, meta: data.meta || { prompt, model } })
+      // Normalize output: prefer absolute outputUrl; if worker returned a relative outputPath, rewrite to absolute using GHIBLI_WORKER_URL
+      let outputUrl: string | undefined = data.outputUrl
+      if (!outputUrl && typeof data.outputPath === 'string') {
+        outputUrl = workerBase + data.outputPath
+      }
+      return NextResponse.json({ ok: true, outputUrl, meta: data.meta || { prompt, model } })
     }
 
     if (imageFile && typeof imageFile.arrayBuffer === 'function') {
