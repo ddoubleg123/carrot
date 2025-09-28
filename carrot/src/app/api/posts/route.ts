@@ -398,7 +398,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
 
 // GET /api/posts - get all posts (latest first)
 export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
-  try {
+  try { {
     // In mock feed mode, avoid touching the database and return an empty list
     if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
       if (process.env.NODE_ENV !== 'production') {
@@ -438,6 +438,7 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       console.log('[GET /api/posts] summary', { total, missingGrad, signedUrls });
     } catch {}
     return NextResponse.json(shaped);
+  }
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);
     if (error instanceof Error) {
