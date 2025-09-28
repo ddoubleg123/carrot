@@ -439,6 +439,7 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     } catch {}
     return NextResponse.json(shaped);
   }
+  }
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);
     if (error instanceof Error) {
