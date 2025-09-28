@@ -24,10 +24,7 @@ async function main() {
 4. No spam - promotional content must be clearly marked and relevant
 5. Constructive criticism welcome - challenge ideas, not people`,
       tags: ['clean-energy', 'renewables', 'sustainability', 'climate', 'policy', 'innovation'],
-      theme: {
-        bg: 'bg-gradient-to-br from-green-50 to-blue-50',
-        accent: '#10B981'
-      }
+      theme: 'light'
     },
     {
       handle: 'universal-basic-income',
@@ -39,10 +36,7 @@ async function main() {
 4. No personal attacks or harassment
 5. Stay constructive and solution-oriented`,
       tags: ['ubi', 'economics', 'inequality', 'policy', 'welfare', 'automation'],
-      theme: {
-        bg: 'bg-gradient-to-br from-blue-50 to-purple-50',
-        accent: '#8B5CF6'
-      }
+      theme: 'warm'
     },
     {
       handle: 'term-limits',
@@ -54,10 +48,19 @@ async function main() {
 4. No personal attacks on politicians or members
 5. Constructive solutions welcome`,
       tags: ['term-limits', 'politics', 'reform', 'democracy', 'leadership', 'government'],
-      theme: {
-        bg: 'bg-gradient-to-br from-purple-50 to-pink-50',
-        accent: '#EC4899'
-      }
+      theme: 'stone'
+    },
+    {
+      handle: 'history',
+      name: 'History',
+      description: 'A comprehensive repository of historical knowledge, events, and sources. Explore timelines, facts, and authoritative references from throughout human history.',
+      rules: `1. Focus on historical accuracy and evidence
+2. Cite authoritative sources
+3. Respectful discussion of historical events
+4. No revisionist history or conspiracy theories
+5. Constructive historical analysis welcome`,
+      tags: ['history', 'education', 'research', 'timeline', 'facts', 'sources'],
+      theme: 'warm'
     }
   ]
 

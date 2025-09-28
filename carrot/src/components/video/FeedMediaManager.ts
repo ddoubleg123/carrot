@@ -148,9 +148,13 @@ class FeedMediaManager {
 
   private queueInitialPosts(): void {
     const endIndex = Math.min(10, this._posts.length);
+    console.log(`[FeedMediaManager] Queueing initial posts: ${endIndex} posts`);
     for (let i = 0; i < endIndex; i++) {
       const post = this._posts[i];
-      this.queuePostTasks(post, Priority.NEXT_10);
+      // First post (index 0) gets VISIBLE priority for full download, others get NEXT_10
+      const priority = i === 0 ? Priority.VISIBLE : Priority.NEXT_10;
+      console.log(`[FeedMediaManager] Post ${i}: ${post.type} with priority ${priority}`);
+      this.queuePostTasks(post, priority);
     }
   }
 
@@ -205,10 +209,17 @@ class FeedMediaManager {
 
         const videoUrl = (post.bucket && post.path)
           ? `/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4`
-          : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : `/api/video?url=${encodeURIComponent(post.videoUrl)}`) : null);
+          : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : (() => {
+              // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+              const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
+              return `/api/video?url=${isAlreadyEncoded ? post.videoUrl : encodeURIComponent(post.videoUrl)}`;
+            })()) : null);
         
         if (videoUrl) {
-          this.preloadQueue.enqueue(post.id, TaskType.VIDEO_PREROLL_6S, priority, post.feedIndex, videoUrl, post.bucket, post.path);
+          // Current post (VISIBLE) gets full video download, others get 6-second preroll
+          const videoTaskType = priority === Priority.VISIBLE ? TaskType.VIDEO_FULL : TaskType.VIDEO_PREROLL_6S;
+          console.log(`[FeedMediaManager] Queuing video for post ${post.id} (index ${post.feedIndex}): ${videoTaskType} with priority ${priority}`);
+          this.preloadQueue.enqueue(post.id, videoTaskType, priority, post.feedIndex, videoUrl, post.bucket, post.path);
         }
         break;
 
@@ -222,13 +233,16 @@ class FeedMediaManager {
         break;
 
       case 'audio':
-        // Preload only audio shell/metadata (not the full audio)
+        // Audio posts are just shells - only download metadata/gradient, never the actual audio file
+        // Audio file is downloaded on-demand when user clicks play
         // Prefer explicit URL if provided; otherwise construct /api/audio from bucket/path
         {
-          const audioMetaUrl = (post.videoUrl && post.videoUrl.includes('/audio')) ? post.videoUrl :
+          const audioUrl = (post.videoUrl && post.videoUrl.includes('/audio')) ? post.videoUrl :
             (post.bucket && post.path ? `/api/audio?bucket=${post.bucket}&path=${post.path}/audio.mp3` : (post.videoUrl || null));
-          if (audioMetaUrl) {
-            this.preloadQueue.enqueue(post.id, TaskType.AUDIO_META, priority, post.feedIndex, audioMetaUrl, post.bucket, post.path);
+          if (audioUrl) {
+            // Always use AUDIO_META - just download the shell/gradient, not the actual audio
+            console.log(`[FeedMediaManager] Queuing audio shell for post ${post.id} (index ${post.feedIndex}): AUDIO_META with priority ${priority}`);
+            this.preloadQueue.enqueue(post.id, TaskType.AUDIO_META, priority, post.feedIndex, audioUrl, post.bucket, post.path);
           }
         }
         break;

@@ -61,7 +61,15 @@ export async function POST(req: Request) {
       let data: any = null
       try { data = await res.json() } catch {}
       if (!res.ok || !data?.ok) {
-        return NextResponse.json({ ok: false, status: res.status, message: data?.message || 'worker failed' }, { status: 500 })
+        const msg = (data && (data.message || data.error)) || 'worker failed'
+        // Graceful fallback for ENOSPC/No space left on device: return a tiny SVG data URL so UI can still render
+        if (/ENOSPC|No space left on device/i.test(String(msg))) {
+          const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
+          const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+          return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { prompt, model, fallback: 'svg', reason: 'ENOSPC from worker' } })
+        }
+        return NextResponse.json({ ok: false, status: res.status, message: msg }, { status: 500 })
       }
       // Normalize output: prefer absolute outputUrl; if worker returned a relative outputPath, rewrite to absolute using GHIBLI_WORKER_URL
       let outputUrl: string | undefined = data.outputUrl

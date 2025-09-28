@@ -16,6 +16,8 @@ import StudyRecord from '@/components/ai-agents/StudyRecord';
 import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
 import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
+import { FEATURED_AGENTS } from '@/lib/agents';
+import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 
 interface Agent {
   id: string;
@@ -98,14 +100,42 @@ export default function FeedAgentsPage() {
 
   const loadAgents = async () => {
     try {
+      // Load database agents
       const response = await fetch('/api/agents');
       const data = await response.json();
-      const agentsList = data.agents || [];
-      setAgents(agentsList);
+      const dbAgents = data.agents || [];
+      
+      // Convert featured agents to the expected format
+      const featuredAgents = FEATURED_AGENTS.map(agent => ({
+        id: agent.id,
+        name: agent.name,
+        persona: agent.personality.approach,
+        domainExpertise: agent.domains,
+        associatedPatches: [],
+        metadata: {
+          role: agent.personality.expertise,
+          expertise: agent.strengths,
+          avatar: agent.avatar,
+          councilMembership: [],
+          userVisibility: 'public',
+          trainingEnabled: true
+        },
+        createdAt: new Date().toISOString()
+      }));
+      
+      // Combine database agents and featured agents, removing duplicates
+      const allAgents = [...dbAgents];
+      featuredAgents.forEach(featuredAgent => {
+        if (!allAgents.find(agent => agent.id === featuredAgent.id)) {
+          allAgents.push(featuredAgent);
+        }
+      });
+      
+      setAgents(allAgents);
       
       // Auto-select the first agent if none is selected
-      if (agentsList.length > 0 && !selectedAgent) {
-        setSelectedAgent(agentsList[0]);
+      if (allAgents.length > 0 && !selectedAgent) {
+        setSelectedAgent(allAgents[0]);
       }
     } catch (error) {
       console.error('Error loading agents:', error);
@@ -380,16 +410,24 @@ export default function FeedAgentsPage() {
               <SelectTrigger className="w-full max-w-md">
                 <SelectValue placeholder="Choose an agent to train..." />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-gray-200 shadow-lg">
                 {filteredAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-medium text-sm">
-                        {agent.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <div className="font-medium">{agent.name}</div>
-                        <div className="text-xs text-gray-500">{agent.domainExpertise.slice(0, 2).join(', ')}</div>
+                  <SelectItem key={agent.id} value={agent.id} className="bg-white hover:bg-gray-50 focus:bg-gray-50">
+                    <div className="flex items-center gap-2 w-full">
+                      {agent.metadata.avatar ? (
+                        <AvatarImage
+                          src={agent.metadata.avatar}
+                          alt={agent.name}
+                          size={32}
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-medium text-sm flex-shrink-0">
+                          {agent.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 truncate">{agent.name}</div>
+                        <div className="text-xs text-gray-500 truncate">{agent.domainExpertise.slice(0, 2).join(', ')}</div>
                       </div>
                     </div>
                   </SelectItem>
@@ -433,9 +471,17 @@ export default function FeedAgentsPage() {
                 <Card key={agent.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                        {agent.name.split(' ').map(n => n[0]).join('')}
-                      </div>
+                      {agent.metadata.avatar ? (
+                        <AvatarImage
+                          src={agent.metadata.avatar}
+                          alt={agent.name}
+                          size={48}
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                          {agent.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                      )}
                       <div>
                         <CardTitle className="text-lg">{agent.name}</CardTitle>
                         <CardDescription>

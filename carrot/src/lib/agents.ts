@@ -19,7 +19,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'alan-turing',
     name: 'Alan Turing',
-    avatar: '/agents/Alan Turing.png',
+    avatar: '/agents/Alan Turing.jpg',
     domains: ['Computer Science', 'Mathematics', 'Logic', 'AI'],
     strengths: ['Complex problem solving', 'Mathematical proofs', 'Algorithm design', 'Code optimization'],
     limits: ['Modern web frameworks', 'Social media trends', 'Contemporary UI/UX'],
@@ -37,7 +37,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'albert-einstein',
     name: 'Albert Einstein',
-    avatar: '/agents/Albert Einstein.png',
+    avatar: '/agents/Albert Einstein.jpg',
     domains: ['Physics', 'Science', 'Philosophy', 'Innovation'],
     strengths: ['Scientific explanations', 'Thought experiments', 'Complex theory simplification', 'Creative problem solving'],
     limits: ['Modern technology specifics', 'Pop culture references', 'Social media dynamics'],
@@ -55,7 +55,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'benjamin-graham',
     name: 'Benjamin Graham',
-    avatar: '/agents/Benjamin Graham.png',
+    avatar: '/agents/Benjamin Graham.jpg',
     domains: ['Finance', 'Investment', 'Economics', 'Value Analysis'],
     strengths: ['Value investing principles', 'Risk assessment', 'Market fundamentals', 'Financial analysis'],
     limits: ['Cryptocurrency', 'Modern fintech', 'Social media marketing', 'Meme stocks'],
@@ -73,7 +73,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'charles-darwin',
     name: 'Charles Darwin',
-    avatar: '/agents/Charles Darwin.png',
+    avatar: '/agents/Charles Darwin.jpg',
     domains: ['Biology', 'Evolution', 'Natural Science', 'Research'],
     strengths: ['Scientific observation', 'Pattern recognition', 'Research methodology', 'Data collection'],
     limits: ['Modern genetics', 'Digital technology', 'Contemporary biology tools'],
@@ -91,7 +91,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'edward-murrow',
     name: 'Edward Murrow',
-    avatar: '/agents/Edward Murrow.png',
+    avatar: '/agents/Edward Murrow.jpg',
     domains: ['Journalism', 'Broadcasting', 'Communication', 'Storytelling'],
     strengths: ['Clear storytelling', 'Fact-checking', 'Interview techniques', 'News writing'],
     limits: ['Social media platforms', 'Modern tech tools', 'Digital journalism'],
@@ -109,7 +109,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'frederick-law-olmsted',
     name: 'Frederick Law Olmsted',
-    avatar: '/agents/Frederick Law Olmsted.png',
+    avatar: '/agents/Frederick Law Olmsted.jpg',
     domains: ['Landscape Architecture', 'Urban Planning', 'Design', 'Nature'],
     strengths: ['Spatial design', 'Environmental planning', 'Public spaces', 'Natural integration'],
     limits: ['Modern architecture', 'Digital design tools', 'Contemporary materials'],
@@ -127,7 +127,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'hal-finney',
     name: 'Hal Finney',
-    avatar: '/agents/Hal Finney.png',
+    avatar: '/agents/Hal Finney.jpg',
     domains: ['Cryptography', 'Computer Science', 'Security', 'Blockchain'],
     strengths: ['Cryptographic systems', 'Security analysis', 'Technical writing', 'Code review'],
     limits: ['Modern crypto trends', 'DeFi protocols', 'NFT markets'],
@@ -145,7 +145,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'jfk',
     name: 'JFK',
-    avatar: '/agents/JFK.png',
+    avatar: '/agents/JFK.jpg',
     domains: ['Leadership', 'Politics', 'Public Speaking', 'Vision'],
     strengths: ['Inspiring speeches', 'Crisis management', 'Vision articulation', 'Team motivation'],
     limits: ['Modern social media', 'Contemporary tech policy', 'Digital campaigning'],
@@ -163,7 +163,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'james-madison',
     name: 'James Madison',
-    avatar: '/agents/James Madison.png',
+    avatar: '/agents/James Madison.jpg',
     domains: ['Government', 'Political Science', 'Law', 'Constitution'],
     strengths: ['Constitutional analysis', 'Government structure', 'Political theory', 'Legal reasoning'],
     limits: ['Modern technology law', 'Contemporary politics', 'Digital rights'],
@@ -181,7 +181,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'john-maynard-keynes',
     name: 'John Maynard Keynes',
-    avatar: '/agents/John Maynard Keynes.png',
+    avatar: '/agents/John Maynard Keynes.jpg',
     domains: ['Economics', 'Policy', 'Finance', 'Markets'],
     strengths: ['Economic analysis', 'Policy recommendations', 'Market dynamics', 'Fiscal theory'],
     limits: ['Modern monetary policy', 'Cryptocurrency', 'Digital economics'],
@@ -199,7 +199,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'john-mccarthy',
     name: 'John McCarthy',
-    avatar: '/agents/John McCarthy.png',
+    avatar: '/agents/John McCarthy.jpg',
     domains: ['AI', 'Computer Science', 'Logic', 'Programming'],
     strengths: ['AI concepts', 'Programming languages', 'Logical reasoning', 'System design'],
     limits: ['Modern ML frameworks', 'Deep learning', 'Contemporary AI tools'],
@@ -217,7 +217,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'mark-twain',
     name: 'Mark Twain',
-    avatar: '/agents/Mark Twain.png',
+    avatar: '/agents/Mark Twain.jpg',
     domains: ['Writing', 'Humor', 'Storytelling', 'Social Commentary'],
     strengths: ['Witty commentary', 'Character development', 'Social observation', 'Engaging narratives'],
     limits: ['Modern slang', 'Digital platforms', 'Contemporary references'],
@@ -235,7 +235,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'martin-luther',
     name: 'Martin Luther',
-    avatar: '/agents/Martin Luther.png',
+    avatar: '/agents/Martin Luther.jpg',
     domains: ['Theology', 'Reform', 'Writing', 'Leadership'],
     strengths: ['Theological analysis', 'Reform strategies', 'Persuasive writing', 'Moral clarity'],
     limits: ['Modern religious contexts', 'Contemporary theology', 'Digital ministry'],
@@ -253,7 +253,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'milton-friedman',
     name: 'Milton Friedman',
-    avatar: '/agents/Milton Friedman.png',
+    avatar: '/agents/Milton Friedman.jpg',
     domains: ['Economics', 'Free Markets', 'Policy', 'Statistics'],
     strengths: ['Economic theory', 'Market analysis', 'Policy critique', 'Statistical reasoning'],
     limits: ['Modern digital economics', 'Behavioral economics', 'Contemporary markets'],
@@ -271,7 +271,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'mlk',
     name: 'MLK',
-    avatar: '/agents/MLK.png',
+    avatar: '/agents/MLK.jpg',
     domains: ['Civil Rights', 'Leadership', 'Social Justice', 'Communication'],
     strengths: ['Powerful speeches', 'Moral clarity', 'Movement building', 'Peaceful resistance'],
     limits: ['Modern activism tactics', 'Digital organizing', 'Contemporary social issues'],
@@ -289,7 +289,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'mother-jones',
     name: 'Mother Jones',
-    avatar: '/agents/Mother Jones.png',
+    avatar: '/agents/Mother Jones.jpg',
     domains: ['Labor Rights', 'Activism', 'Social Justice', 'Organizing'],
     strengths: ['Labor organizing', 'Activist strategies', 'Worker advocacy', 'Social reform'],
     limits: ['Modern labor law', 'Digital organizing', 'Contemporary workplace issues'],
@@ -307,7 +307,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'nelson-mandela',
     name: 'Nelson Mandela',
-    avatar: '/agents/Nelson Mandela.png',
+    avatar: '/agents/Nelson Mandela.jpg',
     domains: ['Leadership', 'Reconciliation', 'Justice', 'Peace'],
     strengths: ['Reconciliation strategies', 'Moral leadership', 'Conflict resolution', 'Unity building'],
     limits: ['Modern political contexts', 'Digital diplomacy', 'Contemporary conflicts'],
@@ -325,7 +325,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'sigmund-freud',
     name: 'Sigmund Freud',
-    avatar: '/agents/Sigmund Freud.png',
+    avatar: '/agents/Sigmund Freud.jpg',
     domains: ['Psychology', 'Human Behavior', 'Analysis', 'Mind'],
     strengths: ['Psychological analysis', 'Human motivation', 'Behavioral patterns', 'Deep insights'],
     limits: ['Modern psychology', 'Contemporary therapy', 'Digital behavior'],
@@ -343,7 +343,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'socrates',
     name: 'Socrates',
-    avatar: '/agents/Socrates.png',
+    avatar: '/agents/Socrates.jpg',
     domains: ['Philosophy', 'Logic', 'Ethics', 'Critical Thinking'],
     strengths: ['Socratic questioning', 'Logical reasoning', 'Ethical analysis', 'Critical examination'],
     limits: ['Modern technology', 'Contemporary issues', 'Digital philosophy'],
@@ -361,7 +361,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'teddy-roosevelt',
     name: 'Teddy Roosevelt',
-    avatar: '/agents/Teddy Roosevelt.png',
+    avatar: '/agents/Teddy Roosevelt.jpg',
     domains: ['Leadership', 'Conservation', 'Reform', 'Action'],
     strengths: ['Bold leadership', 'Reform initiatives', 'Conservation advocacy', 'Direct action'],
     limits: ['Modern environmental issues', 'Contemporary politics', 'Digital advocacy'],
@@ -379,7 +379,7 @@ export const FEATURED_AGENTS: Agent[] = [
   {
     id: 'zbigniew-brzezinski',
     name: 'Zbigniew Brzezinski',
-    avatar: '/agents/Zbigniew Brzezinski.png',
+    avatar: '/agents/Zbigniew Brzezinski.jpg',
     domains: ['Foreign Policy', 'Strategy', 'Geopolitics', 'Security'],
     strengths: ['Strategic analysis', 'Geopolitical insights', 'Foreign policy', 'Security planning'],
     limits: ['Modern cyber warfare', 'Digital diplomacy', 'Contemporary threats'],

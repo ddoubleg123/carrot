@@ -100,7 +100,7 @@ class MediaPreloadQueue {
     maxConcurrentVideos: 2,
     maxSequentialGap: 10,       
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
-    videoBlocksProgression: true     // Videos should download in order
+    videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
   
   private readonly ESTIMATED_SIZES = {

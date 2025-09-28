@@ -36,6 +36,7 @@ import {
   File,
   ExternalLink
 } from 'lucide-react';
+import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
 import { useSession } from 'next-auth/react';
 
@@ -102,10 +103,13 @@ function AgentCard({ agent, onClick }: { agent: any; onClick: () => void }) {
       <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 hover:border-orange-500 hover:shadow-xl transition-all duration-300 hover:scale-105 h-[280px] flex flex-col">
         {/* Avatar - Main Focus - Fixed height for consistency */}
         <div className="h-[200px] relative">
-          <img
+          <OptimizedImage
             src={agent.avatar}
             alt={agent.name}
-            className="w-full h-full object-cover object-top"
+            fill
+            className="object-cover object-top"
+            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+            priority={false}
           />
           {/* Subtle overlay on hover */}
           <div className="absolute inset-0 bg-orange-500/0 group-hover:bg-orange-500/10 transition-colors duration-300" />
@@ -338,73 +342,96 @@ function ConversationThread({
 }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
-  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const lastMessageCountRef = useRef(0);
 
-  // Check if user is near bottom of chat
-  const checkIfNearBottom = () => {
-    if (!messageContainerRef.current) return;
+  // Check if user is at the bottom of the chat
+  const checkIfAtBottom = () => {
+    if (!messageContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
-    const threshold = 100; // Smaller threshold for more sensitive detection
-    const nearBottom = scrollHeight - scrollTop - clientHeight < threshold;
-    setIsNearBottom(nearBottom);
-    
-    // Only show scroll button if user has scrolled up significantly
-    setShowScrollButton(!nearBottom && scrollTop > 100);
-    
-    // Track if user has manually scrolled up
-    if (!nearBottom && scrollTop > 0) {
-      setHasUserScrolled(true);
-    } else if (nearBottom) {
-      setHasUserScrolled(false);
+    const threshold = 10; // Small threshold for precision
+    return scrollHeight - scrollTop <= clientHeight + threshold;
+  };
+
+  // Smooth scroll to bottom
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // AGGRESSIVE AUTO-SCROLL: Always scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (thread.messages.length > 0) {
-      // Always scroll to bottom for new messages - this ensures the latest message is always visible
-      console.log('[Auto-scroll] New message arrived, scrolling to bottom');
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100); // Small delay to ensure DOM is updated
+  // Handle scroll events
+  const handleScroll = () => {
+    const atBottom = checkIfAtBottom();
+    setIsAtBottom(atBottom);
+    
+    // Show scroll button if user has scrolled up significantly
+    if (messageContainerRef.current) {
+      const { scrollTop } = messageContainerRef.current;
+      setShowScrollButton(!atBottom && scrollTop > 100);
+      
+      // Track user scroll behavior
+      if (!atBottom && scrollTop > 0) {
+        setHasUserScrolled(true);
+      } else if (atBottom) {
+        setHasUserScrolled(false);
+      }
     }
-  }, [thread.messages.length]);
+  };
 
-  // Listen for scroll events to track if user is near bottom
+  // Initialize scroll behavior for new thread
+  useEffect(() => {
+    if (!messageContainerRef.current) return;
+    
+    setIsInitialLoad(true);
+    setIsAtBottom(true);
+    setHasUserScrolled(false);
+    setShowScrollButton(false);
+    
+    // For new conversations, ensure we start at the bottom
+    if (thread.messages.length === 0) {
+      // New conversation - scroll to bottom immediately
+      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+    } else {
+      // Existing conversation - scroll to bottom to show latest messages
+      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+    }
+    
+    // Mark initial load as complete after DOM update
+    requestAnimationFrame(() => {
+      setIsInitialLoad(false);
+    });
+  }, [thread.id]);
+
+  // Handle new messages
+  useEffect(() => {
+    const currentMessageCount = thread.messages.length;
+    const hasNewMessages = currentMessageCount > lastMessageCountRef.current;
+    
+    if (hasNewMessages && messageContainerRef.current) {
+      // Only auto-scroll if user is at bottom or it's initial load
+      if (isAtBottom || isInitialLoad) {
+        // Use requestAnimationFrame to ensure DOM is updated
+        requestAnimationFrame(() => {
+          scrollToBottom();
+        });
+      }
+    }
+    
+    lastMessageCountRef.current = currentMessageCount;
+  }, [thread.messages.length, isAtBottom, isInitialLoad]);
+
+  // Set up scroll event listener
   useEffect(() => {
     const container = messageContainerRef.current;
     if (!container) return;
 
-    container.addEventListener('scroll', checkIfNearBottom);
-    return () => container.removeEventListener('scroll', checkIfNearBottom);
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // When starting a new conversation, reset scroll state and scroll to bottom
-  useEffect(() => {
-    setIsNearBottom(true);
-    setHasUserScrolled(false);
-    setShowScrollButton(false);
-    
-    // For new conversations, start at the top to show the first message
-    // Only scroll to bottom if there are existing messages
-    if (messageContainerRef.current) {
-      if (thread.messages.length === 0) {
-        // New conversation - start at top
-        messageContainerRef.current.scrollTop = 0;
-      } else {
-        // Existing conversation - scroll to bottom to show latest messages
-        messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
-      }
-    }
-  }, [thread.id]);
-
-
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
 
   return (
@@ -432,10 +459,10 @@ function ConversationThread({
             {/* Agent Avatar */}
             {message.type === 'agent' && message.agent && (
               <div className="flex-shrink-0">
-                <img
+                <AvatarImage
                   src={message.agent.avatar}
                   alt={message.agent.name}
-                  className="w-10 h-10 rounded-full object-cover"
+                  size={40}
                 />
               </div>
             )}
@@ -567,10 +594,10 @@ function AgentRoster({
                   className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
                 >
                   <div className="relative">
-                    <img
+                    <AvatarImage
                       src={agent.avatar}
                       alt={agent.name}
-                      className="w-10 h-10 rounded-full object-cover"
+                      size={40}
                     />
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
             </div>
@@ -603,10 +630,10 @@ function AgentRoster({
                   onClick={() => onToggleAgent(agent.id)}
                   className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <img
+                  <AvatarImage
                     src={agent.avatar}
                     alt={agent.name}
-                    className="w-8 h-8 rounded-full object-cover"
+                    size={32}
                   />
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-gray-900">{agent.name}</p>

@@ -74,8 +74,8 @@ export default function Overview({ patch }: OverviewProps) {
   ];
 
   const recentSources: Source[] = [
-    { id: '1', title: 'Congressional Research Service Report', url: '#', author: 'CRS' },
-    { id: '2', title: 'Public Opinion Poll Results', url: '#', author: 'Gallup' },
+    { id: '1', title: 'Congressional Research Service Report', url: 'https://crsreports.congress.gov/', author: 'CRS' },
+    { id: '2', title: 'Public Opinion Poll Results', url: 'https://news.gallup.com/', author: 'Gallup' },
   ];
 
   const recentPosts: Post[] = [
@@ -162,7 +162,13 @@ export default function Overview({ patch }: OverviewProps) {
                   </h3>
                   <p className="text-xs text-[#60646C] mb-2">
                     {source.author && `${source.author} • `}
-                    {new URL(source.url).hostname}
+                    {(() => {
+                      try {
+                        return new URL(source.url).hostname;
+                      } catch {
+                        return source.url || 'Unknown source';
+                      }
+                    })()}
                   </p>
                   <a
                     href={source.url}

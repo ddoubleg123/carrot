@@ -8,6 +8,7 @@ import PostModalController from '../../../components/post-modal/PostModalControl
 import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
+import FeedDebugger from '../../../components/debug/FeedDebugger';
 import { Inter } from 'next/font/google';
 import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
 export const dynamic = 'force-dynamic';
@@ -183,7 +184,10 @@ export default async function HomePage() {
 
           {/* Right rail (hidden on small screens) */}
           <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-            <Widgets />
+            <div className="space-y-6">
+              <Widgets />
+              <FeedDebugger />
+            </div>
           </aside>
         </main>
       </div>
