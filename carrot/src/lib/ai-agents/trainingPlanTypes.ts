@@ -1,6 +1,30 @@
 export type TrainingPlanStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'canceled';
 export type TrainingTaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'skipped';
 
+// Optional topic graph and mastery tracking
+export type MasteryLevel = 'none' | 'novice' | 'intermediate' | 'proficient' | 'expert';
+
+export interface TopicNode {
+  id: string;
+  title: string;
+  parentId?: string | null;
+  tags?: string[];
+  dependencies?: string[]; // other topic ids
+  difficulty?: 'easy' | 'medium' | 'hard';
+  priority?: number; // smaller = higher priority
+}
+
+export interface MasteryState {
+  topicId: string;
+  level: MasteryLevel;
+  confidence?: number; // 0..1
+  evidence?: {
+    memoryIds?: string[];
+    sources?: string[];
+  };
+  lastUpdated: string;
+}
+
 export interface TrainingPlanOptions {
   perTopicMax: number; // default 200
   sourceTypes: string[];
@@ -34,7 +58,11 @@ export interface TrainingPlanTotals {
 export interface TrainingPlan {
   id: string;
   agentId: string;
+  // Back-compat: allow either string topics or structured nodes
   topics: string[];
+  topicGraph?: TopicNode[];
+  targets?: Record<string, MasteryLevel>; // topicId -> target mastery
+  mastery?: Record<string, MasteryState>; // topicId -> mastery state
   options: TrainingPlanOptions;
   status: TrainingPlanStatus;
   createdAt: string;
@@ -42,4 +70,15 @@ export interface TrainingPlan {
   totals: TrainingPlanTotals;
   // internal cursor per topic (next page)
   topicPages: Record<string, number>;
+}
+
+export type ProgressEventType = 'retrieved' | 'fed' | 'mastery_update' | 'reassess';
+
+export interface ProgressEvent {
+  id: string;
+  planId: string;
+  topicId?: string;
+  type: ProgressEventType;
+  details?: any;
+  ts: string;
 }

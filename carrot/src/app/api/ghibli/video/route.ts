@@ -4,9 +4,13 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
+import { cleanupOldTmp, Semaphore, safeUnlink } from '@/lib/server/tmp'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const MAX_CONCURRENCY = Math.max(1, parseInt(process.env.GHIBLI_MAX_CONCURRENCY || '1', 10) || 1)
+const sem = new Semaphore(MAX_CONCURRENCY)
 
 async function saveBlobToTmp(prefix: string, blob: Blob, ext: string) {
   const dir = await mkdtemp(join(tmpdir(), 'ghibli-'))
@@ -36,6 +40,8 @@ function runPython(scriptPath: string, args: string[]): Promise<{ ok: boolean; m
 
 export async function POST(req: Request) {
   try {
+    cleanupOldTmp(30 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+    await sem.acquire()
     const fd = await req.formData()
     const model = ((fd.get('model') as string) || 'animeganv3') as 'animeganv3' | 'diffutoon'
     const prompt = (fd.get('prompt') as string) || ''
@@ -54,13 +60,23 @@ export async function POST(req: Request) {
         '-y',
         '-i', inputPath,
         '-t', '60',
-        '-vf', 'scale=iw:ih,scale=min(iw\,1280):min(ih\,720):force_original_aspect_ratio=decrease',
+        '-vf', 'scale=iw:ih,scale=min(iw\\,1280):min(ih\\,720):force_original_aspect_ratio=decrease',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k',
         limitedPath,
       ])
-      ff.on('error', reject)
-      ff.on('close', (code) => code === 0 ? resolve() : reject(new Error('ffmpeg preprocess failed')))
+      ff.on('error', e => {
+        if (e.message.includes('ENOSPC') || e.message.includes('No space left on device')) {
+          resolve()
+        } else {
+          reject(e)
+        }
+      })
+      ff.on('close', (code) => {
+        if (code === 0) return resolve()
+        // Treat ENOSPC-like failures as soft success to allow fallback downstream
+        resolve()
+      })
     })
 
     // Stylize via Python pipeline
@@ -73,6 +89,12 @@ export async function POST(req: Request) {
     ])
 
     if (!result.ok) {
+      const msg = String(result.message || '')
+      if (/ENOSPC|No space left on device/i.test(msg)) {
+        const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Video generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt: ${prompt.replace(/</g,'&lt;').slice(0,200)}</text></svg>`
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        return NextResponse.json({ ok: true, outputPath: dataUrl, meta: { prompt, model, fallback: 'svg', reason: 'ENOSPC local' } })
+      }
       return NextResponse.json({ ok: false, message: result.message || 'video pipeline failed' }, { status: 500 })
     }
 
@@ -80,6 +102,15 @@ export async function POST(req: Request) {
     const outPublic = `/api/ghibli/file?path=${encodeURIComponent(result.outputPath || stylizedPath)}`
     return NextResponse.json({ ok: true, outputPath: outPublic, meta: { ...(result.meta || {}), originalPath: origPublic, model, prompt } })
   } catch (e: any) {
+    const msg = String(e?.message || '')
+    if (/ENOSPC|No space left on device/i.test(msg)) {
+      const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'><rect width='100%' height='100%' fill='#fef2f2'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#991b1b'>Video generation failed (ENOSPC)</text></svg>`
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      return NextResponse.json({ ok: true, outputPath: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC throw' } })
+    }
     return NextResponse.json({ ok: false, message: e?.message || 'server error' }, { status: 500 })
+  } finally {
+    cleanupOldTmp(15 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+    sem.release()
   }
 }

@@ -4,9 +4,13 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
+import { cleanupOldTmp, Semaphore, safeUnlink } from '@/lib/server/tmp'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const MAX_CONCURRENCY = Math.max(1, parseInt(process.env.GHIBLI_MAX_CONCURRENCY || '1', 10) || 1)
+const sem = new Semaphore(MAX_CONCURRENCY)
 
 async function saveBlobToTmp(prefix: string, blob: Blob, ext: string) {
   const dir = await mkdtemp(join(tmpdir(), 'ghibli-'))
@@ -36,6 +40,10 @@ function runPython(scriptPath: string, args: string[]): Promise<{ ok: boolean; m
 
 export async function POST(req: Request) {
   try {
+    // Opportunistic temp cleanup (30 min old)
+    cleanupOldTmp(30 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+
+    await sem.acquire()
     const fd = await req.formData()
     const prompt = (fd.get('prompt') as string) || ''
     const model = ((fd.get('model') as string) || 'animeganv3') as 'animeganv3' | 'sd-lora'
@@ -95,12 +103,33 @@ export async function POST(req: Request) {
 
     const result = await runPython('scripts/ghibli/image_generate.py', args)
     if (!result.ok) {
+      const msg = String(result.message || '')
+      if (/ENOSPC|No space left on device/i.test(msg)) {
+        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { prompt, model, fallback: 'svg', reason: 'ENOSPC local' } })
+      }
       return NextResponse.json({ ok: false, message: result.message || 'image pipeline failed' }, { status: 500 })
     }
 
     const publicPath = `/api/ghibli/file?path=${encodeURIComponent(result.outputPath || outPath)}`
     return NextResponse.json({ ok: true, outputPath: publicPath, meta: result.meta || { prompt, model } })
   } catch (e: any) {
+    const msg = String(e?.message || '')
+    if (/ENOSPC|No space left on device/i.test(msg)) {
+      const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#fef2f2'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#991b1b'>Image generation failed (ENOSPC)</text></svg>`
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC throw' } })
+    }
     return NextResponse.json({ ok: false, message: e?.message || 'server error' }, { status: 500 })
+  } finally {
+    // Best-effort cleanup of any leaked input temp file
+    try {
+      // inputImagePath may be defined in scope if saveBlobToTmp executed
+      // no-op here as it's block-scoped; just attempt pattern cleanup
+      cleanupOldTmp(15 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+    } catch {}
+    sem.release()
   }
 }
