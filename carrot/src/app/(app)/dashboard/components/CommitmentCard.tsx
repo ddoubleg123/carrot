@@ -440,7 +440,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 {author?.avatar ? (
                   <Image
                     src={`/api/img?url=${encodeURIComponent(author.avatar || '/avatar-placeholder.svg')}`}
-                    alt={author?.username ? `${author.username}'s avatar` : 'User avatar'}
+                    alt={author?.username && String(author.username).trim() ? `${String(author.username)}'s avatar` : 'User avatar'}
                     fill
                     sizes="40px"
                     priority={false}
@@ -456,7 +456,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold text-gray-900 truncate">
-                  {author && author.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
+                  {author && author.username && String(author.username).trim() ? (String(author.username).startsWith("@") ? String(author.username) : `@${String(author.username)}`) : "@user"}
                 </span>
                 {(() => {
                   const cc = props.homeCountry || (author as any)?.flag || null;

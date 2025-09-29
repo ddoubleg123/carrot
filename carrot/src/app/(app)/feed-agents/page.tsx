@@ -67,6 +67,8 @@ export default function FeedAgentsPage() {
   const [lastPlanId, setLastPlanId] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<any>(null);
   const [topicsFromDeepseek, setTopicsFromDeepseek] = useState<string[]>([]);
+  const [auditResult, setAuditResult] = useState<any | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -152,6 +154,24 @@ export default function FeedAgentsPage() {
     poll();
     return () => { if (t) clearTimeout(t); };
   }, [selectedAgent?.id, lastPlanId]);
+
+  const runAudit = async () => {
+    if (!selectedAgent || !lastPlanId) return;
+    setIsAuditing(true);
+    setAuditResult(null);
+    try {
+      const r = await fetch(`/api/agents/${selectedAgent.id}/training-plan/${lastPlanId}/audit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 20 })
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) { alert('Audit failed: ' + (j.error || r.statusText)); return; }
+      setAuditResult(j);
+    } catch {
+      alert('Audit error');
+    } finally {
+      setIsAuditing(false);
+    }
+  };
 
   // Check server info on mount
   useEffect(() => {
@@ -1005,6 +1025,47 @@ export default function FeedAgentsPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Audit section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Audit (Deepseek)</h4>
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={runAudit} disabled={isAuditing}>
+                        {isAuditing ? 'Auditing…' : 'Run Audit'}
+                      </Button>
+                    </div>
+                    {!auditResult && (
+                      <div className="text-xs text-gray-500">Audits validate whether fed sources truly support the topics. Click Run Audit.</div>
+                    )}
+                    {auditResult && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-2 bg-green-50 border border-green-200 rounded">
+                          <div className="text-sm font-medium text-green-800 mb-1">Approved ({auditResult.approved?.length || 0})</div>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {(auditResult.approved || []).map((a: any) => (
+                              <div key={a.id} className="text-xs">
+                                <div className="font-medium truncate" title={a.title}>{a.title}</div>
+                                <div className="text-green-700 truncate" title={a.url}>{a.url}</div>
+                                <div className="text-[11px] text-green-800">{a.topic} • {typeof a.quality==='number'? `q=${a.quality.toFixed(2)}`: ''}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="p-2 bg-red-50 border border-red-200 rounded">
+                          <div className="text-sm font-medium text-red-800 mb-1">Flagged ({auditResult.flagged?.length || 0})</div>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {(auditResult.flagged || []).map((a: any) => (
+                              <div key={a.id} className="text-xs">
+                                <div className="font-medium truncate" title={a.title}>{a.title}</div>
+                                <div className="text-red-700 truncate" title={a.url}>{a.url}</div>
+                                <div className="text-[11px] text-red-800">{a.topic} • {a.reason || 'not relevant'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Reuse dashboard chart for the single agent */}

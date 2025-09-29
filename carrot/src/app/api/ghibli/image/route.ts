@@ -92,11 +92,18 @@ export async function POST(req: Request) {
       inputImagePath = await saveBlobToTmp('input-image', imageFile as unknown as Blob, ext)
     }
 
-    const outPath = join(tmpdir(), `ghibli-out-${randomUUID()}.png`)
+    // Create a dedicated per-request tmp dir so cleanup is reliable
+    const reqDir = await mkdtemp(join(tmpdir(), 'ghibli-'))
+    const outPath = join(reqDir, `out-${randomUUID()}.png`)
     const args = ['--prompt', prompt, '--model', model, '--out', outPath]
     if (inputImagePath) args.push('--input_image', inputImagePath)
-
-    const result = await runPython('scripts/ghibli/image_generate.py', args)
+    // Attempt with one retry on ENOSPC after tmp purge
+    const runOnce = async () => await runPython('scripts/ghibli/image_generate.py', args)
+    let result = await runOnce()
+    if (!result.ok && /ENOSPC|No space left on device/i.test(String(result.message||''))) {
+      try { await cleanupTmpPrefixRecursive('ghibli-', 0) } catch {}
+      result = await runOnce()
+    }
     if (!result.ok) {
       const msg = String(result.message || '')
       if (/ENOSPC|No space left on device/i.test(msg)) {
@@ -113,7 +120,7 @@ export async function POST(req: Request) {
     if (inlinePref) {
       try {
         const buf = await readFile(finalPath)
-        if (buf.length <= 2_500_000) {
+        if (buf.length <= 4_000_000) {
           const base64 = buf.toString('base64')
           try { await unlink(finalPath) } catch {}
           return NextResponse.json({ ok: true, outputUrl: `data:image/png;base64,${base64}`, meta: result.meta || { prompt, model, inline: true } })
