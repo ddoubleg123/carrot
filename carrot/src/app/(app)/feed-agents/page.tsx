@@ -108,7 +108,7 @@ export default function FeedAgentsPage() {
       const res = await fetch(`/api/agents/${selectedAgent.id}/training-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1, verifyWithDeepseek: true } }),
+        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1, verifyWithDeepseek: true, verificationMode: 'advisory' } }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) { alert('Failed to create training plan: ' + (data.error || res.statusText)); return; }
@@ -128,7 +128,7 @@ export default function FeedAgentsPage() {
       const res = await fetch(`/api/agents/${selectedAgent.id}/training-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1 } }),
+        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1, verifyWithDeepseek: true, verificationMode: 'advisory' } }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) { alert('Failed to create training plan: ' + (data.error || res.statusText)); return; }

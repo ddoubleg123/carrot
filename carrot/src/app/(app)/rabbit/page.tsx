@@ -357,8 +357,9 @@ function ConversationThread({
 
   // Bulletproof scroll to bottom with DOM timing
   const scrollToBottom = () => {
-    if (!messagesEndRef.current) return;
-    messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    const el = scrollContainerRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
   };
 
   // Handle scroll events
@@ -386,12 +387,14 @@ function ConversationThread({
     setHasUserScrolled(false);
     setShowScrollButton(false);
     
-    // Delay scroll until DOM is painted
-    const timeout = setTimeout(() => {
-      scrollToBottom();
-    }, 100);
-
-    return () => clearTimeout(timeout);
+    // Defer until layout is stable (double rAF avoids reflow jitter)
+    let raf1 = 0, raf2 = 0
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        scrollToBottom()
+      })
+    })
+    return () => { if (raf1) cancelAnimationFrame(raf1); if (raf2) cancelAnimationFrame(raf2) }
   }, [thread.id]);
 
   // Handle new messages with proper DOM timing
@@ -451,13 +454,7 @@ function ConversationThread({
       {/* Messages */}
       <div 
         ref={scrollContainerRef}
-        style={{
-          height: '100%',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        className="flex-1 px-6 py-6 pb-24"
+        className="flex-1 overflow-y-auto px-6 py-6 pb-24 flex flex-col"
       >
         <div className="space-y-4">
           {thread.messages.map((message) => (

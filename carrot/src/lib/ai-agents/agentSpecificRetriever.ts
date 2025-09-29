@@ -105,6 +105,7 @@ If unsure, set ok=false.`
     autoFeed?: boolean;
     sourceTypes?: string[]; // subset of ['wikipedia','arxiv','news','github','pubmed','books']
     verifyWithDeepseek?: boolean; // if true, ask Deepseek to validate sources before feeding
+    verificationMode?: 'off' | 'advisory' | 'strict';
   }): Promise<{ success: boolean; results: any[]; fedCount: number }>{
     const { agentId, topic } = params
     const maxResults = params.maxResults ?? 20
@@ -121,13 +122,21 @@ If unsure, set ok=false.`
       if (allowed.has('books')) results.push(...await this.searchBooks(topic, maxResults))
 
       const filtered = await this.applyQualityFilter(results, [topic])
-      // Optional Deepseek verification: ask model to validate if each result truly helps learn the topic
+      // Optional Deepseek verification
+      const mode = params.verificationMode || (params.verifyWithDeepseek ? 'strict' : 'off')
       let verified = filtered
-      if (params.verifyWithDeepseek && filtered.length > 3) {
+      if (mode !== 'off' && filtered.length > 3) {
         try {
-          verified = await this.verifyWithDeepseek(topic, filtered)
+          const approved = await this.verifyWithDeepseek(topic, filtered)
+          if (mode === 'strict') {
+            verified = approved
+          } else {
+            // advisory: do not block; keep filtered list
+            verified = filtered
+          }
         } catch (e) {
           console.warn('[AgentSpecificRetriever] Deepseek verification failed, falling back to quality-filtered results')
+          verified = filtered
         }
       }
       // de-dupe by URL

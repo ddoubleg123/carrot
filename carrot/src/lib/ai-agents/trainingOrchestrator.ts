@@ -30,14 +30,15 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       return
     }
 
-    // Page size cap with a smaller default to reduce resource pressure
-    const pageSize = Math.min(8, remaining)
+    // Page size per tick (slightly larger to improve throughput but still safe)
+    const pageSize = Math.min(16, remaining)
     const res = await AgentSpecificRetriever.retrieveForTopic({
       agentId: plan.agentId,
       topic,
       maxResults: pageSize,
       autoFeed: true,
       sourceTypes: plan.options.sourceTypes,
+      verificationMode: plan.options.verificationMode || (plan.options.verifyWithDeepseek ? 'strict' : 'off'),
       verifyWithDeepseek: !!plan.options.verifyWithDeepseek,
     })
 

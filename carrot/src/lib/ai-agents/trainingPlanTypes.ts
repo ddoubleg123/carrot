@@ -32,6 +32,7 @@ export interface TrainingPlanOptions {
   throttleMs?: number; // minimum delay between batches per plan
   maxTasksPerTick?: number; // cap tasks processed per tick for this plan
   verifyWithDeepseek?: boolean; // verify sources with Deepseek before feeding
+  verificationMode?: 'off' | 'advisory' | 'strict'; // off: skip, advisory: do not block, strict: block unapproved
 }
 
 export interface TrainingTask {

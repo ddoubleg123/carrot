@@ -26,6 +26,7 @@ export default function SimpleVideo({
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!src) {
@@ -75,17 +76,38 @@ export default function SimpleVideo({
     
     setVideoSrc(proxyUrl);
     setIsLoading(false);
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
   }, [src]);
 
   const handleLoadStart = () => {
     console.log('[SimpleVideo] Load started');
     setIsLoading(true);
     setHasError(false);
+    
+    // Set a timeout to prevent infinite loading
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.warn('[SimpleVideo] Loading timeout - forcing video to show');
+      setIsLoading(false);
+    }, 10000); // 10 second timeout
   };
 
   const handleLoadedData = () => {
     console.log('[SimpleVideo] Data loaded');
     setIsLoading(false);
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
   };
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
@@ -123,6 +145,29 @@ export default function SimpleVideo({
   const handleCanPlay = () => {
     console.log('[SimpleVideo] Can play');
     setIsLoading(false);
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    console.log('[SimpleVideo] Metadata loaded');
+    // Show video as soon as metadata is available, don't wait for full buffering
+    setIsLoading(false);
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  };
+
+  const handleCanPlayThrough = () => {
+    console.log('[SimpleVideo] Can play through');
+    setIsLoading(false);
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
   };
 
   if (hasError) {
@@ -156,10 +201,12 @@ export default function SimpleVideo({
           playsInline={playsInline}
           onLoadStart={handleLoadStart}
           onLoadedData={handleLoadedData}
+          onLoadedMetadata={handleLoadedMetadata}
           onError={handleError}
           onCanPlay={handleCanPlay}
+          onCanPlayThrough={handleCanPlayThrough}
           className="w-full h-full object-contain bg-black"
-          preload="metadata"
+          preload="auto"
           crossOrigin="anonymous"
         />
       )}

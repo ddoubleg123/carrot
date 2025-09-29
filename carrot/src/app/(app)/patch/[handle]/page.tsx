@@ -5,7 +5,7 @@ import { auth } from '@/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
-import TimelineView from '@/components/patch/TimelineView'
+import TimelineView2 from '@/components/patch/TimelineView2'
 import Overview from '@/components/patch/Overview'
 import ResourcesList from '@/components/patch/ResourcesList'
 import PostFeed from '@/components/patch/PostFeed'
@@ -205,7 +205,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
               <PatchTabs activeTab={activeTab} patch={patch}>
                 {activeTab === 'overview' && <Overview patch={patch} />}
                 {activeTab === 'documents' && <ResourcesList patch={patch} />}
-                {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
+                {activeTab === 'timeline' && <TimelineView2 events={formattedEvents as any} patchId={patch.id} />}
                 {activeTab === 'sources' && <ResourcesList patch={patch} />}
                 {activeTab === 'discussions' && <PostFeed patch={patch} />}
               </PatchTabs>

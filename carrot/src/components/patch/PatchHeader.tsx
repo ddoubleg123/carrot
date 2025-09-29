@@ -55,29 +55,18 @@ export default function PatchHeader({
   );
 
   const handleJoin = () => {
-    console.log('Join clicked');
     // TODO: Implement join functionality
+    console.log('Join clicked');
   };
 
   const handleShare = () => {
-    console.log('Share clicked');
     // TODO: Implement share functionality
-  };
-
-  const handleThemeChange = () => {
-    const presets: ('light' | 'warm' | 'stone' | 'civic' | 'ink')[] = ['light', 'warm', 'stone', 'civic', 'ink'];
-    const currentIndex = presets.indexOf(currentTheme.preset || 'light');
-    const nextPreset = presets[(currentIndex + 1) % presets.length];
-    
-    const newTheme: UserPatchTheme = { mode: 'preset', preset: nextPreset };
-    setCurrentTheme(newTheme);
-    onThemeChange?.(newTheme);
+    console.log('Share clicked');
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // TODO: Upload image and get URL
       const imageUrl = URL.createObjectURL(file);
       const newTheme: UserPatchTheme = { mode: 'image', imageUrl };
       setCurrentTheme(newTheme);
@@ -91,9 +80,9 @@ export default function PatchHeader({
         backgroundImage: `url(${currentTheme.imageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
-      };
+      } as React.CSSProperties;
     }
-    return {};
+    return {} as React.CSSProperties;
   };
 
   const getBackgroundClass = () => {
@@ -107,7 +96,6 @@ export default function PatchHeader({
     const date = new Date(dateString);
     const now = new Date();
     const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
     if (diffInDays === 0) return 'Today';
     if (diffInDays === 1) return 'Yesterday';
     if (diffInDays < 7) return `${diffInDays} days ago`;
@@ -116,10 +104,11 @@ export default function PatchHeader({
 
   return (
     <div 
-      className={`relative z-30 px-6 md:px-10 py-8 md:py-10 text-white ${getBackgroundClass()}`}
+      className={`relative z-30 px-6 md:px-10 py-6 md:py-8 text-white ${getBackgroundClass()}`}
       style={getBackgroundStyle()}
     >
       <div className="max-w-[1280px] mx-auto">
+
         {/* Back Button */}
         <Link 
           href="/patch"
@@ -129,7 +118,7 @@ export default function PatchHeader({
         </Link>
 
         {/* Main Content */}
-        <div className="pt-12">
+        <div className="pt-10">
           {/* Title Row */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -137,7 +126,7 @@ export default function PatchHeader({
                 {patch.name}
               </h1>
               {patch.description && (
-                <p className="text-white/90 text-lg line-clamp-1 mt-1">
+                <p className="text-white/95 text-base md:text-lg line-clamp-1 mt-1">
                   {patch.description}
                 </p>
               )}
@@ -164,17 +153,22 @@ export default function PatchHeader({
               >
                 <Share2 className="w-4 h-4" />
               </Button>
-              
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleThemeChange}
-                  className="text-white hover:bg-white/10 p-2"
-                  title="Change theme"
-                >
-                  <Zap className="w-4 h-4" />
-                </Button>
+
+              {/* Quick color swatches */}
+              <div className="hidden md:flex items-center gap-1 ml-1">
+                {(['light','warm','stone','civic','ink'] as const).map(preset => (
+                  <button
+                    key={preset}
+                    aria-label={`Theme ${preset}`}
+                    onClick={() => { const t = { mode:'preset' as const, preset }; setCurrentTheme(t); onThemeChange?.(t) }}
+                    className={`w-6 h-6 rounded-full border border-white/40 hover:scale-105 transition ${preset==='light'?'bg-[#0A5AFF]':preset==='warm'?'bg-[#FF6A00]':preset==='stone'?'bg-[#1A1D22]':preset==='civic'?'bg-[#0A5AFF]':'bg-[#0B0B0F]'} ${currentTheme.preset===preset? 'ring-2 ring-white':''}`}
+                    title={preset}
+                  />
+                ))}
+              </div>
+
+              {/* Image upload (optional) */}
+              <label className="relative inline-flex items-center">
                 <input
                   type="file"
                   accept="image/*"
@@ -182,7 +176,10 @@ export default function PatchHeader({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   title="Upload custom background"
                 />
-              </div>
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 p-2" title="Upload background image">
+                  <Upload className="w-4 h-4" />
+                </Button>
+              </label>
             </div>
           </div>
 
@@ -210,6 +207,7 @@ export default function PatchHeader({
               <Users className="w-4 h-4" />
               <span>{patch._count.members} members</span>
             </div>
+            
             <div className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
               <span>{patch._count.posts} posts</span>
@@ -222,7 +220,7 @@ export default function PatchHeader({
               <BookOpen className="w-4 h-4" />
               <span>{patch._count.sources} sources</span>
             </div>
-            <div className="text-white/70">
+            <div className="text-white/80">
               Updated {formatDate(patch.updatedAt)}
             </div>
           </div>
