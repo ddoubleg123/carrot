@@ -5,8 +5,8 @@ import { TrainingStore } from '@/lib/ai-agents/trainingStore';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
-  const id = ctx.params?.id;
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (!id) return NextResponse.json({ ok: false, message: 'id required' }, { status: 400 });
   const batch = await getBatch(id);
   if (!batch) return NextResponse.json({ ok: false, message: 'not found' }, { status: 404 });

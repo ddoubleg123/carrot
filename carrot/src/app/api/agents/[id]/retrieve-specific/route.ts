@@ -7,10 +7,10 @@ export const dynamic = 'force-dynamic';
 // POST /api/agents/[id]/retrieve-specific - Get agent-specific content
 export async function POST(
   req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await ctx.params;
+    const { id } = await params;
     const body = await req.json();
     const { 
       maxResults = 5,
@@ -48,10 +48,10 @@ export async function POST(
 // GET /api/agents/[id]/retrieve-specific - Get agent training record
 export async function GET(
   req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await ctx.params;
+    const { id } = await params;
     
     const trainingRecord = await AgentSpecificRetriever.getAgentTrainingRecord(id);
     

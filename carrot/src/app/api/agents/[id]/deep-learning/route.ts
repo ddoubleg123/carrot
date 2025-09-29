@@ -8,10 +8,10 @@ export const dynamic = 'force-dynamic';
 // POST /api/agents/[id]/deep-learning - Comprehensive agent training
 export async function POST(
   req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await ctx.params;
+    const { id } = await params;
     const body = await req.json();
     const { 
       maxResults = 50,

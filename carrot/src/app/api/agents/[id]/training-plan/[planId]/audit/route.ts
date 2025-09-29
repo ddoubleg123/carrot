@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic'
  * Body: { limit?: number }
  * Returns Deepseek validation of recently fed memories related to this plan's topics.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string; planId: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string; planId: string }> }) {
   try {
-    const { id, planId } = await ctx.params
+    const { id, planId } = await params
     const body = await req.json().catch(()=>({})) as any
     const limit = Math.max(1, Math.min(40, parseInt(String(body?.limit ?? '20'), 10) || 20))
 
