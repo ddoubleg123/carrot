@@ -126,7 +126,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     // Username: prefer DB user.username, else session username/email local-part, else 'user'
     const sessionUsername = (session?.user as any)?.username || ((session?.user as any)?.email ? String((session?.user as any).email).split('@')[0] : null);
-    const finalUsername = userObj?.username || sessionUsername || 'user';
+    const finalUsername = (userObj?.username && String(userObj.username).trim()) || sessionUsername || 'user';
 
     const mapped = {
       id: post.id,
@@ -135,10 +135,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       stickText: post.stickText || '',
       author: {
         name: '',
-        username: finalUsername || 'user',
-        avatar: finalAvatar || '/avatar-placeholder.svg',
+        username: String(finalUsername || 'user'),
+        avatar: String(finalAvatar || '/avatar-placeholder.svg'),
         flag: userObj?.country || null,
-        id: post.userId || 'unknown',
+        id: String(post.userId || 'unknown'),
       },
       homeCountry: userObj?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },
@@ -608,7 +608,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         clearTimeout(t);
         if (!res.ok) return;
         const posts = await res.json();
-        const mapped = posts.map(mapServerPostToCard);
+        const mapped = posts.map(mapServerPostToCard).filter((post: any) => post && post.author && post.author.username);
         if (cancelled) return;
         setCommitments(mapped);
       } catch (e) {
@@ -811,7 +811,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           
           {/* Professional compact spacing for social media feed */}
           <div className="space-y-3 mt-6">
-            {commitments.map((commitment) => (
+            {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).map((commitment) => (
               <CommitmentCard
                 key={commitment.id}
                 {...commitment}

@@ -694,7 +694,7 @@ export default function FeedAgentsPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <AgentSelfAssessmentChat agent={selectedAgent} onTopics={(t)=> setTopicsFromDeepseek(t)} />
+                    <AgentSelfAssessmentChat key={selectedAgent.id} agent={selectedAgent} onTopics={(t)=> setTopicsFromDeepseek(t)} />
                     <div className="mt-4 flex items-center justify-between">
                       <div className="text-xs text-green-800">
                         {topicsFromDeepseek.length > 0 ? `${topicsFromDeepseek.length} topics detected from Deepseek` : 'No topics detected yet'}

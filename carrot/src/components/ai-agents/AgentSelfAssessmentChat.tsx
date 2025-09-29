@@ -62,6 +62,13 @@ export default function AgentSelfAssessmentChat({ agent, onTopics }: AgentSelfAs
     }
   }, [agent, messages.length]);
 
+  // When switching to a different agent, reset chat state so we don't reuse the previous agent's context
+  useEffect(() => {
+    setMessages([]);
+    setInputValue('');
+    // The init effect above will fire on next render because messages.length === 0
+  }, [agent.id]);
+
   const handleSelfAssessment = async () => {
     setIsLoading(true);
     
