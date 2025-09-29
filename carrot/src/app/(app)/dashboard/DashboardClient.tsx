@@ -75,6 +75,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
+    // Add debugging for posts with missing user data
+    if (!post?.User && process.env.NODE_ENV !== 'production') {
+      console.warn('[DashboardClient] Post missing User data:', { postId: post?.id, post });
+    }
     const prox = (u?: string | null) => {
       if (!u) return null;
       // If already proxied, return as-is
@@ -115,8 +119,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     // Resolve avatar with preference: user.profilePhotoPath -> user.profilePhoto URL -> session user avatar -> placeholder
     const userObj = post?.User || {};
     // For avatars, avoid proxying Google-hosted URLs via /api/img to prevent host allowlist blocks
-    const avatarFromPath = proxPath(userObj.profilePhotoPath);
-    const avatarFromUrlRaw = userObj.profilePhoto ? String(userObj.profilePhoto) : (userObj.image ? String(userObj.image) : null);
+    const avatarFromPath = proxPath(userObj?.profilePhotoPath);
+    const avatarFromUrlRaw = userObj?.profilePhoto ? String(userObj.profilePhoto) : (userObj?.image ? String(userObj.image) : null);
     const sessionAvatarRaw = (session?.user as any)?.profilePhoto || (session?.user as any)?.image || null;
     const finalAvatar = avatarFromPath || avatarFromUrlRaw || sessionAvatarRaw || '/avatar-placeholder.svg';
 
@@ -131,10 +135,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       stickText: post.stickText || '',
       author: {
         name: '',
-        username: finalUsername,
-        avatar: finalAvatar,
+        username: finalUsername || 'user',
+        avatar: finalAvatar || '/avatar-placeholder.svg',
         flag: userObj?.country || null,
-        id: post.userId,
+        id: post.userId || 'unknown',
       },
       homeCountry: userObj?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },

@@ -42,6 +42,43 @@ export async function cleanupOldTmp(maxAgeMs = 30 * 60 * 1000, namePattern?: Reg
   }
 }
 
+// Recursively delete tmp entries that start with a prefix (e.g., 'ghibli-')
+export async function cleanupTmpPrefixRecursive(prefix: string, maxAgeMs = 10 * 60 * 1000) {
+  const dir = TMP_ROOT
+  const now = Date.now()
+  let names: string[] = []
+  try { names = await fsp.readdir(dir) } catch { return }
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue
+    const p = join(dir, name)
+    try {
+      const st = await fsp.stat(p)
+      const age = now - st.mtimeMs
+      if (age < maxAgeMs) continue
+      if (st.isDirectory()) {
+        await rmRecursive(p)
+      } else {
+        await safeUnlink(p)
+      }
+    } catch {}
+  }
+}
+
+async function rmRecursive(p: string) {
+  try {
+    const st = await fsp.stat(p)
+    if (st.isDirectory()) {
+      const entries = await fsp.readdir(p)
+      for (const e of entries) {
+        await rmRecursive(join(p, e))
+      }
+      try { await fsp.rmdir(p) } catch { /* node <14: fallback */ try { await fsp.rm(p, { recursive: true, force: true } as any) } catch {} }
+    } else {
+      await safeUnlink(p)
+    }
+  } catch {}
+}
+
 // Basic path guard: only allow serving files from OS temp directory
 export function isPathInTmp(p: string) {
   const b = basename(p)

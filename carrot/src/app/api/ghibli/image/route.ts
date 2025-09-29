@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { mkdtemp, writeFile } from 'fs/promises'
+import { mkdtemp, writeFile, readFile, unlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
-import { cleanupOldTmp, Semaphore, safeUnlink } from '@/lib/server/tmp'
+import { cleanupOldTmp, cleanupTmpPrefixRecursive, Semaphore, safeUnlink } from '@/lib/server/tmp'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -113,7 +113,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: result.message || 'image pipeline failed' }, { status: 500 })
     }
 
-    const publicPath = `/api/ghibli/file?path=${encodeURIComponent(result.outputPath || outPath)}`
+    const finalPath = result.outputPath || outPath
+    const inlinePref = (process.env.GHIBLI_INLINE_IMAGE || 'true').toLowerCase() !== 'false'
+    if (inlinePref) {
+      try {
+        const buf = await readFile(finalPath)
+        // Only inline if reasonably small
+        if (buf.length <= 2_500_000) { // ~2.5MB
+          const base64 = buf.toString('base64')
+          // Best-effort delete file now
+          try { await unlink(finalPath) } catch {}
+          return NextResponse.json({ ok: true, outputUrl: `data:image/png;base64,${base64}` , meta: result.meta || { prompt, model, inline: true } })
+        }
+      } catch {}
+    }
+    const publicPath = `/api/ghibli/file?path=${encodeURIComponent(finalPath)}`
     return NextResponse.json({ ok: true, outputPath: publicPath, meta: result.meta || { prompt, model } })
   } catch (e: any) {
     const msg = String(e?.message || '')
@@ -129,6 +143,8 @@ export async function POST(req: Request) {
       // inputImagePath may be defined in scope if saveBlobToTmp executed
       // no-op here as it's block-scoped; just attempt pattern cleanup
       cleanupOldTmp(15 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+      // Aggressive: cleanup ghibli-* directories/files older than a few minutes
+      cleanupTmpPrefixRecursive('ghibli-', 2 * 60 * 1000).catch(() => {})
     } catch {}
     sem.release()
   }

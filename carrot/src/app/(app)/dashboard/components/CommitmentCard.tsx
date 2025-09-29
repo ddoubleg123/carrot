@@ -153,7 +153,7 @@ function filterRootDivProps(rest: Record<string, any>): Record<string, any> {
 const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function CommitmentCard(props, ref) {
   const {
     id,
-    author,
+    author: rawAuthor,
     stats,
     timestamp,
     imageUrls = [],
@@ -182,6 +182,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     asChild,
     ...rest
   } = props;
+
+  // Ensure author is always defined with safe defaults
+  const author = rawAuthor || {
+    name: '',
+    username: 'user',
+    avatar: '/avatar-placeholder.svg',
+    flag: null,
+    id: 'unknown'
+  };
 
   // Local content and edit state (kept minimal to avoid bloating the card)
   const [content, setContent] = useState<string>(props.content || "");
@@ -430,7 +439,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative">
                 {author?.avatar ? (
                   <Image
-                    src={`/api/img?url=${encodeURIComponent(author.avatar)}`}
+                    src={`/api/img?url=${encodeURIComponent(author.avatar || '/avatar-placeholder.svg')}`}
                     alt={author?.username ? `${author.username}'s avatar` : 'User avatar'}
                     fill
                     sizes="40px"
@@ -447,7 +456,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold text-gray-900 truncate">
-                  {author?.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
+                  {author && author.username ? (author.username.startsWith("@") ? author.username : `@${author.username}`) : "@user"}
                 </span>
                 {(() => {
                   const cc = props.homeCountry || (author as any)?.flag || null;

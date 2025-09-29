@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { mkdtemp, writeFile } from 'fs/promises'
+import { mkdtemp, writeFile, readFile, unlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
-import { cleanupOldTmp, Semaphore, safeUnlink } from '@/lib/server/tmp'
+import { cleanupOldTmp, cleanupTmpPrefixRecursive, Semaphore, safeUnlink } from '@/lib/server/tmp'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -98,8 +98,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: result.message || 'video pipeline failed' }, { status: 500 })
     }
 
+    const finalPath = result.outputPath || stylizedPath
+    // Optional inline if clip is tiny (<1.2MB)
+    try {
+      const buf = await readFile(finalPath)
+      if (buf.length <= 1_200_000) {
+        const b64 = buf.toString('base64')
+        try { await unlink(finalPath) } catch {}
+        // best-effort unlink intermediates
+        try { await unlink(limitedPath) } catch {}
+        return NextResponse.json({ ok: true, outputPath: `data:video/mp4;base64,${b64}`, meta: { ...(result.meta || {}), model, prompt, inline: true } })
+      }
+    } catch {}
     const origPublic = `/api/ghibli/file?path=${encodeURIComponent(limitedPath)}`
-    const outPublic = `/api/ghibli/file?path=${encodeURIComponent(result.outputPath || stylizedPath)}`
+    const outPublic = `/api/ghibli/file?path=${encodeURIComponent(finalPath)}`
     return NextResponse.json({ ok: true, outputPath: outPublic, meta: { ...(result.meta || {}), originalPath: origPublic, model, prompt } })
   } catch (e: any) {
     const msg = String(e?.message || '')
@@ -111,6 +123,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: e?.message || 'server error' }, { status: 500 })
   } finally {
     cleanupOldTmp(15 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
+    cleanupTmpPrefixRecursive('ghibli-', 2 * 60 * 1000).catch(() => {})
     sem.release()
   }
 }

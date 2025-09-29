@@ -66,6 +66,7 @@ export default function FeedAgentsPage() {
   const [assessmentText, setAssessmentText] = useState('');
   const [lastPlanId, setLastPlanId] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<any>(null);
+  const [topicsFromDeepseek, setTopicsFromDeepseek] = useState<string[]>([]);
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -105,13 +106,32 @@ export default function FeedAgentsPage() {
       const res = await fetch(`/api/agents/${selectedAgent.id}/training-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topics, options: { perTopicMax: 200 } }),
+        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1 } }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) { alert('Failed to create training plan: ' + (data.error || res.statusText)); return; }
       setLastPlanId(data.planId);
       setShowLearnModal(false);
       alert(`Training plan created with ${topics.length} topics. Tracking progress in Training tab.`);
+    } catch (e) {
+      alert('Error creating training plan');
+    }
+  };
+
+  const submitTrainingPlanFromTopics = async () => {
+    if (!selectedAgent) return;
+    const topics = topicsFromDeepseek;
+    if (!topics || !topics.length) { setShowLearnModal(true); return; }
+    try {
+      const res = await fetch(`/api/agents/${selectedAgent.id}/training-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topics, options: { perTopicMax: 200, throttleMs: 6000, maxTasksPerTick: 1 } }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { alert('Failed to create training plan: ' + (data.error || res.statusText)); return; }
+      setLastPlanId(data.planId);
+      alert(`Training plan created with ${topics.length} topics from Deepseek. Tracking progress in Training tab.`);
     } catch (e) {
       alert('Error creating training plan');
     }
@@ -674,10 +694,13 @@ export default function FeedAgentsPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <AgentSelfAssessmentChat agent={selectedAgent} />
-                    <div className="mt-4 flex justify-end">
-                      <Button className="bg-green-600 hover:bg-green-700" onClick={() => setShowLearnModal(true)}>
-                        Learn these topics
+                    <AgentSelfAssessmentChat agent={selectedAgent} onTopics={(t)=> setTopicsFromDeepseek(t)} />
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-xs text-green-800">
+                        {topicsFromDeepseek.length > 0 ? `${topicsFromDeepseek.length} topics detected from Deepseek` : 'No topics detected yet'}
+                      </div>
+                      <Button className="bg-green-600 hover:bg-green-700" onClick={submitTrainingPlanFromTopics}>
+                        {topicsFromDeepseek.length > 0 ? 'Learn these topics' : 'Parse & Learn topics'}
                       </Button>
                     </div>
                   </CardContent>
