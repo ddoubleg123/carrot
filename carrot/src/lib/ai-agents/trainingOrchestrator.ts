@@ -42,6 +42,19 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       verifyWithDeepseek: !!plan.options.verifyWithDeepseek,
     })
 
+    // Record discoveries for UI drilldown (best-effort)
+    try {
+      const entries = (res.results || []).map((r: any) => ({
+        topic,
+        page: task.page || 1,
+        url: r?.url || r?.sourceUrl,
+        title: r?.title || r?.sourceTitle,
+        sourceType: r?.sourceType,
+        status: ((res.fedCount && res.results?.length && res.fedCount === res.results.length) ? 'fed' : 'retrieved') as any,
+      }))
+      if (entries.length) TrainingStore.appendDiscoveries(plan.id, entries)
+    } catch {}
+
     task.itemsFed = res.fedCount
     task.status = 'done'
     task.updatedAt = new Date().toISOString()

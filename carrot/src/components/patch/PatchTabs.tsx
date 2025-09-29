@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import PatchComposer from './PatchComposer';
 
 interface Patch {
@@ -27,9 +28,22 @@ const tabs = [
 
 export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps) {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const handleCreatePost = () => {
     setIsComposerOpen(true);
+  };
+
+  const handleTabClick = (tabId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tabId === 'overview') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tabId);
+    }
+    const newUrl = params.toString() ? `?${params.toString()}` : '';
+    router.push(`/patch/${patch.handle}${newUrl}`);
   };
 
   return (
@@ -48,10 +62,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                       ? 'bg-[#FF6A00] text-white'
                       : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100'
                   }`}
-                  onClick={() => {
-                    // TODO: Navigate to tab
-                    console.log('Navigate to tab:', tab.id);
-                  }}
+                  onClick={() => handleTabClick(tab.id)}
                 >
                   {tab.label}
                 </button>
@@ -73,7 +84,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       </div>
 
       {/* Tab Content */}
-      <div>
+      <div className="px-6 md:px-10">
         {children}
       </div>
 

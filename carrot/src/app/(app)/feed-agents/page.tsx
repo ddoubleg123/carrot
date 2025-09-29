@@ -1190,7 +1190,20 @@ export default function FeedAgentsPage() {
                                 <span className="ml-2 text-gray-600">status: {t.status}</span>
                               </div>
                               {(t.planId) && (
-                                <div className="text-xs text-gray-500">plan <span className="font-mono">{t.planId}</span></div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-xs text-gray-500">plan <span className="font-mono">{t.planId}</span></div>
+                                  {plansById[t.planId]?.plan && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className={`h-6 px-2 ${plansById[t.planId].plan.options?.pauseDiscovery ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700' : ''}`}
+                                      onClick={() => togglePauseDiscovery(!plansById[t.planId].plan.options?.pauseDiscovery)}
+                                      title={plansById[t.planId].plan.options?.pauseDiscovery ? 'Resume discovery' : 'Pause discovery'}
+                                    >
+                                      {plansById[t.planId].plan.options?.pauseDiscovery ? 'Resume' : 'Pause'}
+                                    </Button>
+                                  )}
+                                </div>
                               )}
                             </div>
                             <div className="mt-2">
@@ -1287,6 +1300,40 @@ export default function FeedAgentsPage() {
                         <div key={t.id} className="text-sm flex items-center justify-between border rounded px-2 py-1 bg-white">
                           <div className="truncate mr-3" title={`${t.topic} (page ${t.page})`}>{t.topic}</div>
                           <div className="text-xs text-gray-600">pg {t.page} • {t.status} • fed {t.itemsFed||0}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Discoveries panel (tasks act as discovered pages) */}
+                  <div className="space-y-2 mt-4">
+                    <h4 className="font-medium">Discoveries</h4>
+                    <div className="text-xs text-gray-600">These are discovered pages by topic. Pausing discovery stops adding new pages; feeding continues for queued ones.</div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <label className="text-gray-700">Filter:</label>
+                      <select
+                        className="border rounded px-2 py-1"
+                        onChange={(e)=>{
+                          const v = e.target.value;
+                          const el = document.getElementById('discoveries-list');
+                          if (!el) return;
+                          for (const child of Array.from(el.children)) {
+                            const topic = (child as HTMLElement).getAttribute('data-topic')||'';
+                            (child as HTMLElement).style.display = (!v || v==='__all__' || v===topic) ? '' : 'none';
+                          }
+                        }}
+                      >
+                        <option value="__all__">All topics</option>
+                        {Array.from(new Set((planStatus.tasks||[]).map((t:any)=> t.topic))).map((topic: any)=> (
+                          <option key={topic} value={topic}>{topic}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div id="discoveries-list" className="space-y-1 max-h-64 overflow-y-auto">
+                      {(planStatus.tasks||[]).map((t:any)=> (
+                        <div key={`disc-${t.id}`} data-topic={t.topic} className="text-xs flex items-center justify-between border rounded px-2 py-1 bg-white">
+                          <div className="truncate mr-3" title={`${t.topic} (page ${t.page})`}>{t.topic} • pg {t.page}</div>
+                          <div className="text-gray-600">{t.status}{typeof t.itemsFed==='number' ? ` • fed ${t.itemsFed}`:''}</div>
                         </div>
                       ))}
                     </div>

@@ -70,7 +70,12 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         createdAt: post.createdAt || new Date().toISOString(),
         imageUrls: post.imageUrls ? (typeof post.imageUrls === 'string' ? JSON.parse(post.imageUrls) : post.imageUrls) : [],
         gifUrl: post.gifUrl || null,
-        videoUrl: post.videoUrl || null,
+        videoUrl: (() => {
+          if (!post.videoUrl) return null;
+          // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
+          return `/api/video?url=${isAlreadyEncoded ? post.videoUrl : encodeURIComponent(post.videoUrl)}`;
+        })(),
         thumbnailUrl: post.thumbnailUrl || null,
         audioUrl: post.audioUrl || null,
         audioTranscription: post.audioTranscription || null,

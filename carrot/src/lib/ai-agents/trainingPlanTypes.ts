@@ -15,6 +15,20 @@ export interface TopicNode {
   priority?: number; // smaller = higher priority
 }
 
+// Lightweight log of discovered items for UI drilldown
+export type DiscoveryStatus = 'retrieved' | 'queued' | 'fed' | 'skipped' | 'failed';
+export interface DiscoveryEntry {
+  id: string;
+  planId: string;
+  topic: string;
+  page: number;
+  url?: string;
+  title?: string;
+  sourceType?: string;
+  status: DiscoveryStatus;
+  ts: string;
+}
+
 export interface MasteryState {
   topicId: string;
   level: MasteryLevel;
@@ -78,6 +92,8 @@ export interface TrainingPlan {
   totals: TrainingPlanTotals;
   // internal cursor per topic (next page)
   topicPages: Record<string, number>;
+  // arbitrary metadata for runtime needs (e.g., original pacing when pausing discovery)
+  meta?: Record<string, any>;
 }
 
 export type ProgressEventType = 'retrieved' | 'fed' | 'mastery_update' | 'reassess';

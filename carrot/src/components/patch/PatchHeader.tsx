@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Upload, Palette } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -64,6 +64,12 @@ export default function PatchHeader({
     // Open share sheet
     console.log('Share clicked');
     // TODO: Implement share functionality
+  };
+
+  const handleSettings = () => {
+    // Open settings
+    console.log('Settings clicked');
+    // TODO: Implement settings functionality
   };
 
   const handleThemeChange = (newTheme: UserPatchTheme) => {
@@ -140,13 +146,13 @@ export default function PatchHeader({
             </div>
             
             {/* Right side: Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Button
                 onClick={isMember ? () => {} : handleJoin}
                 variant={isMember ? "outline" : "secondary"}
                 className={isMember 
-                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent" 
-                  : "bg-white text-[#FF6A00] hover:bg-white/90"
+                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2" 
+                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2"
                 }
               >
                 {isMember ? 'Joined' : 'Join'}
@@ -157,46 +163,36 @@ export default function PatchHeader({
                 size="sm"
                 onClick={handleShare}
                 className="text-white hover:bg-white/10 p-2"
+                title="Share"
               >
                 <Share2 className="w-4 h-4" />
               </Button>
 
-              {/* Color Swatch Button */}
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={handleSettings}
                 className="text-white hover:bg-white/10 p-2"
-                title="Change color scheme"
+                title="Settings"
               >
-                <Palette className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
               </Button>
 
-              {/* Quick color swatches */}
-              <div className="hidden md:flex items-center gap-1 ml-1">
-                {(['light','warm','stone','civic','ink'] as const).map(preset => (
-                  <button
-                    key={preset}
-                    aria-label={`Theme ${preset}`}
-                    onClick={() => handleThemeChange({ mode: 'preset', preset })}
-                    className={`w-6 h-6 rounded-full border border-white/40 hover:scale-105 transition ${preset==='light'?'bg-[#0A5AFF]':preset==='warm'?'bg-[#FF6A00]':preset==='stone'?'bg-[#1A1D22]':preset==='civic'?'bg-[#0A5AFF]':'bg-[#0B0B0F]'} ${currentTheme.preset===preset? 'ring-2 ring-white':''}`}
-                    title={preset}
-                  />
-                ))}
-              </div>
-
-              {/* Image upload (optional) */}
-              <label className="relative inline-flex items-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  title="Upload custom background"
-                />
-                <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 p-2" title="Upload background image">
-                  <Upload className="w-4 h-4" />
-                </Button>
-              </label>
+              {/* Lightning Theme Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const presets = ['light', 'warm', 'stone', 'civic', 'ink'] as const;
+                  const currentIndex = presets.indexOf(currentTheme.preset || 'light');
+                  const nextIndex = (currentIndex + 1) % presets.length;
+                  handleThemeChange({ mode: 'preset', preset: presets[nextIndex] });
+                }}
+                className="text-white hover:bg-white/10 p-2"
+                title="Change theme"
+              >
+                <Zap className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 

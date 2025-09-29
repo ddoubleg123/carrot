@@ -87,6 +87,14 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
       return `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
     };
+    const proxVideo = (u?: string | null) => {
+      if (!u) return null;
+      // If already proxied, return as-is
+      if (u.startsWith('/api/video')) return u;
+      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
+      return `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+    };
     const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
       if (!post?.imageUrls) return [] as string[];
@@ -155,7 +163,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       // Prefer durable path-mode if server provided bucket+path, else proxy the URL
       videoUrl: (post?.videoBucket && post?.videoPath)
         ? `/api/video?path=${encodeURIComponent(String(post.videoPath))}&bucket=${encodeURIComponent(String(post.videoBucket))}`
-        : (post.videoUrl ? `/api/video?url=${encodeURIComponent(post.videoUrl)}` : null),
+        : (post.videoUrl ? proxVideo(post.videoUrl) : null),
       thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,
