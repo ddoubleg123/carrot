@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const session = await auth();
@@ -12,48 +12,34 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: patchId } = await params;
+    const { handle: patchHandle } = await params;
+    
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
+
     const body = await req.json();
     const { title, url, author, publisher } = body;
 
-    // Validate input
     if (!title || !url) {
-      return NextResponse.json(
-        { error: 'Title and URL are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Title and URL are required' }, { status: 400 });
     }
 
-    // Validate URL format
-    try {
-      new URL(url);
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid URL format' },
-        { status: 400 }
-      );
-    }
-
-    // Verify patch exists
-    const patch = await prisma.patch.findUnique({
-      where: { id: patchId }
-    });
-
-    if (!patch) {
-      return NextResponse.json(
-        { error: 'Patch not found' },
-        { status: 404 }
-      );
-    }
-
-    // Create source
+    // Create new source
     const source = await prisma.source.create({
       data: {
-        patchId: patchId,
         title,
         url,
         author: author || null,
         publisher: publisher || null,
+        patchId,
         addedBy: session.user.id
       }
     });

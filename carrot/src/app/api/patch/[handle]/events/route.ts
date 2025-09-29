@@ -26,33 +26,34 @@ export async function POST(
     const patchId = patch.id;
 
     const body = await req.json();
-    const { type, title, body: postBody, sourceIds = [] } = body;
+    const { title, summary, dateStart, dateEnd, tags = [], media, sourceIds = [] } = body;
 
-    if (!type || !title || !postBody) {
-      return NextResponse.json({ error: 'Type, title, and body are required' }, { status: 400 });
+    if (!title || !summary || !dateStart) {
+      return NextResponse.json({ error: 'Title, summary, and dateStart are required' }, { status: 400 });
     }
 
-    // Create new patch post
-    const patchPost = await prisma.patchPost.create({
+    // Create new event
+    const event = await prisma.event.create({
       data: {
-        type,
         title,
-        body: postBody,
+        summary,
+        dateStart: new Date(dateStart),
+        dateEnd: dateEnd ? new Date(dateEnd) : null,
+        tags,
+        media: media || null,
         patchId,
-        authorId: session.user.id,
-        tags: [],
-        metrics: { likes: 0, comments: 0, reposts: 0, views: 0 }
+        sourceIds
       }
     });
 
     return NextResponse.json({
       success: true,
-      post: patchPost
+      event
     });
   } catch (error) {
-    console.error('Error creating patch post:', error);
+    console.error('Error creating event:', error);
     return NextResponse.json(
-      { error: 'Failed to create patch post' },
+      { error: 'Failed to create event' },
       { status: 500 }
     );
   }

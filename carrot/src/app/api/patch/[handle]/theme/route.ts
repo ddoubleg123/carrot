@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const session = await auth();
@@ -12,8 +12,20 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: patchId } = await params;
+    const { handle: patchHandle } = await params;
+    
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
 
+    // Get user's theme for this patch
     const userTheme = await prisma.userPatchTheme.findUnique({
       where: {
         user_patch_theme_unique: {
@@ -30,7 +42,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching user patch theme:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch theme' },
+      { error: 'Failed to fetch user patch theme' },
       { status: 500 }
     );
   }
@@ -38,7 +50,7 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const session = await auth();
@@ -46,42 +58,32 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: patchId } = await params;
+    const { handle: patchHandle } = await params;
+    
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
+
     const body = await req.json();
     const { mode, preset, imageUrl } = body;
 
-    // Validate input
-    if (!mode || !['preset', 'image'].includes(mode)) {
-      return NextResponse.json(
-        { error: 'Invalid mode. Must be "preset" or "image"' },
-        { status: 400 }
-      );
+    if (!mode || (mode !== 'preset' && mode !== 'image')) {
+      return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
     }
 
-    if (mode === 'preset' && !['light', 'warm', 'stone', 'civic', 'ink'].includes(preset)) {
-      return NextResponse.json(
-        { error: 'Invalid preset. Must be one of: light, warm, stone, civic, ink' },
-        { status: 400 }
-      );
+    if (mode === 'preset' && !preset) {
+      return NextResponse.json({ error: 'Preset is required for preset mode' }, { status: 400 });
     }
 
     if (mode === 'image' && !imageUrl) {
-      return NextResponse.json(
-        { error: 'imageUrl is required when mode is "image"' },
-        { status: 400 }
-      );
-    }
-
-    // Verify patch exists
-    const patch = await prisma.patch.findUnique({
-      where: { id: patchId }
-    });
-
-    if (!patch) {
-      return NextResponse.json(
-        { error: 'Patch not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Image URL is required for image mode' }, { status: 400 });
     }
 
     // Upsert user theme
@@ -99,7 +101,7 @@ export async function POST(
       },
       create: {
         userId: session.user.id,
-        patchId: patchId,
+        patchId,
         mode,
         preset: mode === 'preset' ? preset : null,
         imageUrl: mode === 'image' ? imageUrl : null
@@ -113,7 +115,7 @@ export async function POST(
   } catch (error) {
     console.error('Error saving user patch theme:', error);
     return NextResponse.json(
-      { error: 'Failed to save theme' },
+      { error: 'Failed to save user patch theme' },
       { status: 500 }
     );
   }

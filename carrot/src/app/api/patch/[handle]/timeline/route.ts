@@ -3,37 +3,49 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
-    const { id: patchId } = await params;
-    const { searchParams } = new URL(req.url);
+    const { handle: patchHandle } = await params;
     
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
+
+    const { searchParams } = new URL(req.url);
     const tag = searchParams.get('tag');
     const from = searchParams.get('from');
     const to = searchParams.get('to');
 
-    // Build where clause
-    const where: any = { patchId };
-
+    // Build where clause for events
+    const whereClause: any = { patchId };
+    
     if (tag) {
-      where.tags = {
+      whereClause.tags = {
         has: tag
       };
     }
-
+    
     if (from || to) {
-      where.dateStart = {};
+      whereClause.dateStart = {};
       if (from) {
-        where.dateStart.gte = new Date(from);
+        whereClause.dateStart.gte = new Date(from);
       }
       if (to) {
-        where.dateStart.lte = new Date(to);
+        whereClause.dateStart.lte = new Date(to);
       }
     }
 
+    // Get events with sources
     const events = await prisma.event.findMany({
-      where,
+      where: whereClause,
       include: {
         sources: {
           select: {
@@ -44,14 +56,26 @@ export async function GET(
           }
         }
       },
-      orderBy: {
-        dateStart: 'desc'
-      }
+      orderBy: { dateStart: 'desc' }
     });
 
-    // Convert to TimelineJS format
+    // Format for TimelineJS
     const timelineData = {
+      title: {
+        media: {
+          url: '',
+          caption: patch.description
+        },
+        text: {
+          headline: patch.name,
+          text: patch.description
+        }
+      },
       events: events.map(event => ({
+        media: event.media ? {
+          url: (event.media as any).url,
+          caption: (event.media as any).alt || ''
+        } : undefined,
         start_date: {
           year: new Date(event.dateStart).getFullYear(),
           month: new Date(event.dateStart).getMonth() + 1,
@@ -66,11 +90,6 @@ export async function GET(
           headline: event.title,
           text: event.summary
         },
-        media: event.media ? {
-          url: (event.media as any).url,
-          caption: (event.media as any).alt || '',
-          credit: event.sources[0]?.author || ''
-        } : undefined,
         group: event.tags[0] || 'General'
       }))
     };

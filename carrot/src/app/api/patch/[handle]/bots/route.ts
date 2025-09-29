@@ -4,32 +4,44 @@ import { auth } from '@/auth';
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
-    const { id: patchId } = await params;
+    const { handle: patchHandle } = await params;
+    
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
 
+    // Get bot subscriptions for this patch
     const botSubscriptions = await prisma.botSubscription.findMany({
       where: { patchId },
       include: {
         owner: {
           select: {
             id: true,
-            name: true,
             username: true,
-            image: true
+            image: true,
+            name: true
           }
         }
       }
     });
 
-    // Mock bot data (in real implementation, this would come from a bots table)
+    // Add mock bot data for each subscription
     const botSubscriptionsWithBotData = botSubscriptions.map(sub => ({
       ...sub,
       bot: {
         id: sub.botId,
         name: `AI Bot ${sub.botId.slice(-4)}`,
-        avatar: null,
+        avatar: undefined,
         lastIndexed: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString()
       }
     }));
@@ -41,7 +53,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching patch bots:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch bots' },
+      { error: 'Failed to fetch patch bots' },
       { status: 500 }
     );
   }
@@ -49,7 +61,7 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const session = await auth();
@@ -57,30 +69,27 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: patchId } = await params;
+    const { handle: patchHandle } = await params;
+    
+    // Find the patch by handle
+    const patch = await prisma.patch.findUnique({
+      where: { handle: patchHandle }
+    });
+    
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+    }
+    
+    const patchId = patch.id;
+
     const body = await req.json();
     const { botId } = body;
 
     if (!botId) {
-      return NextResponse.json(
-        { error: 'botId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Bot ID is required' }, { status: 400 });
     }
 
-    // Verify patch exists
-    const patch = await prisma.patch.findUnique({
-      where: { id: patchId }
-    });
-
-    if (!patch) {
-      return NextResponse.json(
-        { error: 'Patch not found' },
-        { status: 404 }
-      );
-    }
-
-    // Check if bot subscription already exists
+    // Check if bot is already connected to this patch
     const existingSubscription = await prisma.botSubscription.findUnique({
       where: {
         patch_bot_subscription_unique: {
@@ -91,26 +100,23 @@ export async function POST(
     });
 
     if (existingSubscription) {
-      return NextResponse.json(
-        { error: 'Bot is already connected to this patch' },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'Bot already connected to this patch' }, { status: 409 });
     }
 
-    // Create bot subscription
+    // Create new bot subscription
     const botSubscription = await prisma.botSubscription.create({
       data: {
-        patchId: patchId,
-        botId: botId,
+        patchId,
+        botId,
         ownerUserId: session.user.id
       },
       include: {
         owner: {
           select: {
             id: true,
-            name: true,
             username: true,
-            image: true
+            image: true,
+            name: true
           }
         }
       }
@@ -123,7 +129,7 @@ export async function POST(
   } catch (error) {
     console.error('Error connecting bot to patch:', error);
     return NextResponse.json(
-      { error: 'Failed to connect bot' },
+      { error: 'Failed to connect bot to patch' },
       { status: 500 }
     );
   }
