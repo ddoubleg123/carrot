@@ -36,7 +36,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   };
 
   const handleTabClick = (tabId: string) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() || '');
     if (tabId === 'overview') {
       params.delete('tab');
     } else {

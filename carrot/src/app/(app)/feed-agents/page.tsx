@@ -80,6 +80,10 @@ export default function FeedAgentsPage() {
   const [batchStatus, setBatchStatus] = useState<any | null>(null);
   // Cache of planId -> { plan, tasks }
   const [plansById, setPlansById] = useState<Record<string, any>>({});
+  // Discoveries viewer state
+  const [discoveries, setDiscoveries] = useState<any[]>([]);
+  const [discTopic, setDiscTopic] = useState<string>('__all__');
+  const [discStatus, setDiscStatus] = useState<string>('__all__');
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -392,6 +396,26 @@ export default function FeedAgentsPage() {
     };
     run();
   }, [batchStatus]);
+
+  // Poll discoveries for active plan with filters
+  useEffect(() => {
+    if (!lastPlanId) { setDiscoveries([]); return; }
+    let timer: any;
+    const fetchDiscoveries = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (discTopic && discTopic !== '__all__') params.set('topic', discTopic);
+        if (discStatus && discStatus !== '__all__') params.set('status', discStatus);
+        params.set('limit', '200');
+        const r = await fetch(`/api/agents/training/plan/${lastPlanId}/discoveries?${params.toString()}`, { cache: 'no-store' });
+        const j = await r.json();
+        if (j.ok) setDiscoveries(j.items || []);
+      } catch {}
+      timer = setTimeout(fetchDiscoveries, 4000);
+    };
+    fetchDiscoveries();
+    return () => timer && clearTimeout(timer);
+  }, [lastPlanId, discTopic, discStatus]);
 
   // Parse comma/newline separated tags, dedupe while preserving order
   const parseTags = (raw: string): string[] => {
