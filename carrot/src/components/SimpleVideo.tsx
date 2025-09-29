@@ -87,7 +87,8 @@ export default function SimpleVideo({
   }, [src]);
 
   const handleLoadStart = () => {
-    console.log('[SimpleVideo] Load started');
+    const startTime = Date.now();
+    console.log('[SimpleVideo] Load started', { src: videoSrc, startTime });
     setIsLoading(true);
     setHasError(false);
     
@@ -96,13 +97,15 @@ export default function SimpleVideo({
       clearTimeout(loadingTimeoutRef.current);
     }
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('[SimpleVideo] Loading timeout - forcing video to show');
+      const duration = Date.now() - startTime;
+      console.warn('[SimpleVideo] Loading timeout - forcing video to show', { duration: `${duration}ms` });
       setIsLoading(false);
     }, 10000); // 10 second timeout
   };
 
   const handleLoadedData = () => {
-    console.log('[SimpleVideo] Data loaded');
+    const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());
+    console.log('[SimpleVideo] Data loaded', { duration: `${duration}ms` });
     setIsLoading(false);
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -143,7 +146,8 @@ export default function SimpleVideo({
   };
 
   const handleCanPlay = () => {
-    console.log('[SimpleVideo] Can play');
+    const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());
+    console.log('[SimpleVideo] Can play', { duration: `${duration}ms` });
     setIsLoading(false);
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -152,7 +156,8 @@ export default function SimpleVideo({
   };
 
   const handleLoadedMetadata = () => {
-    console.log('[SimpleVideo] Metadata loaded');
+    const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());
+    console.log('[SimpleVideo] Metadata loaded', { duration: `${duration}ms` });
     // Show video as soon as metadata is available, don't wait for full buffering
     setIsLoading(false);
     if (loadingTimeoutRef.current) {
@@ -208,6 +213,7 @@ export default function SimpleVideo({
           className="w-full h-full object-contain bg-black"
           preload="auto"
           crossOrigin="anonymous"
+          data-start-time={Date.now()}
         />
       )}
     </div>

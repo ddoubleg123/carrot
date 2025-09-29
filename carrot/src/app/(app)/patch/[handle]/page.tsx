@@ -24,23 +24,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
     console.log('[PatchPage] Loading patch with handle:', handle)
 
-    // Use Rome template for Rome handle
-    if (handle === 'rome') {
-      const RomePage = (await import('./page-rome')).default;
-      return <RomePage params={params} searchParams={searchParams} />;
-    }
-
-    // Use History template for History handle
-    if (handle === 'history') {
-      const HistoryPage = (await import('./page-history')).default;
-      return <HistoryPage params={params} searchParams={searchParams} />;
-    }
-
-    // Use Astros template for Houston Astros handle
-    if (handle === 'houston-astros') {
-      const AstrosPage = (await import('./page-astros')).default;
-      return <AstrosPage params={params} searchParams={searchParams} />;
-    }
+    // All patches now use the canonical template
 
     // Enhanced patch query with all needed data
     let patch = await prisma.patch.findUnique({

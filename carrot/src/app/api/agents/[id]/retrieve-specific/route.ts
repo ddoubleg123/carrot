@@ -15,14 +15,16 @@ export async function POST(
     const { 
       maxResults = 5,
       autoFeed = false,
-      sourceTypes = ['wikipedia', 'arxiv']
+      sourceTypes = ['wikipedia', 'arxiv'],
+      openAccessOnly = false
     } = body;
 
     const result = await AgentSpecificRetriever.retrieveForAgent({
       agentId: id,
       maxResults,
       autoFeed,
-      sourceTypes
+      sourceTypes,
+      openAccessOnly
     });
 
     return NextResponse.json({

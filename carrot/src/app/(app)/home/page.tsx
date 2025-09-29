@@ -9,8 +9,11 @@ import ClientSessionProvider from '../dashboard/components/ClientSessionProvider
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
 import FeedDebugger from '../../../components/debug/FeedDebugger';
+import VideoLoadingDiagnostics from '../../../components/debug/VideoLoadingDiagnostics';
+import NetworkPerformanceMonitor from '../../../components/debug/NetworkPerformanceMonitor';
 import { Inter } from 'next/font/google';
 import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
+import '../../../lib/debugTools';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -213,6 +216,11 @@ export default async function HomePage() {
             <div className="space-y-6">
               <Widgets />
               <FeedDebugger />
+              <VideoLoadingDiagnostics 
+                videoUrl={commitments.find(p => p.videoUrl)?.videoUrl || ''} 
+                postId={commitments.find(p => p.videoUrl)?.id || ''} 
+              />
+              <NetworkPerformanceMonitor />
             </div>
           </aside>
         </main>

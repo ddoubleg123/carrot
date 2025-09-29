@@ -26,7 +26,7 @@ export async function POST() {
     }
 
     // Create the main patch: "Term Limits for Politicians"
-    const patch = await prisma.patch.upsert({
+    const termLimitsPatch = await prisma.patch.upsert({
       where: { handle: 'term-limits-politicians' },
       update: {},
       create: {
@@ -40,10 +40,27 @@ export async function POST() {
         createdBy: user.id,
       }
     });
-    console.log('✅ Created/updated patch:', patch.name);
+    console.log('✅ Created/updated patch:', termLimitsPatch.name);
 
-    // Create some basic facts
-    const facts = [
+    // Create the History patch
+    const historyPatch = await prisma.patch.upsert({
+      where: { handle: 'history' },
+      update: {},
+      create: {
+        handle: 'history',
+        name: 'History',
+        tagline: 'Comprehensive historical research and documentation',
+        description: 'A scholarly repository dedicated to historical research, documentation, and analysis. Explore historical events, sources, and scholarly discussions.',
+        rules: '1. Maintain academic rigor\n2. Cite primary sources\n3. Respect historical accuracy\n4. Encourage scholarly debate',
+        tags: ['history', 'research', 'scholarship', 'documentation', 'academia'],
+        theme: 'stone',
+        createdBy: user.id,
+      }
+    });
+    console.log('✅ Created/updated patch:', historyPatch.name);
+
+    // Create some basic facts for term limits patch
+    const termLimitsFacts = [
       {
         label: 'Current Status',
         value: 'No federal term limits exist for Congress. Representatives serve 2-year terms with no limit, Senators serve 6-year terms with no limit.',
@@ -58,11 +75,11 @@ export async function POST() {
       },
     ];
 
-    for (const fact of facts) {
+    for (const fact of termLimitsFacts) {
       // Check if fact already exists
       const existingFact = await prisma.fact.findFirst({
         where: {
-          patchId: patch.id,
+          patchId: termLimitsPatch.id,
           label: fact.label,
         }
       });
@@ -70,40 +87,99 @@ export async function POST() {
       if (!existingFact) {
         await prisma.fact.create({
           data: {
-            patchId: patch.id,
+            patchId: termLimitsPatch.id,
             label: fact.label,
             value: fact.value,
           }
         });
       }
     }
-    console.log('✅ Created facts');
+    console.log('✅ Created term limits facts');
 
-    // Create a member
+    // Create some basic facts for history patch
+    const historyFacts = [
+      {
+        label: 'Research Focus',
+        value: 'Primary source documentation, historical analysis, and scholarly research across all historical periods.',
+      },
+      {
+        label: 'Methodology',
+        value: 'Evidence-based historical research with emphasis on primary sources and peer review.',
+      },
+      {
+        label: 'Scope',
+        value: 'Global historical coverage from ancient civilizations to modern history.',
+      },
+    ];
+
+    for (const fact of historyFacts) {
+      // Check if fact already exists
+      const existingFact = await prisma.fact.findFirst({
+        where: {
+          patchId: historyPatch.id,
+          label: fact.label,
+        }
+      });
+      
+      if (!existingFact) {
+        await prisma.fact.create({
+          data: {
+            patchId: historyPatch.id,
+            label: fact.label,
+            value: fact.value,
+          }
+        });
+      }
+    }
+    console.log('✅ Created history facts');
+
+    // Create members for both patches
     await prisma.patchMember.upsert({
       where: {
         patch_user_member_unique: {
-          patchId: patch.id,
+          patchId: termLimitsPatch.id,
           userId: user.id,
         }
       },
       update: {},
       create: {
-        patchId: patch.id,
+        patchId: termLimitsPatch.id,
         userId: user.id,
         role: 'admin',
       }
     });
-    console.log('✅ Created member');
+
+    await prisma.patchMember.upsert({
+      where: {
+        patch_user_member_unique: {
+          patchId: historyPatch.id,
+          userId: user.id,
+        }
+      },
+      update: {},
+      create: {
+        patchId: historyPatch.id,
+        userId: user.id,
+        role: 'admin',
+      }
+    });
+    console.log('✅ Created members');
 
     return NextResponse.json({ 
       success: true, 
       message: 'Patch data seeded successfully',
-      patch: {
-        id: patch.id,
-        handle: patch.handle,
-        name: patch.name
-      }
+      patches: [
+        {
+          id: termLimitsPatch.id,
+          handle: termLimitsPatch.handle,
+          name: termLimitsPatch.name
+        },
+        {
+          id: historyPatch.id,
+          handle: historyPatch.handle,
+          name: historyPatch.name
+        }
+      ]
     });
 
   } catch (error) {

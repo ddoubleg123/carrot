@@ -381,40 +381,33 @@ function ConversationThread({
     }
   };
 
-  // Initialize scroll behavior for new thread
+  // Initialize scroll state for new thread without forcing any scroll
   useEffect(() => {
-    setIsAtBottom(true);
     setHasUserScrolled(false);
     setShowScrollButton(false);
-    
-    // Defer until layout is stable (double rAF avoids reflow jitter)
-    let raf1 = 0, raf2 = 0
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        scrollToBottom()
-      })
-    })
-    return () => { if (raf1) cancelAnimationFrame(raf1); if (raf2) cancelAnimationFrame(raf2) }
+    let raf = 0;
+    raf = requestAnimationFrame(() => {
+      // Measure if content currently overflows; do not scroll
+      const atBottomNow = checkIfAtBottom();
+      setIsAtBottom(atBottomNow);
+    });
+    return () => { if (raf) cancelAnimationFrame(raf); };
   }, [thread.id]);
 
   // Handle new messages with proper DOM timing
   useEffect(() => {
     const currentMessageCount = thread.messages.length;
     const hasNewMessages = currentMessageCount > lastMessageCountRef.current;
-    
-    if (hasNewMessages) {
-      // Only auto-scroll if user is at bottom
-      if (isAtBottom) {
-        // Delay scroll until DOM is painted
-        const timeout = setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-        
-        return () => clearTimeout(timeout);
-      }
-    }
-    
+    // Always record the latest message count to prevent repeat triggers
     lastMessageCountRef.current = currentMessageCount;
+
+    if (hasNewMessages && isAtBottom) {
+      // Delay scroll until DOM is painted
+      const timeout = setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
   }, [thread.messages.length, isAtBottom]);
 
   // Set up scroll event listener
@@ -535,9 +528,8 @@ function ConversationThread({
         <div className="fixed bottom-24 right-6 z-30">
           <button
             onClick={() => {
-              if (messagesEndRef.current) {
-                messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-              }
+              const el = scrollContainerRef.current;
+              if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
             }}
             className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105"
             title="Scroll to latest messages"

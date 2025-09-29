@@ -50,6 +50,8 @@ export async function POST(req: Request) {
   try { await rm(join(tmpdir(), 'carrot-training'), { recursive: true, force: true }) } catch {}
   await sem.acquire()
   let inputImagePath: string | null = null
+  let inputDir: string | null = null
+  let reqDir: string | null = null
   cleanupOldTmp(30 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
 
   try {
@@ -94,10 +96,11 @@ export async function POST(req: Request) {
       const name = (imageFile as any).name as string | undefined
       const ext = (name && name.includes('.')) ? `.${name.split('.').pop()}` : '.png'
       inputImagePath = await saveBlobToTmp('input-image', imageFile as unknown as Blob, ext)
+      try { inputDir = inputImagePath ? inputImagePath.substring(0, inputImagePath.lastIndexOf('/')) : null } catch {}
     }
 
     // Create a dedicated per-request tmp dir so cleanup is reliable
-    const reqDir = await mkdtemp(join(tmpdir(), 'ghibli-'))
+    reqDir = await mkdtemp(join(tmpdir(), 'ghibli-'))
     const outPath = join(reqDir, `out-${randomUUID()}.png`)
     const args = ['--prompt', prompt, '--model', model, '--out', outPath]
     if (inputImagePath) args.push('--input_image', inputImagePath)
@@ -145,6 +148,10 @@ export async function POST(req: Request) {
     try {
       cleanupOldTmp(15 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
       cleanupTmpPrefixRecursive('ghibli-', 2 * 60 * 1000).catch(() => {})
+      // Proactively delete per-request tmp directory and uploaded input dir
+      if (reqDir) { try { await rm(reqDir, { recursive: true, force: true }) } catch {} }
+      if (inputDir) { try { await rm(inputDir, { recursive: true, force: true }) } catch {} }
+      if (inputImagePath) { try { await safeUnlink(inputImagePath) } catch {} }
     } catch {}
     sem.release()
   }

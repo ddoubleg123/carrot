@@ -7,6 +7,7 @@ export interface AgentSpecificRequest {
   maxResults?: number;
   autoFeed?: boolean;
   sourceTypes?: string[];
+  openAccessOnly?: boolean;
 }
 
 export interface AgentTrainingRecord {
@@ -204,7 +205,31 @@ If unsure, set ok=false.`
       console.log(`[AgentSpecificRetriever] Total results before deduplication: ${allResults.length}`);
 
       // Remove duplicates and sort by relevance
-      const uniqueResults = this.deduplicateAndRank(allResults, agent.domainExpertise);
+      let uniqueResults = this.deduplicateAndRank(allResults, agent.domainExpertise);
+
+      // If openAccessOnly is requested, filter out known paywalled domains
+      if (request.openAccessOnly) {
+        const PAYWALL_DOMAINS = [
+          'jstor.org',
+          'sciencedirect.com',
+          'link.springer.com',
+          'ieeexplore.ieee.org',
+          'tandfonline.com',
+          'nature.com',
+          'wiley.com',
+          'cambridge.org',
+          'academic.oup.com',
+          'sagepub.com'
+        ];
+        uniqueResults = uniqueResults.filter(r => {
+          try {
+            const host = new URL(r.url || r.sourceUrl).hostname.replace(/^www\./, '');
+            return !PAYWALL_DOMAINS.some(d => host === d || host.endsWith(`.${d}`));
+          } catch {
+            return true;
+          }
+        });
+      }
 
       // Auto-feed if requested
       if (request.autoFeed) {

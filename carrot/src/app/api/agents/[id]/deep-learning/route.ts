@@ -16,7 +16,8 @@ export async function POST(
     const { 
       maxResults = 50,
       autoFeed = true,
-      sourceTypes = ['wikipedia', 'arxiv', 'news', 'academic', 'books', 'papers']
+      sourceTypes = ['wikipedia', 'arxiv', 'news', 'academic', 'books', 'papers'],
+      openAccessOnly = false
     } = body;
 
     // Get agent details
@@ -49,7 +50,8 @@ export async function POST(
           agentId: id,
           maxResults: Math.min(10, maxResults - totalProcessed), // Distribute results across queries
           autoFeed: false, // We'll handle feeding manually to avoid duplicates
-          sourceTypes
+          sourceTypes,
+          openAccessOnly
         });
 
         if (result.success && result.results) {

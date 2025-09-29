@@ -49,6 +49,7 @@ export default function FeedAgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
   const [activeTab, setActiveTab] = useState<'agents'|'feed'|'memories'|'training'|'dashboard'>('agents');
@@ -69,6 +70,11 @@ export default function FeedAgentsPage() {
   const [topicsFromDeepseek, setTopicsFromDeepseek] = useState<string[]>([]);
   const [auditResult, setAuditResult] = useState<any | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
+  // Toast banner (simple)
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastKind, setToastKind] = useState<'info'|'success'|'error'>('info');
+  // Bulk assessment status tracker
+  const [assessmentStatuses, setAssessmentStatuses] = useState<Record<string, { status: 'in_queue'|'in_process'|'completed'|'error'; planId?: string; error?: string }>>({});
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -249,9 +255,71 @@ export default function FeedAgentsPage() {
       if (allAgents.length > 0 && !selectedAgent) {
         setSelectedAgent(allAgents[0]);
       }
+      // Keep selection coherent if Select All was previously used
+      setSelectedAgentIds(prev => prev.filter(id => allAgents.some(a => a.id === id)));
     } catch (error) {
       console.error('Error loading agents:', error);
     }
+  };
+
+  // Selection helpers
+  const toggleSelectAll = () => {
+    if (selectedAgentIds.length === filteredAgents.length) {
+      setSelectedAgentIds([]);
+    } else {
+      setSelectedAgentIds(filteredAgents.map(a => a.id));
+    }
+  };
+  const toggleSelectAgent = (id: string) => {
+    setSelectedAgentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  // Simple toast helper
+  const showToast = (msg: string, kind: 'info'|'success'|'error' = 'info') => {
+    setToastKind(kind);
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  // Bulk Assess Knowledge (sequential queue)
+  const assessKnowledgeForSelected = async () => {
+    if (selectedAgentIds.length === 0) return;
+    // Queue init
+    const initial: Record<string, { status: 'in_queue'|'in_process'|'completed'|'error' }> = {};
+    for (const id of selectedAgentIds) initial[id] = { status: 'in_queue' };
+    setAssessmentStatuses(initial);
+    showToast('Assessment started for selected agents', 'info');
+    // Navigate to Training tab to observe progress
+    setActiveTab('training');
+
+    // Sequential processing to avoid rate limits
+    for (const id of selectedAgentIds) {
+      setAssessmentStatuses(prev => ({ ...prev, [id]: { ...prev[id], status: 'in_process' } }));
+      try {
+        const agent = agents.find(a => a.id === id);
+        const topics = (agent?.domainExpertise || []).slice(0, 6); // seed topics from expertise
+        if (topics.length === 0) throw new Error('No expertise topics available');
+        // Create training plan
+        const res = await fetch(`/api/agents/${id}/training-plan`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topics, options: { perTopicMax: 120, throttleMs: 5000, maxTasksPerTick: 1, verifyWithDeepseek: true, verificationMode: 'advisory' } })
+        });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.error || 'Failed to create training plan');
+        const planId = j.planId;
+        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'in_process', planId } }));
+        // Optional quick audit kickoff
+        try {
+          await fetch(`/api/agents/${id}/training-plan/${planId}/audit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 15 }) });
+        } catch {}
+        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'completed', planId } }));
+      } catch (e: any) {
+        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'error', error: e?.message || 'error' } }));
+      }
+      // small delay between agents
+      await new Promise(r => setTimeout(r, 800));
+    }
+    showToast('Assessments queued/completed', 'success');
   };
 
   // Parse comma/newline separated tags, dedupe while preserving order
@@ -354,6 +422,7 @@ export default function FeedAgentsPage() {
           query: retrievalQuery,
           sourceTypes: ['wikipedia', 'arxiv', 'news', 'academic', 'pubmed', 'stackoverflow', 'github', 'books'],
           maxResults: 20, // Increased from 5 to 20
+          openAccessOnly: true,
           autoFeed: true
         }),
       });
@@ -387,6 +456,7 @@ export default function FeedAgentsPage() {
         body: JSON.stringify({
           sourceTypes: ['wikipedia', 'arxiv', 'news', 'academic', 'pubmed', 'stackoverflow', 'github', 'books', 'papers'],
           maxResults: 50, // Much more comprehensive
+          openAccessOnly: true,
           autoFeed: true
         }),
       });
@@ -521,15 +591,30 @@ export default function FeedAgentsPage() {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Agent Training</h1>
               <p className="text-gray-600">Feed knowledge to AI agents and manage their memories</p>
             </div>
-            <Button
-              onClick={() => setShowBatchModal(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-              disabled={isProduction && serverInfo?.isFreeTier}
-            >
-              <Zap className="w-4 h-4" />
-              Batch Feed
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowBatchModal(true)}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                disabled={isProduction && serverInfo?.isFreeTier}
+              >
+                <Zap className="w-4 h-4" />
+                Batch Feed
+              </Button>
+              <Button
+                onClick={assessKnowledgeForSelected}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                disabled={selectedAgentIds.length === 0}
+                title={selectedAgentIds.length === 0 ? 'Select agents first' : 'Assess Knowledge for selected agents'}
+              >
+                Assess Knowledge
+              </Button>
+            </div>
           </div>
+          {toastMsg && (
+            <div className={`mt-3 p-3 rounded border ${toastKind==='error' ? 'bg-red-50 border-red-200 text-red-800' : toastKind==='success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+              {toastMsg}
+            </div>
+          )}
 
           {/* Agent Selector */}
           <div className="mt-6 mb-6">
@@ -596,6 +681,9 @@ export default function FeedAgentsPage() {
                   />
                 </div>
               </div>
+              <Button onClick={toggleSelectAll} variant="outline">
+                {selectedAgentIds.length === filteredAgents.length && filteredAgents.length>0 ? 'Clear All' : 'Select All'}
+              </Button>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Agent
@@ -607,6 +695,13 @@ export default function FeedAgentsPage() {
                 <Card key={agent.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedAgentIds.includes(agent.id)}
+                        onChange={() => toggleSelectAgent(agent.id)}
+                        className="w-4 h-4 accent-blue-600"
+                        aria-label={`Select ${agent.name}`}
+                      />
                       {agent.metadata.avatar ? (
                         <AvatarImage
                           src={agent.metadata.avatar}
@@ -1081,21 +1176,7 @@ export default function FeedAgentsPage() {
                 </>
               )}
 
-              {selectedAgent && !planStatus && lastPlanId && (
-                <p className="text-gray-600">Loading plan status…</p>
-              )}
             </div>
-          </TabsContent>
-
-          {/* Training Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
-            <AgentTrainingDashboard 
-              selectedAgentId={selectedAgent?.id}
-              onAgentSelect={(agentId) => {
-                const agent = agents.find(a => a.id === agentId);
-                setSelectedAgent(agent || null);
-              }}
-            />
           </TabsContent>
         </Tabs>
       </div>

@@ -104,7 +104,7 @@ export default function PatchHeader({
 
   return (
     <div 
-      className={`relative z-30 px-6 md:px-10 py-6 md:py-8 text-white ${getBackgroundClass()}`}
+      className={`relative z-30 px-6 md:px-10 py-8 md:py-10 text-white ${getBackgroundClass()}`}
       style={getBackgroundStyle()}
     >
       <div className="max-w-[1280px] mx-auto">
@@ -136,7 +136,7 @@ export default function PatchHeader({
             <div className="flex items-center gap-2">
               <Button
                 onClick={isMember ? () => {} : handleJoin}
-                variant={isMember ? "outline" : "primary"}
+                variant={isMember ? "outline" : "secondary"}
                 className={isMember 
                   ? "border-white/30 text-white hover:bg-white/10 bg-transparent" 
                   : "bg-white text-[#FF6A00] hover:bg-white/90"

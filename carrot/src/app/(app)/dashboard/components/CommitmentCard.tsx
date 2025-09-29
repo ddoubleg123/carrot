@@ -682,7 +682,20 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
                 // While trimming is processing, prefer the original direct videoUrl for optimistic playback
                 const processing = (props as any)?.status === 'processing' || props.uploadStatus === 'processing';
+                
+                // Add debugging for video component selection
+                console.log('[CommitmentCard] Video component selection:', {
+                  postId: id,
+                  hasVideoUrl: !!videoUrl,
+                  hasCfPlaybackUrlHls: !!cfPlaybackUrlHls,
+                  hasCfUid: !!cfUid,
+                  useHls,
+                  processing,
+                  videoUrl: videoUrl?.slice(0, 100)
+                });
+                
                 if (processing && videoUrl) {
+                  console.log('[CommitmentCard] Using VideoPlayer for processing video');
                   return (
                     <VideoPlayer
                       videoUrl={videoUrl || ""}
@@ -698,6 +711,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   );
                 }
                 if (useHls) {
+                  console.log('[CommitmentCard] Using HlsFeedPlayer for HLS video');
                   return (
                     <HlsFeedPlayer
                       assetId={id}
@@ -712,6 +726,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   );
                 }
                 if (cfUid || cfPlaybackUrlHls) {
+                  console.log('[CommitmentCard] Using CFVideoPlayer for Cloudflare video');
                   return (
                     <CFVideoPlayer
                       uid={cfUid || undefined}
@@ -725,6 +740,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     />
                   );
                 }
+                console.log('[CommitmentCard] Using VideoPlayer as default fallback');
                 return (
                   <VideoPlayer
                     videoUrl={videoUrl || ""}
