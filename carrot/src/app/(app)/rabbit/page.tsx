@@ -347,6 +347,8 @@ function ConversationThread({
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
   const lastMessageCountRef = useRef(0);
+  // Track whether we should auto-follow the tail (only when user hasn't scrolled up)
+  const followTailRef = useRef(true);
 
   // Check if user is at the bottom of the chat
   const checkIfAtBottom = () => {
@@ -385,6 +387,7 @@ function ConversationThread({
   useEffect(() => {
     setHasUserScrolled(false);
     setShowScrollButton(false);
+    followTailRef.current = true;
     let raf = 0;
     raf = requestAnimationFrame(() => {
       // Measure if content currently overflows; do not scroll
@@ -401,14 +404,15 @@ function ConversationThread({
     // Always record the latest message count to prevent repeat triggers
     lastMessageCountRef.current = currentMessageCount;
 
-    if (hasNewMessages && isAtBottom) {
+    // If user hasn't scrolled up, always follow the tail; otherwise only when already at bottom
+    if (hasNewMessages && (!hasUserScrolled || isAtBottom)) {
       // Delay scroll until DOM is painted
       const timeout = setTimeout(() => {
         scrollToBottom();
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [thread.messages.length, isAtBottom]);
+  }, [thread.messages.length, isAtBottom, hasUserScrolled]);
 
   // Set up scroll event listener
   useEffect(() => {
@@ -424,8 +428,8 @@ function ConversationThread({
     if (!scrollContainerRef.current) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      // Only auto-scroll if user is at bottom
-      if (isAtBottom) {
+      // Auto-scroll while user hasn't scrolled up, or if at bottom
+      if (!hasUserScrolled || isAtBottom) {
         const timeout = setTimeout(() => {
           scrollToBottom();
         }, 50);
@@ -439,7 +443,7 @@ function ConversationThread({
     return () => {
       resizeObserver.disconnect();
     };
-  }, [isAtBottom]);
+  }, [isAtBottom, hasUserScrolled]);
 
 
   return (

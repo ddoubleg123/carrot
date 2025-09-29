@@ -36,8 +36,8 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     <>
       {/* Tabs Bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
-        <div className="max-w-[880px] mx-auto px-6 md:px-10">
-          <div className="flex items-center justify-between py-4">
+        <div className="max-w-[880px] mx-auto px-8 md:px-12">
+          <div className="flex items-center justify-between py-6">
             {/* Tabs */}
             <div className="flex items-center gap-1">
               {tabs.map((tab) => (
@@ -73,7 +73,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       </div>
 
       {/* Tab Content */}
-      <div className="max-w-[880px] mx-auto px-6 md:px-10 py-6 md:py-8">
+      <div className="max-w-[880px] mx-auto px-8 md:px-12 py-8 md:py-10">
         {children}
       </div>
 

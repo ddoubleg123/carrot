@@ -118,7 +118,7 @@ export default function PatchHeader({
         </Link>
 
         {/* Main Content */}
-        <div className="pt-16 pl-4">
+        <div className="pt-20 pl-8 pr-8">
           {/* Title Row */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex-1 min-w-0">

@@ -75,6 +75,7 @@ export default function SimpleVideo({
     console.log('[SimpleVideo] Proxy URL:', proxyUrl);
     
     setVideoSrc(proxyUrl);
+    // Show video immediately when source is set - don't wait for events
     setIsLoading(false);
     
     // Cleanup timeout on unmount
@@ -89,10 +90,10 @@ export default function SimpleVideo({
   const handleLoadStart = () => {
     const startTime = Date.now();
     console.log('[SimpleVideo] Load started', { src: videoSrc, startTime });
-    setIsLoading(true);
+    // Keep loading state true, but set a shorter timeout
     setHasError(false);
     
-    // Set a timeout to prevent infinite loading
+    // Set a shorter timeout since videos are loading much faster now
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
@@ -100,7 +101,7 @@ export default function SimpleVideo({
       const duration = Date.now() - startTime;
       console.warn('[SimpleVideo] Loading timeout - forcing video to show', { duration: `${duration}ms` });
       setIsLoading(false);
-    }, 10000); // 10 second timeout
+    }, 2000); // 2 second timeout - even more aggressive
   };
 
   const handleLoadedData = () => {
@@ -158,7 +159,7 @@ export default function SimpleVideo({
   const handleLoadedMetadata = () => {
     const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());
     console.log('[SimpleVideo] Metadata loaded', { duration: `${duration}ms` });
-    // Show video as soon as metadata is available, don't wait for full buffering
+    // Show video as soon as metadata is available - this is the earliest we can show it
     setIsLoading(false);
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -190,8 +191,11 @@ export default function SimpleVideo({
   return (
     <div className={`relative ${className}`}>
       {isLoading && (
-        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
-          <div className="text-gray-500">Loading video...</div>
+        <div className="absolute inset-0 bg-gray-50 flex items-center justify-center z-10">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mx-auto mb-2"></div>
+            <div className="text-sm text-gray-500">Loading...</div>
+          </div>
         </div>
       )}
       
@@ -211,7 +215,7 @@ export default function SimpleVideo({
           onCanPlay={handleCanPlay}
           onCanPlayThrough={handleCanPlayThrough}
           className="w-full h-full object-contain bg-black"
-          preload="auto"
+          preload="metadata"
           crossOrigin="anonymous"
           data-start-time={Date.now()}
         />

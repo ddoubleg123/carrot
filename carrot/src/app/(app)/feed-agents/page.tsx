@@ -226,10 +226,10 @@ export default function FeedAgentsPage() {
       // Load database agents
       const response = await fetch('/api/agents');
       const data = await response.json();
-      const dbAgents = data.agents || [];
-      
+      const dbAgents: Agent[] = (data.agents || []) as Agent[];
+
       // Convert featured agents to the expected format
-      const featuredAgents = FEATURED_AGENTS.map(agent => ({
+      const featuredAgents: Agent[] = FEATURED_AGENTS.map(agent => ({
         id: agent.id,
         name: agent.name,
         persona: agent.personality.approach,
@@ -242,18 +242,38 @@ export default function FeedAgentsPage() {
           councilMembership: [],
           userVisibility: 'public',
           trainingEnabled: true
-        },
+        } as any,
         createdAt: new Date().toISOString()
-      }));
-      
-      // Combine database agents and featured agents, removing duplicates
-      const allAgents = [...dbAgents];
-      featuredAgents.forEach(featuredAgent => {
-        if (!allAgents.find(agent => agent.id === featuredAgent.id)) {
-          allAgents.push(featuredAgent);
+      } as Agent));
+
+      // Merge by normalized name (case/space-insensitive) to avoid duplicates by different IDs
+      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const byName = new Map<string, Agent>();
+      // Prefer DB record, then merge in featured domains/metadata if missing
+      for (const a of dbAgents) {
+        byName.set(norm(a.name), a);
+      }
+      for (const f of featuredAgents) {
+        const key = norm(f.name);
+        if (!byName.has(key)) {
+          byName.set(key, f);
+        } else {
+          const base = byName.get(key)!;
+          // Merge domain expertise (union)
+          const mergedDomains = Array.from(new Set([...(base.domainExpertise||[]), ...(f.domainExpertise||[])]));
+          base.domainExpertise = mergedDomains;
+          // Fill in missing avatar/role from featured
+          base.metadata = {
+            ...(f.metadata||{}),
+            ...(base.metadata||{}),
+            avatar: base.metadata?.avatar || f.metadata?.avatar,
+            role: base.metadata?.role || f.metadata?.role,
+          } as any;
+          byName.set(key, base);
         }
-      });
-      
+      }
+
+      const allAgents = Array.from(byName.values()).sort((a,b)=> a.name.localeCompare(b.name));
       setAgents(allAgents);
       
       // Auto-select the first agent if none is selected
@@ -1162,6 +1182,19 @@ export default function FeedAgentsPage() {
                                   <span className="px-2 py-1 bg-gray-50 rounded border">failed {plansById[t.planId].plan.totals.failed}</span>
                                   <span className="px-2 py-1 bg-gray-50 rounded border">skipped {plansById[t.planId].plan.totals.skipped}</span>
                                   <span className="px-2 py-1 bg-gray-50 rounded border">fed {plansById[t.planId].plan.totals.fed}</span>
+                                </div>
+                                {/* Plan topics preview */}
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {((plansById[t.planId].plan.topics as string[]) || []).slice(0, 6).map((topic: string, idx: number) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-[2px] rounded-full border bg-white text-[11px] text-gray-700" title={topic}>
+                                      {topic}
+                                    </span>
+                                  ))}
+                                  {((plansById[t.planId].plan.topics as string[]) || []).length > 6 && (
+                                    <span className="inline-flex items-center px-2 py-[2px] rounded-full border bg-white text-[11px] text-gray-500">
+                                      +{(plansById[t.planId].plan.topics as string[]).length - 6} more
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="mt-1 max-h-24 overflow-y-auto">
                                   {(plansById[t.planId].tasks || []).slice(0, 8).map((pt: any) => (

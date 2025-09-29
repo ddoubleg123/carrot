@@ -3,6 +3,7 @@ import { createBatch, setTaskStageStatus, setBatchStatus, getBatch, updateTask }
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry';
 import { TrainingStore } from '@/lib/ai-agents/trainingStore';
 import { startTrainingOrchestrator } from '@/lib/ai-agents/trainingOrchestrator';
+import { FEATURED_AGENTS } from '@/lib/agents';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,9 +12,14 @@ async function processAgent(batchId: string, taskId: string, agentId: string) {
   // Stage 1: assess → create a real TrainingPlan using agent expertise
   await setTaskStageStatus(batchId, taskId, 'assess', 'running');
   const agent = await AgentRegistry.getAgentById(agentId);
-  const topics: string[] = Array.isArray(agent?.domainExpertise) && agent!.domainExpertise.length > 0
-    ? agent!.domainExpertise
-    : (agent?.persona ? [agent.persona] : ['general knowledge']);
+  // Fallback: featured agent lookup by id or by matching name if ids differ across sources
+  const featured = FEATURED_AGENTS.find(a => a.id === agentId) || (agent ? FEATURED_AGENTS.find(f => f.name.toLowerCase() === String((agent as any).name||'').toLowerCase()) : undefined);
+  const topics: string[] =
+    (Array.isArray(agent?.domainExpertise) && agent!.domainExpertise.length > 0)
+      ? agent!.domainExpertise
+      : (featured?.domains && featured.domains.length > 0)
+        ? featured.domains
+        : (agent?.persona ? [agent.persona] : (featured?.personality?.approach ? [featured.personality.approach] : ['general knowledge']));
   const options = {
     perTopicMax: 200,
     sourceTypes: ['wikipedia','arxiv','academic','books','news','github','stackoverflow','pubmed'],

@@ -57,8 +57,20 @@ export async function POST(req: Request) {
   try {
     const fd = await req.formData()
     const prompt = (fd.get('prompt') as string) || ''
-    const model = (((fd.get('model') as string) || 'animeganv3') as 'animeganv3' | 'sd-lora')
+    let model = (((fd.get('model') as string) || '') as 'animeganv3' | 'sd-lora' | '')
     const imageFile = fd.get('image') as unknown as File | null
+
+    // Choose sensible defaults and validation to avoid heavy/invalid runs:
+    // - If no image: we must use text→image (sd-lora). AnimeGAN requires an input image.
+    // - If image present and model unspecified: default to animeganv3 (style transfer).
+    if (!imageFile) {
+      if (!model) model = 'sd-lora'
+      if (model === 'animeganv3') {
+        return NextResponse.json({ ok: false, message: 'animeganv3 requires an input image. Use sd-lora for prompt-only mode.' }, { status: 400 })
+      }
+    } else if (!model) {
+      model = 'animeganv3'
+    }
 
     // Forward to worker for ALL models if configured (bypass local tmp/disk)
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
@@ -71,7 +83,15 @@ export async function POST(req: Request) {
       if (lora) wf.append('lora', lora)
       if (loraAlpha) wf.append('lora_alpha', loraAlpha)
       if (imageFile && typeof (imageFile as any).arrayBuffer === 'function') {
-        wf.append('image', imageFile as any)
+        try {
+          const ab = await (imageFile as any).arrayBuffer()
+          const blob = new Blob([ab], { type: (imageFile as any).type || 'image/png' })
+          const name = (imageFile as any).name || 'input.png'
+          ;(wf as any).append('image', blob as any, name)
+        } catch {
+          // fallback to direct append
+          wf.append('image', imageFile as any)
+        }
       }
       const workerBase = workerUrl.replace(/\/$/, '')
       const res = await fetch(workerBase + '/generate-image', { method: 'POST', body: wf })
