@@ -50,14 +50,14 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     <>
       {/* Tabs Bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
-        <div className="max-w-[880px] mx-auto px-6 md:px-10">
-          <div className="flex items-center justify-between py-6">
-            {/* Tabs */}
-            <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between py-6">
+          {/* Tabs Container with Horizontal Scroll */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab.id
                       ? 'bg-[#FF6A00] text-white'
                       : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100'
@@ -68,13 +68,15 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                 </button>
               ))}
             </div>
+          </div>
 
-            {/* Create Post Button */}
+          {/* Create Post Button */}
+          <div className="ml-4 flex-shrink-0">
             <Button
               onClick={handleCreatePost}
-              variant="primary"
+              variant="outline"
               size="sm"
-              className="ml-auto bg-[#FF6A00] hover:bg-[#E55A00] text-white font-medium px-4 py-2 rounded-lg shadow-sm"
+              className="border-[#E6E8EC] text-[#0B0B0F] hover:bg-gray-50 font-medium px-4 py-2 rounded-lg whitespace-nowrap"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Post

@@ -135,6 +135,16 @@ export default function FeedAgentsPage() {
     }
   };
 
+  const pauseSelectedDiscovery = async (pause: boolean) => {
+    // TODO: Implement pause/resume selected agents discovery
+    console.log('Pause selected discovery:', pause);
+  };
+
+  const pauseAllDiscovery = async (pause: boolean) => {
+    // TODO: Implement pause/resume all agents discovery
+    console.log('Pause all discovery:', pause);
+  };
+
   const submitTrainingPlanFromTopics = async () => {
     if (!selectedAgent) return;
     const topics = topicsFromDeepseek;
@@ -257,7 +267,7 @@ export default function FeedAgentsPage() {
       // Load database agents
       const response = await fetch('/api/agents');
       const data = await response.json();
-      const dbAgents: Agent[] = (data.agents || []) as Agent[];
+      const dbAgents: Agent[] = ((data.agents || []) as Agent[]).filter((a:any)=> a.isActive !== false);
 
       // Convert featured agents to the expected format
       const featuredAgents: Agent[] = FEATURED_AGENTS.map(agent => ({
@@ -396,6 +406,19 @@ export default function FeedAgentsPage() {
     };
     run();
   }, [batchStatus]);
+
+  // One-time: auto-dedupe duplicates on load (silent)
+  useEffect(() => {
+    const onceKey = 'carrot_dedupe_ran';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(onceKey) === '1') return;
+    (async () => {
+      try { await fetch('/api/agents/dedupe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apply: true }) }); } catch {}
+      localStorage.setItem(onceKey, '1');
+      // reload agents list after dedupe
+      try { await loadAgents(); } catch {}
+    })();
+  }, []);
 
   // Poll discoveries for active plan with filters
   useEffect(() => {
@@ -751,6 +774,28 @@ export default function FeedAgentsPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        {/* Admin Bar */}
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border rounded p-3 flex items-center gap-2 flex-wrap">
+          <Button onClick={toggleSelectAll} variant="outline">
+            {selectedAgentIds.length === filteredAgents.length && filteredAgents.length>0 ? 'Clear All' : 'Select All'}
+          </Button>
+          <Button
+            onClick={assessKnowledgeForSelected}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            disabled={selectedAgentIds.length === 0}
+            title={selectedAgentIds.length === 0 ? 'Select agents first' : 'Assess Knowledge for selected agents'}
+          >
+            Assess Knowledge
+          </Button>
+          <div className="h-5 w-px bg-gray-200 mx-1" />
+          <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(true)}>Pause Discovery (Selected)</Button>
+          <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(false)}>Resume (Selected)</Button>
+          <div className="h-5 w-px bg-gray-200 mx-1" />
+          <Button variant="outline" onClick={()=> pauseAllDiscovery(true)}>Pause All Discovery</Button>
+          <Button variant="outline" onClick={()=> pauseAllDiscovery(false)}>Resume All</Button>
+          <div className="ml-auto text-xs text-gray-600">{selectedAgentIds.length} selected</div>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v)=> setActiveTab(v as any)} className="space-y-6">

@@ -72,21 +72,15 @@ export class FeedService {
 
     // Ensure the Agent exists to satisfy FK constraint for AgentMemory
     try {
-      await prisma.agent.upsert({
-        where: { id: agentId },
-        update: {},
-        create: {
-          id: agentId,
-          name: agentId,
-          persona: 'General knowledge',
-          domainExpertise: [],
-          associatedPatches: [],
-          metadata: {},
-          isActive: true,
-        },
-      });
+      const existing = await prisma.agent.findUnique({ where: { id: agentId } });
+      if (!existing) {
+        const msg = `[FeedService] Agent ${agentId} not found. Refusing to auto-create placeholder to avoid duplicates. Create the agent first.`
+        console.error(msg);
+        throw new Error(msg);
+      }
     } catch (e) {
-      console.error('[FeedService] Upsert agent failed:', e);
+      console.error('[FeedService] Agent existence check failed:', e);
+      throw e;
     }
 
     try {
