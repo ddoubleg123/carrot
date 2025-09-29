@@ -43,7 +43,18 @@ export default function SimpleVideo({
       proxyUrl = src;
     } else if (src.startsWith('/api/video')) {
       // Already proxied through video endpoint, use it directly
-      proxyUrl = src;
+      // But check if it's double-encoded and fix it
+      if (src.includes('%252F') || src.includes('%2520')) {
+        // This is double-encoded, decode it once
+        try {
+          const decoded = decodeURIComponent(src);
+          proxyUrl = decoded;
+        } catch (e) {
+          proxyUrl = src;
+        }
+      } else {
+        proxyUrl = src;
+      }
     } else if (src.includes('firebasestorage.googleapis.com')) {
       // Check if this is a properly formatted Firebase URL (has alt=media)
       if (src.includes('alt=media')) {
@@ -73,6 +84,12 @@ export default function SimpleVideo({
 
     console.log('[SimpleVideo] Original src:', src);
     console.log('[SimpleVideo] Proxy URL:', proxyUrl);
+    console.log('[SimpleVideo] URL analysis:', {
+      isDoubleEncoded: src.includes('%252F') || src.includes('%2520'),
+      hasAltMedia: src.includes('alt=media'),
+      isFirebaseUrl: src.includes('firebasestorage.googleapis.com'),
+      isAlreadyProxied: src.startsWith('/api/video')
+    });
     
     setVideoSrc(proxyUrl);
     // Show video immediately when source is set - don't wait for events

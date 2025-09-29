@@ -184,6 +184,33 @@ export default function FeedAgentsPage() {
     }
   };
 
+  // Pause/Resume discovery for the current plan
+  const togglePauseDiscovery = async (pause: boolean) => {
+    if (!lastPlanId) return;
+    try {
+      const r = await fetch(`/api/agents/training/plan/${lastPlanId}/pause-discovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pause }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) {
+        showToast(j.message || 'Failed to update discovery state', 'error');
+        return;
+      }
+      if (selectedAgent) {
+        try {
+          const r2 = await fetch(`/api/agents/${selectedAgent.id}/training-plan/${lastPlanId}`, { cache: 'no-store' });
+          const j2 = await r2.json();
+          if (j2.ok) setPlanStatus(j2);
+        } catch {}
+      }
+      showToast(pause ? 'Discovery paused' : 'Discovery resumed', 'success');
+    } catch (e: any) {
+      showToast(e?.message || 'Error updating discovery state', 'error');
+    }
+  };
+
   // Check server info on mount
   useEffect(() => {
     if (isProduction) {
@@ -1224,7 +1251,24 @@ export default function FeedAgentsPage() {
               {selectedAgent && planStatus && (
                 <>
                   <div className="text-sm">
-                    <div className="mb-2">Plan: <span className="font-mono">{lastPlanId}</span> • Status: <span className="font-medium">{planStatus.plan.status}</span></div>
+                    <div className="mb-2 flex items-center gap-3 flex-wrap">
+                      <div>
+                        Plan: <span className="font-mono">{lastPlanId}</span> • Status: <span className="font-medium">{planStatus.plan.status}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={planStatus?.plan?.options?.pauseDiscovery ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700' : ''}
+                          onClick={() => togglePauseDiscovery(!planStatus?.plan?.options?.pauseDiscovery)}
+                        >
+                          {planStatus?.plan?.options?.pauseDiscovery ? 'Resume Discovery' : 'Pause Discovery'}
+                        </Button>
+                        {planStatus?.plan?.options?.pauseDiscovery && (
+                          <span className="text-xs text-amber-700">Discovery paused — feeding continues</span>
+                        )}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                       <div className="p-2 bg-gray-50 rounded">Queued: {planStatus.plan.totals.queued}</div>
                       <div className="p-2 bg-gray-50 rounded">Running: {planStatus.plan.totals.running}</div>

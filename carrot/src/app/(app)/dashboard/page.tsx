@@ -32,6 +32,7 @@ function SkeletonBlock({ height = 240 }: { height?: number }) {
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
+  const proxVideo = (u?: string | null) => (u ? `/api/video?url=${encodeURIComponent(u)}` : null);
   const proxArr = (arr?: string[] | string | null) => {
     if (!arr) return [] as string[];
     if (Array.isArray(arr)) return arr.map((u) => prox(u)!).filter(Boolean) as string[];
@@ -92,7 +93,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       timestamp: post.createdAt,
       imageUrls: proxArr(post.imageUrls),
       gifUrl: prox(post.gifUrl) || null,
-      videoUrl: prox(post.videoUrl) || null,
+      videoUrl: proxVideo(post.videoUrl) || null,
       thumbnailUrl: prox(post.thumbnailUrl) || null,
       // Cloudflare Stream
       cfUid: post.cfUid || post.cf_uid || null,

@@ -34,6 +34,8 @@ export interface TrainingPlanOptions {
   maxTasksPerTick?: number; // cap tasks processed per tick for this plan
   verifyWithDeepseek?: boolean; // verify sources with Deepseek before feeding
   verificationMode?: 'off' | 'advisory' | 'strict'; // off: skip, advisory: do not block, strict: block unapproved
+  // Discovery controls
+  pauseDiscovery?: boolean; // when true, do not enqueue further pages; continue feeding what exists
 }
 
 export interface TrainingTask {

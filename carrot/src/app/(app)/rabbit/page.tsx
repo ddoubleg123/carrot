@@ -767,6 +767,27 @@ export default function RabbitPage() {
     streamAssistantReply(`Chat with ${agent.name} about ${agent.role}`);
   };
 
+  // Shared lightweight retry wrapper for transient model outages
+  const fetchWithRetry = async (input: RequestInfo | URL, init?: RequestInit, attempts = 3) => {
+    let lastErr: any = null;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const resp = await fetch(input, init);
+        if (!resp.ok && [429, 500, 502, 503, 504].includes(resp.status)) {
+          lastErr = new Error(`HTTP ${resp.status}`);
+        } else {
+          return resp;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+      const base = 400 * Math.pow(2, i);
+      const jitter = Math.floor(Math.random() * 150);
+      await new Promise(r => setTimeout(r, base + jitter));
+    }
+    throw lastErr;
+  };
+
   async function streamAssistantReply(userMsg: string) {
     try {
       const thread = currentThread;
@@ -847,17 +868,17 @@ export default function RabbitPage() {
       };
 
       console.log('[Rabbit] Calling DeepSeek API with payload:', payload);
-      const resp = await fetch('/api/ai/chat', {
+      const resp = await fetchWithRetry('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }, 3);
       console.log('[Rabbit] API response status:', resp.status, 'ok:', resp.ok);
       if (!resp.ok || !resp.body) {
         console.warn('[Rabbit] API call failed:', resp.status, resp.statusText);
         
         // Add a fallback response when API fails
-        const fallbackResponse = `I'm ${respondingAgent.name}. I'm experiencing technical difficulties. Please try again.`;
+        const fallbackResponse = `I'm ${respondingAgent.name}. The model is temporarily unavailable. I will auto-retry next time; please try again in a moment.`;
         
         // Add the fallback response to the thread
         setCurrentThread(prev => {

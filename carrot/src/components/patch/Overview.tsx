@@ -1,6 +1,6 @@
 'use client';
 
-import { cardVariants, sectionHeading } from '@/styles/cards';
+// Removed custom card styles - using Tailwind directly
 import { Badge } from '@/components/ui/badge';
 import { Calendar, ExternalLink, MessageSquare, Clock } from 'lucide-react';
 
@@ -83,13 +83,13 @@ export default function Overview({ patch }: OverviewProps) {
     { id: '2', title: 'New discussion started', body: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
   ];
   return (
-    <div className="space-y-8 py-8 px-6 md:px-10">
+    <div className="space-y-8">
       {/* Key Facts Grid */}
       <div>
-        <h2 className={sectionHeading}>Key Facts</h2>
+        <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">Key Facts</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {facts.slice(0, 8).map((fact) => (
-            <div key={fact.id} className={cardVariants.compact}>
+            <div key={fact.id} className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="text-sm font-medium text-[#0B0B0F]">
                   {fact.label}
@@ -114,11 +114,11 @@ export default function Overview({ patch }: OverviewProps) {
 
       {/* Recent Activity */}
       <div>
-        <h2 className={sectionHeading}>Recent Activity</h2>
+        <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">Recent Activity</h2>
         <div className="space-y-4">
           {/* Recent Events */}
           {recentEvents.slice(0, 3).map((event) => (
-            <div key={event.id} className={cardVariants.compact}>
+            <div key={event.id} className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-[#0A5AFF]/10 rounded-full flex items-center justify-center flex-shrink-0">
                   <Calendar className="w-4 h-4 text-[#0A5AFF]" />
@@ -151,7 +151,7 @@ export default function Overview({ patch }: OverviewProps) {
 
           {/* Recent Sources */}
           {recentSources.slice(0, 2).map((source) => (
-            <div key={source.id} className={cardVariants.compact}>
+            <div key={source.id} className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <ExternalLink className="w-4 h-4 text-[#60646C]" />
@@ -185,7 +185,7 @@ export default function Overview({ patch }: OverviewProps) {
 
           {/* Recent Posts */}
           {recentPosts.slice(0, 2).map((post) => (
-            <div key={post.id} className={cardVariants.compact}>
+            <div key={post.id} className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
                   <MessageSquare className="w-4 h-4 text-orange-600" />

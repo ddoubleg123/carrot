@@ -46,8 +46,8 @@ export async function POST(req: Request) {
   const startedAt = Date.now()
   // Preflight: aggressively clear previous ghibli-* temp to reclaim space now
   try { await cleanupTmpPrefixRecursive('ghibli-', 0) } catch {}
-  // Also clear training store which may live under /tmp and grow large
-  try { await rm(join(tmpdir(), 'carrot-training'), { recursive: true, force: true }) } catch {}
+  // IMPORTANT: Do NOT clear the training store; it persists AI agent assessments.
+  // If you need to reclaim space, only clear ghibli-* temp dirs via cleanupTmpPrefixRecursive.
   await sem.acquire()
   let inputImagePath: string | null = null
   let inputDir: string | null = null

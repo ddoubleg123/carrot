@@ -47,9 +47,10 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
     task.updatedAt = new Date().toISOString()
     TrainingStore.updateTask(task)
 
-    // Enqueue next page if still under cap
+    // Enqueue next page if still under cap and discovery is not paused
     const newFedTotal = fedSoFar + res.fedCount
-    if (newFedTotal < perTopicMax && res.success && res.results.length > 0) {
+    const discoveryPaused = !!plan.options.pauseDiscovery
+    if (!discoveryPaused && newFedTotal < perTopicMax && res.success && res.results.length > 0) {
       const nextPage = (task.page || 1) + 1
       TrainingStore.enqueueNextPage(plan.id, topic, nextPage)
     }

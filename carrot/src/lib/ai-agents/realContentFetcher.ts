@@ -178,6 +178,13 @@ export class RealContentFetcher {
       const response = await fetch(url);
       
       if (!response.ok) {
+        // Explicitly handle rate limiting
+        if (response.status === 429) {
+          console.warn('News API rate limited (429); cooling down source for 2 minutes');
+          // Cooldown: pretend we requested now so isRateLimited will gate for a while
+          this.RATE_LIMITS.set('newsapi', Date.now() + (2 * 60 * 1000));
+          throw new Error(`News API failed: 429`);
+        }
         throw new Error(`News API failed: ${response.status}`);
       }
       

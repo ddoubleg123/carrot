@@ -5,10 +5,11 @@ import { auth } from '@/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
-import TimelineView2 from '@/components/patch/TimelineView2'
+import TimelineView from '@/components/patch/TimelineView'
 import Overview from '@/components/patch/Overview'
-import ResourcesList from '@/components/patch/ResourcesList'
-import PostFeed from '@/components/patch/PostFeed'
+import DocumentsView from '@/components/patch/DocumentsView'
+import SourcesView from '@/components/patch/SourcesView'
+import DiscussionsView from '@/components/patch/DiscussionsView'
 
 interface PatchPageProps {
   params: Promise<{ handle: string }>
@@ -183,20 +184,20 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
             {/* Main Content Area */}
-            <div className="lg:col-span-2">
+            <div className="max-w-[880px]">
               <PatchTabs activeTab={activeTab} patch={patch}>
                 {activeTab === 'overview' && <Overview patch={patch} />}
-                {activeTab === 'documents' && <ResourcesList patch={patch} />}
-                {activeTab === 'timeline' && <TimelineView2 events={formattedEvents as any} patchId={patch.id} />}
-                {activeTab === 'sources' && <ResourcesList patch={patch} />}
-                {activeTab === 'discussions' && <PostFeed patch={patch} />}
+                {activeTab === 'documents' && <DocumentsView patch={patch} />}
+                {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
+                {activeTab === 'sources' && <SourcesView patch={patch} />}
+                {activeTab === 'discussions' && <DiscussionsView patch={patch} />}
               </PatchTabs>
             </div>
 
             {/* Right Rail */}
-            <div className="lg:col-span-1">
+            <div className="w-[320px]">
               <RightRail
                 patch={patch}
                 followers={followers}

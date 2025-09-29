@@ -55,13 +55,22 @@ export default function PatchHeader({
   );
 
   const handleJoin = () => {
-    // TODO: Implement join functionality
+    // Optimistic join with toast
     console.log('Join clicked');
+    // TODO: Implement optimistic join functionality
   };
 
   const handleShare = () => {
-    // TODO: Implement share functionality
+    // Open share sheet
     console.log('Share clicked');
+    // TODO: Implement share functionality
+  };
+
+  const handleThemeChange = (newTheme: UserPatchTheme) => {
+    setCurrentTheme(newTheme);
+    onThemeChange?.(newTheme);
+    // Save to API
+    // TODO: Implement API call to save theme
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,8 +78,7 @@ export default function PatchHeader({
     if (file) {
       const imageUrl = URL.createObjectURL(file);
       const newTheme: UserPatchTheme = { mode: 'image', imageUrl };
-      setCurrentTheme(newTheme);
-      onThemeChange?.(newTheme);
+      handleThemeChange(newTheme);
     }
   };
 
@@ -108,7 +116,6 @@ export default function PatchHeader({
       style={getBackgroundStyle()}
     >
       <div className="max-w-[1280px] mx-auto">
-
         {/* Back Button */}
         <Link 
           href="/patch"
@@ -118,7 +125,7 @@ export default function PatchHeader({
         </Link>
 
         {/* Main Content */}
-        <div className="pt-20 pl-8 pr-8">
+        <div className="pt-16 pl-4">
           {/* Title Row */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -170,7 +177,7 @@ export default function PatchHeader({
                   <button
                     key={preset}
                     aria-label={`Theme ${preset}`}
-                    onClick={() => { const t = { mode:'preset' as const, preset }; setCurrentTheme(t); onThemeChange?.(t) }}
+                    onClick={() => handleThemeChange({ mode: 'preset', preset })}
                     className={`w-6 h-6 rounded-full border border-white/40 hover:scale-105 transition ${preset==='light'?'bg-[#0A5AFF]':preset==='warm'?'bg-[#FF6A00]':preset==='stone'?'bg-[#1A1D22]':preset==='civic'?'bg-[#0A5AFF]':'bg-[#0B0B0F]'} ${currentTheme.preset===preset? 'ring-2 ring-white':''}`}
                     title={preset}
                   />

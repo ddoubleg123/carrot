@@ -43,7 +43,6 @@ export class FeedService {
       estimatedMemories,
     };
   }
-
   /**
    * Feed content to an agent
    */
@@ -55,7 +54,7 @@ export class FeedService {
     console.log(`[FeedService] Processing feed for agent ${agentId}`);
 
     // Extract and clean content
-    let extractedContent;
+    let extractedContent: ExtractedContent;
     try {
       extractedContent = await this.extractContent(feedItem);
     } catch (error) {
@@ -70,7 +69,26 @@ export class FeedService {
     }
     
     const memoryIds: string[] = [];
-    
+
+    // Ensure the Agent exists to satisfy FK constraint for AgentMemory
+    try {
+      await prisma.agent.upsert({
+        where: { id: agentId },
+        update: {},
+        create: {
+          id: agentId,
+          name: agentId,
+          persona: 'General knowledge',
+          domainExpertise: [],
+          associatedPatches: [],
+          metadata: {},
+          isActive: true,
+        },
+      });
+    } catch (e) {
+      console.error('[FeedService] Upsert agent failed:', e);
+    }
+
     try {
       // Limit content length to prevent memory issues
       const maxContentLength = 5000; // 5KB limit
@@ -98,13 +116,22 @@ export class FeedService {
 
       memoryIds.push(memory.id);
       console.log(`[FeedService] Successfully stored memory for agent ${agentId}: ${memory.id}`);
-    } catch (memoryError) {
-      console.error('[FeedService] Error storing memory:', memoryError);
+    } catch (memoryError: any) {
+      // Enhance logging for Prisma known request errors
+      if (memoryError?.code) {
+        console.error('[FeedService] Error storing memory (Prisma):', {
+          code: memoryError.code,
+          meta: memoryError.meta,
+          message: memoryError.message,
+        });
+      } else {
+        console.error('[FeedService] Error storing memory:', memoryError);
+      }
       throw memoryError; // Re-throw to indicate failure
     }
 
-    // Create feed event record
-    let feedEvent;
+    // Create feed event record (best-effort)
+    let feedEvent: any = null;
     try {
       feedEvent = await prisma.agentFeedEvent.create({
         data: {
