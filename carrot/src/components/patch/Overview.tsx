@@ -83,7 +83,7 @@ export default function Overview({ patch }: OverviewProps) {
     { id: '2', title: 'New discussion started', body: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
   ];
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 py-4">
       {/* Key Facts Grid */}
       <div>
         <h2 className={sectionHeading}>Key Facts</h2>

@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Upload } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Upload, Palette } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -112,13 +112,13 @@ export default function PatchHeader({
         {/* Back Button */}
         <Link 
           href="/patch"
-          className="absolute left-3 top-3 md:left-4 md:top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors"
+          className="absolute left-6 top-6 md:left-8 md:top-8 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
 
         {/* Main Content */}
-        <div className="pt-10">
+        <div className="pt-16 pl-4">
           {/* Title Row */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -152,6 +152,16 @@ export default function PatchHeader({
                 className="text-white hover:bg-white/10 p-2"
               >
                 <Share2 className="w-4 h-4" />
+              </Button>
+
+              {/* Color Swatch Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10 p-2"
+                title="Change color scheme"
+              >
+                <Palette className="w-4 h-4" />
               </Button>
 
               {/* Quick color swatches */}

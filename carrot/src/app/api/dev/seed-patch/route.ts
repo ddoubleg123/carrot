@@ -165,6 +165,159 @@ export async function POST() {
     });
     console.log('✅ Created members');
 
+    // Create sample events for timeline with different media types
+    const sampleEvents = [
+      {
+        title: 'Founding of the Movement',
+        summary: 'The term limits movement was officially founded with the goal of establishing congressional term limits.',
+        dateStart: new Date('2020-01-15'),
+        dateEnd: new Date('2020-01-15'),
+        tags: ['founding', 'movement'],
+        media: {
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=800&h=600&fit=crop',
+          alt: 'Congress building'
+        }
+      },
+      {
+        title: 'First Major Rally',
+        summary: 'Over 10,000 supporters gathered in Washington DC to demand congressional term limits.',
+        dateStart: new Date('2020-06-15'),
+        dateEnd: new Date('2020-06-15'),
+        tags: ['rally', 'protest'],
+        media: {
+          type: 'video',
+          url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+          alt: 'Rally footage'
+        }
+      },
+      {
+        title: 'Research Paper Published',
+        summary: 'Dr. Sarah Chen published groundbreaking research on the effectiveness of term limits.',
+        dateStart: new Date('2021-03-20'),
+        dateEnd: new Date('2021-03-20'),
+        tags: ['research', 'academic'],
+        media: {
+          type: 'pdf',
+          url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+          alt: 'Research paper'
+        }
+      },
+      {
+        title: 'State Legislature Success',
+        summary: 'First state legislature passed a resolution supporting federal term limits.',
+        dateStart: new Date('2021-08-10'),
+        dateEnd: new Date('2021-08-10'),
+        tags: ['legislation', 'success'],
+        media: {
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=800&h=600&fit=crop',
+          alt: 'State capitol'
+        }
+      },
+      {
+        title: 'Public Opinion Poll Results',
+        summary: 'New poll shows 78% of Americans support congressional term limits.',
+        dateStart: new Date('2022-01-15'),
+        dateEnd: new Date('2022-01-15'),
+        tags: ['polling', 'public-opinion'],
+        media: {
+          type: 'video',
+          url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+          alt: 'Poll results presentation'
+        }
+      }
+    ];
+
+    // Create events for term limits patch
+    for (const eventData of sampleEvents) {
+      const existingEvent = await prisma.event.findFirst({
+        where: {
+          patchId: termLimitsPatch.id,
+          title: eventData.title
+        }
+      });
+      
+      if (!existingEvent) {
+        await prisma.event.create({
+          data: {
+            patchId: termLimitsPatch.id,
+            title: eventData.title,
+            summary: eventData.summary,
+            dateStart: eventData.dateStart,
+            dateEnd: eventData.dateEnd,
+            tags: eventData.tags,
+            media: eventData.media
+          }
+        });
+      }
+    }
+
+    // Create sample events for history patch
+    const historyEvents = [
+      {
+        title: 'Ancient Civilizations Research',
+        summary: 'Comprehensive study of governance systems in ancient civilizations and their relevance to modern democracy.',
+        dateStart: new Date('2023-01-10'),
+        dateEnd: new Date('2023-01-10'),
+        tags: ['ancient-history', 'governance'],
+        media: {
+          type: 'image',
+          url: 'https://images.unsplash.com/photo-1539650116574-75c0c6d73c6e?w=800&h=600&fit=crop',
+          alt: 'Ancient ruins'
+        }
+      },
+      {
+        title: 'Medieval Political Systems',
+        summary: 'Analysis of medieval political structures and their influence on modern governance.',
+        dateStart: new Date('2023-03-15'),
+        dateEnd: new Date('2023-03-15'),
+        tags: ['medieval', 'politics'],
+        media: {
+          type: 'video',
+          url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+          alt: 'Medieval documentary'
+        }
+      },
+      {
+        title: 'Modern Democracy Evolution',
+        summary: 'Documentation of how modern democratic systems evolved from historical precedents.',
+        dateStart: new Date('2023-06-20'),
+        dateEnd: new Date('2023-06-20'),
+        tags: ['democracy', 'modern-history'],
+        media: {
+          type: 'pdf',
+          url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+          alt: 'Democracy research paper'
+        }
+      }
+    ];
+
+    for (const eventData of historyEvents) {
+      const existingEvent = await prisma.event.findFirst({
+        where: {
+          patchId: historyPatch.id,
+          title: eventData.title
+        }
+      });
+      
+      if (!existingEvent) {
+        await prisma.event.create({
+          data: {
+            patchId: historyPatch.id,
+            title: eventData.title,
+            summary: eventData.summary,
+            dateStart: eventData.dateStart,
+            dateEnd: eventData.dateEnd,
+            tags: eventData.tags,
+            media: eventData.media
+          }
+        });
+      }
+    }
+
+    console.log('✅ Created sample events with media');
+
     return NextResponse.json({ 
       success: true, 
       message: 'Patch data seeded successfully',

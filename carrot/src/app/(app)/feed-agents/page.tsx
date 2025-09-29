@@ -75,6 +75,11 @@ export default function FeedAgentsPage() {
   const [toastKind, setToastKind] = useState<'info'|'success'|'error'>('info');
   // Bulk assessment status tracker
   const [assessmentStatuses, setAssessmentStatuses] = useState<Record<string, { status: 'in_queue'|'in_process'|'completed'|'error'; planId?: string; error?: string }>>({});
+  // Batch API integration
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<any | null>(null);
+  // Cache of planId -> { plan, tasks }
+  const [plansById, setPlansById] = useState<Record<string, any>>({});
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -281,46 +286,65 @@ export default function FeedAgentsPage() {
     setTimeout(() => setToastMsg(null), 2500);
   };
 
-  // Bulk Assess Knowledge (sequential queue)
+  // Bulk Assess Knowledge via batch API
   const assessKnowledgeForSelected = async () => {
     if (selectedAgentIds.length === 0) return;
-    // Queue init
-    const initial: Record<string, { status: 'in_queue'|'in_process'|'completed'|'error' }> = {};
-    for (const id of selectedAgentIds) initial[id] = { status: 'in_queue' };
-    setAssessmentStatuses(initial);
-    showToast('Assessment started for selected agents', 'info');
-    // Navigate to Training tab to observe progress
-    setActiveTab('training');
-
-    // Sequential processing to avoid rate limits
-    for (const id of selectedAgentIds) {
-      setAssessmentStatuses(prev => ({ ...prev, [id]: { ...prev[id], status: 'in_process' } }));
-      try {
-        const agent = agents.find(a => a.id === id);
-        const topics = (agent?.domainExpertise || []).slice(0, 6); // seed topics from expertise
-        if (topics.length === 0) throw new Error('No expertise topics available');
-        // Create training plan
-        const res = await fetch(`/api/agents/${id}/training-plan`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topics, options: { perTopicMax: 120, throttleMs: 5000, maxTasksPerTick: 1, verifyWithDeepseek: true, verificationMode: 'advisory' } })
-        });
-        const j = await res.json();
-        if (!res.ok || !j.ok) throw new Error(j.error || 'Failed to create training plan');
-        const planId = j.planId;
-        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'in_process', planId } }));
-        // Optional quick audit kickoff
-        try {
-          await fetch(`/api/agents/${id}/training-plan/${planId}/audit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 15 }) });
-        } catch {}
-        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'completed', planId } }));
-      } catch (e: any) {
-        setAssessmentStatuses(prev => ({ ...prev, [id]: { status: 'error', error: e?.message || 'error' } }));
-      }
-      // small delay between agents
-      await new Promise(r => setTimeout(r, 800));
+    try {
+      showToast('Assessment started for selected agents', 'info');
+      setActiveTab('training');
+      const res = await fetch('/api/agents/batch/assess', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentIds: selectedAgentIds })
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) { showToast(j.message || 'Failed to start batch', 'error'); return; }
+      setBatchId(j.batch.id);
+    } catch (e:any) {
+      showToast(e?.message || 'Error starting assessment batch', 'error');
     }
-    showToast('Assessments queued/completed', 'success');
   };
+
+  // Poll batch status
+  useEffect(() => {
+    if (!batchId) return;
+    let timer: any;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/agents/batch/${batchId}/status`, { cache: 'no-store' });
+        const j = await r.json();
+        if (j.ok) setBatchStatus(j.batch);
+      } catch {}
+      timer = setTimeout(poll, 3000);
+    };
+    poll();
+    return () => timer && clearTimeout(timer);
+  }, [batchId]);
+
+  // When batchStatus updates, fetch any missing plan details for tasks that have a planId
+  useEffect(() => {
+    const run = async () => {
+      if (!batchStatus?.tasks) return;
+      const toFetch: { agentId: string; planId: string }[] = [];
+      for (const t of batchStatus.tasks as any[]) {
+        if (t.planId && !plansById[t.planId]) {
+          toFetch.push({ agentId: t.agentId, planId: t.planId });
+        }
+      }
+      if (!toFetch.length) return;
+      const fetched: Record<string, any> = {};
+      for (const { agentId, planId } of toFetch) {
+        try {
+          const r = await fetch(`/api/agents/${agentId}/training-plan/${planId}`, { cache: 'no-store' });
+          const j = await r.json();
+          if (j.ok) { fetched[planId] = j; }
+        } catch {}
+      }
+      if (Object.keys(fetched).length) {
+        setPlansById(prev => ({ ...prev, ...fetched }));
+      }
+    };
+    run();
+  }, [batchStatus]);
 
   // Parse comma/newline separated tags, dedupe while preserving order
   const parseTags = (raw: string): string[] => {
@@ -1091,6 +1115,75 @@ export default function FeedAgentsPage() {
                 <p className="text-gray-600">Select an agent to view their training progress.</p>
               )}
 
+              {/* Bulk Assessment Status (multi-agent) */}
+              {batchStatus && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Bulk Assessment Status</span>
+                      <span className="text-sm font-normal text-gray-500">Batch <span className="font-mono">{batchStatus.id}</span> • {batchStatus.status}</span>
+                    </CardTitle>
+                    <CardDescription>
+                      {batchStatus.agentIds?.length || 0} agents • discovered {batchStatus.totals?.discovered || 0} • fed {batchStatus.totals?.fed || 0}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {(batchStatus.tasks || []).map((t: any) => {
+                        const planned = t.itemsPlanned || 0;
+                        const fed = t.itemsFed || 0;
+                        const pct = planned > 0 ? Math.min(100, Math.round((fed / planned) * 100)) : 0;
+                        const agent = agents.find(a => a.id === t.agentId);
+                        return (
+                          <div key={t.id} className="p-2 border rounded bg-white">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-3">
+                                <span className="font-medium">{agent?.name || t.agentId}</span>
+                                <span className="ml-2 text-gray-600">stage: {t.stage}</span>
+                                <span className="ml-2 text-gray-600">status: {t.status}</span>
+                              </div>
+                              {(t.planId) && (
+                                <div className="text-xs text-gray-500">plan <span className="font-mono">{t.planId}</span></div>
+                              )}
+                            </div>
+                            <div className="mt-2">
+                              <div className="w-full h-2 bg-gray-100 rounded">
+                                <div className={`h-2 rounded ${pct===100? 'bg-green-500':'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <div className="mt-1 text-xs text-gray-600">{fed} fed / {planned} discovered ({pct}%)</div>
+                              {t.lastError && <div className="mt-1 text-xs text-red-600">{t.lastError}</div>}
+                            </div>
+                            {t.planId && plansById[t.planId] && (
+                              <div className="mt-2 text-xs text-gray-700">
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">queued {plansById[t.planId].plan.totals.queued}</span>
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">running {plansById[t.planId].plan.totals.running}</span>
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">done {plansById[t.planId].plan.totals.done}</span>
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">failed {plansById[t.planId].plan.totals.failed}</span>
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">skipped {plansById[t.planId].plan.totals.skipped}</span>
+                                  <span className="px-2 py-1 bg-gray-50 rounded border">fed {plansById[t.planId].plan.totals.fed}</span>
+                                </div>
+                                <div className="mt-1 max-h-24 overflow-y-auto">
+                                  {(plansById[t.planId].tasks || []).slice(0, 8).map((pt: any) => (
+                                    <div key={pt.id} className="flex items-center justify-between">
+                                      <span className="truncate mr-2" title={`${pt.topic} (page ${pt.page})`}>{pt.topic}</span>
+                                      <span className="text-gray-500">pg {pt.page} • {pt.status} • fed {pt.itemsFed||0}</span>
+                                    </div>
+                                  ))}
+                                  {(plansById[t.planId].tasks || []).length > 8 && (
+                                    <div className="text-[11px] text-gray-500 mt-1">and more…</div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {selectedAgent && !lastPlanId && (
                 <p className="text-gray-600">Create a training plan from the self-assessment to see live progress here.</p>
               )}
@@ -1168,6 +1261,7 @@ export default function FeedAgentsPage() {
                     <h4 className="font-medium">Coverage by expertise</h4>
                     <AgentTrainingDashboard 
                       selectedAgentId={selectedAgent?.id}
+                      refreshToken={batchStatus?.updatedAt || (batchStatus ? JSON.stringify(batchStatus.totals||{}) : undefined)}
                       onAgentSelect={(agentId)=>{
                         const a = agents.find(a=> a.id===agentId); setSelectedAgent(a||null);
                       }}

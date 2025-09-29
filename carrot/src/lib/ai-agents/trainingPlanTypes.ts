@@ -1,5 +1,6 @@
 export type TrainingPlanStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'canceled';
 export type TrainingTaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'skipped';
+export type BatchStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'partial';
 
 // Optional topic graph and mastery tracking
 export type MasteryLevel = 'none' | 'novice' | 'intermediate' | 'proficient' | 'expert';
@@ -86,4 +87,39 @@ export interface ProgressEvent {
   type: ProgressEventType;
   details?: any;
   ts: string;
+}
+
+// Batch processing types for multi-agent Assess → Discover → Feed workflow
+export type BatchStage = 'assess' | 'discover' | 'feed';
+
+export interface BatchAgentTask {
+  id: string;
+  agentId: string;
+  stage: BatchStage; // current stage
+  planId?: string;   // filled after assess
+  status: TrainingTaskStatus; // reuse statuses
+  itemsPlanned?: number; // discovery count
+  itemsFed?: number;     // fed count
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchJob {
+  id: string;
+  agentIds: string[];
+  status: BatchStatus;
+  createdAt: string;
+  updatedAt: string;
+  // Totals across all agents
+  totals: {
+    queued: number;
+    running: number;
+    done: number;
+    failed: number;
+    discovered: number; // items found
+    fed: number;        // items fed
+  };
+  tasks: BatchAgentTask[];
+  meta?: Record<string, any>;
 }

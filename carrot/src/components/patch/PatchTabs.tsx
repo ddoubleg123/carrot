@@ -63,7 +63,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
               onClick={handleCreatePost}
               variant="primary"
               size="sm"
-              className="ml-auto bg-[#FF6A00] hover:bg-[#E55A00] text-white"
+              className="ml-auto bg-[#FF6A00] hover:bg-[#E55A00] text-white font-medium px-4 py-2 rounded-lg shadow-sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Post

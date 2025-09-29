@@ -89,8 +89,8 @@ export default function TimelineView({ events, patchId }: TimelineViewProps) {
           },
           media: event.media ? {
             url: event.media.url,
-            caption: event.media.alt || '',
-            credit: event.sources.map(s => s.title).join(', ')
+            caption: event.media.alt || event.summary,
+            credit: event.sources.map(s => s.title).join(', ') || 'Carrot Patch'
           } : undefined,
           group: event.tags[0] || 'General'
         };
@@ -164,8 +164,24 @@ export default function TimelineView({ events, patchId }: TimelineViewProps) {
       timelineRef.current.innerHTML = '';
       new TL.Timeline(
         timelineRef.current,
-        { title: { text: { headline: 'Timeline' } }, events: data.events },
-        { start_at_end: false, timenav_position: 'bottom', hash_bookmark: false, scale_factor: 1 }
+        { 
+          title: { 
+            text: { 
+              headline: 'Timeline', 
+              text: 'Explore the chronological history of events' 
+            } 
+          }, 
+          events: data.events 
+        },
+        { 
+          start_at_end: false, 
+          timenav_position: 'bottom', 
+          hash_bookmark: false, 
+          scale_factor: 1,
+          height: 500,
+          width: '100%',
+          initial_zoom: 2
+        }
       );
     };
     

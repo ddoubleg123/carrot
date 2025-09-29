@@ -60,14 +60,14 @@ export async function POST(req: Request) {
     const model = (((fd.get('model') as string) || 'animeganv3') as 'animeganv3' | 'sd-lora')
     const imageFile = fd.get('image') as unknown as File | null
 
-    // Forward to worker for sd-lora if configured
+    // Forward to worker for ALL models if configured (bypass local tmp/disk)
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
-    if (workerUrl && model === 'sd-lora') {
+    if (workerUrl) {
       const lora = (fd.get('lora') as string) || ''
       const loraAlpha = (fd.get('lora_alpha') as string) || ''
       const wf = new FormData()
       wf.append('prompt', prompt)
-      wf.append('model', 'sd-lora')
+      wf.append('model', model)
       if (lora) wf.append('lora', lora)
       if (loraAlpha) wf.append('lora_alpha', loraAlpha)
       if (imageFile && typeof (imageFile as any).arrayBuffer === 'function') {
@@ -81,14 +81,14 @@ export async function POST(req: Request) {
         const msg = (data && (data.message || data.error)) || 'worker failed'
         if (/ENOSPC|No space left on device/i.test(String(msg))) {
           const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
+          const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
           const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-          return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { prompt, model, fallback: 'svg', reason: 'ENOSPC from worker' } })
+          return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { used: 'worker', prompt, model, fallback: 'svg', reason: 'ENOSPC from worker', error: msg } })
         }
-        return NextResponse.json({ ok: false, status: res.status, message: msg }, { status: 500 })
+        return NextResponse.json({ ok: false, status: res.status, message: msg, meta: { used: 'worker', error: msg } }, { status: 500 })
       }
       const outputUrl: string | undefined = data.outputUrl || (typeof data.outputPath === 'string' ? workerBase + data.outputPath : undefined)
-      return NextResponse.json({ ok: true, outputUrl, meta: data.meta || { prompt, model } })
+      return NextResponse.json({ ok: true, outputUrl, meta: { used: 'worker', ...(data.meta || { prompt, model }) } })
     }
 
     // Local pipeline
@@ -130,12 +130,12 @@ export async function POST(req: Request) {
         if (buf.length <= 4_000_000) {
           const base64 = buf.toString('base64')
           try { await unlink(finalPath) } catch {}
-          return NextResponse.json({ ok: true, outputUrl: `data:image/png;base64,${base64}`, meta: result.meta || { prompt, model, inline: true } })
+          return NextResponse.json({ ok: true, outputUrl: `data:image/png;base64,${base64}`, meta: { used: 'local', ...(result.meta || { prompt, model, inline: true }) } })
         }
       } catch {}
     }
     const publicPath = `/api/ghibli/file?path=${encodeURIComponent(finalPath)}`
-    return NextResponse.json({ ok: true, outputPath: publicPath, meta: result.meta || { prompt, model } })
+    return NextResponse.json({ ok: true, outputPath: publicPath, meta: { used: 'local', ...(result.meta || { prompt, model }) } })
   } catch (e: any) {
     const msg = String(e?.message || '')
     if (/ENOSPC|No space left on device/i.test(msg)) {

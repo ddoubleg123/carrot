@@ -58,11 +58,13 @@ interface AgentTrainingRecord {
 interface TrainingDashboardProps {
   selectedAgentId?: string;
   onAgentSelect?: (agentId: string) => void;
+  refreshToken?: string;
 }
 
 export default function AgentTrainingDashboard({ 
   selectedAgentId, 
-  onAgentSelect 
+  onAgentSelect,
+  refreshToken,
 }: TrainingDashboardProps) {
   const [trainingRecords, setTrainingRecords] = useState<AgentTrainingRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<AgentTrainingRecord | null>(null);
@@ -73,6 +75,12 @@ export default function AgentTrainingDashboard({
   useEffect(() => {
     loadTrainingRecords();
   }, []);
+
+  // Live refresh when a token changes (e.g., batch status updates)
+  useEffect(() => {
+    if (!refreshToken) return;
+    loadTrainingRecords();
+  }, [refreshToken]);
 
   useEffect(() => {
     if (selectedAgentId && trainingRecords.length > 0) {
