@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import type { TrainingPlan, TrainingTask, TrainingPlanTotals } from './trainingPlanTypes'
+import type { TrainingPlan, TrainingTask, TrainingPlanTotals, TrainingPlanOptions } from './trainingPlanTypes'
 
 const DIR = process.env.CARROT_DATA_DIR || join(tmpdir(), 'carrot-training')
 const FILE = join(DIR, 'plans.json')
@@ -35,14 +35,28 @@ function save(db: DB) {
 }
 
 export const TrainingStore = {
-  createPlan(agentId: string, topics: string[], perTopicMax: number, sourceTypes: string[]): TrainingPlan {
+  createPlan(agentId: string, topics: string[], perTopicMaxOrOptions: number | Partial<TrainingPlanOptions>, sourceTypesMaybe?: string[]): TrainingPlan {
     const db = load()
     const id = randomUUID()
     const now = new Date().toISOString()
     const totals: TrainingPlanTotals = { queued: 0, running: 0, done: 0, failed: 0, skipped: 0, dropped: 0, fed: 0 }
+    // Back-compat: support old signature (perTopicMax: number, sourceTypes: string[])
+    let options: TrainingPlanOptions
+    if (typeof perTopicMaxOrOptions === 'number') {
+      options = { perTopicMax: perTopicMaxOrOptions, sourceTypes: sourceTypesMaybe || ['wikipedia','arxiv','academic','books','news','github','stackoverflow','pubmed'] }
+    } else {
+      const o = perTopicMaxOrOptions || {}
+      options = {
+        perTopicMax: o.perTopicMax ?? 200,
+        sourceTypes: o.sourceTypes ?? ['wikipedia','arxiv','academic','books','news','github','stackoverflow','pubmed'],
+        throttleMs: o.throttleMs,
+        maxTasksPerTick: o.maxTasksPerTick,
+        verifyWithDeepseek: o.verifyWithDeepseek,
+      }
+    }
     const plan: TrainingPlan = {
       id, agentId, topics,
-      options: { perTopicMax, sourceTypes },
+      options,
       status: 'pending',
       createdAt: now,
       updatedAt: now,

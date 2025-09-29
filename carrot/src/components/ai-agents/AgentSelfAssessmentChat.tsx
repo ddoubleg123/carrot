@@ -196,7 +196,14 @@ Be specific and actionable in your recommendations.`;
       .map(s => s.replace(/[:;\-–—]+$/,'').trim())
       .map(s => s.replace(/\s+/g,' ').trim())
       .filter(Boolean)
-      .map(s => s.length > 120 ? s.slice(0,120) : s)
+      .map(s => s.length > 80 ? s.slice(0,80) : s)
+      // Heuristics: keep likely topics only (1-6 words, no sentence punctuation, no pronoun/filler starts)
+      .filter(s => {
+        const words = s.split(/\s+/).filter(Boolean)
+        const startsBad = /^(i|i'm|im|my|the|a|an|and|but|as|so|because|since|while|however|moreover|therefore)$/i.test(words[0] || '')
+        const hasSentencePunct = /[.!?]{1,}\s*$/.test(s) || /\balso\b|\btherefore\b|\bmoreover\b/i.test(s)
+        return words.length >= 1 && words.length <= 6 && !startsBad && !hasSentencePunct
+      })
     const seen = new Set<string>()
     const out: string[] = []
     for (const t of cleaned) {

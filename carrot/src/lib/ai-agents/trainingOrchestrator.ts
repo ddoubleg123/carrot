@@ -38,6 +38,7 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       maxResults: pageSize,
       autoFeed: true,
       sourceTypes: plan.options.sourceTypes,
+      verifyWithDeepseek: !!plan.options.verifyWithDeepseek,
     })
 
     task.itemsFed = res.fedCount

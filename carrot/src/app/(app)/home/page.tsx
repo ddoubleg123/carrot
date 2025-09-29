@@ -48,7 +48,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       return [];
     }
     const posts = await response.json();
-      return posts.map((post: any) => {
+      return posts.filter((post: any) => post && post.User).map((post: any) => {
       // Prefer durable storage path via proxy to ensure same-origin
       const p = post.User || {};
       const proxiedFromPath = p.profilePhotoPath ? `/api/img?path=${encodeURIComponent(p.profilePhotoPath)}` : null;
@@ -82,7 +82,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       // Safe user data extraction with explicit null checks
       const safeUser = {
         name: (p && p.name) || '',
-        username: (p && p.username) || 'daniel',
+        username: String((p && p.username && p.username.trim()) || 'daniel'),
         avatar,
         flag: (p && p.country) || null,
         id: safePost.userId,

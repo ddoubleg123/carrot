@@ -31,6 +31,7 @@ export interface TrainingPlanOptions {
   // Pacing controls
   throttleMs?: number; // minimum delay between batches per plan
   maxTasksPerTick?: number; // cap tasks processed per tick for this plan
+  verifyWithDeepseek?: boolean; // verify sources with Deepseek before feeding
 }
 
 export interface TrainingTask {

@@ -63,7 +63,36 @@ export class AgentSpecificRetriever {
       keywords: ['politics', 'government', 'policy', 'democracy', 'governance'],
       searchTerms: ['political science', 'government policy', 'democratic theory']
     }
-  } as const
+  } as const;
+
+  // Ask Deepseek to verify a list of candidate results for a topic. Returns subset approved by Deepseek.
+  private static async verifyWithDeepseek(topic: string, items: any[]): Promise<any[]> {
+    try {
+      const specimen = items.slice(0, 15).map(r => ({ title: r.title, url: r.url, snippet: (r.content || '').slice(0, 300) }))
+      const prompt = `You are vetting sources for learning the topic: "${topic}".
+Return a strict JSON array. Each element: {"url": string, "ok": boolean, "reason": string}.
+Mark ok=true only if the page is authoritative and directly helps learn the topic.
+If unsure, set ok=false.`
+      const res = await fetch('/api/deepseek/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [
+          { role: 'system', content: 'You are a rigorous research assistant who validates sources for learning.' },
+          { role: 'user', content: prompt + "\n\nCandidates:" + JSON.stringify(specimen) }
+        ]})
+      })
+      const data = await res.json().catch(()=>({})) as any
+      const text = (data && data.response) || ''
+      const jsonStart = text.indexOf('[')
+      const jsonEnd = text.lastIndexOf(']')
+      if (jsonStart === -1 || jsonEnd === -1) return items
+      const parsed = JSON.parse(text.slice(jsonStart, jsonEnd+1)) as Array<{url:string; ok:boolean; reason?:string}>
+      const okSet = new Set(parsed.filter(x=> x && x.ok && typeof x.url==='string').map(x=> x.url))
+      if (okSet.size === 0) return items
+      return items.filter(r => okSet.has(r.url))
+    } catch {
+      return items
+    }
+  }
 
   /**
    * Topic-specific retrieval with optional auto-feed.
@@ -75,6 +104,7 @@ export class AgentSpecificRetriever {
     maxResults?: number;
     autoFeed?: boolean;
     sourceTypes?: string[]; // subset of ['wikipedia','arxiv','news','github','pubmed','books']
+    verifyWithDeepseek?: boolean; // if true, ask Deepseek to validate sources before feeding
   }): Promise<{ success: boolean; results: any[]; fedCount: number }>{
     const { agentId, topic } = params
     const maxResults = params.maxResults ?? 20
@@ -91,8 +121,17 @@ export class AgentSpecificRetriever {
       if (allowed.has('books')) results.push(...await this.searchBooks(topic, maxResults))
 
       const filtered = await this.applyQualityFilter(results, [topic])
+      // Optional Deepseek verification: ask model to validate if each result truly helps learn the topic
+      let verified = filtered
+      if (params.verifyWithDeepseek && filtered.length) {
+        try {
+          verified = await this.verifyWithDeepseek(topic, filtered)
+        } catch (e) {
+          console.warn('[AgentSpecificRetriever] Deepseek verification failed, falling back to quality-filtered results')
+        }
+      }
       // de-dupe by URL
-      const unique = filtered.filter((r, i, self)=> i===self.findIndex(x=> x.url===r.url))
+      const unique = verified.filter((r, i, self)=> i===self.findIndex(x=> x.url===r.url))
 
       let fedCount = 0
       if (autoFeed) {
