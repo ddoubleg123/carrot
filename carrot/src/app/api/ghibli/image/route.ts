@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { mkdtemp, writeFile, readFile, unlink } from 'fs/promises'
+import { mkdtemp, writeFile, readFile, unlink, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
@@ -43,7 +43,11 @@ function runPython(scriptPath: string, args: string[]): Promise<{ ok: boolean; m
 }
 
 export async function POST(req: Request) {
+  const startedAt = Date.now()
+  // Preflight: aggressively clear previous ghibli-* temp to reclaim space now
   try { await cleanupTmpPrefixRecursive('ghibli-', 0) } catch {}
+  // Also clear training store which may live under /tmp and grow large
+  try { await rm(join(tmpdir(), 'carrot-training'), { recursive: true, force: true }) } catch {}
   await sem.acquire()
   let inputImagePath: string | null = null
   cleanupOldTmp(30 * 60 * 1000, /^ghibli-|^ghibli/ as any).catch(() => {})
