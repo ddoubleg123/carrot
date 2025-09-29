@@ -24,6 +24,7 @@ export default function SimpleVideo({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -88,7 +89,33 @@ export default function SimpleVideo({
   };
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    console.error('[SimpleVideo] Video error:', e);
+    const video = e.currentTarget;
+    console.error('[SimpleVideo] Video error:', {
+      error: video.error,
+      code: video.error?.code,
+      message: video.error?.message,
+      networkState: video.networkState,
+      readyState: video.readyState,
+      src: video.src,
+      retryCount
+    });
+    
+    // Retry once for Firebase Storage URLs
+    if (retryCount < 1 && video.src.includes('firebasestorage.googleapis.com')) {
+      console.log('[SimpleVideo] Retrying Firebase Storage URL...');
+      setRetryCount(prev => prev + 1);
+      setIsLoading(true);
+      setHasError(false);
+      
+      // Force reload the video
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      }, 1000);
+      return;
+    }
+    
     setHasError(true);
     setIsLoading(false);
   };
@@ -100,10 +127,11 @@ export default function SimpleVideo({
 
   if (hasError) {
     return (
-      <div className={`bg-gray-100 flex items-center justify-center ${className}`}>
+      <div className={`bg-gray-50 flex items-center justify-center ${className}`} style={{ minHeight: '200px' }}>
         <div className="text-center p-4">
-          <div className="text-gray-500 mb-2">Video unavailable</div>
-          <div className="text-xs text-gray-400">Unable to load video content</div>
+          <div className="text-gray-400 mb-2">📹</div>
+          <div className="text-sm text-gray-500">Video temporarily unavailable</div>
+          <div className="text-xs text-gray-400 mt-1">Content may be processing</div>
         </div>
       </div>
     );
@@ -132,6 +160,7 @@ export default function SimpleVideo({
           onCanPlay={handleCanPlay}
           className="w-full h-full object-contain bg-black"
           preload="metadata"
+          crossOrigin="anonymous"
         />
       )}
     </div>

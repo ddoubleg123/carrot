@@ -30,9 +30,10 @@ interface ChatMessage {
 
 interface AgentSelfAssessmentChatProps {
   agent: Agent;
+  onTopics?: (topics: string[]) => void; // emit parsed topics list for one-click learning
 }
 
-export default function AgentSelfAssessmentChat({ agent }: AgentSelfAssessmentChatProps) {
+export default function AgentSelfAssessmentChat({ agent, onTopics }: AgentSelfAssessmentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -114,6 +115,11 @@ Be specific and actionable in your recommendations.`;
         };
         
         setMessages(prev => [...prev, deepseekMessage]);
+        // Emit topics for one-click training
+        try {
+          const topics = extractTopicsList(data.response)
+          if (topics.length && onTopics) onTopics(topics)
+        } catch {}
       } else {
         throw new Error(data.error || 'Failed to get assessment');
       }
@@ -159,6 +165,41 @@ Be specific and actionable in your recommendations.`;
     return recommendations.slice(0, 5); // Limit to 5 recommendations
   };
 
+  const extractTopicsList = (content: string): string[] => {
+    // Heuristics:
+    // - Prefer a single comma-separated line with many items
+    // - Also support bullets/numbered lists
+    // - Normalize, dedupe, trim
+    const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    let candidates: string[] = []
+    // Find the longest comma-separated line
+    const commaLines = lines.filter(l => l.split(',').length >= 3)
+    if (commaLines.length) {
+      const best = commaLines.sort((a,b)=> b.length - a.length)[0]
+      candidates = best.split(',')
+    } else {
+      // Fallback: bullets or numbered
+      for (const l of lines) {
+        const m = l.match(/^(?:[-*•\d\.\)]\s*)?(.*)$/)
+        if (m && m[1]) candidates.push(m[1])
+      }
+    }
+    const cleaned = candidates
+      .map(s => s.replace(/^[-*•\d\.\)]\s*/, ''))
+      .map(s => s.replace(/[:;\-–—]+$/,'').trim())
+      .map(s => s.replace(/\s+/g,' ').trim())
+      .filter(Boolean)
+      .map(s => s.length > 120 ? s.slice(0,120) : s)
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const t of cleaned) {
+      const key = t.toLowerCase()
+      if (!seen.has(key)) { seen.add(key); out.push(t) }
+    }
+    // Cap to reasonable batch size
+    return out.slice(0, 50)
+  }
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -202,6 +243,11 @@ Be specific and actionable in your recommendations.`;
         };
         
         setMessages(prev => [...prev, deepseekMessage]);
+        // Emit topics for one-click training
+        try {
+          const topics = extractTopicsList(data.response)
+          if (topics.length && onTopics) onTopics(topics)
+        } catch {}
       }
     } catch (error) {
       console.error('Error sending message:', error);

@@ -3,6 +3,9 @@ import type { TrainingPlan, TrainingTask } from './trainingPlanTypes'
 import { AgentSpecificRetriever } from './agentSpecificRetriever'
 
 let started = false
+// Per-plan pacing memory (not persisted)
+const lastRunAt = new Map<string, number>()
+const GLOBAL_MAX_TASKS_PER_TICK = Math.max(1, parseInt(process.env.TRAIN_GLOBAL_MAX_TASKS_PER_TICK || '2', 10) || 2)
 
 async function processTask(task: TrainingTask, plan: TrainingPlan) {
   // Skip if plan paused/canceled
@@ -27,7 +30,8 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       return
     }
 
-    const pageSize = Math.min(20, remaining) // fetch per page, capped to 20
+    // Page size cap with a smaller default to reduce resource pressure
+    const pageSize = Math.min(8, remaining)
     const res = await AgentSpecificRetriever.retrieveForTopic({
       agentId: plan.agentId,
       topic,
@@ -81,16 +85,36 @@ async function tick() {
   // Scan all plans and run a few tasks FIFO
   const planIds = TrainingStore.listPlanIds()
   const plans: TrainingPlan[] = planIds.map(id=> TrainingStore.getPlan(id)).filter((p): p is TrainingPlan => !!p)
+  let executed = 0
   for (const plan of plans) {
     if (!plan) continue
     if (plan.status === 'pending') { plan.status = 'running'; TrainingStore.updatePlan(plan) }
     if (plan.status !== 'running') { continue }
+
+    // Pacing knobs per plan
+    const throttleMs = typeof plan.options.throttleMs === 'number' ? Math.max(0, plan.options.throttleMs) : 4000
+    const maxTasksPerTick = Math.max(1, plan.options.maxTasksPerTick || 1)
+
+    const now = Date.now()
+    const last = lastRunAt.get(plan.id) || 0
+    if (now - last < throttleMs) continue
+
     const tasks = TrainingStore.listTasks(plan.id)
-    const next = tasks.find(t=> t.status==='queued')
-    if (next) {
+    const queued = tasks.filter(t=> t.status==='queued')
+
+    const budget = Math.min(maxTasksPerTick, queued.length, Math.max(0, GLOBAL_MAX_TASKS_PER_TICK - executed))
+    for (let i = 0; i < budget; i++) {
+      const next = queued[i]
+      if (!next) break
       await processTask(next, plan)
+      executed++
+      if (executed >= GLOBAL_MAX_TASKS_PER_TICK) break
+    }
+    if (budget > 0) {
+      lastRunAt.set(plan.id, now + Math.floor(Math.random()*500)) // small jitter
       recomputeTotals(plan)
     }
+    if (executed >= GLOBAL_MAX_TASKS_PER_TICK) break
   }
 }
 

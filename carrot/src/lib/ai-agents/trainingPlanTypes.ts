@@ -28,6 +28,9 @@ export interface MasteryState {
 export interface TrainingPlanOptions {
   perTopicMax: number; // default 200
   sourceTypes: string[];
+  // Pacing controls
+  throttleMs?: number; // minimum delay between batches per plan
+  maxTasksPerTick?: number; // cap tasks processed per tick for this plan
 }
 
 export interface TrainingTask {
