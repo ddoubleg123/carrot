@@ -69,16 +69,24 @@ export class WikipediaReferenceExtractor {
   private static async parseReferencesFromContent(pageContent: any): Promise<WikipediaReference[]> {
     const references: WikipediaReference[] = [];
     
-    // Parse HTML to extract reference links
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(pageContent.html, 'text/html');
+    // Parse HTML to extract reference links using regex (server-side compatible)
+    const linkMatches = pageContent.html.match(/<a[^>]*href="(http[^"]*)"[^>]*>([\s\S]*?)<\/a>/g) || [];
     
-    // Find all reference links
-    const refLinks = doc.querySelectorAll('a[href^="http"]');
-    
-    for (const link of refLinks) {
-      const href = link.getAttribute('href');
-      const text = link.textContent?.trim() || '';
+    for (const linkMatch of linkMatches) {
+      const hrefMatch = linkMatch.match(/href="(http[^"]*)"/);
+      const textMatch = linkMatch.match(/>([\s\S]*?)<\/a>/);
+      
+      if (!hrefMatch || !textMatch) continue;
+      
+      const href = hrefMatch[1];
+      const text = textMatch[1].replace(/<[^>]*>/g, '').trim();
+      
+      // Create a mock link object for compatibility
+      const link = {
+        href,
+        textContent: text,
+        getAttribute: (attr: string) => attr === 'href' ? href : null
+      };
       
       if (href && this.isValidReference(href)) {
         const reference = await this.analyzeReference(href, text);

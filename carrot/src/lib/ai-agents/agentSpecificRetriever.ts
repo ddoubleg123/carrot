@@ -439,20 +439,30 @@ export class AgentSpecificRetriever {
       }
       
       const xmlText = await response.text();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
       
-      const entries = xmlDoc.getElementsByTagName('entry');
+      // Use regex parsing instead of DOMParser for server-side compatibility
+      const entryMatches = xmlText.match(/<entry>[\s\S]*?<\/entry>/g) || [];
       const results = [];
       
-      for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
-        const title = entry.getElementsByTagName('title')[0]?.textContent || '';
-        const summary = entry.getElementsByTagName('summary')[0]?.textContent || '';
-        const link = entry.getElementsByTagName('link')[0]?.getAttribute('href') || '';
-        const authors = Array.from(entry.getElementsByTagName('author')).map(
-          author => author.getElementsByTagName('name')[0]?.textContent || ''
-        );
+      for (const entryXml of entryMatches) {
+        // Extract title
+        const titleMatch = entryXml.match(/<title[^>]*>([\s\S]*?)<\/title>/);
+        const title = titleMatch ? titleMatch[1].trim() : '';
+        
+        // Extract summary
+        const summaryMatch = entryXml.match(/<summary[^>]*>([\s\S]*?)<\/summary>/);
+        const summary = summaryMatch ? summaryMatch[1].trim() : '';
+        
+        // Extract link
+        const linkMatch = entryXml.match(/<link[^>]*href="([^"]*)"[^>]*>/);
+        const link = linkMatch ? linkMatch[1] : '';
+        
+        // Extract authors
+        const authorMatches = entryXml.match(/<author>[\s\S]*?<\/author>/g) || [];
+        const authors = authorMatches.map(authorXml => {
+          const nameMatch = authorXml.match(/<name[^>]*>([\s\S]*?)<\/name>/);
+          return nameMatch ? nameMatch[1].trim() : '';
+        }).filter(name => name);
         
         results.push({
           title,

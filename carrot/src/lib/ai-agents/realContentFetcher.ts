@@ -43,23 +43,30 @@ export class RealContentFetcher {
       }
       
       const xmlText = await detailResponse.text();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
       
-      const articles = xmlDoc.getElementsByTagName('PubmedArticle');
+      // Use regex parsing instead of DOMParser for server-side compatibility
+      const articleMatches = xmlText.match(/<PubmedArticle>[\s\S]*?<\/PubmedArticle>/g) || [];
       const results: RetrievedContent[] = [];
       
-      for (let i = 0; i < articles.length; i++) {
-        const article = articles[i];
-        const title = article.getElementsByTagName('ArticleTitle')[0]?.textContent || '';
-        const abstract = article.getElementsByTagName('AbstractText')[0]?.textContent || '';
-        const authors = Array.from(article.getElementsByTagName('Author')).map(
-          author => {
-            const lastName = author.getElementsByTagName('LastName')[0]?.textContent || '';
-            const firstName = author.getElementsByTagName('ForeName')[0]?.textContent || '';
-            return `${firstName} ${lastName}`.trim();
-          }
-        );
+      for (let i = 0; i < articleMatches.length; i++) {
+        const articleXml = articleMatches[i];
+        // Extract title
+        const titleMatch = articleXml.match(/<ArticleTitle[^>]*>([\s\S]*?)<\/ArticleTitle>/);
+        const title = titleMatch ? titleMatch[1].trim() : '';
+        
+        // Extract abstract
+        const abstractMatch = articleXml.match(/<AbstractText[^>]*>([\s\S]*?)<\/AbstractText>/);
+        const abstract = abstractMatch ? abstractMatch[1].trim() : '';
+        
+        // Extract authors
+        const authorMatches = articleXml.match(/<Author>[\s\S]*?<\/Author>/g) || [];
+        const authors = authorMatches.map(authorXml => {
+          const lastNameMatch = authorXml.match(/<LastName[^>]*>([\s\S]*?)<\/LastName>/);
+          const firstNameMatch = authorXml.match(/<ForeName[^>]*>([\s\S]*?)<\/ForeName>/);
+          const lastName = lastNameMatch ? lastNameMatch[1].trim() : '';
+          const firstName = firstNameMatch ? firstNameMatch[1].trim() : '';
+          return `${firstName} ${lastName}`.trim();
+        }).filter(name => name);
         
         if (title && abstract) {
           results.push({
@@ -230,17 +237,25 @@ export class RealContentFetcher {
       }
       
       const xmlText = await response.text();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
       
-      const items = xmlDoc.getElementsByTagName('item');
+      // Use regex parsing instead of DOMParser for server-side compatibility
+      const itemMatches = xmlText.match(/<item>[\s\S]*?<\/item>/g) || [];
       const results: RetrievedContent[] = [];
       
-      for (let i = 0; i < Math.min(items.length, maxResults); i++) {
-        const item = items[i];
-        const title = item.getElementsByTagName('title')[0]?.textContent || '';
-        const description = item.getElementsByTagName('description')[0]?.textContent || '';
-        const link = item.getElementsByTagName('link')[0]?.textContent || '';
+      for (let i = 0; i < Math.min(itemMatches.length, maxResults); i++) {
+        const itemXml = itemMatches[i];
+        
+        // Extract title
+        const titleMatch = itemXml.match(/<title[^>]*>([\s\S]*?)<\/title>/);
+        const title = titleMatch ? titleMatch[1].trim() : '';
+        
+        // Extract description
+        const descriptionMatch = itemXml.match(/<description[^>]*>([\s\S]*?)<\/description>/);
+        const description = descriptionMatch ? descriptionMatch[1].trim() : '';
+        
+        // Extract link
+        const linkMatch = itemXml.match(/<link[^>]*>([\s\S]*?)<\/link>/);
+        const link = linkMatch ? linkMatch[1].trim() : '';
         
         if (title && description) {
           results.push({
