@@ -123,7 +123,7 @@ If unsure, set ok=false.`
       const filtered = await this.applyQualityFilter(results, [topic])
       // Optional Deepseek verification: ask model to validate if each result truly helps learn the topic
       let verified = filtered
-      if (params.verifyWithDeepseek && filtered.length) {
+      if (params.verifyWithDeepseek && filtered.length > 3) {
         try {
           verified = await this.verifyWithDeepseek(topic, filtered)
         } catch (e) {
@@ -187,7 +187,7 @@ If unsure, set ok=false.`
       
       for (const query of searchQueries) {
         console.log(`[AgentSpecificRetriever] Processing query: "${query}"`);
-        const results = await this.searchWithStrategy(query, searchStrategy, request.maxResults || 5);
+        const results = await this.searchWithStrategy(query, searchStrategy, request.maxResults || 10);
         console.log(`[AgentSpecificRetriever] Query "${query}" returned ${results.length} results`);
         allResults.push(...results);
       }
@@ -205,7 +205,9 @@ If unsure, set ok=false.`
         const existingTitles = new Set(existingMemories.map(m => m.sourceTitle).filter(Boolean));
         
         let fedCount = 0;
-        for (const content of uniqueResults.slice(0, request.maxResults || 5)) {
+        const cap = request.maxResults || 10
+        console.log(`[AgentSpecificRetriever] Auto-feed cap: ${cap}, unique candidates: ${uniqueResults.length}`)
+        for (const content of uniqueResults.slice(0, cap)) {
           // Skip if we already have this content
           if (existingUrls.has(content.url) || existingTitles.has(content.title)) {
             console.log(`[AgentSpecificRetriever] Skipping duplicate content: ${content.title}`);
@@ -438,29 +440,35 @@ If unsure, set ok=false.`
    */
   private static async searchWikipedia(query: string, maxResults: number): Promise<any[]> {
     try {
-      const response = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`
-      );
-      
-      if (!response.ok) {
-        return [];
+      // Use MediaWiki search API to find relevant pages for general queries
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=${maxResults}`
+      const r = await fetch(searchUrl)
+      if (!r.ok) return []
+      const j: any = await r.json()
+      const hits: Array<{ title: string; snippet?: string }> = j?.query?.search || []
+      if (!hits.length) return []
+      const results: any[] = []
+      for (const h of hits.slice(0, maxResults)) {
+        try {
+          const sumR = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(h.title)}`)
+          if (!sumR.ok) continue
+          const sum = await sumR.json()
+          results.push({
+            title: sum.title || h.title,
+            url: sum.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(h.title)}`,
+            content: sum.extract || h.snippet || '',
+            sourceType: 'wikipedia',
+            sourceTitle: sum.title || h.title,
+            sourceAuthor: 'Wikipedia',
+            relevanceScore: 0.9,
+            domain: this.detectDomain((sum.extract || h.snippet || ''))
+          })
+        } catch {}
       }
-      
-      const data = await response.json();
-      
-      return [{
-        title: data.title,
-        url: data.content_urls?.desktop?.page || '',
-        content: data.extract || '',
-        sourceType: 'wikipedia',
-        sourceTitle: data.title,
-        sourceAuthor: 'Wikipedia',
-        relevanceScore: 0.9,
-        domain: this.detectDomain(data.extract || '')
-      }];
+      return results
     } catch (error) {
-      console.error('Error searching Wikipedia:', error);
-      return [];
+      console.error('Error searching Wikipedia:', error)
+      return []
     }
   }
 

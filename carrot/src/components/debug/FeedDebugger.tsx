@@ -189,7 +189,7 @@ export default function FeedDebugger() {
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {posts.map((post) => (
                 <div key={post.id} className="p-2 border rounded text-sm">
-                  <div className="font-medium">@{post.author.username}</div>
+                  <div className="font-medium">@{post.author?.username || 'user'}</div>
                   <div className="text-gray-600 truncate">{post.content}</div>
                   <div className="text-xs text-gray-500">
                     {post.videoUrl && '📹 Video'}
