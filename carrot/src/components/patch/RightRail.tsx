@@ -114,20 +114,11 @@ export default function RightRail({
 
           {/* AI Agents Section */}
           <div className="border-t border-[#E6E8EC] pt-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4">
               <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
                 <Bot className="w-5 h-5" />
                 AI Agents
               </h3>
-              <Button
-                onClick={handleConnectAgent}
-                variant="outline"
-                size="sm"
-                className="text-xs"
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Connect
-              </Button>
             </div>
             
             {botSubscriptions.length > 0 ? (
@@ -161,7 +152,10 @@ export default function RightRail({
               <div className="text-center py-4">
                 <Bot className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm text-[#60646C]">No agents connected</p>
-                <p className="text-xs text-[#60646C] mt-1">Connect AI agents to monitor this patch</p>
+                <p className="text-xs text-[#60646C] mt-1 leading-relaxed">
+                  Connect AI agents<br />
+                  to monitor this patch
+                </p>
                 <Button
                   onClick={handleConnectAgent}
                   variant="outline"

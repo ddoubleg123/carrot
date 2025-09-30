@@ -20,7 +20,7 @@ import {
 
 interface QuickAction {
   id: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<any>;
   label: string;
   description: string;
   color: string;

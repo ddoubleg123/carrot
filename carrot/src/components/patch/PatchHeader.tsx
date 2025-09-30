@@ -146,7 +146,7 @@ export default function PatchHeader({
             </div>
             
             {/* Right side: Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-col gap-2 flex-shrink-0">
               <Button
                 onClick={isMember ? () => {} : handleJoin}
                 variant={isMember ? "outline" : "secondary"}
