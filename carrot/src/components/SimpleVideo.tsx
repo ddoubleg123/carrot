@@ -44,12 +44,14 @@ export default function SimpleVideo({
     } else if (src.startsWith('/api/video')) {
       // Already proxied through video endpoint, use it directly
       // But check if it's double-encoded and fix it
-      if (src.includes('%252F') || src.includes('%2520')) {
+      if (src.includes('%252F') || src.includes('%2520') || src.includes('%2525')) {
         // This is double-encoded, decode it once
         try {
           const decoded = decodeURIComponent(src);
+          console.log('[SimpleVideo] Fixed double-encoded URL:', { original: src, decoded });
           proxyUrl = decoded;
         } catch (e) {
+          console.warn('[SimpleVideo] Failed to decode double-encoded URL:', e);
           proxyUrl = src;
         }
       } else {
@@ -107,10 +109,31 @@ export default function SimpleVideo({
   const handleLoadStart = () => {
     const startTime = Date.now();
     console.log('[SimpleVideo] Load started', { src: videoSrc, startTime });
-    // Keep loading state true, but set a shorter timeout
     setHasError(false);
     
-    // Set a shorter timeout since videos are loading much faster now
+    // For Firebase Storage URLs, try to load only first 6 seconds using range requests
+    if (videoSrc && videoSrc.includes('firebasestorage.googleapis.com')) {
+      const video = videoRef.current;
+      if (video) {
+        // Set up range request for first ~500KB (roughly 6 seconds of video)
+        video.addEventListener('progress', () => {
+          if (video.buffered.length > 0 && video.buffered.end(0) >= 6) {
+            // We have 6 seconds buffered, we can show the video
+            console.log('[SimpleVideo] Pre-roll loaded (6 seconds)', { 
+              buffered: video.buffered.end(0),
+              duration: `${Date.now() - startTime}ms`
+            });
+            setIsLoading(false);
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
+          }
+        });
+      }
+    }
+    
+    // Set a longer timeout for large videos, but still reasonable
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
@@ -118,7 +141,7 @@ export default function SimpleVideo({
       const duration = Date.now() - startTime;
       console.warn('[SimpleVideo] Loading timeout - forcing video to show', { duration: `${duration}ms` });
       setIsLoading(false);
-    }, 2000); // 2 second timeout - even more aggressive
+    }, 5000); // 5 second timeout for large videos
   };
 
   const handleLoadedData = () => {
@@ -232,7 +255,7 @@ export default function SimpleVideo({
           onCanPlay={handleCanPlay}
           onCanPlayThrough={handleCanPlayThrough}
           className="w-full h-full object-contain bg-black"
-          preload="metadata"
+          preload="auto"
           crossOrigin="anonymous"
           data-start-time={Date.now()}
         />

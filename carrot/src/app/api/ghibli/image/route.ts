@@ -72,6 +72,13 @@ export async function POST(req: Request) {
       model = 'animeganv3'
     }
 
+    // Smart fallback: if user requests sd-lora but it's not available, fall back to basic mode
+    let useFallback = false
+    if (model === 'sd-lora' && !imageFile) {
+      // Try sd-lora first, but prepare fallback
+      useFallback = true
+    }
+
     // Forward to worker for ALL models if configured (bypass local tmp/disk)
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
     if (workerUrl) {
@@ -131,6 +138,17 @@ export async function POST(req: Request) {
       try { await cleanupTmpPrefixRecursive('ghibli-', 0) } catch {}
       result = await runOnce()
     }
+    
+    // Smart fallback: if sd-lora fails due to missing dependencies, try basic mode
+    if (!result.ok && useFallback && model === 'sd-lora' && /Stable Diffusion not available|ImportError|ModuleNotFoundError/i.test(String(result.message || ''))) {
+      console.log('[Ghibli] SD failed, falling back to basic mode')
+      const fallbackArgs = ['--prompt', prompt, '--model', 'animeganv3', '--out', outPath]
+      if (inputImagePath) fallbackArgs.push('--input_image', inputImagePath)
+      result = await runPython('scripts/ghibli/image_generate.py', fallbackArgs)
+      if (result.ok) {
+        result.meta = { ...result.meta, fallback: true, originalModel: 'sd-lora' }
+      }
+    }
     if (!result.ok) {
       const msg = String(result.message || '')
       if (/ENOSPC|No space left on device/i.test(msg)) {
@@ -158,11 +176,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, outputPath: publicPath, meta: { used: 'local', ...(result.meta || { prompt, model }) } })
   } catch (e: any) {
     const msg = String(e?.message || '')
+    
+    // Handle different types of errors with appropriate fallbacks
     if (/ENOSPC|No space left on device/i.test(msg)) {
-      const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#fef2f2'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#991b1b'>Image generation failed (ENOSPC)</text></svg>`
+      const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#fef2f2'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#991b1b'>Image generation failed (ENOSPC)</text><text x='16' y='56' font-family='sans-serif' font-size='14' fill='#991b1b'>Server out of disk space</text></svg>`
       const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-      return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC throw' } })
+      return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC' } })
     }
+    
+    if (/Stable Diffusion not available|ImportError|ModuleNotFoundError/i.test(msg)) {
+      const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f0f9ff'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#0369a1'>AI Model Not Available</text><text x='16' y='56' font-family='sans-serif' font-size='14' fill='#0369a1'>Using basic image generation instead</text></svg>`
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'missing_dependencies' } })
+    }
+    
     return NextResponse.json({ ok: false, message: e?.message || 'server error' }, { status: 500 })
   } finally {
     try {

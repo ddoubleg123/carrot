@@ -26,6 +26,7 @@ export default function TestGhibliClient() {
   const [model, setModel] = useState<'animeganv3' | 'sd-lora' | 'diffutoon'>('sd-lora')
   const [log, setLog] = useState<string>('Ready.')
   const [imageOut, setImageOut] = useState<string | null>(null)
+  const [imageMeta, setImageMeta] = useState<any>(null)
   const [videoOut, setVideoOut] = useState<string | null>(null)
   const [origVideo, setOrigVideo] = useState<string | null>(null)
   const imgFileRef = useRef<HTMLInputElement>(null)
@@ -138,6 +139,7 @@ export default function TestGhibliClient() {
     }
     appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
     setImageOut(data.outputUrl || data.outputPath || null)
+    setImageMeta(data.meta || null)
     setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0), style: preset.label, mode: imageMode, model: chosenModel })
   }
 
@@ -204,6 +206,7 @@ export default function TestGhibliClient() {
             <li>Enter a prompt (required).</li>
             <li>Choose mode: Prompt-only (no upload) or Upload + Stylize.</li>
             <li>Optional: specify a LoRA file path available on the worker and a strength.</li>
+            <li><strong>Note:</strong> Prompt-only mode uses Stable Diffusion (requires AI model setup). Upload mode uses basic image processing.</li>
           </ol>
         ) : (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -273,6 +276,24 @@ export default function TestGhibliClient() {
         {tab==='image' ? (
           imageOut ? (
             <div style={{ display:'grid', gap:8 }}>
+              {/* Show mode information */}
+              {imageMeta?.fallback && (
+                <div style={{ padding: '8px 12px', background: '#f0f9ff', border: '1px solid #0369a1', borderRadius: 6, fontSize: 14 }}>
+                  <div style={{ color: '#0369a1', fontWeight: 'bold' }}>⚠️ AI Model Not Available</div>
+                  <div style={{ color: '#0369a1', marginTop: 4 }}>
+                    Stable Diffusion is not installed. Using basic image generation instead.
+                    {imageMeta.originalModel && ` (Requested: ${imageMeta.originalModel})`}
+                  </div>
+                </div>
+              )}
+              {imageMeta?.reason === 'ENOSPC' && (
+                <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #dc2626', borderRadius: 6, fontSize: 14 }}>
+                  <div style={{ color: '#dc2626', fontWeight: 'bold' }}>💾 Server Out of Space</div>
+                  <div style={{ color: '#dc2626', marginTop: 4 }}>
+                    The server has run out of disk space. Please try again later or contact support.
+                  </div>
+                </div>
+              )}
               <div style={{ display:'flex', gap:8 }}>
                 <a href={imageOut + (imageOut.includes('?') ? '&' : '?') + 'download=1'}
                    download

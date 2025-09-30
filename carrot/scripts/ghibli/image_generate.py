@@ -113,7 +113,10 @@ def main():
     parser.add_argument('--animegan_cmd', type=str, default=os.environ.get('ANIMEGAN_CMD', ''))
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    # Handle case where output is in current directory (no dirname)
+    output_dir = os.path.dirname(args.out)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     meta = {
         'prompt': args.prompt,
