@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
-import { Send, Plus, Settings, Upload, X, ExternalLink } from 'lucide-react';
+import { Send, Plus, Settings, Upload, X, ExternalLink, File } from 'lucide-react';
 
 // Lazy load components for better performance
 const AgentRoster = dynamic(() => import('@/components/rabbit/AgentRoster'), {

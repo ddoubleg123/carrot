@@ -5,6 +5,9 @@ const NAME_TO_ISO2: Record<string, string> = {
   // Common names to ISO-2
   "UNITED STATES": "US",
   "USA": "US",
+  "U.S.": "US",
+  "U.S": "US",
+  "UNITED STATES OF AMERICA": "US",
   "UNITED KINGDOM": "GB",
   "UK": "GB",
   "GREAT BRITAIN": "GB",
@@ -34,21 +37,45 @@ const NAME_TO_ISO2: Record<string, string> = {
   "UNITED ARAB EMIRATES": "AE",
 };
 
+// Alpha-3 to Alpha-2 for common codes
+const A3_TO_A2: Record<string, string> = {
+  USA: 'US', GBR: 'GB', CAN: 'CA', MEX: 'MX', FRA: 'FR', DEU: 'DE', ESP: 'ES', PRT: 'PT',
+  BRA: 'BR', IND: 'IN', CHN: 'CN', JPN: 'JP', KOR: 'KR', RUS: 'RU', UKR: 'UA', TUR: 'TR',
+  ARE: 'AE', ISR: 'IL', PSE: 'PS'
+};
+
 function normalizeCountry(input?: string | null): string | null {
   if (!input) return null;
   let s = input.trim();
   if (!s) return null;
-  // If already looks like 2-letter code, normalize case
+  // If already an emoji flag, keep it
+  const containsEmoji = /[\u{1F1E6}-\u{1F1FF}]{2}/u.test(s);
+  if (containsEmoji) return s;
+  // Remove punctuation and periods commonly present (e.g., U.S.)
+  s = s.replace(/[\.]/g, ' ').replace(/\s+/g, ' ').trim();
+  // If 2 letters, assume ISO2
   if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  // If alpha-3, map to alpha-2
+  if (/^[A-Za-z]{3}$/.test(s)) {
+    const a2 = A3_TO_A2[s.toUpperCase()];
+    if (a2) return a2;
+  }
   const upper = s.toUpperCase();
+  // Try exact name map
   const mapped = NAME_TO_ISO2[upper];
-  return mapped ? mapped : null;
+  if (mapped) return mapped;
+  // Try extracting the first two letters of the first word if it looks like a country phrase
+  const firstWord = upper.split(' ')[0];
+  if (/^[A-Z]{2,}$/.test(firstWord)) return firstWord.slice(0, 2);
+  return null;
 }
 
 function countryToEmoji(codeOrName?: string | null): string | null {
   const norm = normalizeCountry(codeOrName);
   if (!norm) return null;
   let cc = norm;
+  // If already emoji, return as-is
+  if (/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(cc)) return cc;
   // Business rule: replace Israel (IL) with Palestinian flag (PS)
   if (cc === 'IL') cc = 'PS';
   if (!/^[A-Z]{2}$/.test(cc)) return null;
