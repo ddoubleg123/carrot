@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
+import CreateGroupModal from '@/components/patch/CreateGroupModal';
 
 interface Patch {
   id: string;
@@ -25,6 +26,7 @@ interface PatchPageClientProps {
 export default function PatchPageClient({ patches }: PatchPageClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isReducedMotion, setIsReducedMotion] = useState(false);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,8 +41,38 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
   }, []);
 
   const handleCreateGroup = () => {
-    // TODO: Implement group creation
-    console.log('Create group clicked');
+    setIsCreateGroupModalOpen(true);
+  };
+
+  const handleGroupSubmit = async (data: any) => {
+    try {
+      const response = await fetch('/api/patches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create group');
+      }
+
+      const result = await response.json();
+      console.log('Group created successfully:', result);
+      
+      // Close the modal
+      setIsCreateGroupModalOpen(false);
+      
+      // TODO: Redirect to the new group page
+      // For now, we could refresh the page or update the patches list
+      window.location.href = `/patch/${result.patch.handle}`;
+      
+    } catch (error) {
+      console.error('Failed to create group:', error);
+      throw error; // Re-throw to let the modal handle the error
+    }
   };
 
   // Filter patches based on search query
@@ -222,6 +254,13 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
           )}
         </div>
       </div>
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateGroupModalOpen}
+        onClose={() => setIsCreateGroupModalOpen(false)}
+        onSubmit={handleGroupSubmit}
+      />
     </div>
   );
 }

@@ -8,8 +8,17 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!id) return NextResponse.json({ ok: false, message: 'id required' }, { status: 400 });
-  const batch = await getBatch(id);
-  if (!batch) return NextResponse.json({ ok: false, message: 'not found' }, { status: 404 });
+  
+  try {
+    const batch = await getBatch(id);
+    if (!batch) {
+      // Batch not found - likely expired or server restarted
+      return NextResponse.json({ 
+        ok: false, 
+        message: 'Batch job not found - may have expired or been cleared',
+        code: 'BATCH_NOT_FOUND'
+      }, { status: 404 });
+    }
 
   // Reconcile live progress from TrainingPlans
   let totalFed = 0;
@@ -26,8 +35,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     totalFed += fed;
     totalDiscovered += discovered;
   }
-  batch.totals.fed = totalFed;
-  batch.totals.discovered = totalDiscovered;
+    batch.totals.fed = totalFed;
+    batch.totals.discovered = totalDiscovered;
 
-  return NextResponse.json({ ok: true, batch });
+    return NextResponse.json({ ok: true, batch });
+  } catch (error) {
+    console.error('[Batch Status] Error:', error);
+    return NextResponse.json({ 
+      ok: false, 
+      message: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    }, { status: 500 });
+  }
 }

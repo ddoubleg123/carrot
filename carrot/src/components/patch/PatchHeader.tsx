@@ -6,6 +6,7 @@ import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Setti
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import COLOR_SCHEMES, { type ColorScheme } from '@/config/colorSchemes';
 
 interface Patch {
   id: string;
@@ -24,7 +25,7 @@ interface Patch {
 
 interface UserPatchTheme {
   mode: 'preset' | 'image';
-  preset?: 'light' | 'warm' | 'stone' | 'civic' | 'ink';
+  preset?: number; // Index into COLOR_SCHEMES array
   imageUrl?: string;
 }
 
@@ -35,13 +36,8 @@ interface PatchHeaderProps {
   onThemeChange?: (theme: UserPatchTheme) => void;
 }
 
-const themes = {
-  light: "bg-[linear-gradient(180deg,#0A5AFF,rgba(10,90,255,0.20))]",
-  warm:  "bg-[linear-gradient(180deg,#FF6A00,rgba(255,106,0,0.22))]",
-  stone: "bg-[linear-gradient(180deg,#0B0B0F,#1A1D22)]",
-  civic: "bg-[linear-gradient(180deg,#0A5AFF,#0B0B0F)]",
-  ink:   "bg-[#0B0B0F]"
-};
+// Default theme index (Sunset Pop)
+const DEFAULT_THEME_INDEX = 0;
 
 export default function PatchHeader({ 
   patch, 
@@ -51,7 +47,7 @@ export default function PatchHeader({
 }: PatchHeaderProps) {
   const router = useRouter();
   const [currentTheme, setCurrentTheme] = useState<UserPatchTheme>(
-    userTheme || { mode: 'preset', preset: 'light' }
+    userTheme || { mode: 'preset', preset: DEFAULT_THEME_INDEX }
   );
 
   const handleJoin = () => {
@@ -96,14 +92,21 @@ export default function PatchHeader({
         backgroundPosition: 'center'
       } as React.CSSProperties;
     }
-    return {} as React.CSSProperties;
+    
+    // Use composer color schemes
+    const schemeIndex = currentTheme.preset ?? DEFAULT_THEME_INDEX;
+    const scheme = COLOR_SCHEMES[schemeIndex] || COLOR_SCHEMES[DEFAULT_THEME_INDEX];
+    
+    return {
+      background: `linear-gradient(180deg, ${scheme.gradientFromColor}, ${scheme.gradientViaColor || scheme.gradientFromColor}, ${scheme.gradientToColor})`
+    } as React.CSSProperties;
   };
 
   const getBackgroundClass = () => {
     if (currentTheme.mode === 'image') {
       return "bg-center bg-cover after:absolute after:inset-0 after:bg-[linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.55))]";
     }
-    return themes[currentTheme.preset || 'light'];
+    return ""; // Background handled by inline style
   };
 
   const formatDate = (dateString: string) => {
@@ -151,45 +154,45 @@ export default function PatchHeader({
                 onClick={isMember ? () => {} : handleJoin}
                 variant={isMember ? "outline" : "secondary"}
                 className={isMember 
-                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 flex items-center gap-2" 
-                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 flex items-center gap-2"
+                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 w-24 justify-start" 
+                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 w-24 justify-start"
                 }
               >
-                <Users className="w-4 h-4" />
-                {isMember ? 'Joined' : 'Join'}
+                <Users className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium">{isMember ? 'Joined' : 'Join'}</span>
               </Button>
               
               <Button
                 variant="ghost"
                 onClick={handleShare}
-                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
+                className="text-white hover:bg-white/10 px-4 py-2 w-24 justify-start"
               >
-                <Share2 className="w-4 h-4" />
-                Share
+                <Share2 className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium">Share</span>
               </Button>
 
               <Button
                 variant="ghost"
                 onClick={handleSettings}
-                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
+                className="text-white hover:bg-white/10 px-4 py-2 w-24 justify-start"
               >
-                <Settings className="w-4 h-4" />
-                Settings
+                <Settings className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium">Settings</span>
               </Button>
 
               {/* Lightning Theme Button */}
               <Button
                 variant="ghost"
                 onClick={() => {
-                  const presets = ['light', 'warm', 'stone', 'civic', 'ink'] as const;
-                  const currentIndex = presets.indexOf(currentTheme.preset || 'light');
-                  const nextIndex = (currentIndex + 1) % presets.length;
-                  handleThemeChange({ mode: 'preset', preset: presets[nextIndex] });
+                  const currentIndex = currentTheme.preset ?? DEFAULT_THEME_INDEX;
+                  const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
+                  handleThemeChange({ mode: 'preset', preset: nextIndex });
                 }}
-                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
+                className="text-white hover:bg-white/10 px-4 py-2 w-24 justify-start"
+                title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
               >
-                <Zap className="w-4 h-4" />
-                Theme
+                <Zap className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium">Theme</span>
               </Button>
             </div>
           </div>

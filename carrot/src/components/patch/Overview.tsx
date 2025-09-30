@@ -85,7 +85,7 @@ export default function Overview({ patch }: OverviewProps) {
   return (
     <div className="space-y-8 px-6 md:px-10">
       {/* Key Facts Grid */}
-      <div>
+      <div className="pt-6">
         <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">Key Facts</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {facts.slice(0, 8).map((fact) => (

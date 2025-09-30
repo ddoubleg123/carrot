@@ -136,15 +136,20 @@ export async function POST(req: Request) {
       }
       if (!res || !res.ok || !data?.ok) {
         const msg = (data && (data.message || data.error)) || 'worker failed'
-        console.log('[Ghibli] Worker failed, falling back to local processing:', msg)
+        const status = res?.status || 'unknown'
+        console.log('[Ghibli] Worker failed, falling back to local processing:', { status, msg })
         
-        // If worker fails, fall back to local processing instead of returning 500
-        // This ensures the user gets a response even when the worker is down
+        // Handle specific error cases with appropriate fallbacks
         if (/ENOSPC|No space left on device/i.test(String(msg))) {
           const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
           const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
           return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { used: 'worker', prompt, model, fallback: 'svg', reason: 'ENOSPC from worker', error: msg } })
+        }
+        
+        // Handle rate limiting (429) with a specific message
+        if (status === 429) {
+          console.log('[Ghibli] Worker rate limited, using local fallback')
         }
         
         // For other worker failures, continue to local processing instead of returning 500

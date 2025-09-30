@@ -51,7 +51,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       {/* Tabs Bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
         <div className="px-6 md:px-10">
-          <div className="flex items-center justify-between py-6">
+          <div className="flex items-center justify-between py-4">
             {/* Tabs Container with Horizontal Scroll - aligned with content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
