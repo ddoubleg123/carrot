@@ -81,6 +81,7 @@ export async function POST(req: Request) {
 
     // Forward to worker for ALL models if configured (bypass local tmp/disk)
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
+    console.log('[Ghibli] Worker URL configured:', !!workerUrl, workerUrl ? `${workerUrl.substring(0, 30)}...` : 'none')
     if (workerUrl) {
       const lora = (fd.get('lora') as string) || ''
       const loraAlpha = (fd.get('lora_alpha') as string) || ''
@@ -101,9 +102,11 @@ export async function POST(req: Request) {
         }
       }
       const workerBase = workerUrl.replace(/\/$/, '')
+      console.log('[Ghibli] Forwarding to worker:', workerBase + '/generate-image')
       const res = await fetch(workerBase + '/generate-image', { method: 'POST', body: wf })
       let data: any = null
       try { data = await res.json() } catch {}
+      console.log('[Ghibli] Worker response:', { status: res.status, ok: res.ok, dataOk: data?.ok, message: data?.message })
       if (!res.ok || !data?.ok) {
         const msg = (data && (data.message || data.error)) || 'worker failed'
         if (/ENOSPC|No space left on device/i.test(String(msg))) {
@@ -180,14 +183,26 @@ export async function POST(req: Request) {
     
     // Handle different types of errors with appropriate fallbacks
     if (/ENOSPC|No space left on device/i.test(msg)) {
-      const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="640" height="384"><rect width="100%" height="100%" fill="#fef2f2"/><text x="16" y="32" font-family="sans-serif" font-size="16" fill="#991b1b">Image generation failed (ENOSPC)</text><text x="16" y="56" font-family="sans-serif" font-size="14" fill="#991b1b">Server out of disk space</text></svg>`
-      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="384" viewBox="0 0 640 384">
+        <rect width="100%" height="100%" fill="#fef2f2"/>
+        <text x="320" y="120" font-family="Arial, sans-serif" font-size="24" fill="#991b1b" text-anchor="middle">⚠️ Server Out of Space</text>
+        <text x="320" y="160" font-family="Arial, sans-serif" font-size="16" fill="#991b1b" text-anchor="middle">ENOSPC Error</text>
+        <text x="320" y="200" font-family="Arial, sans-serif" font-size="14" fill="#666" text-anchor="middle">Please try again later or use a GPU worker</text>
+        <text x="320" y="240" font-family="Arial, sans-serif" font-size="12" fill="#999" text-anchor="middle">Render.com has limited disk space for AI models</text>
+      </svg>`
+      const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC' } })
     }
     
     if (/Stable Diffusion not available|ImportError|ModuleNotFoundError/i.test(msg)) {
-      const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="640" height="384"><rect width="100%" height="100%" fill="#f0f9ff"/><text x="16" y="32" font-family="sans-serif" font-size="16" fill="#0369a1">AI Model Not Available</text><text x="16" y="56" font-family="sans-serif" font-size="14" fill="#0369a1">Using basic image generation instead</text></svg>`
-      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="384" viewBox="0 0 640 384">
+        <rect width="100%" height="100%" fill="#f0f9ff"/>
+        <text x="320" y="120" font-family="Arial, sans-serif" font-size="24" fill="#0369a1" text-anchor="middle">🤖 AI Model Not Available</text>
+        <text x="320" y="160" font-family="Arial, sans-serif" font-size="16" fill="#0369a1" text-anchor="middle">Stable Diffusion not installed</text>
+        <text x="320" y="200" font-family="Arial, sans-serif" font-size="14" fill="#666" text-anchor="middle">Using basic image generation instead</text>
+        <text x="320" y="240" font-family="Arial, sans-serif" font-size="12" fill="#999" text-anchor="middle">Set up GPU worker for full AI capabilities</text>
+      </svg>`
+      const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'missing_dependencies' } })
     }
     

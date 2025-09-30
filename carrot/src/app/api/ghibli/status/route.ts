@@ -38,11 +38,26 @@ async function pathExists(p?: string | null) {
 export async function GET() {
   const sdModel = process.env.GHIBLI_SD_MODEL || 'runwayml/stable-diffusion-v1-5'
   const lora = process.env.GHIBLI_LORA_WEIGHTS || ''
+  const workerUrl = process.env.GHIBLI_WORKER_URL || ''
   const steps = parseInt(process.env.GHIBLI_SD_STEPS || '25', 10)
   const guidance = parseFloat(process.env.GHIBLI_SD_GUIDANCE || '7.5')
 
   const py = await checkPythonTorch()
   const loraOk = await pathExists(lora)
+
+  // Test worker connectivity if URL is set
+  let workerStatus = 'not_configured'
+  if (workerUrl) {
+    try {
+      const response = await fetch(`${workerUrl.replace(/\/$/, '')}/health`, { 
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      })
+      workerStatus = response.ok ? 'healthy' : 'unhealthy'
+    } catch (e) {
+      workerStatus = 'unreachable'
+    }
+  }
 
   return NextResponse.json({
     ok: true,
@@ -52,6 +67,8 @@ export async function GET() {
     sdModel,
     loraPath: lora,
     loraExists: loraOk,
+    workerUrl: workerUrl ? `${workerUrl.substring(0, 20)}...` : null, // Only show first 20 chars for security
+    workerStatus,
     defaults: { steps, guidance },
     deviceHint: process.env.CUDA_VISIBLE_DEVICES ? 'cuda' : 'cpu'
   })
