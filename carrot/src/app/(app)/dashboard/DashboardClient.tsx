@@ -91,9 +91,22 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       if (!u) return null;
       // If already proxied, return as-is
       if (u.startsWith('/api/video')) return u;
-      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
-      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
-      return `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      
+      // For Firebase Storage URLs, always proxy them
+      if (u.includes('firebasestorage.googleapis.com')) {
+        // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          return `/api/video?url=${u}`;
+        } else {
+          // URL is not encoded, encode it once
+          return `/api/video?url=${encodeURIComponent(u)}`;
+        }
+      }
+      
+      // For other URLs, proxy them as well
+      return `/api/video?url=${encodeURIComponent(u)}`;
     };
     const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
@@ -807,16 +820,22 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   return (
     <VideoProvider>
       <div className="dashboard-feed-root">
-        <div className="px-4" style={{ paddingTop: '32px' }}>
-          {isModalComposer ? (
-            <ComposerTrigger onOpenModal={() => setIsModalOpen(true)} />
-          ) : (
-            <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
-          )}
-          
-          {/* Feed Tabs - positioned right under the composer */}
-          <FeedTabsContainer />
-          
+        {/* Fixed Composer and Tabs Container */}
+        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-100">
+          <div className="px-4" style={{ paddingTop: '32px', paddingBottom: '16px' }}>
+            {isModalComposer ? (
+              <ComposerTrigger onOpenModal={() => setIsModalOpen(true)} />
+            ) : (
+              <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
+            )}
+            
+            {/* Feed Tabs - positioned right under the composer */}
+            <FeedTabsContainer />
+          </div>
+        </div>
+        
+        {/* Scrollable Feed Content */}
+        <div className="px-4">
           {/* Professional compact spacing for social media feed */}
           <div className="space-y-3 mt-6">
             {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).map((commitment) => (

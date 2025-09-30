@@ -2,6 +2,50 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ===== Append-only Training Models =====
+model TrainingPlan {
+  id         String   @id @default(cuid())
+  agentId    String
+  topics     String   // JSON stringified string[]
+  options    String   // JSON stringified TrainingPlanOptions
+  status     String
+  totals     String   // JSON stringified totals
+  topicPages String   // JSON stringified Record<string, number>
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tasks      TrainingTask[]
+  discoveries DiscoveryEntry[]
+}
+
+model TrainingTask {
+  id           String   @id @default(cuid())
+  planId       String
+  agentId      String
+  topic        String
+  page         Int
+  status       String
+  itemsFed     Int      @default(0)
+  itemsDropped Int      @default(0)
+  attempts     Int      @default(0)
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  plan         TrainingPlan @relation(fields: [planId], references: [id])
+}
+
+model DiscoveryEntry {
+  id         String   @id @default(cuid())
+  planId     String
+  topic      String
+  page       Int
+  url        String?
+  title      String?
+  sourceType String?
+  status     String
+  ts         DateTime @default(now())
+  plan       TrainingPlan @relation(fields: [planId], references: [id])
+}
+
 // Playback/user preferences synchronized across devices
 model UserPref {
   userId         String  @id
@@ -228,15 +272,16 @@ model SourceAsset {
   title               String?
   authorHandle        String?   @map("author_handle")
   publishedAt         DateTime? @map("published_at")
-  status              String    @default("pending") // pending | ready | failed | removed
+  status              String    @default("pending")
   version             Int       @default(1)
   refcount            Int       @default(0)
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  userVideos    UserVideo[]
-  videoVariants VideoVariant[]
-  ingestionJobs IngestionJob[]
+  // Opposite relation fields
+  userVideos          UserVideo[]
+  videoVariants       VideoVariant[]
+  ingestionJobs       IngestionJob[]
 
   @@unique([platform, externalId], name: "platform_external_id")
   @@index([contentHash])

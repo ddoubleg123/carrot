@@ -160,6 +160,7 @@ export default function Sidebar() {
               <Link 
                 key={index}
                 href={item.href} 
+                prefetch={true}
                 className="nav-item group relative flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/10 transition-all duration-200 text-white/90 hover:text-white font-medium text-[15px] max-lg:justify-center cursor-pointer transform hover:scale-105" 
                 onClick={item.href === '/login' ? handleLogout : undefined}
                 aria-label={item.label}

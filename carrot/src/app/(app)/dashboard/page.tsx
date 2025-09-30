@@ -114,6 +114,9 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   }
 }
 
+// Add caching for dashboard page
+export const revalidate = 60; // Revalidate every minute
+
 export default async function DashboardPage() {
   const session = await auth();
   

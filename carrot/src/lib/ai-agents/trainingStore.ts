@@ -3,8 +3,14 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import type { TrainingPlan, TrainingTask, TrainingPlanTotals, TrainingPlanOptions, DiscoveryEntry, DiscoveryStatus } from './trainingPlanTypes'
+import { PrismaClient } from '@prisma/client'
 
-const DIR = process.env.CARROT_DATA_DIR || join(tmpdir(), 'carrot-training')
+const prisma = new PrismaClient()
+// Lax alias to avoid TS errors if client hasn't generated new model typings yet
+const dbClient: any = prisma as any
+
+// Prefer explicit env path; otherwise use a repo-local folder for durability instead of OS tmp
+const DIR = process.env.CARROT_DATA_DIR || join(process.cwd(), '.carrot-data', 'training')
 const FILE = join(DIR, 'plans.json')
 
 type DB = {
@@ -76,6 +82,39 @@ export const TrainingStore = {
       plan.totals.queued++
     }
     save(db)
+    // Write-through to Prisma (best-effort, append-only)
+    ;(async()=>{
+      try {
+        if (dbClient.trainingPlan?.create) await dbClient.trainingPlan.create({
+          data: {
+            id,
+            agentId,
+            topics: JSON.stringify(topics),
+            options: JSON.stringify(options),
+            status: plan.status,
+            totals: JSON.stringify(totals),
+            topicPages: JSON.stringify(plan.topicPages),
+          }
+        })
+        if (topics.length) {
+          const taskRows = Object.values(db.tasks).filter(t=> t.planId===id).map(t=> ({
+            id: t.id,
+            planId: t.planId,
+            agentId: t.agentId,
+            topic: t.topic,
+            page: t.page || 1,
+            status: t.status,
+            itemsFed: t.itemsFed||0,
+            itemsDropped: t.itemsDropped||0,
+            attempts: t.attempts||0,
+            lastError: t.lastError || null as any,
+          }))
+          if (taskRows.length) {
+            if (dbClient.trainingTask?.createMany) await dbClient.trainingTask.createMany({ data: taskRows, skipDuplicates: true })
+          }
+        }
+      } catch {}
+    })()
     return plan
   },
   appendDiscoveries(planId: string, entries: Array<{ topic: string; page: number; url?: string; title?: string; sourceType?: string; status?: DiscoveryStatus; id?: string; ts?: string }>) {
@@ -97,6 +136,23 @@ export const TrainingStore = {
     }
     db.discoveries[planId] = list
     save(db)
+    // Write-through to Prisma
+    ;(async()=>{
+      try {
+        const data = entries.map(e=> ({
+          id: e.id || randomUUID(),
+          planId,
+          topic: e.topic,
+          page: e.page,
+          url: e.url || null as any,
+          title: e.title || null as any,
+          sourceType: (e as any).sourceType || null as any,
+          status: (e.status as any) || 'retrieved',
+          ts: new Date(e.ts || new Date().toISOString()),
+        }))
+        if (dbClient.discoveryEntry?.createMany) await dbClient.discoveryEntry.createMany({ data, skipDuplicates: true })
+      } catch {}
+    })()
   },
   updateDiscoveryStatus(planId: string, ids: string[], status: DiscoveryStatus) {
     const db = load()
@@ -109,6 +165,7 @@ export const TrainingStore = {
     }
     db.discoveries[planId] = list
     save(db)
+    ;(async()=>{ try { if (dbClient.discoveryEntry?.updateMany) await dbClient.discoveryEntry.updateMany({ where: { id: { in: ids } }, data: { status } }) } catch {} })()
   },
   listDiscoveries(planId: string, opts?: { topic?: string; status?: DiscoveryStatus; limit?: number }) {
     const db = load()
@@ -128,17 +185,68 @@ export const TrainingStore = {
   },
   listTasks(planId: string): TrainingTask[] {
     const db = load()
-    return Object.values(db.tasks).filter(t => t.planId === planId).sort((a,b)=> a.createdAt.localeCompare(b.createdAt))
+    return Object.values(db.tasks).filter((t: TrainingTask) => t.planId === planId).sort((a: TrainingTask, b: TrainingTask)=> a.createdAt.localeCompare(b.createdAt))
   },
   updatePlan(plan: TrainingPlan) {
     const db = load()
     plan.updatedAt = new Date().toISOString()
     db.plans[plan.id] = plan
     save(db)
+    ;(async()=>{
+      try {
+        if (dbClient.trainingPlan?.upsert) await dbClient.trainingPlan.upsert({
+          where: { id: plan.id },
+          create: {
+            id: plan.id,
+            agentId: plan.agentId,
+            topics: JSON.stringify(plan.topics),
+            options: JSON.stringify(plan.options),
+            status: plan.status,
+            totals: JSON.stringify(plan.totals),
+            topicPages: JSON.stringify(plan.topicPages),
+          },
+          update: {
+            agentId: plan.agentId,
+            topics: JSON.stringify(plan.topics),
+            options: JSON.stringify(plan.options),
+            status: plan.status,
+            totals: JSON.stringify(plan.totals),
+            topicPages: JSON.stringify(plan.topicPages),
+          }
+        })
+      } catch {}
+    })()
   },
   updateTask(task: TrainingTask) {
     const db = load()
     save(db)
+    ;(async()=>{
+      try {
+        if (dbClient.trainingTask?.upsert) await dbClient.trainingTask.upsert({
+          where: { id: task.id },
+          create: {
+            id: task.id,
+            planId: task.planId,
+            agentId: task.agentId,
+            topic: task.topic,
+            page: task.page || 1,
+            status: task.status,
+            itemsFed: task.itemsFed || 0,
+            itemsDropped: task.itemsDropped || 0,
+            attempts: task.attempts || 0,
+            lastError: task.lastError || null as any,
+          },
+          update: {
+            status: task.status,
+            itemsFed: task.itemsFed || 0,
+            itemsDropped: task.itemsDropped || 0,
+            attempts: task.attempts || 0,
+            lastError: task.lastError || null as any,
+            page: task.page || 1,
+          }
+        })
+      } catch {}
+    })()
   },
   enqueueNextPage(planId: string, topic: string, nextPage: number) {
     const db = load()
@@ -155,5 +263,30 @@ export const TrainingStore = {
     plan.updatedAt = now
     db.plans[planId] = plan
     save(db)
+    ;(async()=>{
+      try {
+        if (dbClient.trainingTask?.create) await dbClient.trainingTask.create({
+          data: {
+            id: taskId,
+            planId,
+            agentId: plan.agentId,
+            topic,
+            page: nextPage,
+            status: 'queued',
+            itemsFed: 0,
+            itemsDropped: 0,
+            attempts: 0,
+          }
+        })
+        if (dbClient.trainingPlan?.update) await dbClient.trainingPlan.update({
+          where: { id: planId },
+          data: {
+            totals: JSON.stringify(plan.totals),
+            topicPages: JSON.stringify(plan.topicPages),
+            status: plan.status,
+          }
+        })
+      } catch {}
+    })()
   }
 }

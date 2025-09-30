@@ -20,8 +20,8 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
     const topic = task.topic
     const perTopicMax = plan.options.perTopicMax
     // Compute how many already fed for this topic across tasks
-    const tasks = TrainingStore.listTasks(plan.id).filter(t => t.topic === topic)
-    const fedSoFar = tasks.reduce((a,b)=> a + (b.itemsFed||0), 0)
+    const tasks: TrainingTask[] = TrainingStore.listTasks(plan.id).filter((t: TrainingTask) => t.topic === topic)
+    const fedSoFar = tasks.reduce((a: number, b: TrainingTask)=> a + (b.itemsFed||0), 0)
     const remaining = Math.max(0, perTopicMax - fedSoFar)
     if (remaining <= 0) {
       task.status = 'skipped'
@@ -41,6 +41,9 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       verificationMode: plan.options.verificationMode || (plan.options.verifyWithDeepseek ? 'strict' : 'off'),
       verifyWithDeepseek: !!plan.options.verifyWithDeepseek,
     })
+    if (!res.success) {
+      console.error('[trainingOrchestrator] retrieveForTopic failed', { planId: plan.id, agentId: plan.agentId, topic })
+    }
 
     // Record discoveries for UI drilldown (best-effort)
     try {
@@ -68,6 +71,7 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
       TrainingStore.enqueueNextPage(plan.id, topic, nextPage)
     }
   } catch (e: any) {
+    console.error('[trainingOrchestrator] processTask error', { planId: plan.id, taskId: task.id, topic: task.topic, err: e?.message || e })
     task.lastError = String(e?.message || e)
     task.status = 'failed'
     task.updatedAt = new Date().toISOString()
@@ -110,17 +114,17 @@ async function tick() {
     // Pacing knobs per plan
     const throttleMs = typeof plan.options.throttleMs === 'number' ? Math.max(0, plan.options.throttleMs) : 4000
     const maxTasksPerTick = Math.max(1, plan.options.maxTasksPerTick || 1)
-
     const now = Date.now()
     const last = lastRunAt.get(plan.id) || 0
     if (now - last < throttleMs) continue
 
-    const tasks = TrainingStore.listTasks(plan.id)
-    const queued = tasks.filter(t=> t.status==='queued')
+    const tasks: TrainingTask[] = TrainingStore.listTasks(plan.id)
+    
+    const queued: TrainingTask[] = tasks.filter((t: TrainingTask)=> t.status==='queued')
 
-    const budget = Math.min(maxTasksPerTick, queued.length, Math.max(0, GLOBAL_MAX_TASKS_PER_TICK - executed))
-    for (let i = 0; i < budget; i++) {
-      const next = queued[i]
+    const budget: number = Math.min(maxTasksPerTick, queued.length, Math.max(0, GLOBAL_MAX_TASKS_PER_TICK - executed))
+    for (let i: number = 0; i < budget; i++) {
+      const next: TrainingTask | undefined = queued[i]
       if (!next) break
       await processTask(next, plan)
       executed++

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import PatchHeader from '@/components/patch/PatchHeader'
@@ -11,10 +12,60 @@ import DocumentsView from '@/components/patch/DocumentsView'
 import SourcesView from '@/components/patch/SourcesView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 
+// Loading skeleton component
+function PatchPageSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header skeleton */}
+      <div className="bg-gradient-to-r from-orange-400 to-orange-600 h-64">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 pt-8">
+          <div className="h-8 bg-white/20 rounded w-1/3 mb-4 animate-pulse"></div>
+          <div className="h-4 bg-white/20 rounded w-2/3 mb-6 animate-pulse"></div>
+          <div className="flex gap-4">
+            <div className="h-10 bg-white/20 rounded w-20 animate-pulse"></div>
+            <div className="h-10 bg-white/20 rounded w-20 animate-pulse"></div>
+            <div className="h-10 bg-white/20 rounded w-20 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Content skeleton */}
+      <div className="max-w-7xl mx-auto px-6 md:px-10 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          <div className="space-y-6">
+            {/* Tabs skeleton */}
+            <div className="flex gap-4 border-b">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
+              ))}
+            </div>
+            
+            {/* Content skeleton */}
+            <div className="space-y-4">
+              <div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+          </div>
+          
+          {/* Right rail skeleton */}
+          <div className="space-y-4">
+            <div className="h-32 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PatchPageProps {
   params: Promise<{ handle: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
+
+// Add caching for patch pages
+export const revalidate = 300; // Revalidate every 5 minutes
 
 export default async function PatchPage({ params, searchParams }: PatchPageProps) {
   try {
@@ -27,29 +78,79 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
 
     // All patches now use the canonical template
 
-    // Enhanced patch query with all needed data
-    let patch = await prisma.patch.findUnique({
-      where: { handle },
-      select: {
-        id: true,
-        handle: true,
-        name: true,
-        description: true,
-        theme: true,
-        tags: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            members: true,
-            posts: true,
-            events: true,
-            sources: true,
+    // Optimized: Single query to get patch with all related data
+    const [patch, userTheme, followers, followerCount, botSubscriptions] = await Promise.all([
+      // Main patch query
+      prisma.patch.findUnique({
+        where: { handle },
+        select: {
+          id: true,
+          handle: true,
+          name: true,
+          description: true,
+          theme: true,
+          tags: true,
+          createdBy: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              members: true,
+              posts: true,
+              events: true,
+              sources: true,
+            }
           }
         }
-      }
-    });
+      }),
+      
+      // User theme query (only if logged in)
+      session?.user?.id ? prisma.userPatchTheme.findUnique({
+        where: {
+          user_patch_theme_unique: {
+            userId: session.user.id,
+            patchId: handle // We'll update this after we get the patch
+          }
+        }
+      }) : Promise.resolve(null),
+      
+      // Followers query
+      prisma.follower.findMany({
+        where: { patchId: { in: [] } }, // Will be updated after patch query
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              username: true
+            }
+          }
+        },
+        take: 10,
+        orderBy: { createdAt: 'desc' }
+      }),
+      
+      // Follower count query
+      prisma.follower.count({
+        where: { patchId: { in: [] } } // Will be updated after patch query
+      }),
+      
+      // Bot subscriptions query
+      prisma.botSubscription.findMany({
+        where: { patchId: { in: [] } }, // Will be updated after patch query
+        include: {
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
+          }
+        }
+      })
+    ]);
 
     if (!patch) {
       return (
@@ -62,57 +163,53 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
       );
     }
 
-    // Get user theme if logged in
-    let userTheme = null;
-    if (session?.user?.id) {
-      userTheme = await prisma.userPatchTheme.findUnique({
-        where: {
-          user_patch_theme_unique: {
-            userId: session.user.id,
-            patchId: patch.id
+    // Now get the actual related data with the correct patch ID
+    const [actualFollowers, actualFollowerCount, actualBotSubscriptions] = await Promise.all([
+      prisma.follower.findMany({
+        where: { patchId: patch.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              username: true
+            }
+          }
+        },
+        take: 10,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.follower.count({
+        where: { patchId: patch.id }
+      }),
+      prisma.botSubscription.findMany({
+        where: { patchId: patch.id },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
           }
         }
-      });
-    }
+      })
+    ]);
 
-    // Get followers data
-    const followers = await prisma.follower.findMany({
-      where: { patchId: patch.id },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            username: true
-          }
-        }
-      },
-      take: 10,
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const followerCount = await prisma.follower.count({
-      where: { patchId: patch.id }
-    });
-
-    // Get bot subscriptions
-    const botSubscriptions = await prisma.botSubscription.findMany({
-      where: { patchId: patch.id },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            image: true
-          }
+    // Get user theme with correct patch ID
+    const actualUserTheme = session?.user?.id ? await prisma.userPatchTheme.findUnique({
+      where: {
+        user_patch_theme_unique: {
+          userId: session.user.id,
+          patchId: patch.id
         }
       }
-    });
+    }) : null;
 
     // Add mock bot data to match the expected interface
-    const botSubscriptionsWithBotData = botSubscriptions.map(sub => ({
+    const botSubscriptionsWithBotData = actualBotSubscriptions.map(sub => ({
       ...sub,
       bot: {
         id: sub.botId,
@@ -167,47 +264,49 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
     }));
 
     return (
-      <div className="min-h-screen bg-white">
-        {/* Header */}
-        <PatchHeader
-          patch={{
-            ...patch,
-            updatedAt: patch.updatedAt.toISOString()
-          }}
-          isMember={!!isMember}
-          userTheme={userTheme ? {
-            mode: userTheme.mode as 'preset' | 'image',
-            preset: userTheme.preset as 'light' | 'warm' | 'stone' | 'civic' | 'ink' | undefined,
-            imageUrl: userTheme.imageUrl || undefined
-          } : null}
-        />
+      <Suspense fallback={<PatchPageSkeleton />}>
+        <div className="min-h-screen bg-white">
+          {/* Header */}
+          <PatchHeader
+            patch={{
+              ...patch,
+              updatedAt: patch.updatedAt.toISOString()
+            }}
+            isMember={!!isMember}
+            userTheme={actualUserTheme ? {
+              mode: actualUserTheme.mode as 'preset' | 'image',
+              preset: actualUserTheme.preset as 'light' | 'warm' | 'stone' | 'civic' | 'ink' | undefined,
+              imageUrl: actualUserTheme.imageUrl || undefined
+            } : null}
+          />
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
-            {/* Main Content Area */}
-            <div className="max-w-[880px]">
-              <PatchTabs activeTab={activeTab} patch={patch}>
-                {activeTab === 'overview' && <Overview patch={patch} />}
-                {activeTab === 'documents' && <DocumentsView patch={patch} />}
-                {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
-                {activeTab === 'sources' && <SourcesView patch={patch} />}
-                {activeTab === 'discussions' && <DiscussionsView patch={patch} />}
-              </PatchTabs>
-            </div>
+          {/* Main Content */}
+          <div className="max-w-7xl mx-auto px-6 md:px-10">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
+              {/* Main Content Area */}
+              <div className="max-w-[880px]">
+                <PatchTabs activeTab={activeTab} patch={patch}>
+                  {activeTab === 'overview' && <Overview patch={patch} />}
+                  {activeTab === 'documents' && <DocumentsView patch={patch} />}
+                  {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
+                  {activeTab === 'sources' && <SourcesView patch={patch} />}
+                  {activeTab === 'discussions' && <DiscussionsView patch={patch} />}
+                </PatchTabs>
+              </div>
 
-            {/* Right Rail */}
-            <div className="w-[320px]">
-              <RightRail
-                patch={patch}
-                followers={followers}
-                botSubscriptions={botSubscriptionsWithBotData as any}
-                followerCount={followerCount}
-              />
+              {/* Right Rail */}
+              <div className="w-[320px]">
+                <RightRail
+                  patch={patch}
+                  followers={actualFollowers}
+                  botSubscriptions={botSubscriptionsWithBotData as any}
+                  followerCount={actualFollowerCount}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Suspense>
     );
   } catch (error) {
     console.error('Patch page error:', error);

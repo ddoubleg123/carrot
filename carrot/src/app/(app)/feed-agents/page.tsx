@@ -1245,7 +1245,15 @@ export default function FeedAgentsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                      <span>Bulk Assessment Status</span>
+                      <span className="flex items-center gap-2">
+                        <span>Bulk Assessment Status</span>
+                        {/* Plan-level error summary */}
+                        {Array.isArray(batchStatus.tasks) && batchStatus.tasks.some((x:any)=> !!x.lastError) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-700 text-[11px] font-medium" title="One or more tasks failed. Hover tasks to see error.">
+                            Errors: {batchStatus.tasks.filter((x:any)=> !!x.lastError).length}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-sm font-normal text-gray-500">Batch <span className="font-mono">{batchStatus.id}</span> • {batchStatus.status}</span>
                     </CardTitle>
                     <CardDescription>
@@ -1289,7 +1297,16 @@ export default function FeedAgentsPage() {
                                 <div className={`h-2 rounded ${pct===100? 'bg-green-500':'bg-blue-500'}`} style={{ width: `${pct}%` }} />
                               </div>
                               <div className="mt-1 text-xs text-gray-600">{fed} fed / {planned} discovered ({pct}%)</div>
-                              {t.lastError && <div className="mt-1 text-xs text-red-600">{t.lastError}</div>}
+                              {t.lastError && (
+                                <div className="mt-1">
+                                  <span
+                                    className="inline-flex items-center px-2 py-[2px] rounded bg-red-100 text-red-700 border border-red-200 text-[11px]"
+                                    title={t.lastError}
+                                  >
+                                    Error
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             {t.planId && plansById[t.planId] && (
                               <div className="mt-2 text-xs text-gray-700">

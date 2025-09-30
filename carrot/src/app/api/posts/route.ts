@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '../../../lib/prisma';
 import { auth } from '@/auth';
 import { projectPost } from './_project';
+import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
@@ -253,6 +254,9 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     console.log(`✅ POST /api/posts - Post created successfully with ID: ${post.id}`);
     console.log(`🔍 POST /api/posts - Post audioUrl: ${post.audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
+    
+    // Invalidate posts cache when new post is created
+    cache.delete(cacheKeys.posts());
     try {
       console.log('[POST /api/posts] persisted media+gradients', {
         postId: post.id,
@@ -406,6 +410,22 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       }
       return NextResponse.json([]);
     }
+    
+    // Check cache first
+    const cacheKey = cacheKeys.posts();
+    const cachedPosts = cache.get(cacheKey);
+    
+    if (cachedPosts) {
+      console.log('[GET /api/posts] Cache hit, returning cached data');
+      const response = NextResponse.json(cachedPosts);
+      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+      response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      response.headers.set('X-Cache', 'HIT');
+      return response;
+    }
+
+    console.log('[GET /api/posts] Cache miss, fetching from database');
+    // Add caching for frequently accessed posts data
     const posts = await prisma.post.findMany({
       orderBy: { createdAt: 'desc' },
       include: { 
@@ -437,7 +457,15 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       const signedUrls = shaped.filter((x: any) => typeof x.videoUrl === 'string' && x.videoUrl.includes('GoogleAccessId=')).length;
       console.log('[GET /api/posts] summary', { total, missingGrad, signedUrls });
     } catch {}
-    return NextResponse.json(shaped);
+    // Store in cache for future requests
+    cache.set(cacheKey, shaped, cacheTTL.posts);
+    
+    // Add caching headers for better performance
+    const response = NextResponse.json(shaped);
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+    response.headers.set('X-Cache', 'MISS');
+    return response;
   }
   } catch (error) {
     console.error('💥 Detailed error fetching posts:', error);

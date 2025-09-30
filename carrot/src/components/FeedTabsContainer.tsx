@@ -40,14 +40,12 @@ export function FeedTabsContainer({ className }: FeedTabsContainerProps) {
   if (!isInitialized) {
     return (
       <div className={className}>
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-[#E6E8EC]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between py-4">
-              <div className="flex gap-1 rounded-full bg-gray-100 p-1 h-10">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="w-20 h-8 bg-gray-200 rounded-full animate-pulse" />
-                ))}
-              </div>
+        <div className="py-4">
+          <div className="flex items-center justify-center">
+            <div className="flex gap-1 rounded-full bg-gray-100 p-1 h-10">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="w-20 h-8 bg-gray-200 rounded-full animate-pulse" />
+              ))}
             </div>
           </div>
         </div>

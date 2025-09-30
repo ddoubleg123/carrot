@@ -1,44 +1,25 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Send, 
-  X, 
-  Plus, 
-  Settings, 
-  Brain, 
-  MessageSquare, 
-  History, 
-  Pin, 
-  EyeOff,
-  Users,
-  Link,
-  FileText,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  Filter,
-  Play, 
-  CheckCircle, 
-  AlertTriangle, 
-  Command, 
-  Clock, 
-  User, 
-  ArrowRight, 
-  ArrowLeft, 
-  Target, 
-  Palette, 
-  Code, 
-  Shield,
-  Upload,
-  Image,
-  File,
-  ExternalLink
-} from 'lucide-react';
-// import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
-import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
+import { getAutoJoinAgents, getAllAgents, getAgentById, logAgentInteraction } from '@/lib/agentMatching';
+
+// Lazy load components for better performance
+const AgentRoster = dynamic(() => import('@/components/rabbit/AgentRoster'), {
+  loading: () => <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>,
+  ssr: false
+});
+
+const ChatInterface = dynamic(() => import('@/components/rabbit/ChatInterface'), {
+  loading: () => <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>,
+  ssr: false
+});
+
+const QuickActions = dynamic(() => import('@/components/rabbit/QuickActions'), {
+  loading: () => <div className="h-32 bg-gray-100 animate-pulse rounded-lg"></div>,
+  ssr: false
+});
 
 // Design Tokens
 const COLORS = {
@@ -550,142 +531,6 @@ function ConversationThread({
   );
 }
 
-// Agent Roster Sidebar Component
-function AgentRoster({ 
-  agents, 
-  activeAgents, 
-  onToggleAgent, 
-  onRemoveAgent,
-  onPinAgent,
-  onHideAgent 
-}: {
-  agents: typeof AGENTS;
-  activeAgents: string[];
-  onToggleAgent: (agentId: string) => void;
-  onRemoveAgent: (agentId: string) => void;
-  onPinAgent: (agentId: string) => void;
-  onHideAgent: (agentId: string) => void;
-}) {
-  const [showSettings, setShowSettings] = useState(false);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'responding': return 'bg-orange-500';
-      case 'idle': return 'bg-gray-400';
-      default: return 'bg-gray-400';
-    }
-  };
-
-  return (
-    <div className="flex-1 flex flex-col">
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="p-4 bg-gray-50 border-b border-gray-200">
-          <h4 className="font-medium text-gray-900 mb-3">Agent Preferences</h4>
-          <div className="space-y-2">
-            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
-              <Pin size={16} />
-              Pin agents to always include
-                  </button>
-            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
-              <EyeOff size={16} />
-              Hide agents from auto-join
-            </button>
-            <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-2">
-              <Users size={16} />
-              Curate "My Council"
-            </button>
-                    </div>
-                  </div>
-                )}
-              
-      {/* Search Bar */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-          <input
-            type="text"
-            placeholder="Search agents..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Active Agents */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-4 pt-6">
-          <h4 className="text-sm font-medium text-gray-500 mb-3">Active Advisors</h4>
-          <div className="space-y-3">
-            {agents
-              .filter(agent => activeAgents.includes(agent.id))
-              .map((agent) => (
-                <div
-                  key={agent.id}
-                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
-                >
-                  <div className="relative">
-                    <img
-                      src={agent.avatar}
-                      alt={agent.name}
-                      className="w-10 h-10 rounded-full object-cover"
-                      onError={(e) => {
-                        console.error('Agent avatar failed to load:', agent.avatar);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(agent.status)} rounded-full border-2 border-white`} />
-            </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{agent.name}</p>
-                    <p className="text-sm text-gray-500 truncate">{agent.role}</p>
-        </div>
-
-          <button
-                    onClick={() => onRemoveAgent(agent.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-          >
-                    <X size={16} />
-          </button>
-                </div>
-                      ))}
-                    </div>
-                  </div>
-
-        {/* Available Agents */}
-        <div className="p-4 border-t border-gray-200">
-          <h4 className="text-sm font-medium text-gray-500 mb-3">Available Advisors</h4>
-          <div className="space-y-2">
-            {agents
-              .filter(agent => !activeAgents.includes(agent.id) && !agent.hidden)
-              .map((agent) => (
-              <button
-                  key={agent.id}
-                  onClick={() => onToggleAgent(agent.id)}
-                  className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  <img
-                    src={agent.avatar}
-                    alt={agent.name}
-                    className="w-8 h-8 rounded-full object-cover"
-                    onError={(e) => {
-                      console.error('Agent avatar failed to load:', agent.avatar);
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                  <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-gray-900">{agent.name}</p>
-                    <p className="text-xs text-gray-500">{agent.role}</p>
-                  </div>
-                  <Plus size={16} className="text-gray-400" />
-              </button>
-              ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Main Rabbit Page Component
 export default function RabbitPage() {
@@ -1062,6 +907,11 @@ export default function RabbitPage() {
             <ChatStarter onStartConversation={handleStartConversation} />
         </div>
       </div>
+
+      {/* Quick Actions Section */}
+      <Suspense fallback={<div className="h-32 bg-gray-100 animate-pulse rounded-lg mx-6"></div>}>
+        <QuickActions onActionClick={handleStartConversation} />
+      </Suspense>
       
       {/* Agent Grid - Avatar Focused */}
       <div className="px-6 pb-16">
@@ -1127,8 +977,7 @@ export default function RabbitPage() {
 
         {/* Agent Roster Sidebar */}
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
-          {/* Agent List */}
-          <div className="flex-1 overflow-y-auto">
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>}>
             <AgentRoster
               agents={agents}
               activeAgents={activeAgents}
@@ -1137,7 +986,7 @@ export default function RabbitPage() {
               onPinAgent={handlePinAgent}
               onHideAgent={handleHideAgent}
             />
-          </div>
+          </Suspense>
         </div>
       </div>
 

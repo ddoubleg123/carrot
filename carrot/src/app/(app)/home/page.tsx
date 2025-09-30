@@ -72,9 +72,27 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         gifUrl: post.gifUrl || null,
         videoUrl: (() => {
           if (!post.videoUrl) return null;
-          // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
-          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
-          return `/api/video?url=${isAlreadyEncoded ? post.videoUrl : encodeURIComponent(post.videoUrl)}`;
+          
+          // If already proxied, return as-is
+          if (post.videoUrl.startsWith('/api/video')) {
+            return post.videoUrl;
+          }
+          
+          // For Firebase Storage URLs, always proxy them
+          if (post.videoUrl.includes('firebasestorage.googleapis.com')) {
+            // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+            const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
+            if (isAlreadyEncoded) {
+              // URL is already encoded, pass it directly to avoid double-encoding
+              return `/api/video?url=${post.videoUrl}`;
+            } else {
+              // URL is not encoded, encode it once
+              return `/api/video?url=${encodeURIComponent(post.videoUrl)}`;
+            }
+          }
+          
+          // For other URLs, proxy them as well
+          return `/api/video?url=${encodeURIComponent(post.videoUrl)}`;
         })(),
         thumbnailUrl: post.thumbnailUrl || null,
         audioUrl: post.audioUrl || null,
@@ -131,6 +149,9 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     return [];
   }
 }
+
+// Add caching for home page
+export const revalidate = 60; // Revalidate every minute
 
 export default async function HomePage() {
   // First try auth() via dynamic import
