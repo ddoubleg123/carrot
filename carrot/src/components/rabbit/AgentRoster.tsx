@@ -16,7 +16,7 @@ interface Agent {
   avatar: string;
   status: string;
   expertise: string[];
-  description: string;
+  description?: string;
 }
 
 interface AgentRosterProps {

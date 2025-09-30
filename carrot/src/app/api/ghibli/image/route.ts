@@ -117,22 +117,43 @@ export async function POST(req: Request) {
       }
       const workerBase = workerUrl.replace(/\/$/, '')
       console.log('[Ghibli] Forwarding to worker:', workerBase + '/generate-image')
-      const res = await fetch(workerBase + '/generate-image', { method: 'POST', body: wf })
+      let res: Response
+      try {
+        res = await fetch(workerBase + '/generate-image', { 
+          method: 'POST', 
+          body: wf,
+          signal: AbortSignal.timeout(30000) // 30 second timeout
+        })
+      } catch (fetchError) {
+        console.log('[Ghibli] Worker fetch failed, using local fallback:', fetchError)
+        // Continue to local processing if worker is unreachable
+        res = null as any
+      }
       let data: any = null
-      try { data = await res.json() } catch {}
-      console.log('[Ghibli] Worker response:', { status: res.status, ok: res.ok, dataOk: data?.ok, message: data?.message })
-      if (!res.ok || !data?.ok) {
+      if (res) {
+        try { data = await res.json() } catch {}
+        console.log('[Ghibli] Worker response:', { status: res.status, ok: res.ok, dataOk: data?.ok, message: data?.message })
+      }
+      if (!res || !res.ok || !data?.ok) {
         const msg = (data && (data.message || data.error)) || 'worker failed'
+        console.log('[Ghibli] Worker failed, falling back to local processing:', msg)
+        
+        // If worker fails, fall back to local processing instead of returning 500
+        // This ensures the user gets a response even when the worker is down
         if (/ENOSPC|No space left on device/i.test(String(msg))) {
           const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#f5f5f5'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#222'>Image generation fallback (ENOSPC)</text><text x='16' y='64' font-family='sans-serif' font-size='14' fill='#444'>Prompt:</text><foreignObject x='16' y='80' width='608' height='280'><div xmlns='http://www.w3.org/1999/xhtml' style='font-family: sans-serif; font-size: 14px; color: #333; white-space: pre-wrap;'>${esc(prompt).slice(0,400)}</div></foreignObject></svg>`
           const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
           return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { used: 'worker', prompt, model, fallback: 'svg', reason: 'ENOSPC from worker', error: msg } })
         }
-        return NextResponse.json({ ok: false, status: res.status, message: msg, meta: { used: 'worker', error: msg } }, { status: 500 })
+        
+        // For other worker failures, continue to local processing instead of returning 500
+        console.log('[Ghibli] Worker unavailable, using local fallback')
+      } else {
+        // Worker succeeded, return the result
+        const outputUrl: string | undefined = data.outputUrl || (typeof data.outputPath === 'string' ? workerBase + data.outputPath : undefined)
+        return NextResponse.json({ ok: true, outputUrl, meta: { used: 'worker', ...(data.meta || { prompt, model }) } })
       }
-      const outputUrl: string | undefined = data.outputUrl || (typeof data.outputPath === 'string' ? workerBase + data.outputPath : undefined)
-      return NextResponse.json({ ok: true, outputUrl, meta: { used: 'worker', ...(data.meta || { prompt, model }) } })
     }
 
     // Local pipeline
