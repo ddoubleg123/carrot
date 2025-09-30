@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     
     // Handle different types of errors with appropriate fallbacks
     if (/ENOSPC|No space left on device/i.test(msg)) {
-      const svg = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg xmlns='http://www.w3.org/2000/svg' width='640' height='384'><rect width='100%' height='100%' fill='#fef2f2'/><text x='16' y='32' font-family='sans-serif' font-size='16' fill='#991b1b'>Image generation failed (ENOSPC)</text><text x='16' y='56' font-family='sans-serif' font-size='14' fill='#991b1b'>Server out of disk space</text></svg>`
+      const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="640" height="384"><rect width="100%" height="100%" fill="#fef2f2"/><text x="16" y="32" font-family="sans-serif" font-size="16" fill="#991b1b">Image generation failed (ENOSPC)</text><text x="16" y="56" font-family="sans-serif" font-size="14" fill="#991b1b">Server out of disk space</text></svg>`
       const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC' } })
     }
