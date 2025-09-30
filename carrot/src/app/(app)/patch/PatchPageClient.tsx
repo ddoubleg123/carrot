@@ -62,11 +62,32 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
       const result = await response.json();
       console.log('Group created successfully:', result);
       
+      // Update discovered content with real patch ID if we have pending discovery
+      const pendingDiscovery = (window as any).pendingDiscovery;
+      if (pendingDiscovery && pendingDiscovery.discoveredContent) {
+        try {
+          await fetch('/api/ai/update-discovery-patch', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              tempPatchId: pendingDiscovery.patchId,
+              realPatchId: result.patch.id
+            }),
+          });
+          console.log('Updated discovered content with real patch ID');
+        } catch (error) {
+          console.error('Failed to update discovery patch ID:', error);
+        }
+        // Clean up
+        delete (window as any).pendingDiscovery;
+      }
+      
       // Close the modal
       setIsCreateGroupModalOpen(false);
       
-      // TODO: Redirect to the new group page
-      // For now, we could refresh the page or update the patches list
+      // Redirect to the new group page
       window.location.href = `/patch/${result.patch.handle}`;
       
     } catch (error) {

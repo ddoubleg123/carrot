@@ -80,6 +80,34 @@ export default function CreateGroupModal({ isOpen, onClose, onSubmit }: CreateGr
 
   const handleMetadataSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Trigger background content discovery
+    try {
+      const response = await fetch('/api/ai/discover-content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          patchId: 'temp-' + Date.now(), // Temporary ID, will be updated after creation
+          patchName: formData.name,
+          description: formData.description,
+          tags: formData.tags,
+          categories: formData.categories
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Background discovery started:', result);
+        // Store the discovery result for later use
+        (window as any).pendingDiscovery = result;
+      }
+    } catch (error) {
+      console.error('Failed to start background discovery:', error);
+      // Continue anyway - discovery is not critical for group creation
+    }
+    
     setStep('final');
   };
 

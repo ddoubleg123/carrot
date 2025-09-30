@@ -506,6 +506,7 @@ model Patch {
   userThemes       UserPatchTheme[]
   followers        Follower[]
   botSubscriptions BotSubscription[]
+  discoveredContent DiscoveredContent[]
 
   @@index([handle])
   @@index([createdBy])
@@ -740,4 +741,29 @@ model BotSubscription {
   @@index([patchId])
   @@index([ownerUserId])
   @@map("bot_subscriptions")
+}
+
+// AI-Discovered Content for Patches
+model DiscoveredContent {
+  id              String   @id @default(cuid())
+  patchId         String   @map("patch_id")
+  type            String   // 'document' | 'source' | 'discussion_topic' | 'timeline_event'
+  title           String
+  content         String
+  relevanceScore  Int      @map("relevance_score") // 1-10
+  sourceUrl       String?  @map("source_url")
+  tags            String[]
+  status          String   @default("pending") // 'pending' | 'approved' | 'rejected' | 'audited'
+  auditScore      Int?     @map("audit_score") // 1-10, set after DeepSeek audit
+  auditNotes      String?  @map("audit_notes")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+
+  @@index([patchId])
+  @@index([type])
+  @@index([status])
+  @@index([relevanceScore])
+  @@map("discovered_content")
 }
