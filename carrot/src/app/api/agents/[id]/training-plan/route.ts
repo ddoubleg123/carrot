@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { TrainingStore } from '@/lib/ai-agents/trainingStore'
 import { startTrainingOrchestrator } from '@/lib/ai-agents/trainingOrchestrator'
+import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
+import { FEATURED_AGENTS } from '@/lib/agents'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -17,6 +19,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const maxTasksPerTick: number | undefined = body.options?.maxTasksPerTick
     const verifyWithDeepseek: boolean | undefined = body.options?.verifyWithDeepseek
     if (!topics.length) return NextResponse.json({ error: 'topics required' }, { status: 400 })
+
+    // Ensure agent exists in DB; create from featured metadata if missing
+    let agent = await AgentRegistry.getAgentById(id)
+    if (!agent) {
+      const featured = FEATURED_AGENTS.find(a => a.id === id)
+      if (!featured) {
+        return NextResponse.json({ ok: false, error: 'agent not found' }, { status: 404 })
+      }
+      await AgentRegistry.createAgent({
+        name: featured.name,
+        persona: featured.personality?.approach || `${featured.name} — ${featured.personality?.expertise || 'Expert'}`,
+        domainExpertise: Array.isArray(featured.domains) ? featured.domains : [],
+        metadata: {
+          role: featured.personality?.expertise,
+          avatar: featured.avatar,
+          trainingEnabled: true,
+        }
+      })
+      agent = await AgentRegistry.getAgentById(id)
+    }
 
     const plan = TrainingStore.createPlan(id, topics, { perTopicMax, sourceTypes, throttleMs, maxTasksPerTick, verifyWithDeepseek }, sourceTypes)
     startTrainingOrchestrator()

@@ -128,17 +128,13 @@ export const TrainingStore = {
   },
   updatePlan(plan: TrainingPlan) {
     const db = load()
+    plan.updatedAt = new Date().toISOString()
     db.plans[plan.id] = plan
     save(db)
   },
   updateTask(task: TrainingTask) {
     const db = load()
-    db.tasks[task.id] = task
     save(db)
-  },
-  listPlanIds(): string[] {
-    const db = load()
-    return Object.keys(db.plans)
   },
   enqueueNextPage(planId: string, topic: string, nextPage: number) {
     const db = load()
