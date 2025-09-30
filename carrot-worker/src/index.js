@@ -876,6 +876,114 @@ app.get('/ingest/test', async (req, res) => {
   }
 });
 
+// Cleanup endpoint for disk space management
+app.post('/cleanup', async (req, res) => {
+  try {
+    console.log('[CLEANUP] Starting disk cleanup...');
+    let cleaned = 0;
+    let freed_mb = 0;
+    const errors = [];
+
+    // Clean temp directories
+    const temp_dirs = ['/tmp', '/var/tmp', os.tmpdir()];
+    for (const temp_dir of temp_dirs) {
+      if (fs.existsSync(temp_dir)) {
+        try {
+          const items = fs.readdirSync(temp_dir);
+          for (const item of items) {
+            const item_path = path.join(temp_dir, item);
+            try {
+              const stat = fs.statSync(item_path);
+              if (stat.isFile()) {
+                const size = stat.size;
+                fs.unlinkSync(item_path);
+                cleaned++;
+                freed_mb += size / (1024 * 1024);
+              } else if (stat.isDirectory() && (item.startsWith('ghibli-') || item.startsWith('generated_') || item.startsWith('tmp_'))) {
+                // Calculate directory size before deletion
+                let dir_size = 0;
+                try {
+                  const walkDir = (dir) => {
+                    const files = fs.readdirSync(dir);
+                    for (const file of files) {
+                      const file_path = path.join(dir, file);
+                      const file_stat = fs.statSync(file_path);
+                      if (file_stat.isFile()) {
+                        dir_size += file_stat.size;
+                      } else if (file_stat.isDirectory()) {
+                        walkDir(file_path);
+                      }
+                    }
+                  };
+                  walkDir(item_path);
+                  freed_mb += dir_size / (1024 * 1024);
+                } catch (e) {
+                  // Ignore size calculation errors
+                }
+                fs.rmSync(item_path, { recursive: true, force: true });
+                cleaned++;
+              }
+            } catch (e) {
+              errors.push(`Failed to clean ${item_path}: ${e.message}`);
+            }
+          }
+        } catch (e) {
+          errors.push(`Failed to read ${temp_dir}: ${e.message}`);
+        }
+      }
+    }
+
+    // Clean old generated images (keep only last 10)
+    const output_dir = path.join(process.cwd(), 'outputs');
+    if (fs.existsSync(output_dir)) {
+      try {
+        const files = fs.readdirSync(output_dir);
+        const image_files = files.filter(f => f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg'));
+        if (image_files.length > 10) {
+          // Sort by modification time, keep newest 10
+          const files_with_stats = image_files.map(f => ({
+            name: f,
+            path: path.join(output_dir, f),
+            mtime: fs.statSync(path.join(output_dir, f)).mtime
+          }));
+          files_with_stats.sort((a, b) => b.mtime - a.mtime);
+          
+          for (const old_file of files_with_stats.slice(10)) {
+            try {
+              const size = fs.statSync(old_file.path).size;
+              fs.unlinkSync(old_file.path);
+              cleaned++;
+              freed_mb += size / (1024 * 1024);
+            } catch (e) {
+              errors.push(`Failed to clean ${old_file.path}: ${e.message}`);
+            }
+          }
+        }
+      } catch (e) {
+        errors.push(`Failed to clean outputs directory: ${e.message}`);
+      }
+    }
+
+    console.log(`[CLEANUP] Completed: ${cleaned} items cleaned, ${freed_mb.toFixed(1)}MB freed`);
+    
+    res.json({
+      ok: true,
+      message: `Cleaned ${cleaned} items, freed ${freed_mb.toFixed(1)}MB`,
+      details: {
+        cleaned_files: cleaned,
+        freed_space_mb: freed_mb,
+        errors: errors
+      }
+    });
+  } catch (err) {
+    console.error('[CLEANUP] Error:', err);
+    res.status(500).json({
+      ok: false,
+      message: `Cleanup failed: ${err.message}`
+    });
+  }
+});
+
 // Start server with runtime tool installation
 async function startServer() {
   // Install video tools at startup
