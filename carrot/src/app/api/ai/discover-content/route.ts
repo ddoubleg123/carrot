@@ -168,6 +168,24 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
       }
     }
 
+    // Trigger automatic audit for discovered content (in background)
+    if (storedContent.length > 0) {
+      // Don't await this - let it run in background
+      fetch(`${req.nextUrl.origin}/api/ai/batch-audit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          patchId,
+          limit: Math.min(3, storedContent.length) // Audit first 3 items automatically
+        }),
+      }).catch(error => {
+        console.error('Background audit failed:', error);
+        // Don't fail the discovery if audit fails
+      });
+    }
+
     return NextResponse.json({
       success: true,
       patchId,

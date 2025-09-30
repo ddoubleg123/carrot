@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar, ExternalLink, MessageSquare, Clock } from 'lucide-react';
 import DiscoveryStatus from './DiscoveryStatus';
 import DiscoveredContent from './DiscoveredContent';
+import ContentAudit from './ContentAudit';
 
 interface Fact {
   id: string;
@@ -94,6 +95,12 @@ export default function Overview({ patch }: OverviewProps) {
       <div>
         <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">AI Discovered Content</h2>
         <DiscoveredContent patchHandle={patch.handle} />
+      </div>
+
+      {/* Content Audit */}
+      <div>
+        <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">Content Quality Audit</h2>
+        <ContentAudit patchId={patch.id} patchHandle={patch.handle} />
       </div>
 
       {/* Key Facts Grid */}
