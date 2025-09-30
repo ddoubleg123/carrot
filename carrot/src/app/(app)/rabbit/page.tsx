@@ -361,7 +361,7 @@ function ConversationThread({
   const scrollToBottom = () => {
     const el = scrollContainerRef.current
     if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   };
 
   // Handle scroll events
@@ -383,16 +383,18 @@ function ConversationThread({
     }
   };
 
-  // Initialize scroll state for new thread without forcing any scroll
+  // Initialize scroll state for new thread and jump to bottom
   useEffect(() => {
     setHasUserScrolled(false);
     setShowScrollButton(false);
     followTailRef.current = true;
     let raf = 0;
     raf = requestAnimationFrame(() => {
-      // Measure if content currently overflows; do not scroll
-      const atBottomNow = checkIfAtBottom();
-      setIsAtBottom(atBottomNow);
+      // After mount, snap to tail so latest is visible
+      setIsAtBottom(true);
+      const t = setTimeout(() => scrollToBottom(), 0);
+      // cleanup timer
+      return () => clearTimeout(t);
     });
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [thread.id]);

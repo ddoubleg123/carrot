@@ -84,6 +84,30 @@ export default function FeedAgentsPage() {
   const [discoveries, setDiscoveries] = useState<any[]>([]);
   const [discTopic, setDiscTopic] = useState<string>('__all__');
   const [discStatus, setDiscStatus] = useState<string>('__all__');
+  // Global training focus (0 = discovery, 100 = feeding)
+  const [focusPercent, setFocusPercent] = useState<number>(() => {
+    if (typeof window === 'undefined') return 50;
+    const v = parseInt(localStorage.getItem('carrot_training_focus') || '50', 10);
+    return isFinite(v) ? Math.max(0, Math.min(100, v)) : 50;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('carrot_training_focus', String(focusPercent));
+    let done = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/agents/training/focus', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ percent: focusPercent })
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) showToast(j.message || 'Failed to update focus', 'error');
+      } catch (e:any) {
+        showToast(e?.message || 'Error updating focus', 'error');
+      } finally { done = true; }
+    }, 300);
+    return () => { if (!done) clearTimeout(t); };
+  }, [focusPercent]);
 
   // Learn topics: parse + create training plan
   const extractTopicsFromAssessment = (text: string): string[] => {
@@ -314,7 +338,11 @@ export default function FeedAgentsPage() {
         }
       }
 
-      const allAgents = Array.from(byName.values()).sort((a,b)=> a.name.localeCompare(b.name));
+      // Restrict to canonical FEATURED_AGENTS set (exactly 20)
+      const canonicalIds = new Set(FEATURED_AGENTS.map(a => a.id));
+      const allAgents = Array.from(byName.values())
+        .filter(a => canonicalIds.has(a.id))
+        .sort((a,b)=> a.name.localeCompare(b.name));
       setAgents(allAgents);
       
       // Auto-select the first agent if none is selected
@@ -777,7 +805,7 @@ export default function FeedAgentsPage() {
         </div>
 
         {/* Admin Bar */}
-        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border rounded p-3 flex items-center gap-2 flex-wrap">
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border rounded p-3 flex items-center gap-3 flex-wrap">
           <Button onClick={toggleSelectAll} variant="outline">
             {selectedAgentIds.length === filteredAgents.length && filteredAgents.length>0 ? 'Clear All' : 'Select All'}
           </Button>
@@ -789,6 +817,22 @@ export default function FeedAgentsPage() {
           >
             Assess Knowledge
           </Button>
+          {/* Focus Slider: 0% discovery ↔ 100% feeding */}
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-xs text-gray-600 whitespace-nowrap">Focus</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={focusPercent}
+              onChange={e => setFocusPercent(parseInt(e.target.value, 10))}
+              className="w-40"
+              aria-label="Training focus (0% discovery to 100% feeding)"
+            />
+            <span className="text-xs text-gray-600 whitespace-nowrap">{100 - focusPercent}% discover</span>
+            <span className="text-xs text-gray-600">|</span>
+            <span className="text-xs text-gray-600 whitespace-nowrap">{focusPercent}% feed</span>
+          </div>
           <div className="h-5 w-px bg-gray-200 mx-1" />
           <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(true)}>Pause Discovery (Selected)</Button>
           <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(false)}>Resume (Selected)</Button>

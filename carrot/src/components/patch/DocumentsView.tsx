@@ -98,7 +98,7 @@ export default function DocumentsView({ patch }: DocumentsViewProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-6 md:px-10">
       {/* Header and Controls */}
       <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">

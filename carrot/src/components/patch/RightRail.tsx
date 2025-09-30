@@ -47,9 +47,9 @@ export default function RightRail({
   botSubscriptions = [],
   followerCount = 0
 }: RightRailProps) {
-  const handleConnectBot = () => {
-    console.log('Connect bot clicked');
-    // TODO: Implement bot connection
+  const handleConnectAgent = () => {
+    console.log('Connect agent clicked');
+    // TODO: Implement agent connection
   };
 
   const formatLastIndexed = (dateString?: string) => {
@@ -67,7 +67,7 @@ export default function RightRail({
 
   return (
     <div className="space-y-6 px-6 md:px-8">
-      {/* Followers & Listening Bots Card */}
+      {/* Followers & AI Agents Card */}
       <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
         <div className="space-y-6">
           {/* Followers Section */}
@@ -112,15 +112,15 @@ export default function RightRail({
             )}
           </div>
 
-          {/* Listening Bots Section */}
+          {/* AI Agents Section */}
           <div className="border-t border-[#E6E8EC] pt-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
                 <Bot className="w-5 h-5" />
-                Listening Bots
+                AI Agents
               </h3>
               <Button
-                onClick={handleConnectBot}
+                onClick={handleConnectAgent}
                 variant="outline"
                 size="sm"
                 className="text-xs"
@@ -160,16 +160,16 @@ export default function RightRail({
             ) : (
               <div className="text-center py-4">
                 <Bot className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-[#60646C]">No bots connected</p>
-                <p className="text-xs text-[#60646C] mt-1">Connect AI bots to monitor this patch</p>
+                <p className="text-sm text-[#60646C]">No agents connected</p>
+                <p className="text-xs text-[#60646C] mt-1">Connect AI agents to monitor this patch</p>
                 <Button
-                  onClick={handleConnectBot}
+                  onClick={handleConnectAgent}
                   variant="outline"
                   size="sm"
                   className="mt-3"
                 >
                   <Plus className="w-3 h-3 mr-1" />
-                  Connect a Bot
+                  Connect an Agent
                 </Button>
               </div>
             )}

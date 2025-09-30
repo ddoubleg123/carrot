@@ -51,7 +51,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       {/* Tabs Bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
         <div className="flex items-center justify-between py-6">
-          {/* Tabs Container with Horizontal Scroll */}
+          {/* Tabs Container with Horizontal Scroll - aligned with content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
               {tabs.map((tab) => (
@@ -70,13 +70,11 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
             </div>
           </div>
 
-          {/* Create Post Button */}
-          <div className="ml-4 flex-shrink-0">
+          {/* Create Post Button - moved to better position */}
+          <div className="ml-6 flex-shrink-0">
             <Button
               onClick={handleCreatePost}
-              variant="outline"
-              size="sm"
-              className="border-[#E6E8EC] text-[#0B0B0F] hover:bg-gray-50 font-medium px-4 py-2 rounded-lg whitespace-nowrap"
+              className="bg-[#FF6A00] hover:bg-[#E55A00] text-white font-medium px-6 py-2 rounded-lg whitespace-nowrap shadow-sm hover:shadow-md transition-all duration-200"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Post
@@ -86,7 +84,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
       </div>
 
       {/* Tab Content */}
-      <div className="px-6 md:px-10">
+      <div>
         {children}
       </div>
 
