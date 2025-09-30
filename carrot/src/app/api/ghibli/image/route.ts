@@ -83,6 +83,20 @@ export async function POST(req: Request) {
     const workerUrl = process.env.GHIBLI_WORKER_URL || ''
     console.log('[Ghibli] Worker URL configured:', !!workerUrl, workerUrl ? `${workerUrl.substring(0, 30)}...` : 'none')
     if (workerUrl) {
+      // Pre-cleanup: Clear worker disk space before generation
+      try {
+        const workerBase = workerUrl.replace(/\/$/, '')
+        console.log('[Ghibli] Pre-cleaning worker disk space...')
+        const cleanupRes = await fetch(workerBase + '/cleanup', { method: 'POST' })
+        if (cleanupRes.ok) {
+          const cleanupData = await cleanupRes.json()
+          console.log('[Ghibli] Worker cleanup result:', cleanupData)
+        } else {
+          console.warn('[Ghibli] Worker cleanup failed, proceeding anyway')
+        }
+      } catch (e) {
+        console.warn('[Ghibli] Worker cleanup error, proceeding anyway:', e)
+      }
       const lora = (fd.get('lora') as string) || ''
       const loraAlpha = (fd.get('lora_alpha') as string) || ''
       const wf = new FormData()

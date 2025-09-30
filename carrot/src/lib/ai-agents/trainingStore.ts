@@ -122,6 +122,10 @@ export const TrainingStore = {
     const db = load()
     return db.plans[planId] || null
   },
+  listPlanIds(): string[] {
+    const db = load()
+    return Object.keys(db.plans)
+  },
   listTasks(planId: string): TrainingTask[] {
     const db = load()
     return Object.values(db.tasks).filter(t => t.planId === planId).sort((a,b)=> a.createdAt.localeCompare(b.createdAt))

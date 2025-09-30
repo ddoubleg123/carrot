@@ -133,65 +133,63 @@ export default function PatchHeader({
         {/* Main Content */}
         <div className="pt-16 pl-4">
           {/* Title Row */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="flex-1 min-w-0 max-w-2xl">
               <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
                 {patch.name}
               </h1>
               {patch.description && (
-                <p className="text-white/95 text-base md:text-lg line-clamp-1 mt-1">
+                <p className="text-white/95 text-base md:text-lg line-clamp-2 mt-2 pr-4">
                   {patch.description}
                 </p>
               )}
             </div>
             
             {/* Right side: Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button
                 onClick={isMember ? () => {} : handleJoin}
                 variant={isMember ? "outline" : "secondary"}
                 className={isMember 
-                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2" 
-                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2"
+                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 flex items-center gap-2" 
+                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 flex items-center gap-2"
                 }
               >
+                <Users className="w-4 h-4" />
                 {isMember ? 'Joined' : 'Join'}
               </Button>
               
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={handleShare}
-                className="text-white hover:bg-white/10 p-2"
-                title="Share"
+                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
               >
                 <Share2 className="w-4 h-4" />
+                Share
               </Button>
 
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={handleSettings}
-                className="text-white hover:bg-white/10 p-2"
-                title="Settings"
+                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
               >
                 <Settings className="w-4 h-4" />
+                Settings
               </Button>
 
               {/* Lightning Theme Button */}
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={() => {
                   const presets = ['light', 'warm', 'stone', 'civic', 'ink'] as const;
                   const currentIndex = presets.indexOf(currentTheme.preset || 'light');
                   const nextIndex = (currentIndex + 1) % presets.length;
                   handleThemeChange({ mode: 'preset', preset: presets[nextIndex] });
                 }}
-                className="text-white hover:bg-white/10 p-2"
-                title="Change theme"
+                className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-2"
               >
                 <Zap className="w-4 h-4" />
+                Theme
               </Button>
             </div>
           </div>
