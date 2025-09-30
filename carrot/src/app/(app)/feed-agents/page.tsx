@@ -292,57 +292,41 @@ export default function FeedAgentsPage() {
       const response = await fetch('/api/agents');
       const data = await response.json();
       const dbAgents: Agent[] = ((data.agents || []) as Agent[]).filter((a:any)=> a.isActive !== false);
-
-      // Convert featured agents to the expected format
-      const featuredAgents: Agent[] = FEATURED_AGENTS.map(agent => ({
-        id: agent.id,
-        name: agent.name,
-        persona: agent.personality.approach,
-        domainExpertise: agent.domains,
-        associatedPatches: [],
-        metadata: {
-          role: agent.personality.expertise,
-          expertise: agent.strengths,
-          avatar: agent.avatar,
-          councilMembership: [],
-          userVisibility: 'public',
-          trainingEnabled: true
-        } as any,
-        createdAt: new Date().toISOString()
-      } as Agent));
-
-      // Merge by normalized name (case/space-insensitive) to avoid duplicates by different IDs
+      const byNameDB = new Map<string, Agent>();
       const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-      const byName = new Map<string, Agent>();
-      // Prefer DB record, then merge in featured domains/metadata if missing
-      for (const a of dbAgents) {
-        byName.set(norm(a.name), a);
-      }
-      for (const f of featuredAgents) {
-        const key = norm(f.name);
-        if (!byName.has(key)) {
-          byName.set(key, f);
-        } else {
-          const base = byName.get(key)!;
-          // Merge domain expertise (union)
-          const mergedDomains = Array.from(new Set([...(base.domainExpertise||[]), ...(f.domainExpertise||[])]));
-          base.domainExpertise = mergedDomains;
-          // Fill in missing avatar/role from featured
-          base.metadata = {
-            ...(f.metadata||{}),
-            ...(base.metadata||{}),
-            avatar: base.metadata?.avatar || f.metadata?.avatar,
-            role: base.metadata?.role || f.metadata?.role,
-          } as any;
-          byName.set(key, base);
-        }
-      }
+      for (const a of dbAgents) byNameDB.set(norm(a.name), a);
 
-      // Restrict to canonical FEATURED_AGENTS set (exactly 20)
-      const canonicalIds = new Set(FEATURED_AGENTS.map(a => a.id));
-      const allAgents = Array.from(byName.values())
-        .filter(a => canonicalIds.has(a.id))
-        .sort((a,b)=> a.name.localeCompare(b.name));
+      // Build the canonical 20 strictly from FEATURED_AGENTS ids, hydrating from DB by name only
+      const allAgents: Agent[] = FEATURED_AGENTS.map(f => {
+        const hydrated = byNameDB.get(norm(f.name));
+        const base: Agent = {
+          id: f.id, // keep canonical ID
+          name: f.name,
+          persona: f.personality.approach,
+          domainExpertise: f.domains,
+          associatedPatches: [],
+          metadata: {
+            role: f.personality.expertise,
+            expertise: f.strengths,
+            avatar: f.avatar,
+            councilMembership: [],
+            userVisibility: 'public',
+            trainingEnabled: true
+          } as any,
+          createdAt: new Date().toISOString()
+        } as Agent;
+        if (hydrated) {
+          // merge non-id fields from DB but preserve canonical id
+          base.domainExpertise = Array.from(new Set([...(base.domainExpertise||[]), ...(hydrated.domainExpertise||[])]));
+          base.metadata = {
+            ...(base.metadata||{}),
+            ...(hydrated.metadata||{}),
+            avatar: (hydrated.metadata as any)?.avatar || (base.metadata as any)?.avatar,
+            role: (hydrated.metadata as any)?.role || (base.metadata as any)?.role,
+          } as any;
+        }
+        return base;
+      }).sort((a,b)=> a.name.localeCompare(b.name));
       setAgents(allAgents);
       
       // Auto-select the first agent if none is selected
@@ -804,7 +788,7 @@ export default function FeedAgentsPage() {
           </div>
         </div>
 
-        {/* Admin Bar */}
+        {/* Admin Bar (simplified) */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border rounded p-3 flex items-center gap-3 flex-wrap">
           <Button onClick={toggleSelectAll} variant="outline">
             {selectedAgentIds.length === filteredAgents.length && filteredAgents.length>0 ? 'Clear All' : 'Select All'}
@@ -817,25 +801,6 @@ export default function FeedAgentsPage() {
           >
             Assess Knowledge
           </Button>
-          {/* Focus Slider: 0% discovery ↔ 100% feeding */}
-          <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-gray-600 whitespace-nowrap">Focus</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={focusPercent}
-              onChange={e => setFocusPercent(parseInt(e.target.value, 10))}
-              className="w-40"
-              aria-label="Training focus (0% discovery to 100% feeding)"
-            />
-            <span className="text-xs text-gray-600 whitespace-nowrap">{100 - focusPercent}% discover</span>
-            <span className="text-xs text-gray-600">|</span>
-            <span className="text-xs text-gray-600 whitespace-nowrap">{focusPercent}% feed</span>
-          </div>
-          <div className="h-5 w-px bg-gray-200 mx-1" />
-          <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(true)}>Pause Discovery (Selected)</Button>
-          <Button variant="outline" disabled={selectedAgentIds.length === 0} onClick={()=> pauseSelectedDiscovery(false)}>Resume (Selected)</Button>
           <div className="h-5 w-px bg-gray-200 mx-1" />
           <Button variant="outline" onClick={()=> pauseAllDiscovery(true)}>Pause All Discovery</Button>
           <Button variant="outline" onClick={()=> pauseAllDiscovery(false)}>Resume All</Button>

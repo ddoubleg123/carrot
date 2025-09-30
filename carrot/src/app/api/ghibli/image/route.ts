@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     }
 
     // Forward to worker for ALL models if configured (bypass local tmp/disk)
-    const workerUrl = process.env.GHIBLI_WORKER_URL || ''
+    const workerUrl = process.env.INGEST_WORKER_URL || process.env.GHIBLI_WORKER_URL || ''
     console.log('[Ghibli] Worker URL configured:', !!workerUrl, workerUrl ? `${workerUrl.substring(0, 30)}...` : 'none')
     if (workerUrl) {
       // Pre-cleanup: Clear worker disk space before generation

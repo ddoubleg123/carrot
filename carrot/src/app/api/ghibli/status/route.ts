@@ -38,7 +38,7 @@ async function pathExists(p?: string | null) {
 export async function GET() {
   const sdModel = process.env.GHIBLI_SD_MODEL || 'runwayml/stable-diffusion-v1-5'
   const lora = process.env.GHIBLI_LORA_WEIGHTS || ''
-  const workerUrl = process.env.GHIBLI_WORKER_URL || ''
+  const workerUrl = process.env.INGEST_WORKER_URL || process.env.GHIBLI_WORKER_URL || ''
   const steps = parseInt(process.env.GHIBLI_SD_STEPS || '25', 10)
   const guidance = parseFloat(process.env.GHIBLI_SD_GUIDANCE || '7.5')
 
