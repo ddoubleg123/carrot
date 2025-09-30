@@ -50,35 +50,37 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     <>
       {/* Tabs Bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
-        <div className="flex items-center justify-between py-6">
-          {/* Tabs Container with Horizontal Scroll - aligned with content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0 ${
-                    activeTab === tab.id
-                      ? 'bg-[#FF6A00] text-white'
-                      : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100'
-                  }`}
-                  onClick={() => handleTabClick(tab.id)}
+        <div className="px-6 md:px-10">
+          <div className="flex items-center justify-between py-6">
+            {/* Tabs Container with Horizontal Scroll - aligned with content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide pb-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap flex-shrink-0 ${
+                      activeTab === tab.id
+                        ? 'bg-[#FF6A00] text-white'
+                        : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100'
+                    }`}
+                    onClick={() => handleTabClick(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                
+                {/* Create Post Button - now in the same row as tabs */}
+                <Button
+                  onClick={handleCreatePost}
+                  variant="primary"
+                  size="sm"
+                  className="ml-4 bg-[#FF6A00] hover:bg-[#E55A00] text-white font-medium px-4 py-2 rounded-lg whitespace-nowrap shadow-sm hover:shadow-md transition-all duration-200"
                 >
-                  {tab.label}
-                </button>
-              ))}
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Post
+                </Button>
+              </div>
             </div>
-          </div>
-
-          {/* Create Post Button - moved to better position */}
-          <div className="ml-6 flex-shrink-0">
-            <Button
-              onClick={handleCreatePost}
-              className="bg-[#FF6A00] hover:bg-[#E55A00] text-white font-medium px-6 py-2 rounded-lg whitespace-nowrap shadow-sm hover:shadow-md transition-all duration-200"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Post
-            </Button>
           </div>
         </div>
       </div>
