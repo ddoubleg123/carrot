@@ -46,6 +46,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     const raw = searchParams.get('url');
     const pathParam = searchParams.get('path');
     const bucketParam = searchParams.get('bucket');
+    const rangeParam = searchParams.get('range');
     // Track whether we performed a single decode on the incoming url param
     let decodedOnce = false;
 
@@ -71,7 +72,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         const file = bucket.file(objectPath.replace(/^\/+/, ''));
         const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
 
-        const range = req.headers.get('range');
+        const range = req.headers.get('range') || rangeParam;
         const size = Number(meta?.size || 0);
         const contentType = meta?.contentType || 'application/octet-stream';
         const cacheControl = meta?.cacheControl || 'public, max-age=604800, immutable';
@@ -116,7 +117,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     // Helper: simple proxy without Admin SDK (fallback)
     const simpleProxy = async (url: string) => {
       const headers = new Headers();
-      const range = req.headers.get('range');
+      const range = req.headers.get('range') || rangeParam;
       if (range) headers.set('range', range);
       const ifModifiedSince = req.headers.get('if-modified-since');
       if (ifModifiedSince) headers.set('if-modified-since', ifModifiedSince);
@@ -312,7 +313,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // Forward important headers
     const fwdHeaders: HeadersInit = {};
-    const range = req.headers.get('range'); if (range) fwdHeaders['Range'] = range;
+    const range = req.headers.get('range') || rangeParam; if (range) fwdHeaders['Range'] = range;
     const ifNoneMatch = req.headers.get('if-none-match'); if (ifNoneMatch) fwdHeaders['If-None-Match'] = ifNoneMatch;
     const ifModifiedSince = req.headers.get('if-modified-since'); if (ifModifiedSince) fwdHeaders['If-Modified-Since'] = ifModifiedSince;
 

@@ -57,11 +57,38 @@ export default function SimpleVideo({
       } else {
         proxyUrl = src;
       }
+      
+      // For Firebase Storage URLs, add range parameter to request only first 6 seconds
+      if (proxyUrl.includes('firebasestorage.googleapis.com')) {
+        try {
+          const url = new URL(proxyUrl, window.location.origin);
+          // Add range parameter to request first 6 seconds (roughly 500KB)
+          url.searchParams.set('range', 'bytes=0-524287');
+          console.log('[SimpleVideo] Added range parameter for 6-second pre-roll');
+          proxyUrl = url.toString();
+        } catch (e) {
+          console.warn('[SimpleVideo] Failed to add range parameter:', e);
+        }
+      }
     } else if (src.includes('firebasestorage.googleapis.com')) {
       // Check if this is a properly formatted Firebase URL (has alt=media)
       if (src.includes('alt=media')) {
-        // This is a properly formatted Firebase URL, use it directly
-        proxyUrl = src;
+        // This is a properly formatted Firebase URL, proxy it with range parameter
+        let cleanSrc = src;
+        
+        // If the URL is already encoded (contains %2F), decode it first
+        if (src.includes('%2F') || src.includes('%3F') || src.includes('%3D')) {
+          try {
+            cleanSrc = decodeURIComponent(src);
+          } catch (e) {
+            // If decoding fails, use original
+            cleanSrc = src;
+          }
+        }
+        
+        // Now encode it properly for the proxy with range parameter
+        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}&range=bytes=0-524287`;
+        console.log('[SimpleVideo] Added range parameter for Firebase URL');
       } else {
         // This is an old Firebase URL, proxy it
         let cleanSrc = src;
@@ -76,8 +103,9 @@ export default function SimpleVideo({
           }
         }
         
-        // Now encode it properly for the proxy
-        proxyUrl = `/api/video-simple?url=${encodeURIComponent(cleanSrc)}`;
+        // Now encode it properly for the proxy with range parameter
+        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}&range=bytes=0-524287`;
+        console.log('[SimpleVideo] Added range parameter for old Firebase URL');
       }
     } else {
       // Direct URL
@@ -111,13 +139,15 @@ export default function SimpleVideo({
     console.log('[SimpleVideo] Load started', { src: videoSrc, startTime });
     setHasError(false);
     
-    // For Firebase Storage URLs, try to load only first 6 seconds using range requests
+    // For Firebase Storage URLs, implement proper range request for first 6 seconds
     if (videoSrc && videoSrc.includes('firebasestorage.googleapis.com')) {
       const video = videoRef.current;
       if (video) {
         // Set up range request for first ~500KB (roughly 6 seconds of video)
+        let preRollTriggered = false;
         video.addEventListener('progress', () => {
-          if (video.buffered.length > 0 && video.buffered.end(0) >= 6) {
+          if (!preRollTriggered && video.buffered.length > 0 && video.buffered.end(0) >= 6) {
+            preRollTriggered = true;
             // We have 6 seconds buffered, we can show the video
             console.log('[SimpleVideo] Pre-roll loaded (6 seconds)', { 
               buffered: video.buffered.end(0),
@@ -129,6 +159,11 @@ export default function SimpleVideo({
               loadingTimeoutRef.current = null;
             }
           }
+        });
+        
+        // Add range request header for first 6 seconds only
+        video.addEventListener('loadstart', () => {
+          console.log('[SimpleVideo] Requesting first 6 seconds only');
         });
       }
     }
