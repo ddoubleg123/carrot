@@ -58,6 +58,7 @@ interface WizardStepProps {
   onNext: () => void;
   onBack: () => void;
   isLoading?: boolean;
+  getMotionTransition?: (duration?: string) => string;
 }
 
 interface GroupFormData {
@@ -74,7 +75,7 @@ interface CreateGroupWizardProps {
 }
 
 // Step 1: Details Component
-const Step1Details: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, isLoading }) => {
+const Step1Details: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, isLoading, getMotionTransition }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validateStep = useCallback(() => {
@@ -234,7 +235,7 @@ const Step1Details: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, isLoa
 };
 
 // Step 2: Topics Component
-const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading }) => {
+const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading, getMotionTransition }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -379,7 +380,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
                 color: data.tags.includes(tag) ? TOKENS.colors.surface : TOKENS.colors.ink,
                 fontSize: TOKENS.typography.body,
                 cursor: 'pointer',
-                transition: getMotionTransition(TOKENS.motion.fast),
+                transition: getMotionTransition?.(TOKENS.motion.fast) || `all ${TOKENS.motion.fast} ${TOKENS.easing}`,
                 minHeight: '44px',
                 display: 'flex',
                 alignItems: 'center'
@@ -456,7 +457,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
 };
 
 // Step 3: Review Component
-const Step3Review: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading }) => {
+const Step3Review: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading, getMotionTransition }) => {
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async () => {
@@ -903,6 +904,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
             onUpdate={handleUpdate}
             onNext={handleNext}
             onBack={handleBack}
+            getMotionTransition={getMotionTransition}
           />
         </div>
 
