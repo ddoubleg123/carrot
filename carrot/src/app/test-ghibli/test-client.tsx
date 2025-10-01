@@ -27,6 +27,7 @@ export default function TestGhibliClient() {
   const [log, setLog] = useState<string>('Ready.')
   const [imageOut, setImageOut] = useState<string | null>(null)
   const [imageMeta, setImageMeta] = useState<any>(null)
+  const [imageLoadError, setImageLoadError] = useState<boolean>(false)
   const [videoOut, setVideoOut] = useState<string | null>(null)
   const [origVideo, setOrigVideo] = useState<string | null>(null)
   const imgFileRef = useRef<HTMLInputElement>(null)
@@ -138,8 +139,11 @@ export default function TestGhibliClient() {
       return
     }
     appendLog(`[Image] Done in ${(t1 - t0).toFixed(0)}ms`)
-    setImageOut(data.outputUrl || data.outputPath || null)
+    const imageUrl = data.outputUrl || data.outputPath || null
+    appendLog(`[Image] Output URL: ${imageUrl ? (imageUrl.length > 100 ? imageUrl.substring(0, 100) + '...' : imageUrl) : 'null'}`)
+    setImageOut(imageUrl)
     setImageMeta(data.meta || null)
+    setImageLoadError(false) // Reset error state
     setMetrics({ ...(data.meta || {}), durationMs: Math.round(t1 - t0), style: preset.label, mode: imageMode, model: chosenModel })
   }
 
@@ -301,7 +305,27 @@ export default function TestGhibliClient() {
                 <a href={imageOut} target="_blank" rel="noreferrer"
                    style={{ padding:'6px 10px', background:'#555', color:'#fff', borderRadius:6, textDecoration:'none' }}>Open</a>
               </div>
-              <img src={imageOut} alt="output" style={{ maxWidth:'100%' }} />
+              {imageLoadError ? (
+                <div style={{ padding: '20px', background: '#fef2f2', border: '1px solid #dc2626', borderRadius: 6, textAlign: 'center' }}>
+                  <div style={{ color: '#dc2626', fontWeight: 'bold', marginBottom: 8 }}>❌ Image Failed to Load</div>
+                  <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>The generated image could not be displayed</div>
+                  <div style={{ fontSize: 12, color: '#999', wordBreak: 'break-all' }}>
+                    URL: {imageOut?.substring(0, 100)}...
+                  </div>
+                </div>
+              ) : (
+                <img 
+                  src={imageOut} 
+                  alt="output" 
+                  style={{ maxWidth:'100%' }} 
+                  onLoad={() => appendLog('[Image] Image loaded successfully')}
+                  onError={(e) => {
+                    appendLog('[Image] Failed to load image: ' + e.currentTarget.src.substring(0, 100) + '...')
+                    console.error('Image load error:', e)
+                    setImageLoadError(true)
+                  }}
+                />
+              )}
             </div>
           ) : <div>No image yet.</div>
         ) : (

@@ -211,8 +211,10 @@ export async function POST(req: Request) {
         const buf = await readFile(finalPath)
         if (buf.length <= 4_000_000) {
           const base64 = buf.toString('base64')
+          const dataUrl = `data:image/png;base64,${base64}`
+          console.log(`[Ghibli] Generated Base64 data URL, length: ${dataUrl.length}, buffer size: ${buf.length}`)
           try { await unlink(finalPath) } catch {}
-          return NextResponse.json({ ok: true, outputUrl: `data:image/png;base64,${base64}`, meta: { used: 'local', ...(result.meta || { prompt, model, inline: true }) } })
+          return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { used: 'local', ...(result.meta || { prompt, model, inline: true }) } })
         }
       } catch {}
     }
@@ -231,6 +233,7 @@ export async function POST(req: Request) {
         <text x="320" y="240" font-family="Arial, sans-serif" font-size="12" fill="#999" text-anchor="middle">Render.com has limited disk space for AI models</text>
       </svg>`
       const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+      console.log(`[Ghibli] Generated ENOSPC SVG fallback, data URL length: ${dataUrl.length}`)
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC' } })
     }
     
@@ -243,6 +246,7 @@ export async function POST(req: Request) {
         <text x="320" y="240" font-family="Arial, sans-serif" font-size="12" fill="#999" text-anchor="middle">Set up GPU worker for full AI capabilities</text>
       </svg>`
       const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+      console.log(`[Ghibli] Generated missing dependencies SVG fallback, data URL length: ${dataUrl.length}`)
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'missing_dependencies' } })
     }
     
