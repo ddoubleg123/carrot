@@ -11,6 +11,23 @@ import Overview from '@/components/patch/Overview'
 import DocumentsView from '@/components/patch/DocumentsView'
 import SourcesView from '@/components/patch/SourcesView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
+import COLOR_SCHEMES from '@/config/colorSchemes'
+
+// Helper function to convert preset string to index
+function getPresetIndex(preset: string | null | undefined): number | undefined {
+  if (!preset) return undefined;
+  
+  // Map old theme names to COLOR_SCHEMES indices
+  const themeMap: Record<string, number> = {
+    'light': 0,   // Sunset Pop
+    'warm': 4,    // Amber Heat
+    'stone': 1,   // Ocean Pop
+    'civic': 2,   // Mint Pop
+    'ink': 3,     // Candy Grapefruit
+  };
+  
+  return themeMap[preset] ?? 0; // Default to first theme if not found
+}
 
 // Loading skeleton component
 function PatchPageSkeleton() {
@@ -275,7 +292,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
             isMember={!!isMember}
             userTheme={actualUserTheme ? {
               mode: actualUserTheme.mode as 'preset' | 'image',
-              preset: actualUserTheme.preset as 'light' | 'warm' | 'stone' | 'civic' | 'ink' | undefined,
+              preset: getPresetIndex(actualUserTheme.preset),
               imageUrl: actualUserTheme.imageUrl || undefined
             } : null}
           />
