@@ -55,8 +55,10 @@ def run_sd_lora(prompt: str, out: str, init_image_path: str = '') -> str:
     try:
         import torch  # type: ignore
         from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, EulerAncestralDiscreteScheduler  # type: ignore
+    except ImportError as ex:
+        raise RuntimeError(f'Stable Diffusion dependencies not available: {ex}. Install requirements-sd.txt and set GHIBLI_SD_MODEL/GHIBLI_LORA_WEIGHTS as needed.') from ex
     except Exception as ex:
-        raise RuntimeError('Stable Diffusion not available. Install requirements-sd.txt and set GHIBLI_SD_MODEL/GHIBLI_LORA_WEIGHTS as needed.') from ex
+        raise RuntimeError(f'Stable Diffusion initialization failed: {ex}. Check your environment configuration.') from ex
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -160,6 +162,11 @@ def main():
 
         # No input image: produce a PNG file
         out_path = args.out if args.out.lower().endswith('.png') else (args.out + '.png')
+        
+        # For sd-lora model, we should have already handled it above
+        if args.model == 'sd-lora':
+            raise RuntimeError('sd-lora model should have been handled above. This indicates a fallback to placeholder generation.')
+        
         if _PIL_AVAILABLE:
             # Render a simple PNG with prompt and model text
             img = Image.new('RGB', (768, 512), color=(220, 230, 240))  # type: ignore
