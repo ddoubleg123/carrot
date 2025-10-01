@@ -110,7 +110,7 @@ Please provide a comprehensive audit of this content.`
           fullResponse += chunk.token;
         } else if (chunk.type === 'error') {
           hasError = true;
-          errorMessage = chunk.error;
+          errorMessage = chunk.error || 'Unknown error occurred';
           break;
         }
       }
