@@ -97,7 +97,7 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
           fullResponse += chunk.token;
         } else if (chunk.type === 'error') {
           hasError = true;
-          errorMessage = chunk.error;
+          errorMessage = chunk.error || 'Unknown error occurred';
           break;
         }
       }

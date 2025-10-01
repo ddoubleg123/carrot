@@ -61,7 +61,7 @@ Please generate relevant tags and categories for this knowledge group.`
           fullResponse += chunk.token;
         } else if (chunk.type === 'error') {
           hasError = true;
-          errorMessage = chunk.error;
+          errorMessage = chunk.error || 'Unknown error occurred';
           break;
         }
       }
