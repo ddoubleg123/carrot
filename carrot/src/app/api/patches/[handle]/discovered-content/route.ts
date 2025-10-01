@@ -23,7 +23,7 @@ export async function GET(
 
     // Fetch discovered content for this patch
     // Check if DiscoveredContent table exists, if not return empty array
-    let discoveredContent = [];
+    let discoveredContent: any[] = [];
     try {
       discoveredContent = await prisma.discoveredContent.findMany({
         where: {
