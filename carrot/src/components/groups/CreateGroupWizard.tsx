@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import telemetry from '@/lib/telemetry';
 
 // Design tokens from Carrot standards
 const TOKENS = {
@@ -36,6 +37,7 @@ const TOKENS = {
     normal: '160ms',
     slow: '180ms',
   },
+  easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ease-in-out
   typography: {
     h2: '28px',
     body: '16px',
@@ -377,7 +379,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
                 color: data.tags.includes(tag) ? TOKENS.colors.surface : TOKENS.colors.ink,
                 fontSize: TOKENS.typography.body,
                 cursor: 'pointer',
-                transition: `all ${TOKENS.motion.fast} ease-in-out`,
+                transition: getMotionTransition(TOKENS.motion.fast),
                 minHeight: '44px',
                 display: 'flex',
                 alignItems: 'center'
@@ -646,6 +648,29 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     tags: [],
     categories: []
   });
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  // Check for reduced motion preference
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  // Track wizard open
+  useEffect(() => {
+    if (isOpen) {
+      telemetry.trackGroupCreateOpen();
+    }
+  }, [isOpen]);
+
+  // Helper function for motion transitions
+  const getMotionTransition = (duration: string = TOKENS.motion.normal) => {
+    return prefersReducedMotion ? 'none' : `all ${duration} ${TOKENS.easing}`;
+  };
 
   const steps: WizardStep[] = [
     {
@@ -672,10 +697,26 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
   const CurrentStepComponent = currentStepData.component;
 
   const handleNext = () => {
+    const startTime = performance.now();
+    
     if (currentStep < steps.length - 1) {
+      // Track step completion
+      telemetry.trackStepComplete(currentStep, steps[currentStep].label, {
+        name_length: formData.name.length,
+        description_length: formData.description.length,
+        tags_count: formData.tags.length,
+        categories_count: formData.categories.length
+      });
+      
       setCurrentStep(currentStep + 1);
+      
+      // Track step transition latency
+      const latency = performance.now() - startTime;
+      telemetry.trackStepContinue(currentStep, steps[currentStep].label, latency);
     } else {
       // Final step - create group
+      const totalTime = performance.now() - startTime;
+      telemetry.trackGroupCreateSuccess('new-group-id', totalTime);
       onSuccess('new-group-id');
       onClose();
     }
@@ -701,22 +742,42 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     }
   };
 
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, formData]);
+
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: TOKENS.spacing.lg
-    }}>
+    <div 
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wizard-title"
+      aria-describedby="wizard-description"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: TOKENS.spacing.lg
+      }}
+    >
       <div style={{
         background: TOKENS.colors.surface,
         borderRadius: TOKENS.radii.xl,
@@ -736,20 +797,26 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           alignItems: 'center'
         }}>
           <div>
-            <h2 style={{
-              fontSize: TOKENS.typography.h2,
-              fontWeight: 600,
-              color: TOKENS.colors.ink,
-              margin: 0,
-              marginBottom: TOKENS.spacing.xs
-            }}>
+            <h2 
+              id="wizard-title"
+              style={{
+                fontSize: TOKENS.typography.h2,
+                fontWeight: 600,
+                color: TOKENS.colors.ink,
+                margin: 0,
+                marginBottom: TOKENS.spacing.xs
+              }}
+            >
               {currentStepData.title}
             </h2>
-            <p style={{
-              fontSize: TOKENS.typography.body,
-              color: TOKENS.colors.slate,
-              margin: 0
-            }}>
+            <p 
+              id="wizard-description"
+              style={{
+                fontSize: TOKENS.typography.body,
+                color: TOKENS.colors.slate,
+                margin: 0
+              }}
+            >
               {currentStep === 0 && 'Give your group a name and description.'}
               {currentStep === 1 && 'Select all that apply. You can change these later.'}
               {currentStep === 2 && 'Review your group details before creating.'}
@@ -799,7 +866,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
                     fontSize: TOKENS.typography.caption,
                     fontWeight: 600,
                     cursor: index < currentStep ? 'pointer' : 'default',
-                    transition: `all ${TOKENS.motion.normal} ease-in-out`
+                    transition: getMotionTransition()
                   }}
                   onClick={() => index < currentStep && setCurrentStep(index)}
                 >
@@ -861,7 +928,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
               display: 'flex',
               alignItems: 'center',
               gap: TOKENS.spacing.sm,
-              transition: `all ${TOKENS.motion.normal} ease-in-out`,
+              transition: getMotionTransition(),
               opacity: currentStep === 0 ? 0.5 : 1
             }}
             onMouseEnter={(e) => {
@@ -893,7 +960,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
               display: 'flex',
               alignItems: 'center',
               gap: TOKENS.spacing.sm,
-              transition: `all ${TOKENS.motion.normal} ease-in-out`,
+              transition: getMotionTransition(),
               minHeight: '44px'
             }}
             onMouseEnter={(e) => {

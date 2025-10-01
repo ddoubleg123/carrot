@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import telemetry from '@/lib/telemetry';
 
 // Design tokens from Carrot standards
 const TOKENS = {
@@ -63,8 +64,11 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(true);
+  const [firstItemTime, setFirstItemTime] = useState<number | null>(null);
 
   useEffect(() => {
+    telemetry.trackDiscoveryStarted(patchHandle);
+    
     loadDiscoveredContent();
     
     // Set up polling for new content
@@ -77,14 +81,25 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
       if (response.ok) {
         const data = await response.json();
-        setItems(data.items || []);
+        const newItems = data.items || [];
+        
+        // Track first item discovery
+        if (newItems.length > 0 && items.length === 0 && firstItemTime === null) {
+          const timeToFirstItem = performance.now();
+          setFirstItemTime(timeToFirstItem);
+          telemetry.trackDiscoveryFirstItem(patchHandle, timeToFirstItem);
+        }
+        
+        setItems(newItems);
         setIsDiscovering(data.isActive || false);
         setError(null);
       } else {
         setError('We couldn\'t check sources. Retry.');
+        telemetry.trackDiscoveryError(patchHandle, 'API request failed');
       }
     } catch (err) {
       setError('Connection lost. We\'ll keep trying.');
+      telemetry.trackDiscoveryError(patchHandle, 'Network error');
     } finally {
       setIsLoading(false);
     }
