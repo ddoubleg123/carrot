@@ -58,18 +58,8 @@ export default function SimpleVideo({
         proxyUrl = src;
       }
       
-      // For Firebase Storage URLs, add range parameter to request only first 6 seconds
-      if (proxyUrl.includes('firebasestorage.googleapis.com')) {
-        try {
-          const url = new URL(proxyUrl, window.location.origin);
-          // Add range parameter to request first 6 seconds (roughly 500KB)
-          url.searchParams.set('range', 'bytes=0-524287');
-          console.log('[SimpleVideo] Added range parameter for 6-second pre-roll');
-          proxyUrl = url.toString();
-        } catch (e) {
-          console.warn('[SimpleVideo] Failed to add range parameter:', e);
-        }
-      }
+      // Range requests are handled by FeedMediaManager preloading system
+      // No need to add range parameters here to avoid duplicate requests
     } else if (src.includes('firebasestorage.googleapis.com')) {
       // Check if this is a properly formatted Firebase URL (has alt=media)
       if (src.includes('alt=media')) {
@@ -86,9 +76,9 @@ export default function SimpleVideo({
           }
         }
         
-        // Now encode it properly for the proxy with range parameter
-        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}&range=bytes=0-524287`;
-        console.log('[SimpleVideo] Added range parameter for Firebase URL');
+        // Encode it properly for the proxy (range requests handled by FeedMediaManager)
+        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}`;
+        console.log('[SimpleVideo] Proxying Firebase URL (range handled by preload system)');
       } else {
         // This is an old Firebase URL, proxy it
         let cleanSrc = src;
@@ -103,9 +93,9 @@ export default function SimpleVideo({
           }
         }
         
-        // Now encode it properly for the proxy with range parameter
-        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}&range=bytes=0-524287`;
-        console.log('[SimpleVideo] Added range parameter for old Firebase URL');
+        // Encode it properly for the proxy (range requests handled by FeedMediaManager)
+        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}`;
+        console.log('[SimpleVideo] Proxying old Firebase URL (range handled by preload system)');
       }
     } else {
       // Direct URL

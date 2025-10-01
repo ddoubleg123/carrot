@@ -167,7 +167,7 @@ class FeedPreloadManager {
     }
   }
 
-  // Preload video: thumbnail first, then 6 seconds
+  // Preload video: thumbnail only (video preloading handled by FeedMediaManager)
   private async preloadVideo(post: PostAsset): Promise<void> {
     try {
       const asset: PreloadedAsset = {
@@ -177,7 +177,7 @@ class FeedPreloadManager {
         lastAccessed: Date.now()
       };
 
-      // Step 1: Load thumbnail (blocking)
+      // Only load thumbnail (video preloading is handled by FeedMediaManager to avoid duplicate requests)
       if (post.thumbnailUrl || (post.bucket && post.path)) {
         const thumbnailUrl = post.thumbnailUrl || 
           (post.bucket && post.path ? `/api/img?bucket=${post.bucket}&path=${post.path}/thumb.jpg&generatePoster=true` : null);
@@ -195,24 +195,9 @@ class FeedPreloadManager {
         }
       }
 
-      // Step 2: Load first 6 seconds of video (blocking)
-      if (post.videoUrl) {
-        try {
-          const response = await fetch(post.videoUrl, {
-            headers: { 'Range': 'bytes=0-1048576' } // First ~1MB for 6s at typical bitrates
-          });
-          if (response.ok) {
-            asset.videoBuffer = await response.arrayBuffer();
-            console.log('[FeedPreloadManager] Video segment loaded', { id: post.id, size: asset.videoBuffer.byteLength });
-          }
-        } catch (e) {
-          console.warn('[FeedPreloadManager] Video segment load failed', { id: post.id, error: e });
-        }
-      }
-
-      // Cache the asset
+      // Cache the asset (without video buffer to avoid duplicate requests)
       this.assetCache.set(post.id, asset);
-      console.log('[FeedPreloadManager] Video preload complete', { id: post.id });
+      console.log('[FeedPreloadManager] Thumbnail preload complete (video handled by FeedMediaManager)', { id: post.id });
 
     } catch (error) {
       console.error('[FeedPreloadManager] Video preload error', { id: post.id, error });

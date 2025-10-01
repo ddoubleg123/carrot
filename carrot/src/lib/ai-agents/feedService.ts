@@ -72,14 +72,81 @@ export class FeedService {
 
     // Ensure the Agent exists to satisfy FK constraint for AgentMemory
     try {
-      const existing = await prisma.agent.findUnique({ where: { id: agentId } });
+      let existing = await prisma.agent.findUnique({ where: { id: agentId } });
       if (!existing) {
-        const msg = `[FeedService] Agent ${agentId} not found. Refusing to auto-create placeholder to avoid duplicates. Create the agent first.`
-        console.error(msg);
-        throw new Error(msg);
+        console.log(`[FeedService] Agent ${agentId} not found in database. Attempting to create from featured agents...`);
+        
+        // Try to find the agent in featured agents and create it
+        try {
+          const { FEATURED_AGENTS } = await import('@/lib/agents');
+          const featuredAgent = FEATURED_AGENTS.find(agent => agent.id === agentId);
+          
+          if (featuredAgent) {
+            console.log(`[FeedService] Creating agent ${agentId} from featured agents...`);
+            existing = await prisma.agent.create({
+              data: {
+                id: featuredAgent.id,
+                name: featuredAgent.name,
+                persona: `I am ${featuredAgent.name}. ${featuredAgent.personality?.approach || 'I provide expert knowledge in my field.'}`,
+                domainExpertise: featuredAgent.domains || [],
+                associatedPatches: [],
+                vectorDbRef: null,
+                knowledgeProfile: {
+                  expertise: featuredAgent.personality?.expertise || 'General knowledge',
+                  strengths: featuredAgent.strengths || [],
+                  limitations: featuredAgent.limits || []
+                },
+                feedSubscriptions: [],
+                metadata: {
+                  source: 'featured_agent',
+                  avatar: featuredAgent.avatar,
+                  personality: featuredAgent.personality
+                }
+              }
+            });
+            console.log(`[FeedService] Successfully created agent ${agentId}: ${existing.name}`);
+          } else {
+            // Try enhanced agents as fallback
+            const { ENHANCED_AGENTS } = await import('@/lib/agentMatching');
+            const enhancedAgent = ENHANCED_AGENTS.find(agent => agent.id === agentId);
+            
+            if (enhancedAgent) {
+              console.log(`[FeedService] Creating agent ${agentId} from enhanced agents...`);
+              existing = await prisma.agent.create({
+                data: {
+                  id: enhancedAgent.id,
+                  name: enhancedAgent.name,
+                  persona: `I am ${enhancedAgent.name}, specialized in ${enhancedAgent.role}. I provide expert knowledge in ${enhancedAgent.expertise.join(', ')}.`,
+                  domainExpertise: enhancedAgent.expertise || [],
+                  associatedPatches: [],
+                  vectorDbRef: null,
+                  knowledgeProfile: {
+                    expertise: enhancedAgent.role || 'General knowledge',
+                    strengths: enhancedAgent.expandedKeywords?.slice(0, 5) || [],
+                    limitations: []
+                  },
+                  feedSubscriptions: [],
+                  metadata: {
+                    source: 'enhanced_agent',
+                    avatar: enhancedAgent.avatar,
+                    role: enhancedAgent.role
+                  }
+                }
+              });
+              console.log(`[FeedService] Successfully created agent ${agentId}: ${existing.name}`);
+            } else {
+              const msg = `[FeedService] Agent ${agentId} not found in featured or enhanced agents. Cannot create memory without agent record.`
+              console.error(msg);
+              throw new Error(msg);
+            }
+          }
+        } catch (createError) {
+          console.error('[FeedService] Error creating agent:', createError);
+          throw new Error(`Failed to create agent ${agentId}: ${createError}`);
+        }
       }
     } catch (e) {
-      console.error('[FeedService] Agent existence check failed:', e);
+      console.error('[FeedService] Agent existence check/creation failed:', e);
       throw e;
     }
 

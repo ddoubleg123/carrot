@@ -293,14 +293,14 @@ export default function FeedAgentsPage() {
       const data = await response.json();
       const dbAgents: Agent[] = ((data.agents || []) as Agent[]).filter((a:any)=> a.isActive !== false);
       const byNameDB = new Map<string, Agent>();
-      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const norm = (s: string) => s.toLowerCase().replace(/[\s-]+/g, ' ').trim();
       for (const a of dbAgents) byNameDB.set(norm(a.name), a);
 
       // Build the canonical 20 strictly from FEATURED_AGENTS ids, hydrating from DB by name only
       const allAgents: Agent[] = FEATURED_AGENTS.map(f => {
         const hydrated = byNameDB.get(norm(f.name));
         const base: Agent = {
-          id: f.id, // keep canonical ID
+          id: hydrated?.id || f.id, // use database ID if exists, otherwise use canonical ID
           name: f.name,
           persona: f.personality.approach,
           domainExpertise: f.domains,
@@ -316,7 +316,8 @@ export default function FeedAgentsPage() {
           createdAt: new Date().toISOString()
         } as Agent;
         if (hydrated) {
-          // merge non-id fields from DB but preserve canonical id
+          // merge non-id fields from DB and use database ID
+          base.id = hydrated.id; // Use the actual database ID
           base.domainExpertise = Array.from(new Set([...(base.domainExpertise||[]), ...(hydrated.domainExpertise||[])]));
           base.metadata = {
             ...(base.metadata||{}),
