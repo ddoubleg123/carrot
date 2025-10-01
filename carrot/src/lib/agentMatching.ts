@@ -141,7 +141,7 @@ export const ENHANCED_AGENTS = [
     id: 'turing',
     name: 'Alan Turing',
     role: 'Computing',
-    avatar: '/agents/Alan Turing.png',
+    avatar: '/agents/Alan Turing.jpg',
     expertise: ['Computer Science', 'Cryptography', 'AI Theory'],
     expandedKeywords: [
       'computer science', 'cryptography', 'ai theory', 'computing', 'algorithms',

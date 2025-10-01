@@ -820,7 +820,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   return (
     <VideoProvider>
       <div className="dashboard-feed-root">
-        {/* Fixed Composer and Tabs Container */}
+        {/* Fixed Composer Container */}
         <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-100">
           <div className="px-4" style={{ paddingTop: '32px', paddingBottom: '16px' }}>
             {isModalComposer ? (
@@ -828,10 +828,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             ) : (
               <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
             )}
-            
-            {/* Feed Tabs - positioned right under the composer */}
-            <FeedTabsContainer />
           </div>
+        </div>
+        
+        {/* Scrollable Feed Tabs */}
+        <div className="px-4">
+          <FeedTabsContainer />
         </div>
         
         {/* Scrollable Feed Content */}

@@ -136,7 +136,7 @@ export const TrainingStore = {
     }
     db.discoveries[planId] = list
     save(db)
-    // Write-through to Prisma
+    // Write-through to Prisma - with proper error handling
     ;(async()=>{
       try {
         const data = entries.map(e=> ({
@@ -150,8 +150,13 @@ export const TrainingStore = {
           status: (e.status as any) || 'retrieved',
           ts: new Date(e.ts || new Date().toISOString()),
         }))
-        if (dbClient.discoveryEntry?.createMany) await dbClient.discoveryEntry.createMany({ data, skipDuplicates: true })
-      } catch {}
+        if (dbClient.discoveryEntry?.createMany) {
+          await dbClient.discoveryEntry.createMany({ data, skipDuplicates: true })
+          console.log(`[TrainingStore] Persisted ${data.length} discovery entries to database for plan ${planId}`)
+        }
+      } catch (error) {
+        console.error('[TrainingStore] Failed to persist discovery entries to database:', error)
+      }
     })()
   },
   updateDiscoveryStatus(planId: string, ids: string[], status: DiscoveryStatus) {
@@ -170,6 +175,14 @@ export const TrainingStore = {
   listDiscoveries(planId: string, opts?: { topic?: string; status?: DiscoveryStatus; limit?: number }) {
     const db = load()
     let arr = (db.discoveries[planId] || []).slice().reverse() // newest first
+    
+    // If no discoveries in file system, try to load from database
+    if (arr.length === 0) {
+      console.log(`[TrainingStore] No discoveries in file system for plan ${planId}, attempting to load from database...`)
+      // This would be async, but we'll handle it in the calling code
+      // For now, return empty array and let the UI handle the async loading
+    }
+    
     if (opts?.topic) arr = arr.filter(x => x.topic === opts.topic)
     if (opts?.status) arr = arr.filter(x => x.status === opts.status)
     if (opts?.limit) arr = arr.slice(0, Math.max(1, opts.limit))

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -9,7 +9,7 @@ interface BatchAuditRequest {
   limit?: number;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { patchId, limit = 5 }: BatchAuditRequest = await req.json();
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     const auditResults = [];
     for (const content of pendingContent) {
       try {
-        const auditResponse = await fetch(`${req.nextUrl.origin}/api/ai/audit-content`, {
+        const auditResponse = await fetch(`${new URL(req.url).origin}/api/ai/audit-content`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

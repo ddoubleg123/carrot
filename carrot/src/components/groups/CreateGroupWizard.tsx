@@ -661,10 +661,19 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  // Track wizard open
+  // Track wizard open and reset form when closed
   useEffect(() => {
     if (isOpen) {
       telemetry.trackGroupCreateOpen();
+    } else {
+      // Reset form data when modal is closed
+      setFormData({
+        name: '',
+        description: '',
+        tags: [],
+        categories: []
+      });
+      setCurrentStep(0);
     }
   }, [isOpen]);
 

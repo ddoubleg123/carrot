@@ -94,7 +94,26 @@ function ensureStorage(): any | null {
   try {
     if (storageClient) return storageClient;
 
-    // Prefer explicit inline JSON if provided
+    // Use individual Firebase environment variables
+    const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+    const firebaseProjectId = process.env.FIREBASE_PROJECT_ID;
+    
+    if (firebaseClientEmail && firebasePrivateKey && firebaseProjectId) {
+      const opts: StorageOptions = {
+        projectId: firebaseProjectId,
+        credentials: {
+          client_email: firebaseClientEmail,
+          private_key: firebasePrivateKey,
+        },
+      } as any;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      GCS = GCS || require('@google-cloud/storage');
+      storageClient = new GCS.Storage(opts);
+      return storageClient;
+    }
+
+    // Fallback to GCS_SA_JSON if individual Firebase vars not available
     const jsonEnv = process.env.GCS_SA_JSON;
     if (jsonEnv) {
       let creds;
@@ -124,13 +143,17 @@ function ensureStorage(): any | null {
 
 async function getFreshSignedUrl(bucket: string, path: string, ttlSec = SIGN_TTL_SECONDS): Promise<string | null> {
   const client = ensureStorage();
-  if (!client) return null;
+  if (!client) {
+    console.warn('[Image Proxy] No Firebase Storage client available - credentials missing');
+    return null;
+  }
   try {
     const b = client.bucket(bucket);
     const f = b.file(path);
     const [url] = await f.getSignedUrl({ action: 'read', expires: Date.now() + ttlSec * 1000 });
     return url;
-  } catch {
+  } catch (error) {
+    console.warn('[Image Proxy] Failed to generate signed URL:', error);
     return null;
   }
 }
@@ -313,16 +336,27 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     if (publicUrl) {
       try { const test = await fetch(publicUrl, { method: 'HEAD' }); if (test.ok) target = new URL(publicUrl); } catch {}
     }
-    // Prefer env bucket if available
+    // Prefer env bucket if available and credentials are present
     if (!target && ENV_BUCKET) {
-      // Try a fresh signed URL first
-      const signed = await getFreshSignedUrl(ENV_BUCKET, safe).catch(() => null);
-      if (signed) {
-        try { target = new URL(signed); } catch {}
-      }
-      if (!target) {
-        const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ENV_BUCKET)}/o/${encodeURIComponent(safe)}?alt=media`
-        try { target = new URL(constructed) } catch {}
+      // Check if we have Firebase Storage credentials before trying to access
+      const hasCredentials = !!(
+        (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_PROJECT_ID) ||
+        process.env.GCS_SA_JSON || 
+        process.env.GOOGLE_APPLICATION_CREDENTIALS
+      );
+      
+      if (hasCredentials) {
+        // Try a fresh signed URL first
+        const signed = await getFreshSignedUrl(ENV_BUCKET, safe).catch(() => null);
+        if (signed) {
+          try { target = new URL(signed); } catch {}
+        }
+        if (!target) {
+          const constructed = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ENV_BUCKET)}/o/${encodeURIComponent(safe)}?alt=media`
+          try { target = new URL(constructed) } catch {}
+        }
+      } else {
+        console.warn('[Image Proxy] Firebase Storage credentials missing - skipping Firebase Storage access');
       }
     }
     // Last resort, construct from PUBLIC_BASE template (if BUCKET placeholder present, drop it)
@@ -331,7 +365,18 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       const base = baseRaw.replace('${BUCKET}', ENV_BUCKET || '')
       const constructed = base + encodeURIComponent(safe) + (base.includes('?') ? '&' : '?') + 'alt=media'
       try { target = new URL(constructed) } catch {
-        return new NextResponse('Bad path', { status: 400 })
+        // If we still can't construct a URL, return a placeholder image
+        console.warn('[Image Proxy] Unable to construct image URL - returning placeholder');
+        const placeholderSvg = svgPlaceholder('image-not-found');
+        return new NextResponse(placeholderSvg, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/svg+xml; charset=utf-8',
+            'Cache-Control': 'public, max-age=300',
+            'Access-Control-Allow-Origin': '*',
+            'X-Proxy': 'img-construction-fallback'
+          },
+        });
       }
     }
   } else {
@@ -381,6 +426,24 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
 
   if (!upstream.ok) {
     const errorBody = await upstream.text();
+    
+    // Handle Firebase Storage authentication errors (403 Forbidden)
+    if (upstream.status === 403 && (target?.hostname === 'firebasestorage.googleapis.com' || target?.hostname?.endsWith('.firebasestorage.app'))) {
+      console.warn('[Image Proxy] Firebase Storage 403 error - credentials may be missing or expired');
+      
+      // Return a placeholder image instead of 403 error
+      const placeholderSvg = svgPlaceholder('firebase-auth-error');
+      return new NextResponse(placeholderSvg, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=300', // Cache for 5 minutes
+          'Access-Control-Allow-Origin': '*',
+          'X-Proxy': 'img-firebase-auth-fallback'
+        },
+      });
+    }
+    
     // If token-related or 4xx, last-resort redirect to avoid broken posters
     const looksSigned = errorBody.includes('ExpiredToken') || errorBody.includes('X-Goog-') || (target?.toString().includes('Expires=') || target?.toString().includes('token='));
     if (looksSigned) {

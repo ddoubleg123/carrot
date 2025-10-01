@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient';
 import prisma from '@/lib/prisma';
 
@@ -13,7 +13,7 @@ interface AuditRequest {
   patchCategories: string[];
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { contentId, patchName, patchDescription, patchTags, patchCategories }: AuditRequest = await req.json();
 

@@ -10,6 +10,8 @@ interface SimpleVideoProps {
   autoPlay?: boolean;
   muted?: boolean;
   playsInline?: boolean;
+  postId?: string; // Add postId for FeedMediaManager integration
+  onVideoRef?: (el: HTMLVideoElement | null) => void; // Add callback for video ref
 }
 
 export default function SimpleVideo({
@@ -20,6 +22,8 @@ export default function SimpleVideo({
   autoPlay = false,
   muted = true,
   playsInline = true,
+  postId,
+  onVideoRef,
 }: SimpleVideoProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -27,6 +31,121 @@ export default function SimpleVideo({
   const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // FeedMediaManager integration for single-video playback
+  useEffect(() => {
+    if (!postId || !containerRef.current) return;
+
+    const registerWithFeedMediaManager = async () => {
+      try {
+        const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
+        const manager = FeedMediaManager.inst;
+        
+        if (manager && containerRef.current) {
+          const handle = {
+            id: postId,
+            el: containerRef.current,
+            play: async () => {
+              try {
+                await videoRef.current?.play();
+              } catch (e) {
+                console.warn('[SimpleVideo] Play failed:', e);
+              }
+            },
+            pause: () => {
+              try {
+                videoRef.current?.pause();
+              } catch (e) {
+                console.warn('[SimpleVideo] Pause failed:', e);
+              }
+            },
+            setPaused: () => {
+              try {
+                videoRef.current?.pause();
+              } catch (e) {
+                console.warn('[SimpleVideo] SetPaused failed:', e);
+              }
+            },
+            release: () => {
+              try {
+                videoRef.current?.pause();
+                if (videoRef.current) {
+                  videoRef.current.removeAttribute('src');
+                  videoRef.current.load();
+                }
+              } catch (e) {
+                console.warn('[SimpleVideo] Release failed:', e);
+              }
+            }
+          };
+
+          manager.registerHandle(containerRef.current, handle);
+          
+          // Cleanup on unmount
+          return () => {
+            if (containerRef.current) {
+              manager.unregisterHandle(containerRef.current);
+            }
+          };
+        }
+      } catch (e) {
+        console.warn('[SimpleVideo] FeedMediaManager integration failed:', e);
+      }
+    };
+
+    registerWithFeedMediaManager();
+  }, [postId]);
+
+  // Call onVideoRef when video element is ready
+  useEffect(() => {
+    if (videoRef.current && onVideoRef) {
+      onVideoRef(videoRef.current);
+    }
+  }, [onVideoRef]);
+
+  // Handle video play events to set as active in FeedMediaManager
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !postId) return;
+
+    const handlePlay = async () => {
+      try {
+        const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
+        const handle = FeedMediaManager.inst.getHandleByElement(containerRef.current!);
+        if (handle) {
+          FeedMediaManager.inst.setActive(handle);
+          console.log('[SimpleVideo] Set as active video', { postId });
+        }
+      } catch (e) {
+        console.warn('[SimpleVideo] Failed to set as active', e);
+      }
+    };
+
+    video.addEventListener('play', handlePlay);
+
+    // Add intersection observer to handle visibility and pause when not visible
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const visible = entry.intersectionRatio >= 0.5;
+      if (!visible) {
+        try { 
+          video.pause(); 
+          console.log('[SimpleVideo] Paused video due to low visibility', { postId, intersectionRatio: entry.intersectionRatio });
+        } catch {}
+      }
+    }, { threshold: [0, 0.5, 1] });
+    
+    if (containerRef.current) {
+      io.observe(containerRef.current);
+    }
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      io.disconnect();
+    };
+  }, [postId]);
 
   useEffect(() => {
     if (!src) {
@@ -254,7 +373,7 @@ export default function SimpleVideo({
   }
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       {isLoading && (
         <div className="absolute inset-0 bg-gray-50 flex items-center justify-center z-10">
           <div className="text-center">

@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { groupName, description } = await req.json();
 

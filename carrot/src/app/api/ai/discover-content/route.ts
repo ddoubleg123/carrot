@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient';
 import prisma from '@/lib/prisma';
 
@@ -22,7 +22,7 @@ interface DiscoveredContent {
   tags: string[];
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { patchId, patchName, description, tags, categories }: DiscoveryRequest = await req.json();
 
@@ -171,7 +171,7 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
     // Trigger automatic audit for discovered content (in background)
     if (storedContent.length > 0) {
       // Don't await this - let it run in background
-      fetch(`${req.nextUrl.origin}/api/ai/batch-audit`, {
+      fetch(`${new URL(req.url).origin}/api/ai/batch-audit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

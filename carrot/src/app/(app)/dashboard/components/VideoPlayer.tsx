@@ -41,6 +41,8 @@ export default function VideoPlayer({
           autoPlay={true}
           muted={true}
           playsInline={true}
+          postId={postId}
+          onVideoRef={onVideoRef}
           className="w-full rounded-xl"
         />
       </div>

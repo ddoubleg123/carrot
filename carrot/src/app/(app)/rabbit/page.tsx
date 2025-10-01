@@ -542,6 +542,8 @@ export default function RabbitPage() {
   const [agents, setAgents] = useState(AGENTS);
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
+  // New: simple tabs under chat box
+  const [selectedTab, setSelectedTab] = useState<'agents' | 'tab2' | 'tab3'>('agents');
 
   // Enhanced auto-join agents using smart matching
   const autoJoinAgents = (query: string) => {
@@ -904,30 +906,63 @@ export default function RabbitPage() {
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 mb-12">What do you want your AI agents to do?</h1>
           
-            {/* Chat Starter */}
-            <ChatStarter onStartConversation={handleStartConversation} />
+            {/* Chat Starter (80% width) */}
+            <div className="w-4/5 mx-auto">
+              <ChatStarter onStartConversation={handleStartConversation} />
+            </div>
+
+            {/* Tabs under chat box */}
+            <div className="w-4/5 mx-auto mt-6">
+              <div className="flex items-center gap-2 border-b border-gray-200">
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${selectedTab==='agents' ? 'border-orange-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  onClick={()=> setSelectedTab('agents')}
+                >
+                  AI agents
+                </button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${selectedTab==='tab2' ? 'border-orange-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  onClick={()=> setSelectedTab('tab2')}
+                >
+                  Tab 2
+                </button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${selectedTab==='tab3' ? 'border-orange-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  onClick={()=> setSelectedTab('tab3')}
+                >
+                  Tab 3
+                </button>
+              </div>
+            </div>
         </div>
       </div>
 
-      {/* Quick Actions Section */}
-      <Suspense fallback={<div className="h-32 bg-gray-100 animate-pulse rounded-lg mx-6"></div>}>
-        <QuickActions onActionClick={handleStartConversation} />
-      </Suspense>
-      
-      {/* Agent Grid - Avatar Focused */}
-      <div className="px-6 pb-16">
+      {/* Tab Content */}
+      {selectedTab === 'agents' && (
+        <div className="px-6 pb-16">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
               {agents.map((agent) => (
-              <AgentCard 
-                key={agent.id} 
-                agent={agent} 
-                onClick={() => handleAgentClick(agent)}
-              />
-            ))}
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  onClick={() => handleAgentClick(agent)}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+      {selectedTab === 'tab2' && (
+        <div className="px-6 pb-16">
+          <div className="max-w-7xl mx-auto text-gray-600 text-sm">Coming soon.</div>
+        </div>
+      )}
+      {selectedTab === 'tab3' && (
+        <div className="px-6 pb-16">
+          <div className="max-w-7xl mx-auto text-gray-600 text-sm">Coming soon.</div>
+        </div>
+      )}
       </div>
     );
   }

@@ -158,7 +158,14 @@ If unsure, set ok=false.`
             sourceAuthor: item.sourceAuthor,
             tags: [topic]
           }
-          try { await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); fedCount++ } catch {}
+          try { 
+            await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); 
+            fedCount++;
+            console.log(`[AgentSpecificRetriever] Successfully fed content to agent ${agentId}: ${item.title}`);
+          } catch (error) {
+            console.error(`[AgentSpecificRetriever] Failed to feed content to agent ${agentId}:`, error);
+            // Don't increment fedCount on error
+          }
         }
       }
 
@@ -259,10 +266,11 @@ If unsure, set ok=false.`
           
           try {
             await FeedService.feedAgent(request.agentId, feedItem, 'agent-specific-retrieval');
-            console.log(`[AgentSpecificRetriever] Fed NEW content to ${request.agentId}: ${content.title}`);
+            console.log(`[AgentSpecificRetriever] Successfully fed NEW content to ${request.agentId}: ${content.title}`);
             fedCount++;
           } catch (error) {
-            console.error(`[AgentSpecificRetriever] Error feeding content:`, error);
+            console.error(`[AgentSpecificRetriever] Failed to feed content to ${request.agentId}:`, error);
+            // Don't increment fedCount on error
           }
         }
         

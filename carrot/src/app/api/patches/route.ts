@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request, context: { params: Promise<{}> }) {
   try {
     // Check authentication
     const session: any = await auth();
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request, context: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';

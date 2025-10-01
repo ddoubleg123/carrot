@@ -458,10 +458,26 @@ class MediaPreloadQueue {
         }
 
         case TaskType.VIDEO_PREROLL_6S: {
+          // First, get the video metadata to calculate 6 seconds worth of data
+          const headResponse = await fetch(url, {
+            method: 'HEAD',
+            signal: abortController.signal,
+            headers: { 'Accept': 'video/*' }
+          });
+          
+          if (!headResponse.ok) throw new Error(`HEAD HTTP ${headResponse.status}`);
+          
+          const contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
+          const contentType = headResponse.headers.get('content-type') || '';
+          
+          // For 6-second pre-roll, request a smaller chunk (512KB max)
+          // This should be enough for most videos to get 6 seconds of content
+          const prerollSize = Math.min(512 * 1024, contentLength || 512 * 1024);
+          
           const videoResponse = await fetch(url, {
             signal: abortController.signal,
             headers: { 
-              'Range': 'bytes=0-1572864', // 1.5MB to match estimated size
+              'Range': `bytes=0-${prerollSize - 1}`,
               'Accept': 'video/*'
             }
           });
