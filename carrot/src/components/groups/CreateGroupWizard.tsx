@@ -1,0 +1,915 @@
+'use client';
+
+import React, { useState, useCallback } from 'react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+
+// Design tokens from Carrot standards
+const TOKENS = {
+  colors: {
+    actionOrange: '#FF6A00',
+    civicBlue: '#0A5AFF',
+    ink: '#0B0B0F',
+    slate: '#60646C',
+    line: '#E6E8EC',
+    surface: '#FFFFFF',
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#EF4444',
+  },
+  spacing: {
+    xs: '4px',
+    sm: '8px',
+    md: '12px',
+    lg: '16px',
+    xl: '24px',
+    xxl: '32px',
+  },
+  radii: {
+    sm: '6px',
+    md: '8px',
+    lg: '12px',
+    xl: '16px',
+    xxl: '20px',
+  },
+  motion: {
+    fast: '120ms',
+    normal: '160ms',
+    slow: '180ms',
+  },
+  typography: {
+    h2: '28px',
+    body: '16px',
+    caption: '12px',
+  }
+};
+
+interface WizardStep {
+  id: string;
+  title: string;
+  label: string;
+  component: React.ComponentType<WizardStepProps>;
+}
+
+interface WizardStepProps {
+  data: GroupFormData;
+  onUpdate: (data: Partial<GroupFormData>) => void;
+  onNext: () => void;
+  onBack: () => void;
+  isLoading?: boolean;
+}
+
+interface GroupFormData {
+  name: string;
+  description: string;
+  tags: string[];
+  categories: string[];
+}
+
+interface CreateGroupWizardProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (groupId: string) => void;
+}
+
+// Step 1: Details Component
+const Step1Details: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, isLoading }) => {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateStep = useCallback(() => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!data.name.trim()) {
+      newErrors.name = 'Group name is required';
+    } else if (data.name.length < 3) {
+      newErrors.name = 'Group name must be at least 3 characters';
+    } else if (data.name.length > 60) {
+      newErrors.name = 'Group name must be less than 60 characters';
+    }
+
+    if (data.description.length > 240) {
+      newErrors.description = 'Description must be less than 240 characters';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [data]);
+
+  const handleNext = () => {
+    if (validateStep()) {
+      onNext();
+    }
+  };
+
+  const showCharCount = data.description.length >= 200;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.lg }}>
+      <div>
+        <label 
+          htmlFor="group-name"
+          style={{ 
+            display: 'block', 
+            fontSize: TOKENS.typography.body, 
+            fontWeight: 500, 
+            color: TOKENS.colors.ink,
+            marginBottom: TOKENS.spacing.sm 
+          }}
+        >
+          Group Name *
+        </label>
+        <input
+          id="group-name"
+          type="text"
+          value={data.name}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Enter group name"
+          maxLength={60}
+          style={{
+            width: '100%',
+            padding: TOKENS.spacing.md,
+            border: `1px solid ${errors.name ? TOKENS.colors.danger : TOKENS.colors.line}`,
+            borderRadius: TOKENS.radii.md,
+            fontSize: TOKENS.typography.body,
+            outline: 'none',
+            transition: `border-color ${TOKENS.motion.normal} ease-in-out`,
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = TOKENS.colors.civicBlue;
+            e.target.style.boxShadow = `0 0 0 2px ${TOKENS.colors.civicBlue}20`;
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = errors.name ? TOKENS.colors.danger : TOKENS.colors.line;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
+        {errors.name && (
+          <div style={{ 
+            color: TOKENS.colors.danger, 
+            fontSize: TOKENS.typography.caption, 
+            marginTop: TOKENS.spacing.xs 
+          }}>
+            {errors.name}
+          </div>
+        )}
+        <div style={{ 
+          color: TOKENS.colors.slate, 
+          fontSize: TOKENS.typography.caption, 
+          marginTop: TOKENS.spacing.xs 
+        }}>
+          Keep it short and scannable.
+        </div>
+      </div>
+
+      <div>
+        <label 
+          htmlFor="group-description"
+          style={{ 
+            display: 'block', 
+            fontSize: TOKENS.typography.body, 
+            fontWeight: 500, 
+            color: TOKENS.colors.ink,
+            marginBottom: TOKENS.spacing.sm 
+          }}
+        >
+          Description
+        </label>
+        <textarea
+          id="group-description"
+          value={data.description}
+          onChange={(e) => onUpdate({ description: e.target.value })}
+          placeholder="Describe what this group is about..."
+          maxLength={240}
+          rows={4}
+          style={{
+            width: '100%',
+            padding: TOKENS.spacing.md,
+            border: `1px solid ${errors.description ? TOKENS.colors.danger : TOKENS.colors.line}`,
+            borderRadius: TOKENS.radii.md,
+            fontSize: TOKENS.typography.body,
+            outline: 'none',
+            resize: 'vertical',
+            minHeight: '100px',
+            transition: `border-color ${TOKENS.motion.normal} ease-in-out`,
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = TOKENS.colors.civicBlue;
+            e.target.style.boxShadow = `0 0 0 2px ${TOKENS.colors.civicBlue}20`;
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = errors.description ? TOKENS.colors.danger : TOKENS.colors.line;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
+        {errors.description && (
+          <div style={{ 
+            color: TOKENS.colors.danger, 
+            fontSize: TOKENS.typography.caption, 
+            marginTop: TOKENS.spacing.xs 
+          }}>
+            {errors.description}
+          </div>
+        )}
+        <div style={{ 
+          color: TOKENS.colors.slate, 
+          fontSize: TOKENS.typography.caption, 
+          marginTop: TOKENS.spacing.xs 
+        }}>
+          Ex: Tips and creative drills for youth cheer coaches.
+        </div>
+        {showCharCount && (
+          <div style={{ 
+            color: TOKENS.colors.slate, 
+            fontSize: TOKENS.typography.caption, 
+            marginTop: TOKENS.spacing.xs,
+            textAlign: 'right'
+          }}>
+            {data.description.length}/240
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Step 2: Topics Component
+const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Curated tags for youth sports/cheer context
+  const availableTags = [
+    'youth sports', 'cheerleading', 'coaching', 'routines', 'choreography', 
+    'drills', 'safety', 'team building', 'game day', 'fundraising', 
+    'practice plans', 'stunts', 'tumbling', 'spirit', 'competition',
+    'leadership', 'fitness', 'technique', 'performance', 'community'
+  ];
+
+  const availableCategories = [
+    'Coaching Tips',
+    'Safety & Training', 
+    'Routine Development',
+    'Team Management',
+    'Competition Prep',
+    'Parent Resources',
+    'Fundraising Ideas',
+    'Equipment & Gear'
+  ];
+
+  const filteredTags = availableTags.filter(tag => 
+    tag.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const toggleTag = (tag: string) => {
+    const newTags = data.tags.includes(tag)
+      ? data.tags.filter(t => t !== tag)
+      : [...data.tags, tag];
+    onUpdate({ tags: newTags });
+  };
+
+  const toggleCategory = (category: string) => {
+    const newCategories = data.categories.includes(category)
+      ? data.categories.filter(c => c !== category)
+      : [...data.categories, category];
+    onUpdate({ categories: newCategories });
+  };
+
+  const handleNext = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    
+    // Optimistic navigation - move to next step immediately
+    onNext();
+    
+    // Background save (simulated)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setIsSaving(false);
+    } catch (error) {
+      setSaveError('We couldn\'t save your topics. Retry.');
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.lg }}>
+      {saveError && (
+        <div style={{
+          padding: TOKENS.spacing.md,
+          background: '#FEF2F2',
+          border: `1px solid ${TOKENS.colors.danger}`,
+          borderRadius: TOKENS.radii.md,
+          color: TOKENS.colors.danger,
+          fontSize: TOKENS.typography.body
+        }}>
+          {saveError}
+          <button 
+            onClick={() => setSaveError(null)}
+            style={{
+              marginLeft: TOKENS.spacing.md,
+              color: TOKENS.colors.danger,
+              textDecoration: 'underline',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div>
+        <label 
+          htmlFor="tag-search"
+          style={{ 
+            display: 'block', 
+            fontSize: TOKENS.typography.body, 
+            fontWeight: 500, 
+            color: TOKENS.colors.ink,
+            marginBottom: TOKENS.spacing.sm 
+          }}
+        >
+          Tags — select all that apply
+        </label>
+        <input
+          id="tag-search"
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search tags…"
+          style={{
+            width: '100%',
+            padding: TOKENS.spacing.md,
+            border: `1px solid ${TOKENS.colors.line}`,
+            borderRadius: TOKENS.radii.md,
+            fontSize: TOKENS.typography.body,
+            outline: 'none',
+            marginBottom: TOKENS.spacing.md,
+            transition: `border-color ${TOKENS.motion.normal} ease-in-out`,
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = TOKENS.colors.civicBlue;
+            e.target.style.boxShadow = `0 0 0 2px ${TOKENS.colors.civicBlue}20`;
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = TOKENS.colors.line;
+            e.target.style.boxShadow = 'none';
+          }}
+        />
+        
+        <div style={{ 
+          display: 'flex', 
+          flexWrap: 'wrap', 
+          gap: TOKENS.spacing.sm,
+          minHeight: '44px',
+          alignItems: 'flex-start'
+        }}>
+          {filteredTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => toggleTag(tag)}
+              style={{
+                padding: `${TOKENS.spacing.sm} ${TOKENS.spacing.md}`,
+                border: `1px solid ${data.tags.includes(tag) ? TOKENS.colors.civicBlue : TOKENS.colors.line}`,
+                borderRadius: TOKENS.radii.lg,
+                background: data.tags.includes(tag) ? TOKENS.colors.civicBlue : TOKENS.colors.surface,
+                color: data.tags.includes(tag) ? TOKENS.colors.surface : TOKENS.colors.ink,
+                fontSize: TOKENS.typography.body,
+                cursor: 'pointer',
+                transition: `all ${TOKENS.motion.fast} ease-in-out`,
+                minHeight: '44px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              onMouseEnter={(e) => {
+                if (!data.tags.includes(tag)) {
+                  e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!data.tags.includes(tag)) {
+                  e.currentTarget.style.borderColor = TOKENS.colors.line;
+                }
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label style={{ 
+          display: 'block', 
+          fontSize: TOKENS.typography.body, 
+          fontWeight: 500, 
+          color: TOKENS.colors.ink,
+          marginBottom: TOKENS.spacing.md 
+        }}>
+          Categories — select all that apply
+        </label>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.sm }}>
+          {availableCategories.map(category => (
+            <label
+              key={category}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: TOKENS.spacing.md,
+                padding: TOKENS.spacing.md,
+                border: `1px solid ${TOKENS.colors.line}`,
+                borderRadius: TOKENS.radii.md,
+                cursor: 'pointer',
+                transition: `border-color ${TOKENS.motion.normal} ease-in-out`,
+                minHeight: '44px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = TOKENS.colors.line;
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={data.categories.includes(category)}
+                onChange={() => toggleCategory(category)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  accentColor: TOKENS.colors.civicBlue
+                }}
+              />
+              <span style={{ fontSize: TOKENS.typography.body, color: TOKENS.colors.ink }}>
+                {category}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Step 3: Review Component
+const Step3Review: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading }) => {
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreate = async () => {
+    setIsCreating(true);
+    
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Generate a mock group ID
+      const groupId = `group-${Date.now()}`;
+      
+      // Call success callback
+      onNext(); // This will be handled by the parent to close modal and navigate
+    } catch (error) {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.lg }}>
+      {/* Name Card */}
+      <div style={{
+        padding: TOKENS.spacing.lg,
+        border: `1px solid ${TOKENS.colors.line}`,
+        borderRadius: TOKENS.radii.lg,
+        background: TOKENS.colors.surface
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: TOKENS.spacing.sm }}>
+          <h3 style={{ fontSize: TOKENS.typography.body, fontWeight: 600, color: TOKENS.colors.ink, margin: 0 }}>
+            Group Name
+          </h3>
+          <button
+            onClick={() => {/* Navigate back to step 1 */}}
+            style={{
+              color: TOKENS.colors.civicBlue,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: TOKENS.typography.caption,
+              textDecoration: 'underline'
+            }}
+          >
+            Edit
+          </button>
+        </div>
+        <p style={{ fontSize: TOKENS.typography.body, color: TOKENS.colors.ink, margin: 0 }}>
+          {data.name}
+        </p>
+      </div>
+
+      {/* Description Card */}
+      <div style={{
+        padding: TOKENS.spacing.lg,
+        border: `1px solid ${TOKENS.colors.line}`,
+        borderRadius: TOKENS.radii.lg,
+        background: TOKENS.colors.surface
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: TOKENS.spacing.sm }}>
+          <h3 style={{ fontSize: TOKENS.typography.body, fontWeight: 600, color: TOKENS.colors.ink, margin: 0 }}>
+            Description
+          </h3>
+          <button
+            onClick={() => {/* Navigate back to step 1 */}}
+            style={{
+              color: TOKENS.colors.civicBlue,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: TOKENS.typography.caption,
+              textDecoration: 'underline'
+            }}
+          >
+            Edit
+          </button>
+        </div>
+        <p style={{ fontSize: TOKENS.typography.body, color: TOKENS.colors.ink, margin: 0 }}>
+          {data.description || 'No description provided'}
+        </p>
+      </div>
+
+      {/* Tags Card */}
+      <div style={{
+        padding: TOKENS.spacing.lg,
+        border: `1px solid ${TOKENS.colors.line}`,
+        borderRadius: TOKENS.radii.lg,
+        background: TOKENS.colors.surface
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: TOKENS.spacing.sm }}>
+          <h3 style={{ fontSize: TOKENS.typography.body, fontWeight: 600, color: TOKENS.colors.ink, margin: 0 }}>
+            Tags
+          </h3>
+          <button
+            onClick={() => {/* Navigate back to step 2 */}}
+            style={{
+              color: TOKENS.colors.civicBlue,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: TOKENS.typography.caption,
+              textDecoration: 'underline'
+            }}
+          >
+            Edit
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: TOKENS.spacing.sm }}>
+          {data.tags.length > 0 ? (
+            data.tags.map(tag => (
+              <span
+                key={tag}
+                style={{
+                  padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
+                  background: TOKENS.colors.civicBlue,
+                  color: TOKENS.colors.surface,
+                  borderRadius: TOKENS.radii.sm,
+                  fontSize: TOKENS.typography.caption
+                }}
+              >
+                {tag}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: TOKENS.colors.slate, fontSize: TOKENS.typography.body }}>
+              No tags selected
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Categories Card */}
+      <div style={{
+        padding: TOKENS.spacing.lg,
+        border: `1px solid ${TOKENS.colors.line}`,
+        borderRadius: TOKENS.radii.lg,
+        background: TOKENS.colors.surface
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: TOKENS.spacing.sm }}>
+          <h3 style={{ fontSize: TOKENS.typography.body, fontWeight: 600, color: TOKENS.colors.ink, margin: 0 }}>
+            Categories
+          </h3>
+          <button
+            onClick={() => {/* Navigate back to step 2 */}}
+            style={{
+              color: TOKENS.colors.civicBlue,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: TOKENS.typography.caption,
+              textDecoration: 'underline'
+            }}
+          >
+            Edit
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: TOKENS.spacing.sm }}>
+          {data.categories.length > 0 ? (
+            data.categories.map(category => (
+              <span
+                key={category}
+                style={{
+                  padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
+                  background: TOKENS.colors.slate,
+                  color: TOKENS.colors.surface,
+                  borderRadius: TOKENS.radii.sm,
+                  fontSize: TOKENS.typography.caption
+                }}
+              >
+                {category}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: TOKENS.colors.slate, fontSize: TOKENS.typography.body }}>
+              No categories selected
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main Wizard Component
+const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, onSuccess }) => {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<GroupFormData>({
+    name: '',
+    description: '',
+    tags: [],
+    categories: []
+  });
+
+  const steps: WizardStep[] = [
+    {
+      id: 'details',
+      title: 'Create New Group',
+      label: 'Details',
+      component: Step1Details
+    },
+    {
+      id: 'topics',
+      title: 'Choose Topics',
+      label: 'Topics',
+      component: Step2Topics
+    },
+    {
+      id: 'review',
+      title: 'Review & Create',
+      label: 'Review',
+      component: Step3Review
+    }
+  ];
+
+  const currentStepData = steps[currentStep];
+  const CurrentStepComponent = currentStepData.component;
+
+  const handleNext = () => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      // Final step - create group
+      onSuccess('new-group-id');
+      onClose();
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleUpdate = (updates: Partial<GroupFormData>) => {
+    setFormData(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleClose = () => {
+    if (formData.name || formData.description || formData.tags.length > 0 || formData.categories.length > 0) {
+      if (confirm('You have unsaved changes. Are you sure you want to close?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: TOKENS.spacing.lg
+    }}>
+      <div style={{
+        background: TOKENS.colors.surface,
+        borderRadius: TOKENS.radii.xl,
+        width: '100%',
+        maxWidth: '720px',
+        maxHeight: '90vh',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: TOKENS.spacing.xl,
+          borderBottom: `1px solid ${TOKENS.colors.line}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h2 style={{
+              fontSize: TOKENS.typography.h2,
+              fontWeight: 600,
+              color: TOKENS.colors.ink,
+              margin: 0,
+              marginBottom: TOKENS.spacing.xs
+            }}>
+              {currentStepData.title}
+            </h2>
+            <p style={{
+              fontSize: TOKENS.typography.body,
+              color: TOKENS.colors.slate,
+              margin: 0
+            }}>
+              {currentStep === 0 && 'Give your group a name and description.'}
+              {currentStep === 1 && 'Select all that apply. You can change these later.'}
+              {currentStep === 2 && 'Review your group details before creating.'}
+            </p>
+          </div>
+          <button
+            onClick={handleClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: TOKENS.spacing.sm,
+              borderRadius: TOKENS.radii.sm,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = TOKENS.colors.line;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'none';
+            }}
+          >
+            <X size={20} color={TOKENS.colors.slate} />
+          </button>
+        </div>
+
+        {/* Progress Indicator */}
+        <div style={{
+          padding: `${TOKENS.spacing.lg} ${TOKENS.spacing.xl}`,
+          borderBottom: `1px solid ${TOKENS.colors.line}`
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: TOKENS.spacing.lg }}>
+            {steps.map((step, index) => (
+              <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.sm }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: index <= currentStep ? TOKENS.colors.actionOrange : `${TOKENS.colors.slate}60`,
+                    color: TOKENS.colors.surface,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: TOKENS.typography.caption,
+                    fontWeight: 600,
+                    cursor: index < currentStep ? 'pointer' : 'default',
+                    transition: `all ${TOKENS.motion.normal} ease-in-out`
+                  }}
+                  onClick={() => index < currentStep && setCurrentStep(index)}
+                >
+                  {index + 1}
+                </div>
+                <span style={{
+                  fontSize: TOKENS.typography.body,
+                  color: index <= currentStep ? TOKENS.colors.ink : `${TOKENS.colors.slate}60`,
+                  fontWeight: index === currentStep ? 600 : 400
+                }}>
+                  {step.label}
+                </span>
+                {index < steps.length - 1 && (
+                  <div style={{
+                    width: '24px',
+                    height: '1px',
+                    background: index < currentStep ? TOKENS.colors.actionOrange : TOKENS.colors.line,
+                    marginLeft: TOKENS.spacing.sm
+                  }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{
+          padding: TOKENS.spacing.xl,
+          flex: 1,
+          overflow: 'auto'
+        }}>
+          <CurrentStepComponent
+            data={formData}
+            onUpdate={handleUpdate}
+            onNext={handleNext}
+            onBack={handleBack}
+          />
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: TOKENS.spacing.xl,
+          borderTop: `1px solid ${TOKENS.colors.line}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <button
+            onClick={handleBack}
+            disabled={currentStep === 0}
+            style={{
+              padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
+              border: `1px solid ${TOKENS.colors.line}`,
+              borderRadius: TOKENS.radii.md,
+              background: TOKENS.colors.surface,
+              color: currentStep === 0 ? TOKENS.colors.slate : TOKENS.colors.ink,
+              fontSize: TOKENS.typography.body,
+              cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: TOKENS.spacing.sm,
+              transition: `all ${TOKENS.motion.normal} ease-in-out`,
+              opacity: currentStep === 0 ? 0.5 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (currentStep > 0) {
+                e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentStep > 0) {
+                e.currentTarget.style.borderColor = TOKENS.colors.line;
+              }
+            }}
+          >
+            <ChevronLeft size={16} />
+            Back
+          </button>
+
+          <button
+            onClick={handleNext}
+            style={{
+              padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
+              border: 'none',
+              borderRadius: TOKENS.radii.md,
+              background: TOKENS.colors.actionOrange,
+              color: TOKENS.colors.surface,
+              fontSize: TOKENS.typography.body,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: TOKENS.spacing.sm,
+              transition: `all ${TOKENS.motion.normal} ease-in-out`,
+              minHeight: '44px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#E55A00';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = TOKENS.colors.actionOrange;
+            }}
+          >
+            {currentStep === steps.length - 1 ? 'Create Group' : 'Continue'}
+            {currentStep < steps.length - 1 && <ChevronRight size={16} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CreateGroupWizard;

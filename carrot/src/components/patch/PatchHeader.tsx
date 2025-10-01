@@ -146,6 +146,21 @@ export default function PatchHeader({
                   {patch.description}
                 </p>
               )}
+              
+              {/* Topic Chips */}
+              {patch.tags && patch.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {patch.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="bg-white/20 text-white border-white/30 hover:bg-white/30 transition-colors"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             
             {/* Right side: Actions */}
