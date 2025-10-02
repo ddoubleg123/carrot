@@ -188,6 +188,45 @@ export const TrainingStore = {
     if (opts?.limit) arr = arr.slice(0, Math.max(1, opts.limit))
     return arr
   },
+  
+  // New method to load discoveries from database when file system is empty
+  async loadDiscoveriesFromDatabase(planId: string): Promise<DiscoveryEntry[]> {
+    try {
+      if (!dbClient.discoveryEntry?.findMany) {
+        console.warn('[TrainingStore] discoveryEntry table not available')
+        return []
+      }
+      
+      const entries = await dbClient.discoveryEntry.findMany({
+        where: { planId },
+        orderBy: { ts: 'desc' }
+      })
+      
+      const mapped = entries.map((e: any) => ({
+        id: e.id,
+        planId: e.planId,
+        topic: e.topic,
+        page: e.page,
+        url: e.url,
+        title: e.title,
+        sourceType: e.sourceType,
+        status: e.status as DiscoveryStatus,
+        ts: e.ts.toISOString()
+      }))
+      
+      console.log(`[TrainingStore] Loaded ${mapped.length} discoveries from database for plan ${planId}`)
+      
+      // Also populate the file system cache
+      const db = load()
+      db.discoveries[planId] = mapped.reverse() // file system stores oldest first
+      save(db)
+      
+      return mapped
+    } catch (error) {
+      console.error('[TrainingStore] Failed to load discoveries from database:', error)
+      return []
+    }
+  },
   getPlan(planId: string): TrainingPlan | null {
     const db = load()
     return db.plans[planId] || null
