@@ -118,15 +118,16 @@ const adapter = undefined as any;
 export const authOptions = {
   // adapter,
   trustHost: true,
+  secret: process.env.NEXTAUTH_SECRET || 'fallback-secret-for-development',
   session: {
     strategy: 'jwt' as const,
   },
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
 
   providers: [
     Google({
-      clientId:     process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId:     process.env.GOOGLE_CLIENT_ID || 'dummy-client-id',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy-client-secret',
       authorization: {
         params: {
           prompt: 'consent',
@@ -144,19 +145,24 @@ export const authOptions = {
   },
   callbacks: {
     async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
-      // Always redirect to /home after successful OAuth login
-      if (url === baseUrl || url === `${baseUrl}/`) {
+      try {
+        // Always redirect to /home after successful OAuth login
+        if (url === baseUrl || url === `${baseUrl}/`) {
+          return `${baseUrl}/home`;
+        }
+        // Allow relative callback URLs
+        if (url.startsWith('/')) {
+          return `${baseUrl}${url}`;
+        }
+        // Allow callback URLs on the same origin
+        if (new URL(url).origin === baseUrl) {
+          return url;
+        }
+        return `${baseUrl}/home`;
+      } catch (error) {
+        console.error('[NextAuth] Redirect callback error:', error);
         return `${baseUrl}/home`;
       }
-      // Allow relative callback URLs
-      if (url.startsWith('/')) {
-        return `${baseUrl}${url}`;
-      }
-      // Allow callback URLs on the same origin
-      if (new URL(url).origin === baseUrl) {
-        return url;
-      }
-      return `${baseUrl}/home`;
     },
     async signIn({ user, account, profile }: { user: any; account?: any; profile?: any }) {
       console.log('[NextAuth][signIn] === SIGNIN CALLBACK DEBUG ===');
