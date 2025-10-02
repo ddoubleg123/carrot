@@ -1133,6 +1133,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           </button>
         </div>
       </div>
+      </div>
     </>
   );
 };
