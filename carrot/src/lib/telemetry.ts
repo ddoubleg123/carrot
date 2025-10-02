@@ -62,6 +62,12 @@ class Telemetry {
     });
   }
 
+  trackGroupCreateError(error: string) {
+    this.track('group_create_error', {
+      error_message: error
+    });
+  }
+
   trackDiscoveryStarted(patchId: string) {
     this.track('discovery_started', {
       patch_id: patchId
