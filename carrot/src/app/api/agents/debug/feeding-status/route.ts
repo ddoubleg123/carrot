@@ -112,7 +112,7 @@ export async function GET(req: Request) {
     }
 
     // Try to get recent feeding attempts from logs (if possible)
-    let recentFeedingAttempts = [];
+    let recentFeedingAttempts: any[] = [];
     try {
       // This would be populated by actual log parsing if available
       recentFeedingAttempts = [
