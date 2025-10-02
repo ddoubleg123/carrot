@@ -426,7 +426,7 @@ export default function FeedAgentsPage() {
     }
   };
 
-  // Check server info on mount
+  // Check server info on mount and fetch current training status
   useEffect(() => {
     if (isProduction) {
       // Try to get server info by making a test request
@@ -449,7 +449,33 @@ export default function FeedAgentsPage() {
         // Ignore errors - just means we can't get server info
       });
     }
+
+    // Fetch current training status on mount
+    fetchCurrentTrainingStatus();
   }, [isProduction]);
+
+  // Fetch current training status from all active plans
+  const fetchCurrentTrainingStatus = async () => {
+    try {
+      // Get all agents first
+      const agentsRes = await fetch('/api/agents', { cache: 'no-store' });
+      const agentsData = await agentsRes.json();
+      if (agentsData.agents) {
+        setAgents(agentsData.agents);
+      }
+
+      // Try to get current batch status if there's an active batch
+      // This will help us get the real numbers from the logs
+      const batchRes = await fetch('/api/agents/training-records', { cache: 'no-store' });
+      const batchData = await batchRes.json();
+      if (batchData.ok && batchData.batch) {
+        setBatchStatus(batchData.batch);
+        setBatchId(batchData.batch.id);
+      }
+    } catch (error) {
+      console.error('Error fetching current training status:', error);
+    }
+  };
   const [selectedAgentForTraining, setSelectedAgentForTraining] = useState<Agent | null>(null);
   const [preview, setPreview] = useState<FeedPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1421,7 +1447,16 @@ export default function FeedAgentsPage() {
           {/* Training Tracker Tab (single-agent focus) */}
           <TabsContent value="training" className="space-y-6">
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900">Training Tracker {selectedAgent ? `• ${selectedAgent.name}` : ''}</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Training Tracker {selectedAgent ? `• ${selectedAgent.name}` : ''}</h3>
+                <Button 
+                  onClick={fetchCurrentTrainingStatus}
+                  variant="outline"
+                  size="sm"
+                >
+                  Refresh Status
+                </Button>
+              </div>
               {!selectedAgent && (
                 <p className="text-gray-600">Select an agent to view their training progress.</p>
               )}
@@ -1697,8 +1732,17 @@ export default function FeedAgentsPage() {
               
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Discovery History - All Agents</h3>
-                  <p className="text-sm text-gray-600">Viewing discoveries for all agents across all training plans</p>
+                  <div>
+                    <h3 className="text-lg font-semibold">Discovery History - All Agents</h3>
+                    <p className="text-sm text-gray-600">Viewing discoveries for all agents across all training plans</p>
+                  </div>
+                  <Button 
+                    onClick={fetchCurrentTrainingStatus}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Refresh Data
+                  </Button>
                 </div>
                 <DiscoveryHistoryViewer 
                   planId={undefined}

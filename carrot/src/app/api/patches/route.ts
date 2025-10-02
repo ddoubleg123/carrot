@@ -11,11 +11,21 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     }
 
     // Parse request body
-    const body = await request.json();
+    console.log('[API] Request headers:', Object.fromEntries(request.headers.entries()));
+    let body;
+    try {
+      body = await request.json();
+      console.log('[API] Received request body:', JSON.stringify(body, null, 2));
+    } catch (error) {
+      console.error('[API] Error parsing request body:', error);
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { name, description, tags = [], categories = [] } = body;
 
     // Validate required fields
+    console.log('[API] Extracted fields:', { name, description, tags, categories });
     if (!name || !name.trim()) {
+      console.log('[API] Validation failed: name is missing or empty');
       return NextResponse.json({ error: 'Group name is required' }, { status: 400 });
     }
 
