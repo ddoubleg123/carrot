@@ -325,7 +325,7 @@ export default function FeedAgentsPage() {
       showToast('🍽️ Focusing on feeding existing discoveries to agents. Discovery paused.', 'success');
       
       // Switch to Training Tracker tab to show feeding progress
-      setActiveTab('training-tracker');
+      setActiveTab('training');
       
     } catch (error) {
       console.error('Error focusing on feeding:', error);
