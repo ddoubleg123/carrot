@@ -117,7 +117,7 @@ export default function NeverBlackVideo({
       // First, try to use preloaded data for instant loading
       if (postId) {
         try {
-          const preloadedData = preloadQueueRef.current.getResult(`VIDEO_PREROLL_6S:${postId}`);
+          const preloadedData = preloadQueueRef.current.getCompletedTask(postId, TaskType.VIDEO_PREROLL_6S);
           if (preloadedData && preloadedData.success && preloadedData.data) {
             console.log('[NeverBlackVideo] Using preloaded data for instant startup', { postId });
             // Convert ArrayBuffer to Blob, then create blob URL

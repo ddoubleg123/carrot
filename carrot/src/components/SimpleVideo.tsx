@@ -176,8 +176,8 @@ export default function SimpleVideo({
     const checkPreloadedData = async () => {
       if (postId) {
         try {
-          const { default: MediaPreloadQueue } = await import('../lib/MediaPreloadQueue');
-          const preloadedData = MediaPreloadQueue.instance.getCompletedTask(postId, 'VIDEO_PREROLL_6S');
+          const { default: mediaPreloadQueue } = await import('../lib/MediaPreloadQueue');
+          const preloadedData = mediaPreloadQueue.getCompletedTask(postId, 'VIDEO_PREROLL_6S');
           
           if (preloadedData && preloadedData.data) {
             console.log('[SimpleVideo] Using preloaded data for instant startup', { postId });
