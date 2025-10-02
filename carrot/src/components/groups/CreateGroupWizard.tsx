@@ -361,7 +361,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
             borderRadius: '50%',
             animation: 'spin 1s linear infinite'
           }} />
-          Generating personalized suggestions with AI...
+          Customizing your tags for you...
         </div>
       )}
 
@@ -734,6 +734,8 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     tags: [],
     categories: []
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   // Check for reduced motion preference
@@ -797,6 +799,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
 
   const handleNext = async () => {
     const startTime = performance.now();
+    setError(null); // Clear any previous errors
     
     if (currentStep < steps.length - 1) {
       // Track step completion
@@ -814,6 +817,9 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
       telemetry.trackStepContinue(currentStep, steps[currentStep].label, latency);
     } else {
       // Final step - create group
+      setIsLoading(true);
+      setError(null);
+      
       try {
         // Validate form data before sending
         if (!formData.name || !formData.name.trim()) {
@@ -851,8 +857,9 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
       } catch (error) {
         console.error('Failed to create group:', error);
         telemetry.trackGroupCreateError(error instanceof Error ? error.message : 'Unknown error');
-        // You might want to show an error message to the user here
-        alert(`Failed to create group: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setError(error instanceof Error ? error.message : 'Unknown error');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -1052,9 +1059,29 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
             onUpdate={handleUpdate}
             onNext={handleNext}
             onBack={handleBack}
+            isLoading={isLoading}
             getMotionTransition={getMotionTransition}
           />
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div style={{
+            padding: TOKENS.spacing.lg,
+            margin: `0 ${TOKENS.spacing.xl}`,
+            background: '#FEF2F2',
+            border: '1px solid #FECACA',
+            borderRadius: TOKENS.radii.md,
+            color: '#DC2626'
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: TOKENS.spacing.xs }}>
+              Failed to create group
+            </div>
+            <div style={{ fontSize: TOKENS.typography.caption }}>
+              {error}
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{
@@ -1098,30 +1125,52 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
 
           <button
             onClick={handleNext}
+            disabled={isLoading}
             style={{
               padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
               border: 'none',
               borderRadius: TOKENS.radii.md,
-              background: TOKENS.colors.actionOrange,
+              background: isLoading ? TOKENS.colors.slate : TOKENS.colors.actionOrange,
               color: TOKENS.colors.surface,
               fontSize: TOKENS.typography.body,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: TOKENS.spacing.sm,
               transition: getMotionTransition(),
-              minHeight: '44px'
+              minHeight: '44px',
+              opacity: isLoading ? 0.7 : 1
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#E55A00';
+              if (!isLoading) {
+                e.currentTarget.style.background = '#E55A00';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = TOKENS.colors.actionOrange;
+              if (!isLoading) {
+                e.currentTarget.style.background = TOKENS.colors.actionOrange;
+              }
             }}
           >
-            {currentStep === steps.length - 1 ? 'Create Group' : 'Continue'}
-            {currentStep < steps.length - 1 && <ChevronRight size={16} />}
+            {isLoading ? (
+              <>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                Creating...
+              </>
+            ) : (
+              <>
+                {currentStep === steps.length - 1 ? 'Create Group' : 'Continue'}
+                {currentStep < steps.length - 1 && <ChevronRight size={16} />}
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -135,7 +135,7 @@ export default function DiscoveryHistoryViewer({ planId, agentId, className = ''
     }
   };
 
-  if (!planId) {
+  if (!planId && !showAllAgents) {
     return (
       <Card className={className}>
         <CardHeader>
@@ -155,7 +155,11 @@ export default function DiscoveryHistoryViewer({ planId, agentId, className = ''
           {loading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />}
         </CardTitle>
         <CardDescription>
-          All discovered content for this training plan ({discoveries.length} items)
+          {showAllAgents ? (
+            <>All discovered content across all agents and plans ({discoveries.length} items)</>
+          ) : (
+            <>All discovered content for this training plan ({discoveries.length} items)</>
+          )}
         </CardDescription>
       </CardHeader>
       
