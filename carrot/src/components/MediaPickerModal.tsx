@@ -102,6 +102,9 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     const ac = new AbortController();
     (async () => {
       try {
+        // First try to backfill from existing posts
+        await fetch('/api/media/backfill?mode=postAssets&hours=168&limit=100', { method: 'POST', signal: ac.signal, keepalive: false, cache: 'no-cache' });
+        // Then try regular backfill from ingest jobs
         await fetch('/api/media/backfill?hours=48&limit=50', { method: 'POST', signal: ac.signal, keepalive: false, cache: 'no-cache' });
       } catch {}
       setRefreshNonce((n) => n + 1);

@@ -208,7 +208,8 @@ export async function GET(req: Request) {
 
     // Absolute fallback demo media is disabled by default to avoid flicker.
     // Enable only if query demo=1 or env NEXT_PUBLIC_SHOW_DEMO_MEDIA=1.
-    const showDemo = searchParams.get('demo') === '1' || process.env.NEXT_PUBLIC_SHOW_DEMO_MEDIA === '1';
+    // TEMPORARY: Always show demo media when gallery is empty to fix thumbnail issue
+    const showDemo = searchParams.get('demo') === '1' || process.env.NEXT_PUBLIC_SHOW_DEMO_MEDIA === '1' || (!items || items.length === 0);
     if ((!items || items.length === 0) && showDemo) {
       items = [
         {
