@@ -157,6 +157,8 @@ export class FeedService {
         ? extractedContent.content.substring(0, maxContentLength) + '...'
         : extractedContent.content;
 
+      console.log(`[FeedService] Attempting to create memory for agent ${agentId}, content length: ${contentToStore.length}`);
+
       // Create real memory in database
       const memory = await prisma.agentMemory.create({
         data: {

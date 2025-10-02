@@ -239,25 +239,69 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
 
-  // Curated tags for youth sports/cheer context
-  const availableTags = [
-    'youth sports', 'cheerleading', 'coaching', 'routines', 'choreography', 
-    'drills', 'safety', 'team building', 'game day', 'fundraising', 
-    'practice plans', 'stunts', 'tumbling', 'spirit', 'competition',
-    'leadership', 'fitness', 'technique', 'performance', 'community'
-  ];
+  // Load AI-generated tags and categories when component mounts
+  useEffect(() => {
+    const generateMetadata = async () => {
+      if (!data.name.trim()) {
+        // Fallback to basic tags if no name
+        setAvailableTags(['general', 'community', 'discussion']);
+        setAvailableCategories(['General']);
+        return;
+      }
 
-  const availableCategories = [
-    'Coaching Tips',
-    'Safety & Training', 
-    'Routine Development',
-    'Team Management',
-    'Competition Prep',
-    'Parent Resources',
-    'Fundraising Ideas',
-    'Equipment & Gear'
-  ];
+      setIsLoadingAI(true);
+      setAiError(null);
+
+      try {
+        const response = await fetch('/api/ai/generate-group-metadata', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            groupName: data.name,
+            description: data.description
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate AI metadata');
+        }
+
+        const result = await response.json();
+        
+        if (result.success && result.metadata) {
+          setAvailableTags(result.metadata.tags || []);
+          setAvailableCategories(result.metadata.categories || []);
+          console.log('[CreateGroupWizard] AI generated metadata:', result.metadata);
+        } else {
+          throw new Error(result.error || 'Invalid AI response');
+        }
+      } catch (error) {
+        console.error('Failed to generate AI metadata:', error);
+        setAiError(error instanceof Error ? error.message : 'Failed to generate suggestions');
+        
+        // Fallback to basic tags based on group name
+        const fallbackTags = [
+          data.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '-'),
+          'community',
+          'discussion',
+          'knowledge'
+        ];
+        setAvailableTags(fallbackTags);
+        setAvailableCategories(['General']);
+      } finally {
+        setIsLoadingAI(false);
+      }
+    };
+
+    generateMetadata();
+  }, []); // Only run once when component mounts
 
   const filteredTags = availableTags.filter(tag => 
     tag.toLowerCase().includes(searchQuery.toLowerCase())
@@ -296,6 +340,45 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.lg }}>
+      {/* AI Loading State */}
+      {isLoadingAI && (
+        <div style={{
+          padding: TOKENS.spacing.md,
+          background: '#F0F9FF',
+          border: `1px solid ${TOKENS.colors.civicBlue}`,
+          borderRadius: TOKENS.radii.md,
+          color: TOKENS.colors.civicBlue,
+          fontSize: TOKENS.typography.body,
+          display: 'flex',
+          alignItems: 'center',
+          gap: TOKENS.spacing.sm
+        }}>
+          <div style={{
+            width: '16px',
+            height: '16px',
+            border: `2px solid ${TOKENS.colors.civicBlue}`,
+            borderTop: '2px solid transparent',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          Generating personalized suggestions with AI...
+        </div>
+      )}
+
+      {/* AI Error State */}
+      {aiError && (
+        <div style={{
+          padding: TOKENS.spacing.md,
+          background: '#FEF2F2',
+          border: `1px solid ${TOKENS.colors.danger}`,
+          borderRadius: TOKENS.radii.md,
+          color: TOKENS.colors.danger,
+          fontSize: TOKENS.typography.body
+        }}>
+          AI suggestions failed: {aiError}. Using fallback options.
+        </div>
+      )}
+
       {saveError && (
         <div style={{
           padding: TOKENS.spacing.md,
@@ -334,6 +417,16 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
           }}
         >
           Tags — select all that apply
+          {!isLoadingAI && !aiError && availableTags.length > 0 && (
+            <span style={{ 
+              fontSize: TOKENS.typography.caption, 
+              color: TOKENS.colors.slate, 
+              fontWeight: 400,
+              marginLeft: TOKENS.spacing.sm 
+            }}>
+              (AI-generated suggestions)
+            </span>
+          )}
         </label>
         <input
           id="tag-search"
@@ -411,6 +504,16 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
           marginBottom: TOKENS.spacing.md 
         }}>
           Categories — select all that apply
+          {!isLoadingAI && !aiError && availableCategories.length > 0 && (
+            <span style={{ 
+              fontSize: TOKENS.typography.caption, 
+              color: TOKENS.colors.slate, 
+              fontWeight: 400,
+              marginLeft: TOKENS.spacing.sm 
+            }}>
+              (AI-generated suggestions)
+            </span>
+          )}
         </label>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.sm }}>
@@ -804,25 +907,34 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
   if (!isOpen) return null;
 
   return (
-    <div 
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="wizard-title"
-      aria-describedby="wizard-description"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: TOKENS.spacing.lg
-      }}
-    >
+    <>
+      {/* CSS Animation for spinner */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+      
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wizard-title"
+        aria-describedby="wizard-description"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: TOKENS.spacing.lg
+        }}
+      >
       <div style={{
         background: TOKENS.colors.surface,
         borderRadius: TOKENS.radii.xl,
@@ -1021,7 +1133,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

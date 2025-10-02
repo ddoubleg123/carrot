@@ -17,6 +17,7 @@ import BatchFeedModal from '@/components/ai-agents/BatchFeedModal';
 import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow';
 import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
 import AgentSelfAssessmentChat from '@/components/ai-agents/AgentSelfAssessmentChat';
+import DiscoveryHistoryViewer from '@/components/ai-agents/DiscoveryHistoryViewer';
 import { FEATURED_AGENTS } from '@/lib/agents';
 import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 
@@ -52,7 +53,7 @@ export default function FeedAgentsPage() {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [feedContent, setFeedContent] = useState('');
   const [sourceType, setSourceType] = useState('manual');
-  const [activeTab, setActiveTab] = useState<'agents'|'feed'|'memories'|'training'|'dashboard'>('agents');
+  const [activeTab, setActiveTab] = useState<'agents'|'feed'|'memories'|'training'|'dashboard'|'discoveries'>('agents');
   const [showTrainingWorkflow, setShowTrainingWorkflow] = useState(false);
   // Restored state
   const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
@@ -160,13 +161,103 @@ export default function FeedAgentsPage() {
   };
 
   const pauseSelectedDiscovery = async (pause: boolean) => {
-    // TODO: Implement pause/resume selected agents discovery
-    console.log('Pause selected discovery:', pause);
+    if (selectedAgentIds.length === 0) {
+      showToast('No agents selected', 'error');
+      return;
+    }
+
+    try {
+      // Pause discovery for each selected agent's active training plan
+      const results = await Promise.allSettled(
+        selectedAgentIds.map(async (agentId) => {
+          // Get the agent's active training plan
+          const agent = agents.find(a => a.id === agentId);
+          if (!agent) return;
+
+          // Find active plan for this agent from plansById
+          const activePlan = Object.values(plansById).find((p: any) => 
+            p.plan?.agentId === agentId && p.plan?.status === 'active'
+          );
+
+          if (activePlan) {
+            const response = await fetch(`/api/agents/training/plan/${activePlan.plan.id}/pause-discovery`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pause }),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Failed to ${pause ? 'pause' : 'resume'} discovery for ${agent.name}`);
+            }
+          }
+        })
+      );
+
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.length - failed;
+
+      if (succeeded > 0) {
+        showToast(`${pause ? 'Paused' : 'Resumed'} discovery for ${succeeded} agent(s)`, 'success');
+      }
+      if (failed > 0) {
+        showToast(`Failed to update ${failed} agent(s)`, 'error');
+      }
+
+      // Refresh plan status
+      if (lastPlanId) {
+        setTimeout(() => fetchPlanStatus(lastPlanId), 500);
+      }
+    } catch (error) {
+      console.error('Error updating selected agents discovery:', error);
+      showToast(`Failed to ${pause ? 'pause' : 'resume'} selected agents`, 'error');
+    }
   };
 
   const pauseAllDiscovery = async (pause: boolean) => {
-    // TODO: Implement pause/resume all agents discovery
-    console.log('Pause all discovery:', pause);
+    try {
+      // Get all active training plans
+      const allActivePlans = Object.values(plansById).filter((p: any) => 
+        p.plan?.status === 'active'
+      );
+
+      if (allActivePlans.length === 0) {
+        showToast('No active training plans found', 'error');
+        return;
+      }
+
+      // Pause discovery for all active plans
+      const results = await Promise.allSettled(
+        allActivePlans.map(async (planData: any) => {
+          const response = await fetch(`/api/agents/training/plan/${planData.plan.id}/pause-discovery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pause }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to ${pause ? 'pause' : 'resume'} plan ${planData.plan.id}`);
+          }
+        })
+      );
+
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.length - failed;
+
+      if (succeeded > 0) {
+        showToast(`${pause ? 'Paused' : 'Resumed'} discovery for ${succeeded} training plan(s)`, 'success');
+      }
+      if (failed > 0) {
+        showToast(`Failed to update ${failed} training plan(s)`, 'error');
+      }
+
+      // Refresh plan status
+      if (lastPlanId) {
+        setTimeout(() => fetchPlanStatus(lastPlanId), 500);
+      }
+    } catch (error) {
+      console.error('Error updating all discovery:', error);
+      showToast(`Failed to ${pause ? 'pause' : 'resume'} all discovery`, 'error');
+    }
   };
 
   const submitTrainingPlanFromTopics = async () => {
@@ -809,12 +900,13 @@ export default function FeedAgentsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v)=> setActiveTab(v as any)} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="agents">Agent Registry</TabsTrigger>
             <TabsTrigger value="feed">Feed Content</TabsTrigger>
             <TabsTrigger value="memories">Memory Viewer</TabsTrigger>
             <TabsTrigger value="training">Training Tracker</TabsTrigger>
             <TabsTrigger value="dashboard">Training Dashboard</TabsTrigger>
+            <TabsTrigger value="discoveries">Discovery History</TabsTrigger>
           </TabsList>
 
           {/* Agent Registry Tab */}
@@ -1490,6 +1582,31 @@ export default function FeedAgentsPage() {
                 </>
               )}
 
+            </div>
+          </TabsContent>
+
+          {/* Discovery History Tab */}
+          <TabsContent value="discoveries" className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Discovery History</h3>
+                  <p className="text-sm text-gray-600">
+                    View all content discovered during agent training sessions
+                  </p>
+                </div>
+                {selectedAgent && (
+                  <div className="text-sm text-gray-600">
+                    Viewing discoveries for: <span className="font-medium">{selectedAgent.name}</span>
+                  </div>
+                )}
+              </div>
+              
+              <DiscoveryHistoryViewer 
+                planId={lastPlanId || undefined}
+                agentId={selectedAgent?.id}
+                className="w-full"
+              />
             </div>
           </TabsContent>
         </Tabs>

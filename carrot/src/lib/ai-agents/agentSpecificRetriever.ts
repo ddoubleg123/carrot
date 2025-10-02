@@ -159,11 +159,18 @@ If unsure, set ok=false.`
             tags: [topic]
           }
           try { 
-            await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); 
+            console.log(`[AgentSpecificRetriever] Attempting to feed content to agent ${agentId}: ${item.title}`);
+            const result = await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); 
             fedCount++;
-            console.log(`[AgentSpecificRetriever] Successfully fed content to agent ${agentId}: ${item.title}`);
+            console.log(`[AgentSpecificRetriever] ✅ Successfully fed content to agent ${agentId}: ${item.title}`, result);
           } catch (error) {
-            console.error(`[AgentSpecificRetriever] Failed to feed content to agent ${agentId}:`, error);
+            console.error(`[AgentSpecificRetriever] ❌ FEEDING FAILED for agent ${agentId}:`, {
+              title: item.title,
+              url: item.url,
+              agentId,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : 'No stack'
+            });
             // Don't increment fedCount on error
           }
         }
@@ -265,11 +272,18 @@ If unsure, set ok=false.`
           };
           
           try {
-            await FeedService.feedAgent(request.agentId, feedItem, 'agent-specific-retrieval');
-            console.log(`[AgentSpecificRetriever] Successfully fed NEW content to ${request.agentId}: ${content.title}`);
+            console.log(`[AgentSpecificRetriever] Attempting to feed NEW content to ${request.agentId}: ${content.title}`);
+            const result = await FeedService.feedAgent(request.agentId, feedItem, 'agent-specific-retrieval');
+            console.log(`[AgentSpecificRetriever] ✅ Successfully fed NEW content to ${request.agentId}: ${content.title}`, result);
             fedCount++;
           } catch (error) {
-            console.error(`[AgentSpecificRetriever] Failed to feed content to ${request.agentId}:`, error);
+            console.error(`[AgentSpecificRetriever] ❌ FEEDING FAILED for ${request.agentId}:`, {
+              title: content.title,
+              url: content.url,
+              agentId: request.agentId,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : 'No stack'
+            });
             // Don't increment fedCount on error
           }
         }
