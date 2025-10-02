@@ -105,7 +105,7 @@ export async function GET(req: Request) {
     // Check if agent exists in featured agents
     let featuredAgentInfo = null;
     try {
-      const { FEATURED_AGENTS } = await import('@/lib/ai-agents/agentRegistry');
+      const { FEATURED_AGENTS } = await import('@/lib/agents');
       featuredAgentInfo = FEATURED_AGENTS.find(a => a.id === agentId) || null;
     } catch (error) {
       console.error('[Debug] Error checking featured agents:', error);
