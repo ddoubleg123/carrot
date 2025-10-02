@@ -47,14 +47,19 @@ async function processTask(task: TrainingTask, plan: TrainingPlan) {
 
     // Record discoveries for UI drilldown (best-effort)
     try {
-      const entries = (res.results || []).map((r: any) => ({
-        topic,
-        page: task.page || 1,
-        url: r?.url || r?.sourceUrl,
-        title: r?.title || r?.sourceTitle,
-        sourceType: r?.sourceType,
-        status: ((res.fedCount && res.results?.length && res.fedCount === res.results.length) ? 'fed' : 'retrieved') as any,
-      }))
+      const fedSet = new Set<string>((res as any).fedUrls || [])
+      const entries = (res.results || []).map((r: any) => {
+        const url = r?.url || r?.sourceUrl
+        const wasFed = url && fedSet.has(url)
+        return {
+          topic,
+          page: task.page || 1,
+          url,
+          title: r?.title || r?.sourceTitle,
+          sourceType: r?.sourceType,
+          status: (wasFed ? 'fed' : 'retrieved') as any,
+        }
+      })
       if (entries.length) TrainingStore.appendDiscoveries(plan.id, entries)
     } catch {}
 

@@ -1,3 +1,4 @@
+console.log('--- TOP OF PATCHES ROUTE FILE LOADED ---');
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';

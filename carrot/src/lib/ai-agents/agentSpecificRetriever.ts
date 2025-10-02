@@ -143,13 +143,44 @@ If unsure, set ok=false.`
       // de-dupe by URL
       const unique = verified.filter((r, i, self)=> i===self.findIndex(x=> x.url===r.url))
 
+      // Balance selection across sources to avoid Wikipedia dominance
+      const bySource = new Map<string, any[]>()
+      for (const item of unique) {
+        const key = (item.sourceType || 'unknown').toLowerCase()
+        const arr = bySource.get(key) || []
+        arr.push(item)
+        bySource.set(key, arr)
+      }
+      const maxPerSource = Math.max(1, Math.floor((maxResults || 10) * 0.5)) // cap 50% per single source
+      const sources = Array.from(bySource.keys())
+      const balanced: any[] = []
+      const counts = new Map<string, number>()
+      // simple round-robin until we fill
+      while (balanced.length < (maxResults || 10)) {
+        let progressed = false
+        for (const s of sources) {
+          const used = counts.get(s) || 0
+          if (used >= maxPerSource) continue
+          const arr = bySource.get(s) || []
+          if (arr.length === 0) continue
+          const next = arr.shift()
+          if (!next) continue
+          balanced.push(next)
+          counts.set(s, used + 1)
+          progressed = true
+          if (balanced.length >= (maxResults || 10)) break
+        }
+        if (!progressed) break
+      }
+
       let fedCount = 0
       const fedUrlsSet = new Set<string>()
       if (autoFeed) {
         const existing = await FeedService.getRecentMemories(agentId, 200)
         const existingUrls = new Set(existing.map((m:any)=> m.sourceUrl).filter(Boolean))
         const existingTitles = new Set(existing.map((m:any)=> m.sourceTitle).filter(Boolean))
-        for (const item of unique.slice(0, maxResults)) {
+        const candidates = (balanced.length ? balanced : unique).slice(0, maxResults)
+        for (const item of candidates) {
           if (existingUrls.has(item.url) || existingTitles.has(item.title)) continue
           const feedItem: FeedItem = {
             content: item.content,

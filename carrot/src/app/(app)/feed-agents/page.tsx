@@ -1713,6 +1713,28 @@ export default function FeedAgentsPage() {
             </div>
           </TabsContent>
 
+          {/* Training Dashboard Tab */}
+          <TabsContent value="dashboard" className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Training Dashboard</h3>
+                  <p className="text-gray-600 text-sm">Cumulative stats and per-agent overview. Always populated from historical data.</p>
+                </div>
+                <Button variant="outline" onClick={() => setActiveTab('discoveries')}>View Discoveries</Button>
+              </div>
+
+              <AgentTrainingDashboard 
+                selectedAgentId={selectedAgent?.id}
+                refreshToken={batchStatus?.updatedAt || (batchStatus ? JSON.stringify(batchStatus.totals||{}) : undefined)}
+                onAgentSelect={(agentId:string)=>{
+                  const a = agents.find(x=> x.id===agentId) || null;
+                  setSelectedAgent(a);
+                }}
+              />
+            </div>
+          </TabsContent>
+
           {/* Discovery History Tab */}
           <TabsContent value="discoveries" className="space-y-6">
             <div className="space-y-4">
