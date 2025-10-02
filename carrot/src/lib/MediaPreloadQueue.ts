@@ -83,29 +83,29 @@ class MediaPreloadQueue {
   private lastCompletedVideoIndex = -1;  
   private blockedTasks = new Set<string>(); 
 
-  private readonly GLOBAL_BUDGET_MB = 8; 
+  private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 6,       
-    [TaskType.VIDEO_PREROLL_6S]: 2, 
-    [TaskType.VIDEO_FULL]: 1,   // Only one full video download at a time
-    [TaskType.IMAGE]: 4,
-    [TaskType.AUDIO_META]: 3,
-    [TaskType.TEXT_FULL]: 4,
-    [TaskType.AUDIO_FULL]: 2,
+    [TaskType.POSTER]: 8,       // Increased from 6 to 8
+    [TaskType.VIDEO_PREROLL_6S]: 4, // Increased from 2 to 4 for faster video loading
+    [TaskType.VIDEO_FULL]: 2,   // Increased from 1 to 2 for better performance
+    [TaskType.IMAGE]: 6,        // Increased from 4 to 6
+    [TaskType.AUDIO_META]: 4,   // Increased from 3 to 4
+    [TaskType.TEXT_FULL]: 6,    // Increased from 4 to 6
+    [TaskType.AUDIO_FULL]: 3,   // Increased from 2 to 3
   };
   
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 6,
-    maxConcurrentVideos: 2,
-    maxSequentialGap: 10,       
+    maxConcurrentPosters: 8,        // Increased from 6 to 8
+    maxConcurrentVideos: 4,         // Increased from 2 to 4 for faster video loading
+    maxSequentialGap: 15,           // Increased from 10 to 15 for better preloading
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
     videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
   
   private readonly ESTIMATED_SIZES = {
     [TaskType.POSTER]: 0.1, 
-    [TaskType.VIDEO_PREROLL_6S]: 1.5, 
+    [TaskType.VIDEO_PREROLL_6S]: 2.0, // Increased from 1.5MB to 2MB for better video quality
     [TaskType.VIDEO_FULL]: 8.0,  // Full video can be much larger
     [TaskType.IMAGE]: 0.5, 
     [TaskType.AUDIO_META]: 0.5, 
@@ -481,9 +481,9 @@ class MediaPreloadQueue {
           const contentLength = parseInt(headResponse.headers.get('content-length') || '0', 10);
           const contentType = headResponse.headers.get('content-type') || '';
           
-          // For 6-second pre-roll, request a smaller chunk (512KB max)
-          // This should be enough for most videos to get 6 seconds of content
-          const prerollSize = Math.min(512 * 1024, contentLength || 512 * 1024);
+          // For 6-second pre-roll, request a larger chunk (1MB max) for better video quality
+          // This should be enough for most videos to get 6 seconds of content with better quality
+          const prerollSize = Math.min(1024 * 1024, contentLength || 1024 * 1024);
           
           const videoResponse = await fetch(url, {
             signal: abortController.signal,

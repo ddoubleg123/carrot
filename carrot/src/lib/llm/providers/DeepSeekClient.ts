@@ -33,7 +33,22 @@ function hasProxy() {
 }
 
 async function* mockStream(params: ChatParams): AsyncGenerator<StreamChunk> {
-  const demo = 'This is a DeepSeek mock response. To use the real DeepSeek API, set DEEPSEEK_API_KEY environment variable. To use the local DeepSeek infrastructure, start the router service at localhost:8080.';
+  // Check if this is a group metadata generation request
+  const isGroupMetadata = params.messages.some(msg => 
+    msg.content && typeof msg.content === 'string' && 
+    msg.content.includes('generate relevant tags and categories')
+  );
+  
+  let demo: string;
+  if (isGroupMetadata) {
+    // Return a proper JSON response for group metadata generation
+    demo = JSON.stringify({
+      tags: ["community", "discussion", "knowledge", "learning", "collaboration", "networking", "support", "growth"],
+      categories: ["General", "Community", "Education"]
+    });
+  } else {
+    demo = 'This is a DeepSeek mock response. To use the real DeepSeek API, set DEEPSEEK_API_KEY environment variable. To use the local DeepSeek infrastructure, start the router service at localhost:8080.';
+  }
   
   // Add a small delay to simulate real streaming
   await new Promise(r => setTimeout(r, 100));

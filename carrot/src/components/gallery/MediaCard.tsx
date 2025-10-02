@@ -31,20 +31,22 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
   const src = (() => {
     const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || undefined)
                         : (asset.thumbUrl || asset.url || undefined);
-    if (!raw) return undefined;
+    if (!raw) {
+      console.warn('[MediaCard] No thumbnail URL available for asset:', { id: asset.id, type: asset.type, asset });
+      return undefined;
+    }
     // If already proxied or a data/blob URL, pass through unchanged
     if (raw.startsWith('/api/img') || raw.startsWith('data:') || raw.startsWith('blob:')) {
+      console.log('[MediaCard] Using already proxied URL:', raw);
       return raw;
     }
     // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
     const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(raw);
-    if (isAlreadyEncoded) {
-      // URL is already encoded, pass it directly to avoid double-encoding
-      return `/api/img?url=${raw}`;
-    } else {
-      // URL is not encoded, encode it once
-      return `/api/img?url=${encodeURIComponent(raw)}`;
-    }
+    const proxiedUrl = isAlreadyEncoded 
+      ? `/api/img?url=${raw}`
+      : `/api/img?url=${encodeURIComponent(raw)}`;
+    console.log('[MediaCard] Generated proxied URL:', { raw, isAlreadyEncoded, proxiedUrl });
+    return proxiedUrl;
   })();
 
   return (
@@ -73,6 +75,11 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C]">
             {isVideo ? <Film className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
+            {!src && (
+              <div className="absolute inset-0 flex items-center justify-center bg-yellow-50 text-yellow-600 text-xs">
+                No thumbnail
+              </div>
+            )}
           </div>
         )}
       </div>

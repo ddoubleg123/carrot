@@ -561,24 +561,6 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
 
 // Step 3: Review Component
 const Step3Review: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack, isLoading, getMotionTransition }) => {
-  const [isCreating, setIsCreating] = useState(false);
-
-  const handleCreate = async () => {
-    setIsCreating(true);
-    
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Generate a mock group ID
-      const groupId = `group-${Date.now()}`;
-      
-      // Call success callback
-      onNext(); // This will be handled by the parent to close modal and navigate
-    } catch (error) {
-      setIsCreating(false);
-    }
-  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.lg }}>
@@ -769,7 +751,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     if (isOpen) {
       telemetry.trackGroupCreateOpen();
     } else {
-      // Reset form data when modal is closed (with a small delay to avoid race conditions)
+      // Reset form data when modal is closed (with a longer delay to avoid race conditions)
       const resetTimer = setTimeout(() => {
         setFormData({
           name: '',
@@ -778,7 +760,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           categories: []
         });
         setCurrentStep(0);
-      }, 100);
+      }, 500); // Increased delay to avoid race conditions
       
       return () => clearTimeout(resetTimer);
     }
@@ -833,11 +815,16 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     } else {
       // Final step - create group
       try {
+        // Validate form data before sending
+        if (!formData.name || !formData.name.trim()) {
+          throw new Error('Group name is required');
+        }
+        
         const payload = {
-          name: formData.name,
-          description: formData.description,
-          tags: formData.tags,
-          categories: formData.categories
+          name: formData.name.trim(),
+          description: formData.description?.trim() || '',
+          tags: formData.tags || [],
+          categories: formData.categories || []
         };
         
         console.log('[CreateGroupWizard] Sending payload:', payload);
@@ -877,7 +864,12 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
   };
 
   const handleUpdate = (updates: Partial<GroupFormData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
+    console.log('[CreateGroupWizard] Updating form data:', updates);
+    setFormData(prev => {
+      const newData = { ...prev, ...updates };
+      console.log('[CreateGroupWizard] New form data:', newData);
+      return newData;
+    });
   };
 
   const handleClose = () => {

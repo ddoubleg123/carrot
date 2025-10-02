@@ -14,6 +14,12 @@ export type ThumbProps = {
 
 export function Thumb({ src, type, alt = "media", className, placeholder, loading = 'lazy', decoding = 'async', fetchPriority = 'auto' }: ThumbProps) {
   const [failed, setFailed] = React.useState(false);
+  
+  const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    console.warn('[Thumb] Image failed to load:', { src, type, alt, error: e });
+    setFailed(true);
+  };
+  
   return (
     <div className={`relative ${className ?? ""}`}>
       {!failed && src ? (
@@ -25,13 +31,18 @@ export function Thumb({ src, type, alt = "media", className, placeholder, loadin
           fetchPriority={fetchPriority as any}
           width={640}
           height={360}
-          onError={() => setFailed(true)}
+          onError={handleError}
           className="h-full w-full object-cover"
           style={placeholder ? { backgroundImage: `url(${placeholder})`, backgroundSize: "cover" } : undefined}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C]">
           {type === "VIDEO" ? <Film className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
+          {failed && (
+            <div className="absolute inset-0 flex items-center justify-center bg-red-50 text-red-500 text-xs">
+              Failed to load
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -147,12 +147,12 @@ class FeedMediaManager {
   }
 
   private queueInitialPosts(): void {
-    const endIndex = Math.min(10, this._posts.length);
+    const endIndex = Math.min(15, this._posts.length); // Increased from 10 to 15 for better preloading
     console.log(`[FeedMediaManager] Queueing initial posts: ${endIndex} posts`);
     for (let i = 0; i < endIndex; i++) {
       const post = this._posts[i];
-      // First post (index 0) gets VISIBLE priority for full download, others get NEXT_10
-      const priority = i === 0 ? Priority.VISIBLE : Priority.NEXT_10;
+      // First 3 posts get VISIBLE priority for immediate loading, others get NEXT_10
+      const priority = i < 3 ? Priority.VISIBLE : Priority.NEXT_10;
       console.log(`[FeedMediaManager] Post ${i}: ${post.type} with priority ${priority}`);
       this.queuePostTasks(post, priority);
     }
@@ -169,12 +169,12 @@ class FeedMediaManager {
     }
 
     const nextStart = this._currentViewportIndex + 1;
-    const nextEnd = Math.min(nextStart + 10, this._posts.length);
+    const nextEnd = Math.min(nextStart + 15, this._posts.length); // Increased from 10 to 15
     for (let i = nextStart; i < nextEnd; i++) {
       this.queuePostTasks(this._posts[i], Priority.NEXT_10);
     }
 
-    const prevStart = Math.max(0, this._currentViewportIndex - 5);
+    const prevStart = Math.max(0, this._currentViewportIndex - 8); // Increased from 5 to 8
     const prevEnd = this._currentViewportIndex;
     for (let i = prevStart; i < prevEnd; i++) {
       this.queuePostTasks(this._posts[i], Priority.PREV_5);
@@ -258,8 +258,8 @@ class FeedMediaManager {
   }
 
   private cancelDistantTasks(): void {
-    const keepRange = 10; // Keep 10 posts ahead as specified
-    const minIndex = Math.max(0, this._currentViewportIndex - 5); // Keep 5 posts behind
+    const keepRange = 15; // Keep 15 posts ahead as specified
+    const minIndex = Math.max(0, this._currentViewportIndex - 8); // Keep 8 posts behind
     const maxIndex = Math.min(this._posts.length - 1, this._currentViewportIndex + keepRange);
 
     for (const post of this._posts) {

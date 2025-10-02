@@ -466,7 +466,7 @@ function ConversationThread({
       {/* Messages */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-6 py-6 flex flex-col"
+        className="flex-1 overflow-y-auto px-6 py-6 flex flex-col max-h-full"
       >
         <div className="space-y-4">
           {thread.messages.map((message) => (
@@ -1000,7 +1000,7 @@ export default function RabbitPage() {
 
   // Conversation View (After User Engagement)
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Unified Header - extends from left to right - STICKY */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
         {/* Left side - Chat title */}
@@ -1058,7 +1058,7 @@ export default function RabbitPage() {
       </div>
 
       {/* Fixed Chat Input Bar - Duplicated from header container structure */}
-      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
         {/* Left side - Upload button */}
         <div className="flex-shrink-0">
           <button
