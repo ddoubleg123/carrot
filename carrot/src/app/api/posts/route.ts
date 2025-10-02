@@ -123,6 +123,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         // Try to extract bucket and path
         let bucket: string | undefined;
         let path: string | undefined;
+        let originalPath: string | undefined;
+        
         // firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
         const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
         if (host === 'firebasestorage.googleapis.com' && m1) {
@@ -132,6 +134,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             console.log('[posts] Keeping Firebase bucket name:', bucket);
           }
           path = decodeURIComponent(m1[2]);
+          originalPath = m1[2];
         }
         // storage.googleapis.com/<bucket>/<path>
         if (!bucket || !path) {
@@ -139,6 +142,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           if (host === 'storage.googleapis.com' && m2) {
             bucket = decodeURIComponent(m2[1]);
             path = decodeURIComponent(m2[2]);
+            originalPath = m2[2];
           }
         }
         // <sub>.firebasestorage.app/o/<ENCODED_PATH>
@@ -146,6 +150,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
           if (host.endsWith('.firebasestorage.app') && m4) {
             path = decodeURIComponent(m4[1]);
+            originalPath = m4[1];
             // Infer bucket from GoogleAccessId if present
             const ga = sp.get('GoogleAccessId') || '';
             const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
@@ -157,13 +162,16 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           const m3 = url.pathname.match(/\/o\/([^?]+)$/);
           if (m3) {
             path = decodeURIComponent(m3[1]);
+            originalPath = m3[1];
             const ga = sp.get('GoogleAccessId') || '';
             const projectMatch = ga.match(/@([a-z0-9-]+)\.iam\.gserviceaccount\.com$/i);
             if (projectMatch) bucket = `${projectMatch[1]}.appspot.com`;
           }
         }
         if (bucket && path) {
-          const encPath = encodeURIComponent(path);
+          // Don't re-encode the path if it's already properly encoded
+          // Check if the original path was already encoded by comparing with the original URL
+          const encPath = (originalPath === path) ? encodeURIComponent(path) : originalPath;
           const token = sp.get('token');
           const durable = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
           if (token) durable.searchParams.set('token', token);

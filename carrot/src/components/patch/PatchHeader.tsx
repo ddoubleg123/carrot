@@ -63,9 +63,16 @@ export default function PatchHeader({
   };
 
   const handleSettings = () => {
-    // Open settings
+    // Open settings modal with delete option
     console.log('Settings clicked');
-    // TODO: Implement settings functionality
+    // TODO: Implement settings modal with delete functionality
+    // For now, show a simple confirm dialog
+    if (confirm(`Are you sure you want to delete the "${patch.name}" patch? This action cannot be undone.`)) {
+      // TODO: Implement actual delete API call
+      console.log('Delete confirmed for patch:', patch.id);
+      // After successful delete, redirect to home or dashboard
+      router.push('/dashboard');
+    }
   };
 
   const handleThemeChange = (newTheme: UserPatchTheme) => {
@@ -165,56 +172,56 @@ export default function PatchHeader({
             
             {/* Right side: Actions */}
             <div className="flex flex-col gap-2 flex-shrink-0">
-              <Button
-                onClick={isMember ? () => {} : handleJoin}
-                variant={isMember ? "outline" : "secondary"}
-                className={isMember 
-                  ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 w-28 justify-start" 
-                  : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 w-28 justify-start"
-                }
-              >
-                <Users className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span className="text-sm font-medium">{isMember ? 'Joined' : 'Join'}</span>
-              </Button>
-              
-              <Button
-                variant="ghost"
-                onClick={handleShare}
-                className="text-white hover:bg-white/10 px-4 py-2 w-28 justify-start"
-              >
-                <Share2 className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span className="text-sm font-medium">Share</span>
-              </Button>
+        <Button
+          onClick={isMember ? () => {} : handleJoin}
+          variant={isMember ? "outline" : "secondary"}
+          className={isMember 
+            ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 w-32 justify-start" 
+            : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 w-32 justify-start"
+          }
+        >
+          <Users className="w-4 h-4 mr-2 flex-shrink-0" />
+          <span className="text-sm font-medium">{isMember ? 'Joined' : 'Join'}</span>
+        </Button>
+        
+        <Button
+          variant="ghost"
+          onClick={handleShare}
+          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+        >
+          <Share2 className="w-4 h-4 mr-2 flex-shrink-0" />
+          <span className="text-sm font-medium">Share</span>
+        </Button>
 
-              <Button
-                variant="ghost"
-                onClick={handleSettings}
-                className="text-white hover:bg-white/10 px-4 py-2 w-28 justify-start"
-              >
-                <Settings className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span className="text-sm font-medium">Settings</span>
-              </Button>
+        <Button
+          variant="ghost"
+          onClick={handleSettings}
+          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+        >
+          <Settings className="w-4 h-4 mr-2 flex-shrink-0" />
+          <span className="text-sm font-medium">Settings</span>
+        </Button>
 
-              {/* Lightning Theme Button */}
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  const currentIndex = currentTheme.preset ?? DEFAULT_THEME_INDEX;
-                  const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
-                  handleThemeChange({ mode: 'preset', preset: nextIndex });
-                }}
-                className="text-white hover:bg-white/10 px-4 py-2 w-28 justify-start"
-                title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
-              >
-                <Zap className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span className="text-sm font-medium">Theme</span>
-              </Button>
+        {/* Lightning Theme Button */}
+        <Button
+          variant="ghost"
+          onClick={() => {
+            const currentIndex = currentTheme.preset ?? DEFAULT_THEME_INDEX;
+            const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
+            handleThemeChange({ mode: 'preset', preset: nextIndex });
+          }}
+          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+          title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
+        >
+          <Zap className="w-4 h-4 mr-2 flex-shrink-0" />
+          <span className="text-sm font-medium">Theme</span>
+        </Button>
             </div>
           </div>
 
           {/* Tags - Limited to 2 rows */}
           <div className="flex items-center gap-2 flex-wrap mt-4 max-h-12 overflow-hidden">
-            {patch.tags.slice(0, 8).map((tag) => (
+            {[...new Set(patch.tags)].slice(0, 8).map((tag) => (
               <Badge
                 key={tag}
                 variant="secondary"
@@ -223,9 +230,9 @@ export default function PatchHeader({
                 {tag}
               </Badge>
             ))}
-            {patch.tags.length > 8 && (
+            {[...new Set(patch.tags)].length > 8 && (
               <span className="text-xs text-white/70">
-                +{patch.tags.length - 8} more
+                +{[...new Set(patch.tags)].length - 8} more
               </span>
             )}
           </div>

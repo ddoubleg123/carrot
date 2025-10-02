@@ -124,12 +124,26 @@ export default function SimpleVideo({
 
     video.addEventListener('play', handlePlay);
 
-    // Add intersection observer to handle visibility and pause when not visible
-    const io = new IntersectionObserver((entries) => {
+    // Add intersection observer to handle visibility and promote to full download when visible
+    const io = new IntersectionObserver(async (entries) => {
       const entry = entries[0];
       if (!entry) return;
       const visible = entry.intersectionRatio >= 0.5;
-      if (!visible) {
+      
+      if (visible) {
+        // Video is visible - promote to full download
+        try {
+          const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
+          const handle = FeedMediaManager.inst.getHandleByElement(containerRef.current!);
+          if (handle) {
+            FeedMediaManager.inst.setActive(handle);
+            console.log('[SimpleVideo] Promoted visible video to full download', { postId, intersectionRatio: entry.intersectionRatio });
+          }
+        } catch (e) {
+          console.warn('[SimpleVideo] Failed to promote visible video', e);
+        }
+      } else {
+        // Video is not visible - pause it
         try { 
           video.pause(); 
           console.log('[SimpleVideo] Paused video due to low visibility', { postId, intersectionRatio: entry.intersectionRatio });
@@ -176,6 +190,14 @@ export default function SimpleVideo({
       } else {
         proxyUrl = src;
       }
+      
+      // Log URL analysis for debugging
+      console.log('[SimpleVideo] URL analysis:', {
+        isDoubleEncoded: src.includes('%252F'),
+        hasAltMedia: src.includes('alt=media'),
+        isFirebaseUrl: src.includes('firebasestorage.googleapis.com'),
+        isAlreadyProxied: src.startsWith('/api/video')
+      });
       
       // Range requests are handled by FeedMediaManager preloading system
       // No need to add range parameters here to avoid duplicate requests

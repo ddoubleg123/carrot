@@ -286,40 +286,10 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         <p style={{
           fontSize: TOKENS.typography.body,
           color: TOKENS.colors.slate,
-          margin: 0,
-          marginBottom: TOKENS.spacing.lg
+          margin: 0
         }}>
-          Connect sources to start discovering relevant content for this group.
+          Content discovery will begin automatically when the system is ready.
         </p>
-        <button
-          onClick={() => {/* Navigate to Sources tab */}}
-          style={{
-            padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
-            border: `1px solid ${TOKENS.colors.civicBlue}`,
-            borderRadius: TOKENS.radii.md,
-            background: TOKENS.colors.surface,
-            color: TOKENS.colors.civicBlue,
-            fontSize: TOKENS.typography.body,
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: TOKENS.spacing.sm,
-            margin: '0 auto',
-            transition: `all ${TOKENS.motion.normal} ease-in-out`
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = TOKENS.colors.civicBlue;
-            e.currentTarget.style.color = TOKENS.colors.surface;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = TOKENS.colors.surface;
-            e.currentTarget.style.color = TOKENS.colors.civicBlue;
-          }}
-        >
-          <ExternalLink size={16} />
-          Connect sources
-        </button>
       </div>
     );
   }

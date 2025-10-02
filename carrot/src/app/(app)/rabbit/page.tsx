@@ -134,7 +134,7 @@ function ChatStarter({ onStartConversation }: { onStartConversation: (query: str
 
   return (
     <div className="max-w-2xl mx-auto px-6">
-      <div className="relative">
+      <div className="relative w-4/5 mx-auto">
         <input
           ref={inputRef}
           type="text"
@@ -370,15 +370,32 @@ function ConversationThread({
     setHasUserScrolled(false);
     setShowScrollButton(false);
     followTailRef.current = true;
-    let raf = 0;
-    raf = requestAnimationFrame(() => {
-      // After mount, snap to tail so latest is visible
-      setIsAtBottom(true);
-      const t = setTimeout(() => scrollToBottom(), 0);
-      // cleanup timer
-      return () => clearTimeout(t);
-    });
-    return () => { if (raf) cancelAnimationFrame(raf); };
+    
+    // Multiple attempts to ensure we scroll to bottom on initial load
+    const attemptScroll = () => {
+      const el = scrollContainerRef.current;
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+        setIsAtBottom(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Try immediately
+    if (!attemptScroll()) {
+      // If that didn't work, try after a short delay
+      const timeout1 = setTimeout(() => {
+        if (!attemptScroll()) {
+          // If still not working, try after DOM is fully painted
+          const timeout2 = setTimeout(() => {
+            attemptScroll();
+          }, 100);
+          return () => clearTimeout(timeout2);
+        }
+      }, 50);
+      return () => clearTimeout(timeout1);
+    }
   }, [thread.id]);
 
   // Handle new messages with proper DOM timing
@@ -397,6 +414,20 @@ function ConversationThread({
       return () => clearTimeout(timeout);
     }
   }, [thread.messages.length, isAtBottom, hasUserScrolled]);
+
+  // Additional safety: Ensure we're at bottom when component first mounts with existing messages
+  useEffect(() => {
+    if (thread.messages.length > 0 && !hasUserScrolled) {
+      const timeout = setTimeout(() => {
+        const el = scrollContainerRef.current;
+        if (el) {
+          el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+          setIsAtBottom(true);
+        }
+      }, 200);
+      return () => clearTimeout(timeout);
+    }
+  }, []); // Run once on mount
 
   // Set up scroll event listener
   useEffect(() => {
@@ -431,11 +462,11 @@ function ConversationThread({
 
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Messages */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-6 py-6 pb-24 flex flex-col"
+        className="flex-1 overflow-y-auto px-6 py-6 flex flex-col"
       >
         <div className="space-y-4">
           {thread.messages.map((message) => (
@@ -513,7 +544,7 @@ function ConversationThread({
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
-        <div className="fixed bottom-24 right-6 z-30">
+        <div className="absolute bottom-4 right-6 z-30">
           <button
             onClick={() => {
               const el = scrollContainerRef.current;
@@ -1000,9 +1031,9 @@ export default function RabbitPage() {
 
 
       {/* Main Content Area */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Main Conversation Area */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {currentThread && (
             <ConversationThread 
               thread={currentThread}

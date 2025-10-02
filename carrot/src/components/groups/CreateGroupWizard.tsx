@@ -706,7 +706,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
   const currentStepData = steps[currentStep];
   const CurrentStepComponent = currentStepData.component;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const startTime = performance.now();
     
     if (currentStep < steps.length - 1) {
@@ -725,10 +725,36 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
       telemetry.trackStepContinue(currentStep, steps[currentStep].label, latency);
     } else {
       // Final step - create group
-      const totalTime = performance.now() - startTime;
-      telemetry.trackGroupCreateSuccess('new-group-id', totalTime);
-      onSuccess('new-group-id');
-      onClose();
+      try {
+        const response = await fetch('/api/patches', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            tags: formData.tags,
+            categories: formData.categories
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create group');
+        }
+
+        const groupData = await response.json();
+        const totalTime = performance.now() - startTime;
+        telemetry.trackGroupCreateSuccess(groupData.id, totalTime);
+        onSuccess(groupData.id);
+        onClose();
+      } catch (error) {
+        console.error('Failed to create group:', error);
+        telemetry.trackGroupCreateError(error instanceof Error ? error.message : 'Unknown error');
+        // You might want to show an error message to the user here
+        alert(`Failed to create group: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
   };
 
