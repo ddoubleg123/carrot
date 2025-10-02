@@ -983,7 +983,7 @@ export default function FeedAgentsPage() {
           <Button variant="outline" onClick={()=> pauseAllDiscovery(true)}>Pause All Discovery</Button>
           <Button variant="outline" onClick={()=> pauseAllDiscovery(false)}>Resume All</Button>
           <Button 
-            variant="default" 
+            variant="primary" 
             onClick={() => focusOnFeeding()}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
