@@ -149,22 +149,9 @@ app.post('/ingest', requireWorkerSecret, async (req: express.Request, res: expre
 
     // Download video with YouTube support
     console.log('Downloading video from:', url);
-    if (sourceType === 'youtube') {
-      res.status(400).json({ 
-        error: 'YouTube ingestion temporarily disabled', 
-        message: 'YouTube blocks server-side video extraction. Please use direct video file uploads instead.',
-        alternatives: [
-          'Upload video files directly',
-          'Use YouTube Data API (requires API key)',
-          'Process videos client-side in browser'
-        ]
-      });
-      return;
-    } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      console.log('Detected YouTube URL - server-side extraction blocked by YouTube');
-      
-      // YouTube blocks server-side extraction - return error with guidance
-      throw new Error('YouTube server-side extraction is blocked. Please use one of these alternatives: 1) Use YouTube Data API with API key, 2) Process videos client-side in browser, 3) Use a proxy service, or 4) Upload video files directly instead of YouTube URLs.');
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      console.log('Processing YouTube URL with yt-dlp');
+      // Use yt-dlp for YouTube URLs - this should work with proper configuration
     } else {
       // Direct URL - use fetch
       console.log('Processing direct URL');

@@ -666,14 +666,18 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     if (isOpen) {
       telemetry.trackGroupCreateOpen();
     } else {
-      // Reset form data when modal is closed
-      setFormData({
-        name: '',
-        description: '',
-        tags: [],
-        categories: []
-      });
-      setCurrentStep(0);
+      // Reset form data when modal is closed (with a small delay to avoid race conditions)
+      const resetTimer = setTimeout(() => {
+        setFormData({
+          name: '',
+          description: '',
+          tags: [],
+          categories: []
+        });
+        setCurrentStep(0);
+      }, 100);
+      
+      return () => clearTimeout(resetTimer);
     }
   }, [isOpen]);
 
@@ -726,17 +730,22 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
     } else {
       // Final step - create group
       try {
+        const payload = {
+          name: formData.name,
+          description: formData.description,
+          tags: formData.tags,
+          categories: formData.categories
+        };
+        
+        console.log('[CreateGroupWizard] Sending payload:', payload);
+        console.log('[CreateGroupWizard] Form data before send:', formData);
+        
         const response = await fetch('/api/patches', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            name: formData.name,
-            description: formData.description,
-            tags: formData.tags,
-            categories: formData.categories
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
