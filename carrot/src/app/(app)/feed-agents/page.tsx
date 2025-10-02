@@ -313,6 +313,19 @@ export default function FeedAgentsPage() {
     }
   };
 
+  // Fetch plan status for the current agent and plan
+  const fetchPlanStatus = async (planId: string) => {
+    if (!selectedAgent || !planId) return;
+    try {
+      const r = await fetch(`/api/agents/${selectedAgent.id}/training-plan/${planId}`, { cache: 'no-store' });
+      const j = await r.json();
+      if (j.ok) setPlanStatus(j); else setPlanStatus(null);
+    } catch (error) {
+      console.error('Failed to fetch plan status:', error);
+      setPlanStatus(null);
+    }
+  };
+
   // Pause/Resume discovery for the current plan
   const togglePauseDiscovery = async (pause: boolean) => {
     if (!lastPlanId) return;
