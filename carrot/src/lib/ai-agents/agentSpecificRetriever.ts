@@ -169,8 +169,20 @@ If unsure, set ok=false.`
               url: item.url,
               agentId,
               error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : 'No stack'
+              stack: error instanceof Error ? error.stack : 'No stack',
+              errorCode: (error as any)?.code,
+              errorMeta: (error as any)?.meta
             });
+            
+            // Log the specific feedItem that failed
+            console.error(`[AgentSpecificRetriever] Failed feedItem:`, {
+              sourceType: feedItem.sourceType,
+              sourceTitle: feedItem.sourceTitle,
+              sourceUrl: feedItem.sourceUrl,
+              contentLength: feedItem.content?.length || 0,
+              tags: feedItem.tags
+            });
+            
             // Don't increment fedCount on error
           }
         }

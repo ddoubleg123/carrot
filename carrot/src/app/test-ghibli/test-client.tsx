@@ -106,6 +106,20 @@ export default function TestGhibliClient() {
 
   const appendLog = (line: string) => setLog((l) => l + "\n" + line)
 
+  // Derived capability flags (after status loads)
+  const canRun = !!(status?.workerHealthy || (status?.torch && status?.loraExists))
+  const disabledReason = !status
+    ? 'Status not loaded yet'
+    : status.workerHealthy
+      ? null
+      : status.workerStatus === 'unreachable'
+        ? 'GPU worker unreachable. Check tunnel URL/port.'
+        : status.workerStatus === 'unhealthy'
+          ? 'GPU worker unhealthy. Check worker logs.'
+          : (status.torch && status.loraExists)
+            ? null
+            : 'Local SD not available (torch or LoRA missing) and no healthy worker configured.'
+
   const submitImage = async () => {
     // Choose model by mode
     const chosenModel = imageMode === 'upload' ? 'animeganv3' : 'sd-lora'
@@ -211,6 +225,11 @@ export default function TestGhibliClient() {
               <span style={{ fontSize: '0.8em', color: '#666', marginLeft: 8 }}>
                 ({status.workerResponseTime}ms)
               </span>
+            )}
+            {status.workerUrlFull && (
+              <div style={{ marginTop: 4, fontSize: '0.85em', color: '#555', wordBreak: 'break-all' }}>
+                URL: {status.workerUrlFull}
+              </div>
             )}
           </div>
           
@@ -321,24 +340,32 @@ export default function TestGhibliClient() {
           )}
 
           <div>
-            {tab==='image' ? (
-              <button 
-                onClick={submitImage} 
-                disabled={status && !status.canGenerateImages}
-                style={{ 
-                  padding:'8px 14px',
-                  background: status && !status.canGenerateImages ? '#666' : '#007bff',
-                  color: status && !status.canGenerateImages ? '#999' : '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: status && !status.canGenerateImages ? 'not-allowed' : 'pointer'
-                }}
-                title={status && !status.canGenerateImages ? 'AI generation unavailable. Check status above.' : 'Generate image using AI'}
-              >
-                7) Run Image Pipeline
-                {status && !status.canGenerateImages && ' (Disabled)'}
-              </button>
-            ) : (
+            {tab==='image' && (
+              <>
+                <button 
+                  onClick={submitImage} 
+                  disabled={!canRun}
+                  style={{ 
+                    padding:'8px 14px',
+                    background: !canRun ? '#666' : '#007bff',
+                    color: !canRun ? '#999' : '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: !canRun ? 'not-allowed' : 'pointer'
+                  }}
+                  title={!canRun && disabledReason ? disabledReason : 'Generate image using AI'}
+                >
+                  7) Run Image Pipeline
+                  {!canRun && ' (Disabled)'}
+                </button>
+                {!canRun && disabledReason && (
+                  <div style={{ marginTop: 6, fontSize: '0.85em', color: '#b45309' }}>
+                    Reason: {disabledReason}
+                  </div>
+                )}
+              </>
+            )}
+            {tab!=='image' && (
               <button onClick={submitVideo} style={{ padding:'8px 14px' }}>Run Video Pipeline</button>
             )}
           </div>

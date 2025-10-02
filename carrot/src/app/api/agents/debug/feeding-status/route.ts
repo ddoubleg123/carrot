@@ -96,8 +96,30 @@ export async function GET(req: Request) {
     } catch (error) {
       testFeedResult = {
         error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : null
+        stack: error instanceof Error ? error.stack : null,
+        errorCode: (error as any)?.code,
+        errorMeta: (error as any)?.meta
       };
+    }
+
+    // Check if agent exists in featured agents
+    let featuredAgentInfo = null;
+    try {
+      const { FEATURED_AGENTS } = await import('@/lib/ai-agents/agentRegistry');
+      featuredAgentInfo = FEATURED_AGENTS.find(a => a.id === agentId) || null;
+    } catch (error) {
+      console.error('[Debug] Error checking featured agents:', error);
+    }
+
+    // Try to get recent feeding attempts from logs (if possible)
+    let recentFeedingAttempts = [];
+    try {
+      // This would be populated by actual log parsing if available
+      recentFeedingAttempts = [
+        { message: 'Check server logs for recent feeding attempts' }
+      ];
+    } catch (error) {
+      console.error('[Debug] Error getting feeding attempts:', error);
     }
 
     return NextResponse.json({
@@ -129,6 +151,12 @@ export async function GET(req: Request) {
         taskStats,
         discoveryStats,
         testFeedResult,
+        featuredAgentInfo: featuredAgentInfo ? {
+          id: featuredAgentInfo.id,
+          name: featuredAgentInfo.name,
+          domainExpertise: featuredAgentInfo.domainExpertise
+        } : null,
+        recentFeedingAttempts,
         timestamp: new Date().toISOString()
       }
     });

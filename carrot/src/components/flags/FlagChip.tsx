@@ -51,11 +51,17 @@ function normalizeCountry(input?: string | null): string | null {
   // If already an emoji flag, keep it
   const containsEmoji = /[\u{1F1E6}-\u{1F1FF}]{2}/u.test(s);
   if (containsEmoji) return s;
-  // Remove punctuation and periods commonly present (e.g., U.S.)
+  // Normalize: collapse punctuation/spaces and also create a letters-only variant
   s = s.replace(/[\.]/g, ' ').replace(/\s+/g, ' ').trim();
-  // If 2 letters, assume ISO2
+  const lettersOnly = s.replace(/[^A-Za-z]/g, '');
+  // Prefer letters-only interpretation for codes like "U.S.A" or "U S A"
+  if (/^[A-Za-z]{2}$/.test(lettersOnly)) return lettersOnly.toUpperCase();
+  if (/^[A-Za-z]{3}$/.test(lettersOnly)) {
+    const a2fromLetters = A3_TO_A2[lettersOnly.toUpperCase()];
+    if (a2fromLetters) return a2fromLetters;
+  }
+  // If 2 or 3 contiguous letters were provided without punctuation
   if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
-  // If alpha-3, map to alpha-2
   if (/^[A-Za-z]{3}$/.test(s)) {
     const a2 = A3_TO_A2[s.toUpperCase()];
     if (a2) return a2;

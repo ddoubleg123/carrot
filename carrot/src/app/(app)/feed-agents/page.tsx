@@ -220,14 +220,30 @@ export default function FeedAgentsPage() {
         p.plan?.status === 'active'
       );
 
+      console.log('[FeedAgents] Found active plans:', allActivePlans.length);
+      
       if (allActivePlans.length === 0) {
-        showToast('No active training plans found', 'error');
-        return;
+        // Try to fetch fresh data and retry once
+        console.log('[FeedAgents] No active plans found, fetching fresh data...');
+        await refreshPlans();
+        
+        const refreshedPlans = Object.values(plansById).filter((p: any) => 
+          p.plan?.status === 'active'
+        );
+        
+        if (refreshedPlans.length === 0) {
+          showToast('No active training plans found. Please ensure agents have active training plans.', 'error');
+          return;
+        }
+        
+        allActivePlans.push(...refreshedPlans);
       }
 
       // Pause discovery for all active plans
       const results = await Promise.allSettled(
         allActivePlans.map(async (planData: any) => {
+          console.log(`[FeedAgents] ${pause ? 'Pausing' : 'Resuming'} discovery for plan:`, planData.plan.id);
+          
           const response = await fetch(`/api/agents/training/plan/${planData.plan.id}/pause-discovery`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -235,8 +251,14 @@ export default function FeedAgentsPage() {
           });
 
           if (!response.ok) {
-            throw new Error(`Failed to ${pause ? 'pause' : 'resume'} plan ${planData.plan.id}`);
+            const errorText = await response.text();
+            console.error(`[FeedAgents] API error for plan ${planData.plan.id}:`, errorText);
+            throw new Error(`Failed to ${pause ? 'pause' : 'resume'} plan ${planData.plan.id}: ${errorText}`);
           }
+          
+          const result = await response.json();
+          console.log(`[FeedAgents] Successfully ${pause ? 'paused' : 'resumed'} plan:`, planData.plan.id, result);
+          return result;
         })
       );
 
@@ -247,7 +269,12 @@ export default function FeedAgentsPage() {
         showToast(`${pause ? 'Paused' : 'Resumed'} discovery for ${succeeded} training plan(s)`, 'success');
       }
       if (failed > 0) {
-        showToast(`Failed to update ${failed} training plan(s)`, 'error');
+        const failedReasons = results
+          .filter(r => r.status === 'rejected')
+          .map(r => (r as any).reason?.message || 'Unknown error')
+          .join(', ');
+        console.error('[FeedAgents] Failed operations:', failedReasons);
+        showToast(`Failed to update ${failed} training plan(s): ${failedReasons}`, 'error');
       }
 
       // Refresh plan status
