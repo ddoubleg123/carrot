@@ -8,6 +8,8 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
   console.log('[API] Request URL:', request.url);
   console.log('[API] Request method:', request.method);
   console.log('[API] Timestamp:', new Date().toISOString());
+  console.log('[API] Request headers:', Object.fromEntries(request.headers.entries()));
+  console.log('[API] Request body available:', request.body ? 'Yes' : 'No');
   
   try {
     // Check authentication
@@ -21,7 +23,6 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     console.log('[API] Authentication successful for user:', session.user.id);
 
     // Parse request body
-    console.log('[API] Request headers:', Object.fromEntries(request.headers.entries()));
     let body;
     try {
       body = await request.json();

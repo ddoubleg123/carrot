@@ -151,8 +151,11 @@ If unsure, set ok=false.`
         arr.push(item)
         bySource.set(key, arr)
       }
-      const maxPerSource = Math.max(1, Math.floor((maxResults || 10) * 0.5)) // cap 50% per single source
-      const sources = Array.from(bySource.keys())
+      // Cap to 33% of requested results per single source
+      const maxPerSource = Math.max(1, Math.floor((maxResults || 10) / 3))
+      // Prefer research-heavy sources first, then general
+      const preferredOrder = ['arxiv','pubmed','academic','news','github','books','wikipedia','unknown']
+      const sources = Array.from(bySource.keys()).sort((a,b)=> preferredOrder.indexOf(a) - preferredOrder.indexOf(b))
       const balanced: any[] = []
       const counts = new Map<string, number>()
       // simple round-robin until we fill

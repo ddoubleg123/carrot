@@ -123,14 +123,17 @@ export class ContentRetriever {
    * Search web content (simplified - would need a proper web search API)
    */
   static async searchWeb(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
-    // This is a placeholder - in a real implementation, you'd use:
-    // - Google Custom Search API
-    // - Bing Search API
-    // - DuckDuckGo API
-    // - Or a web scraping service
-    
-    console.log(`Web search for "${query}" would return ${maxResults} results`);
-    return [];
+    try {
+      return await RealContentFetcher.fetchContent({
+        query,
+        sourceName: 'web',
+        maxResults,
+        config: { apiKey: process.env.BING_SEARCH_KEY }
+      });
+    } catch (error) {
+      console.error('Error searching Web:', error);
+      return [];
+    }
   }
 
   /**

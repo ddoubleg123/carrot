@@ -13,6 +13,43 @@ export class RealContentFetcher {
   private static readonly RATE_LIMITS = new Map<string, number>();
 
   /**
+   * Fetch content from Bing Web Search
+   */
+  static async fetchFromBing(request: FetchRequest): Promise<RetrievedContent[]> {
+    try {
+      const { query, maxResults = 10, config } = request;
+      const apiKey = config?.apiKey || process.env.BING_SEARCH_KEY;
+      if (!apiKey) {
+        console.warn('Bing Web Search key not configured (BING_SEARCH_KEY). Skipping web search.');
+        return [];
+      }
+      const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=${Math.min(maxResults, 50)}&responseFilter=Webpages`;
+      const res = await fetch(url, { headers: { 'Ocp-Apim-Subscription-Key': apiKey } });
+      if (!res.ok) {
+        if (res.status === 429) {
+          console.warn('Bing Web Search rate limited (429); cooling down source for 2 minutes');
+          this.RATE_LIMITS.set('bing', Date.now() + (2 * 60 * 1000));
+        }
+        throw new Error(`Bing Web Search failed: ${res.status}`);
+      }
+      const data: any = await res.json();
+      const items: any[] = data?.webPages?.value || [];
+      return items.slice(0, maxResults).map((item: any, idx: number) => ({
+        title: item.name,
+        url: item.url,
+        content: item.snippet || '',
+        sourceType: 'url' as const,
+        sourceTitle: item.name,
+        sourceAuthor: item.provider?.[0]?.name || 'Web',
+        relevanceScore: 0.55 + Math.max(0, (maxResults - idx)) / (maxResults * 10)
+      }));
+    } catch (error) {
+      console.error('Error fetching from Bing Web Search:', error);
+      return [];
+    }
+  }
+
+  /**
    * Fetch content from PubMed (biomedical research)
    */
   static async fetchFromPubMed(request: FetchRequest): Promise<RetrievedContent[]> {
@@ -306,6 +343,10 @@ export class RealContentFetcher {
     
     try {
       switch (sourceName.toLowerCase()) {
+        case 'bing':
+        case 'web':
+          results = await this.fetchFromBing(request);
+          break;
         case 'pubmed':
           results = await this.fetchFromPubMed(request);
           break;
