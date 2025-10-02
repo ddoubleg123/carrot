@@ -27,7 +27,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
 
     // Use local development or production environment for transcription
     const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://gotcarrot.com' 
+      ? 'https://carrot-app.onrender.com' 
       : 'http://localhost:3005';
     
     const transcriptionServiceUrl = `${baseUrl}/api/audio/transcribe`;

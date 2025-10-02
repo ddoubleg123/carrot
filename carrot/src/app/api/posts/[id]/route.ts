@@ -116,7 +116,7 @@ export async function PATCH(
         console.log(`🎵 Triggering transcription for updated post ${postId} with audio URL: ${body.audioUrl.substring(0, 80)}...`);
         
         // Use fire-and-forget approach - don't wait for response
-        fetch(`http://localhost:3005/api/transcribe`, {
+        fetch(`${process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'}/api/transcribe`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function fetchPost(id: string) {
-  const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+  const base = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
   const res = await fetch(`${base}/api/posts/${id}`, { cache: 'no-store' });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to fetch post: ${res.status}`);

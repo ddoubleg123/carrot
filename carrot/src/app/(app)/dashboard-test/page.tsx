@@ -9,7 +9,7 @@ import DashboardClientWrapper from './DashboardClientWrapper';
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/posts`, {
+    const response = await fetch(`${process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'}/api/posts`, {
       cache: 'no-store', // Always fetch fresh data
     });
     

@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 async function getPosts() {
   try {
-    const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+    const base = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
     const res = await fetch(`${base}/api/posts`, { cache: 'no-store' });
     if (!res.ok) return [];
     const posts = await res.json();

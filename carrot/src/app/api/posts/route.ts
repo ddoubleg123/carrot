@@ -192,7 +192,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     // Persist a server-owned playable URL if normalization failed but externalUrl exists
     if (!effectiveVideoUrl && externalUrl && !audioUrl) {
       try {
-        const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+        const base = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
         const enc = encodeURIComponent(String(externalUrl));
         effectiveVideoUrl = `${base}/api/video?url=${enc}`;
         console.log('[POST /api/posts] using proxy URL for playback');
@@ -332,7 +332,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         console.log(`🎵 Triggering transcription for post ${post.id} with ${mediaType} URL: ${mediaUrl.substring(0, 80)}...`);
         
         // Use fire-and-forget approach - trigger transcription via internal API
-        fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/audio/trigger-transcription`, {
+        fetch(`${process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'}/api/audio/trigger-transcription`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -365,7 +365,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     try {
       const { trimInMs, trimOutMs, trimAspect } = body || {};
       if ((typeof trimInMs === 'number' || typeof trimOutMs === 'number') && effectiveVideoUrl) {
-        const base = process.env.NEXTAUTH_URL || 'http://localhost:3005';
+        const base = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
         const resp = await fetch(`${base}/api/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -46,7 +46,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   try {
     // Build a base URL from the current request to avoid env mismatch in dev
     const hdrs = await headers();
-    const host = hdrs.get('host') || 'localhost:3005';
+    const host = hdrs.get('host') || 'carrot-app.onrender.com';
     const isVercel = !!process.env.VERCEL;
     const protocol = isVercel ? 'https' : 'http';
     const baseUrl = `${protocol}://${host}`;
