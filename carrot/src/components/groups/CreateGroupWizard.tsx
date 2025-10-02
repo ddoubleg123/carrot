@@ -375,7 +375,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
           color: TOKENS.colors.danger,
           fontSize: TOKENS.typography.body
         }}>
-          AI suggestions failed: {aiError}. Using fallback options.
+          Tag generation failed: {aiError}. Using fallback options.
         </div>
       )}
 
@@ -424,7 +424,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
               fontWeight: 400,
               marginLeft: TOKENS.spacing.sm 
             }}>
-              (AI-generated suggestions)
+              (Smart suggestions)
             </span>
           )}
         </label>
@@ -511,7 +511,7 @@ const Step2Topics: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
               fontWeight: 400,
               marginLeft: TOKENS.spacing.sm 
             }}>
-              (AI-generated suggestions)
+              (Smart suggestions)
             </span>
           )}
         </label>
