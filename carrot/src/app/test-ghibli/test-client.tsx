@@ -246,7 +246,7 @@ export default function TestGhibliClient() {
               <strong>Recommendations:</strong>
               {Object.entries(status.recommendations).map(([key, message]) => (
                 <div key={key} style={{ fontSize: '0.8em', marginTop: 4 }}>
-                  • {message}
+                  • {String(message)}
                 </div>
               ))}
             </div>
