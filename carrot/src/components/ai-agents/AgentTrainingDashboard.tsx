@@ -71,9 +71,25 @@ export default function AgentTrainingDashboard({
   const [isLoading, setIsLoading] = useState(true);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrievalResults, setRetrievalResults] = useState<any[]>([]);
+  // Cumulative stats fallback (when no active batch/records)
+  const [stats, setStats] = useState<null | {
+    ok: boolean
+    totals: { agents: number; plans: number; discoveries: number }
+    byAgent: Array<{
+      agentId: string
+      agentName: string
+      skills: string[]
+      perSkill: Record<string, { retrieved: number; filtered: number; fed: number; failed: number }>
+      totalSkills: number
+      totalMemories: number
+      totalFed: number
+    }>
+  }>(null)
 
   useEffect(() => {
     loadTrainingRecords();
+    // Also load cumulative stats (always available)
+    loadCumulativeStats();
   }, []);
 
   // Live refresh when a token changes (e.g., batch status updates)
@@ -104,6 +120,16 @@ export default function AgentTrainingDashboard({
       setIsLoading(false);
     }
   };
+
+  const loadCumulativeStats = async () => {
+    try {
+      const r = await fetch('/api/agents/training/stats', { cache: 'no-store' })
+      const j = await r.json()
+      if (j?.ok) setStats(j)
+    } catch (e) {
+      console.error('[AgentTrainingDashboard] Failed to load cumulative stats', e)
+    }
+  }
 
   const handleAgentSpecificRetrieval = async (agentId: string) => {
     try {
@@ -177,7 +203,7 @@ export default function AgentTrainingDashboard({
           <h2 className="text-2xl font-bold text-gray-900">Agent Training Dashboard</h2>
           <p className="text-gray-600">Monitor and manage AI agent learning progress</p>
         </div>
-        <Button onClick={loadTrainingRecords} variant="outline">
+        <Button onClick={() => { loadTrainingRecords(); loadCumulativeStats(); }} variant="outline">
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
         </Button>
@@ -191,7 +217,7 @@ export default function AgentTrainingDashboard({
               <Brain className="w-8 h-8 text-blue-500" />
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Total Agents</p>
-                <p className="text-2xl font-bold text-gray-900">{trainingRecords.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{trainingRecords.length || stats?.totals.agents || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -204,7 +230,9 @@ export default function AgentTrainingDashboard({
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Total Memories</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {trainingRecords.reduce((sum, record) => sum + record.totalMemories, 0)}
+                  {trainingRecords.length
+                    ? trainingRecords.reduce((sum, record) => sum + record.totalMemories, 0)
+                    : (stats?.byAgent || []).reduce((n, a) => n + (a.totalMemories || 0), 0)}
                 </p>
               </div>
             </div>
@@ -218,7 +246,9 @@ export default function AgentTrainingDashboard({
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Training Events</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {trainingRecords.reduce((sum, record) => sum + record.totalFeedEvents, 0)}
+                  {trainingRecords.length
+                    ? trainingRecords.reduce((sum, record) => sum + record.totalFeedEvents, 0)
+                    : (stats?.byAgent || []).reduce((n, a) => n + (a.totalFed || 0), 0)}
                 </p>
               </div>
             </div>
@@ -232,7 +262,9 @@ export default function AgentTrainingDashboard({
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Active Domains</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {new Set(trainingRecords.flatMap(r => r.domainExpertise)).size}
+                  {trainingRecords.length
+                    ? new Set(trainingRecords.flatMap(r => r.domainExpertise)).size
+                    : new Set((stats?.byAgent || []).flatMap(a => a.skills)).size}
                 </p>
               </div>
             </div>
@@ -248,9 +280,9 @@ export default function AgentTrainingDashboard({
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          {/* Agent List */}
+          {/* Agent List - live records if present, otherwise cumulative stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {trainingRecords.map((record) => (
+            {(trainingRecords.length ? trainingRecords : (stats?.byAgent || [])).map((record: any) => (
               <Card 
                 key={record.agentId} 
                 className={`cursor-pointer transition-all hover:shadow-md ${
@@ -276,28 +308,32 @@ export default function AgentTrainingDashboard({
                       )}
                     </Button>
                   </div>
-                  <CardDescription>
-                    {record.domainExpertise.join(', ')}
-                  </CardDescription>
+                  {record.domainExpertise ? (
+                    <CardDescription>{record.domainExpertise.join(', ')}</CardDescription>
+                  ) : (
+                    <CardDescription>Skills: {(record.skills || []).slice(0, 8).join(', ') || '—'}</CardDescription>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Memories:</span>
-                    <span className="font-medium">{record.totalMemories}</span>
+                    <span className="font-medium">{record.totalMemories ?? 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Training Events:</span>
-                    <span className="font-medium">{record.totalFeedEvents}</span>
+                    <span className="font-medium">{record.totalFeedEvents ?? record.totalFed ?? 0}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Last Training:</span>
-                    <span className="font-medium">{formatDate(record.lastTrainingDate)}</span>
-                  </div>
+                  {record.lastTrainingDate && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Last Training:</span>
+                      <span className="font-medium">{formatDate(record.lastTrainingDate)}</span>
+                    </div>
+                  )}
                   
                   {/* Expertise Coverage */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-gray-700">Expertise Coverage:</p>
-                    {record.expertiseCoverage.map((coverage, index) => (
+                    {(record.expertiseCoverage || []).map((coverage: any, index: number) => (
                       <div key={index} className="space-y-1">
                         <div className="flex justify-between text-xs">
                           <span>{coverage.domain}</span>
