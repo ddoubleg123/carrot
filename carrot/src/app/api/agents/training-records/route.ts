@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     const planIds = TrainingStore.listPlanIds();
     const activePlans = planIds
       .map(planId => TrainingStore.getPlan(planId))
-      .filter(plan => plan && (plan.status === 'running' || plan.status === 'pending' || plan.status === 'active'))
+      .filter(plan => plan && (plan.status === 'running' || plan.status === 'pending'))
       .map(plan => ({
         id: plan!.id,
         agentId: plan!.agentId,
@@ -25,12 +25,14 @@ export async function GET(req: Request) {
       }));
 
     // Calculate totals across all active plans
-    const totalDiscovered = activePlans.reduce((sum, plan) => sum + (plan.totals?.discovered || 0), 0);
     const totalFed = activePlans.reduce((sum, plan) => sum + (plan.totals?.fed || 0), 0);
     const totalQueued = activePlans.reduce((sum, plan) => sum + (plan.totals?.queued || 0), 0);
     const totalRunning = activePlans.reduce((sum, plan) => sum + (plan.totals?.running || 0), 0);
     const totalDone = activePlans.reduce((sum, plan) => sum + (plan.totals?.done || 0), 0);
     const totalFailed = activePlans.reduce((sum, plan) => sum + (plan.totals?.failed || 0), 0);
+    
+    // Get discovered count from training records
+    const totalDiscovered = trainingRecords.reduce((sum, record) => sum + record.totalMemories, 0);
 
     // Create a mock batch status that matches what the frontend expects
     const batchStatus = {

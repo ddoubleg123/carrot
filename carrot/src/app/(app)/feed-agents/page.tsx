@@ -176,7 +176,7 @@ export default function FeedAgentsPage() {
 
           // Find active plan for this agent from plansById
           const activePlan = Object.values(plansById).find((p: any) => 
-            p.plan?.agentId === agentId && (p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active')
+            p.plan?.agentId === agentId && (p.plan?.status === 'running' || p.plan?.status === 'pending')
           );
 
           if (activePlan) {
@@ -217,7 +217,7 @@ export default function FeedAgentsPage() {
     try {
       // Get all active training plans (running, pending, or active)
       const allActivePlans = Object.values(plansById).filter((p: any) => 
-        p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active'
+        p.plan?.status === 'running' || p.plan?.status === 'pending'
       );
 
       console.log('[FeedAgents] Found active plans:', allActivePlans.length);
@@ -251,7 +251,7 @@ export default function FeedAgentsPage() {
             
             // Check again for active plans after refresh
             const refreshedPlans = Object.values(fetched).filter((p: any) => 
-              p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active'
+              p.plan?.status === 'running' || p.plan?.status === 'pending'
             );
             
             if (refreshedPlans.length > 0) {
