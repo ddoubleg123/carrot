@@ -225,18 +225,45 @@ export default function FeedAgentsPage() {
       if (allActivePlans.length === 0) {
         // Try to fetch fresh data and retry once
         console.log('[FeedAgents] No active plans found, fetching fresh data...');
-        await refreshPlans();
         
-        const refreshedPlans = Object.values(plansById).filter((p: any) => 
-          p.plan?.status === 'active'
-        );
+        // Refresh plans data by re-fetching from batch status
+        if (batchStatus?.tasks) {
+          const toFetch: { agentId: string; planId: string }[] = [];
+          for (const t of batchStatus.tasks as any[]) {
+            if (t.planId) {
+              toFetch.push({ agentId: t.agentId, planId: t.planId });
+            }
+          }
+          
+          const fetched: Record<string, any> = {};
+          for (const { agentId, planId } of toFetch) {
+            try {
+              const r = await fetch(`/api/agents/${agentId}/training-plan/${planId}`, { cache: 'no-store' });
+              const j = await r.json();
+              if (j.ok) { fetched[planId] = j; }
+            } catch (error) {
+              console.error(`[FeedAgents] Failed to fetch plan ${planId}:`, error);
+            }
+          }
+          
+          if (Object.keys(fetched).length) {
+            setPlansById(prev => ({ ...prev, ...fetched }));
+            
+            // Check again for active plans after refresh
+            const refreshedPlans = Object.values(fetched).filter((p: any) => 
+              p.plan?.status === 'active'
+            );
+            
+            if (refreshedPlans.length > 0) {
+              allActivePlans.push(...refreshedPlans);
+            }
+          }
+        }
         
-        if (refreshedPlans.length === 0) {
+        if (allActivePlans.length === 0) {
           showToast('No active training plans found. Please ensure agents have active training plans.', 'error');
           return;
         }
-        
-        allActivePlans.push(...refreshedPlans);
       }
 
       // Pause discovery for all active plans
