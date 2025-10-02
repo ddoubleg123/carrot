@@ -3,12 +3,21 @@ import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 
 export async function POST(request: Request, context: { params: Promise<{}> }) {
+  console.log('[API] ===== PATCHES POST ENDPOINT CALLED =====');
+  console.log('[API] Request URL:', request.url);
+  console.log('[API] Request method:', request.method);
+  console.log('[API] Timestamp:', new Date().toISOString());
+  
   try {
     // Check authentication
+    console.log('[API] Checking authentication...');
     const session: any = await auth();
+    console.log('[API] Session:', session ? 'Found' : 'Not found');
     if (!session?.user?.id) {
+      console.log('[API] Authentication failed - no session or user ID');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    console.log('[API] Authentication successful for user:', session.user.id);
 
     // Parse request body
     console.log('[API] Request headers:', Object.fromEntries(request.headers.entries()));
@@ -106,7 +115,9 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     });
 
   } catch (error) {
-    console.error('Error creating patch:', error);
+    console.error('[API] ===== ERROR IN PATCHES POST =====');
+    console.error('[API] Error creating patch:', error);
+    console.error('[API] Error stack:', error instanceof Error ? error.stack : 'No stack');
     return NextResponse.json(
       { error: 'Failed to create group' },
       { status: 500 }
