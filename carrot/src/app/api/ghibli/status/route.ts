@@ -47,17 +47,34 @@ export async function GET() {
 
   // Test worker connectivity if URL is set
   let workerStatus = 'not_configured'
+  let workerError = null
+  let workerResponseTime = null
+  
   if (workerUrl) {
+    const startTime = Date.now()
     try {
       const response = await fetch(`${workerUrl.replace(/\/$/, '')}/health`, { 
         method: 'GET',
         signal: AbortSignal.timeout(5000) // 5 second timeout
       })
-      workerStatus = response.ok ? 'healthy' : 'unhealthy'
-    } catch (e) {
+      workerResponseTime = Date.now() - startTime
+      
+      if (response.ok) {
+        workerStatus = 'healthy'
+      } else {
+        workerStatus = 'unhealthy'
+        workerError = `HTTP ${response.status}: ${response.statusText}`
+      }
+    } catch (e: any) {
+      workerResponseTime = Date.now() - startTime
       workerStatus = 'unreachable'
+      workerError = e.message || 'Connection failed'
     }
   }
+
+  // Determine overall system status
+  const canGenerateImages = workerStatus === 'healthy' || (py.torch && loraOk)
+  const fallbackMode = workerStatus !== 'healthy' && !py.torch
 
   return NextResponse.json({
     ok: true,
@@ -69,7 +86,25 @@ export async function GET() {
     loraExists: loraOk,
     workerUrl: workerUrl ? `${workerUrl.substring(0, 20)}...` : null, // Only show first 20 chars for security
     workerStatus,
+    workerError,
+    workerResponseTime,
+    canGenerateImages,
+    fallbackMode,
     defaults: { steps, guidance },
-    deviceHint: process.env.CUDA_VISIBLE_DEVICES ? 'cuda' : 'cpu'
+    deviceHint: process.env.CUDA_VISIBLE_DEVICES ? 'cuda' : 'cpu',
+    recommendations: {
+      ...(workerStatus === 'unreachable' && { 
+        worker: 'GPU worker is unreachable. Check Vast.ai instance and tunnel.' 
+      }),
+      ...(workerStatus === 'unhealthy' && { 
+        worker: 'GPU worker is responding but unhealthy. Check worker logs.' 
+      }),
+      ...(!py.torch && { 
+        local: 'Local SD generation unavailable. Install torch or use GPU worker.' 
+      }),
+      ...(!loraOk && lora && { 
+        lora: 'LoRA weights file not found. Check GHIBLI_LORA_WEIGHTS path.' 
+      })
+    }
   })
 }

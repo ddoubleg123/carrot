@@ -182,14 +182,37 @@ export async function POST(req: Request) {
       result = await runOnce()
     }
     
-    // Smart fallback: if sd-lora fails due to missing dependencies, try basic mode
-    if (!result.ok && useFallback && model === 'sd-lora' && /Stable Diffusion not available|ImportError|ModuleNotFoundError/i.test(String(result.message || ''))) {
-      console.log('[Ghibli] SD failed, falling back to basic mode')
-      const fallbackArgs = ['--prompt', prompt, '--model', 'animeganv3', '--out', outPath]
-      if (inputImagePath) fallbackArgs.push('--input_image', inputImagePath)
-      result = await runPython('scripts/ghibli/image_generate.py', fallbackArgs)
-      if (result.ok) {
-        result.meta = { ...result.meta, fallback: true, originalModel: 'sd-lora' }
+    // Smart fallback: if sd-lora fails due to missing dependencies, try a graceful alternative
+    if (
+      !result.ok &&
+      useFallback &&
+      model === 'sd-lora' &&
+      /Stable Diffusion not available|ImportError|ModuleNotFoundError|No module named\s*['\"]?torch|No module named/i.test(String(result.message || ''))
+    ) {
+      console.log('[Ghibli] SD failed (missing deps), selecting fallback based on presence of input image')
+      if (inputImagePath) {
+        // If user supplied an image, we can try the lightweight style transfer
+        const fallbackArgs = ['--prompt', prompt, '--model', 'animeganv3', '--out', outPath, '--input_image', inputImagePath]
+        result = await runPython('scripts/ghibli/image_generate.py', fallbackArgs)
+        if (result.ok) {
+          result.meta = { ...result.meta, fallback: true, originalModel: 'sd-lora' }
+        }
+      } else {
+        // Prompt-only and SD unavailable: return an SVG placeholder instead of error
+        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+        const cleanPrompt = esc(prompt).slice(0, 240)
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="384" viewBox="0 0 640 384">
+  <rect width="100%" height="100%" fill="#f0f9ff"/>
+  <text x="320" y="120" font-family="Arial, sans-serif" font-size="24" fill="#0369a1" text-anchor="middle">AI Model Not Available</text>
+  <text x="320" y="160" font-family="Arial, sans-serif" font-size="16" fill="#0369a1" text-anchor="middle">Stable Diffusion missing (torch not installed)</text>
+  <text x="320" y="205" font-family="Arial, sans-serif" font-size="13" fill="#111" text-anchor="middle">Prompt:</text>
+  <foreignObject x="20" y="215" width="600" height="140">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial, sans-serif;font-size:12px;color:#333;word-wrap:break-word;white-space:pre-wrap;">${cleanPrompt}</div>
+  </foreignObject>
+</svg>`
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { prompt, model, fallback: 'svg', reason: 'missing_dependencies' } })
       }
     }
     if (!result.ok) {
@@ -237,7 +260,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, outputUrl: dataUrl, meta: { fallback: 'svg', reason: 'ENOSPC' } })
     }
     
-    if (/Stable Diffusion not available|ImportError|ModuleNotFoundError/i.test(msg)) {
+    if (/Stable Diffusion not available|ImportError|ModuleNotFoundError|No module named\s*['\"]?torch|No module named/i.test(msg)) {
       // Generate a simple PNG fallback using a 1x1 pixel with text overlay
       const canvas = `
         <svg xmlns="http://www.w3.org/2000/svg" width="640" height="384" viewBox="0 0 640 384">
