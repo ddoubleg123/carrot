@@ -154,7 +154,7 @@ export async function GET(req: Request) {
         featuredAgentInfo: featuredAgentInfo ? {
           id: featuredAgentInfo.id,
           name: featuredAgentInfo.name,
-          domainExpertise: featuredAgentInfo.domainExpertise
+          domains: featuredAgentInfo.domains
         } : null,
         recentFeedingAttempts,
         timestamp: new Date().toISOString()
