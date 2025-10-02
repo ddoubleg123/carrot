@@ -176,7 +176,7 @@ export default function FeedAgentsPage() {
 
           // Find active plan for this agent from plansById
           const activePlan = Object.values(plansById).find((p: any) => 
-            p.plan?.agentId === agentId && p.plan?.status === 'active'
+            p.plan?.agentId === agentId && (p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active')
           );
 
           if (activePlan) {
@@ -215,9 +215,9 @@ export default function FeedAgentsPage() {
 
   const pauseAllDiscovery = async (pause: boolean) => {
     try {
-      // Get all active training plans
+      // Get all active training plans (running, pending, or active)
       const allActivePlans = Object.values(plansById).filter((p: any) => 
-        p.plan?.status === 'active'
+        p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active'
       );
 
       console.log('[FeedAgents] Found active plans:', allActivePlans.length);
@@ -251,7 +251,7 @@ export default function FeedAgentsPage() {
             
             // Check again for active plans after refresh
             const refreshedPlans = Object.values(fetched).filter((p: any) => 
-              p.plan?.status === 'active'
+              p.plan?.status === 'running' || p.plan?.status === 'pending' || p.plan?.status === 'active'
             );
             
             if (refreshedPlans.length > 0) {
@@ -311,6 +311,25 @@ export default function FeedAgentsPage() {
     } catch (error) {
       console.error('Error updating all discovery:', error);
       showToast(`Failed to ${pause ? 'pause' : 'resume'} all discovery`, 'error');
+    }
+  };
+
+  const focusOnFeeding = async () => {
+    try {
+      console.log('[FeedAgents] Focus on Feeding - pausing discovery and prioritizing feeding...');
+      
+      // First pause all discovery
+      await pauseAllDiscovery(true);
+      
+      // Show a message about what's happening
+      showToast('🍽️ Focusing on feeding existing discoveries to agents. Discovery paused.', 'success');
+      
+      // Switch to Training Tracker tab to show feeding progress
+      setActiveTab('training-tracker');
+      
+    } catch (error) {
+      console.error('Error focusing on feeding:', error);
+      showToast('Failed to focus on feeding', 'error');
     }
   };
 
@@ -963,6 +982,13 @@ export default function FeedAgentsPage() {
           <div className="h-5 w-px bg-gray-200 mx-1" />
           <Button variant="outline" onClick={()=> pauseAllDiscovery(true)}>Pause All Discovery</Button>
           <Button variant="outline" onClick={()=> pauseAllDiscovery(false)}>Resume All</Button>
+          <Button 
+            variant="default" 
+            onClick={() => focusOnFeeding()}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            🍽️ Focus on Feeding
+          </Button>
           <div className="ml-auto text-xs text-gray-600">{selectedAgentIds.length} selected</div>
         </div>
 
@@ -1669,11 +1695,18 @@ export default function FeedAgentsPage() {
                 )}
               </div>
               
-              <DiscoveryHistoryViewer 
-                planId={lastPlanId || undefined}
-                agentId={selectedAgent?.id}
-                className="w-full"
-              />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Discovery History - All Agents</h3>
+                  <p className="text-sm text-gray-600">Viewing discoveries for all agents across all training plans</p>
+                </div>
+                <DiscoveryHistoryViewer 
+                  planId={undefined}
+                  agentId={undefined}
+                  className="w-full"
+                  showAllAgents={true}
+                />
+              </div>
             </div>
           </TabsContent>
         </Tabs>

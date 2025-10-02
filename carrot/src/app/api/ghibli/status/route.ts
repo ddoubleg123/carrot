@@ -38,7 +38,7 @@ async function pathExists(p?: string | null) {
 export async function GET() {
   const sdModel = process.env.GHIBLI_SD_MODEL || 'runwayml/stable-diffusion-v1-5'
   const lora = process.env.GHIBLI_LORA_WEIGHTS || ''
-  const workerUrl = process.env.INGEST_WORKER_URL || process.env.GHIBLI_WORKER_URL || ''
+  const workerUrl = process.env.GHIBLI_WORKER_URL || process.env.INGEST_WORKER_URL || ''
   const steps = parseInt(process.env.GHIBLI_SD_STEPS || '25', 10)
   const guidance = parseFloat(process.env.GHIBLI_SD_GUIDANCE || '7.5')
 
@@ -49,19 +49,35 @@ export async function GET() {
   let workerStatus = 'not_configured'
   let workerHealthy = false
   let workerResponseTime: number | null = null
+  let workerHealthCode: number | null = null
+  let workerHealthBodySnippet: string | null = null
+  let workerHealthUrl: string | null = null
+  let workerFinalUrl: string | null = null
   if (workerUrl) {
     try {
       const start = Date.now()
-      const res = await fetch(`${workerUrl.replace(/\/$/, '')}/health`, {
+      const healthUrl = `${workerUrl.replace(/\/$/, '')}/health`
+      const res = await fetch(healthUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       })
       workerResponseTime = Date.now() - start
       workerStatus = res.ok ? 'healthy' : 'unhealthy'
       workerHealthy = !!res.ok
+      workerHealthCode = res.status
+      workerHealthUrl = healthUrl
+      workerFinalUrl = res.url || healthUrl
+      try {
+        const text = await res.text()
+        workerHealthBodySnippet = text ? text.slice(0, 200) : null
+      } catch {}
     } catch {
       workerStatus = 'unreachable'
       workerHealthy = false
+      workerHealthCode = null
+      workerHealthBodySnippet = null
+      workerHealthUrl = workerUrl ? `${workerUrl.replace(/\/$/, '')}/health` : null
+      workerFinalUrl = null
     }
   }
 
@@ -78,6 +94,10 @@ export async function GET() {
     workerStatus,
     workerHealthy,
     workerResponseTime,
+    workerHealthCode,
+    workerHealthBodySnippet,
+    workerHealthUrl,
+    workerFinalUrl,
     defaults: { steps, guidance },
     deviceHint: process.env.CUDA_VISIBLE_DEVICES ? 'cuda' : 'cpu'
   })

@@ -86,6 +86,15 @@ export default function TestGhibliClient() {
         const r = await fetch('/api/ghibli/status', { cache: 'no-store' })
         const j = await r.json()
         setStatus(j)
+        try {
+          const parts: string[] = []
+          if (j?.workerStatus) parts.push(`worker=${j.workerStatus}`)
+          if (typeof j?.workerHealthCode !== 'undefined') parts.push(`code=${j.workerHealthCode}`)
+          if (j?.workerHealthUrl) parts.push(`url=${j.workerHealthUrl}`)
+          if (j?.workerFinalUrl && j?.workerFinalUrl !== j?.workerHealthUrl) parts.push(`final=${j.workerFinalUrl}`)
+          if (parts.length > 0) appendLog('[Status] ' + parts.join(' | '))
+          if (j?.workerHealthBodySnippet) appendLog('[Status] body: ' + String(j.workerHealthBodySnippet))
+        } catch {}
       } catch (e) {
         setStatus({ ok: false, error: String(e) })
       }
@@ -254,6 +263,18 @@ export default function TestGhibliClient() {
               <div>LoRA path: {status.loraPath || '(not set)'}</div>
               <div>LoRA exists: {String(status.loraExists)}</div>
               <div>Device hint: {status.deviceHint}</div>
+              {typeof status.workerHealthCode !== 'undefined' && (
+                <div>Worker health code: {String(status.workerHealthCode)}</div>
+              )}
+              {status.workerHealthUrl && (
+                <div style={{ wordBreak: 'break-all' }}>Worker health URL: {status.workerHealthUrl}</div>
+              )}
+              {status.workerFinalUrl && status.workerFinalUrl !== status.workerHealthUrl && (
+                <div style={{ wordBreak: 'break-all' }}>Worker final URL: {status.workerFinalUrl}</div>
+              )}
+              {status.workerHealthBodySnippet && (
+                <div style={{ whiteSpace:'pre-wrap' }}>Worker body: {status.workerHealthBodySnippet}</div>
+              )}
               {status.workerError && <div style={{ color: '#f44336' }}>Worker Error: {status.workerError}</div>}
               {status.torchError && <div style={{ color: '#f44336' }}>Torch Error: {status.torchError}</div>}
             </div>

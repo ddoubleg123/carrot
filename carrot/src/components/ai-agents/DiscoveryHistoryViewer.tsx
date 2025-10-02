@@ -24,9 +24,10 @@ interface DiscoveryHistoryViewerProps {
   planId?: string;
   agentId?: string;
   className?: string;
+  showAllAgents?: boolean;
 }
 
-export default function DiscoveryHistoryViewer({ planId, agentId, className = '' }: DiscoveryHistoryViewerProps) {
+export default function DiscoveryHistoryViewer({ planId, agentId, className = '', showAllAgents = false }: DiscoveryHistoryViewerProps) {
   const [discoveries, setDiscoveries] = useState<DiscoveryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,20 +55,31 @@ export default function DiscoveryHistoryViewer({ planId, agentId, className = ''
 
   // Load discoveries
   const loadDiscoveries = async () => {
-    if (!planId) return;
-    
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('limit', '500'); // Get more items for history view
       
-      const response = await fetch(`/api/agents/training/plan/${planId}/discoveries?${params.toString()}`, {
+      if (agentId) {
+        params.set('agentId', agentId);
+      }
+      
+      let url: string;
+      if (showAllAgents || !planId) {
+        // Use the new all-agents endpoint
+        url = `/api/agents/training/discoveries?${params.toString()}`;
+      } else {
+        // Use the single-plan endpoint
+        url = `/api/agents/training/plan/${planId}/discoveries?${params.toString()}`;
+      }
+      
+      const response = await fetch(url, {
         cache: 'no-store'
       });
       
       const data = await response.json();
       if (data.ok) {
-        setDiscoveries(data.items || []);
+        setDiscoveries(data.discoveries || data.items || []);
       }
     } catch (error) {
       console.error('Failed to load discoveries:', error);
@@ -79,7 +91,7 @@ export default function DiscoveryHistoryViewer({ planId, agentId, className = ''
   // Load discoveries on mount and when planId changes
   useEffect(() => {
     loadDiscoveries();
-  }, [planId]);
+  }, [planId, agentId, showAllAgents]);
 
   // Auto-refresh every 10 seconds
   useEffect(() => {
