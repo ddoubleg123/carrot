@@ -107,7 +107,7 @@ If unsure, set ok=false.`
     sourceTypes?: string[]; // subset of ['wikipedia','arxiv','news','github','pubmed','books']
     verifyWithDeepseek?: boolean; // if true, ask Deepseek to validate sources before feeding
     verificationMode?: 'off' | 'advisory' | 'strict';
-  }): Promise<{ success: boolean; results: any[]; fedCount: number }>{
+  }): Promise<{ success: boolean; results: any[]; fedCount: number; fedUrls: string[] }> {
     const { agentId, topic } = params
     const maxResults = params.maxResults ?? 20
     const autoFeed = !!params.autoFeed
@@ -144,6 +144,7 @@ If unsure, set ok=false.`
       const unique = verified.filter((r, i, self)=> i===self.findIndex(x=> x.url===r.url))
 
       let fedCount = 0
+      const fedUrlsSet = new Set<string>()
       if (autoFeed) {
         const existing = await FeedService.getRecentMemories(agentId, 200)
         const existingUrls = new Set(existing.map((m:any)=> m.sourceUrl).filter(Boolean))
@@ -162,6 +163,7 @@ If unsure, set ok=false.`
             console.log(`[AgentSpecificRetriever] Attempting to feed content to agent ${agentId}: ${item.title}`);
             const result = await FeedService.feedAgent(agentId, feedItem, 'topic-trainer'); 
             fedCount++;
+            if (item.url) fedUrlsSet.add(item.url)
             console.log(`[AgentSpecificRetriever] ✅ Successfully fed content to agent ${agentId}: ${item.title}`, result);
           } catch (error) {
             console.error(`[AgentSpecificRetriever] ❌ FEEDING FAILED for agent ${agentId}:`, {
@@ -188,10 +190,10 @@ If unsure, set ok=false.`
         }
       }
 
-      return { success: true, results: unique.slice(0, maxResults), fedCount }
+      return { success: true, results: unique.slice(0, maxResults), fedCount, fedUrls: Array.from(fedUrlsSet) }
     } catch (e) {
       console.error('[AgentSpecificRetriever] retrieveForTopic error', e)
-      return { success: false, results: [], fedCount: 0 }
+      return { success: false, results: [], fedCount: 0, fedUrls: [] }
     }
   }
 
