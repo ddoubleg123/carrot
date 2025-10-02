@@ -108,35 +108,82 @@ export default function NeverBlackVideo({
   const fallbackPosterUrl = getFallbackPosterUrl();
   const currentPosterUrl = fallbackAttempt === 0 ? primaryPosterUrl : fallbackPosterUrl;
   
-  // Resolve video URL via proxy
-  const videoUrl = (() => {
-    if (bucket && path) return `/api/video?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`;
-    if (!src) return null;
-    
-    // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
-    const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(src);
-    
-    try {
-      const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-      if (u.pathname.startsWith('/api/video')) return u.toString();
+  // Resolve video URL via proxy or preloaded data
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [blobCleanupRef] = useState<{ current: (() => void) | null }>({ current: null });
+
+  useEffect(() => {
+    const resolveVideoUrl = async () => {
+      // First, try to use preloaded data for instant loading
+      if (postId) {
+        try {
+          const preloadedData = preloadQueueRef.current.getResult(`VIDEO_PREROLL_6S:${postId}`);
+          if (preloadedData && preloadedData.success && preloadedData.data) {
+            console.log('[NeverBlackVideo] Using preloaded data for instant startup', { postId });
+            // Convert ArrayBuffer to Blob, then create blob URL
+            const arrayBuffer = preloadedData.data as ArrayBuffer;
+            const blob = new Blob([arrayBuffer], { type: 'video/mp4' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // Store cleanup function
+            blobCleanupRef.current = () => URL.revokeObjectURL(blobUrl);
+            
+            setVideoUrl(blobUrl);
+            return;
+          }
+        } catch (e) {
+          console.warn('[NeverBlackVideo] Failed to check preloaded data:', e);
+        }
+      }
+
+      // Fallback to normal URL resolution
+      if (bucket && path) {
+        setVideoUrl(`/api/video?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`);
+        return;
+      }
+      if (!src) {
+        setVideoUrl(null);
+        return;
+      }
       
-      if (isAlreadyEncoded) {
-        // URL is already encoded, pass it directly to avoid double-encoding
-        return `/api/video?url=${src}`;
-      } else {
-        // URL is not encoded, encode it once
-        return `/api/video?url=${encodeURIComponent(src)}`;
+      // Check if URL is already heavily encoded (contains %25 which indicates double encoding)
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(src);
+      
+      try {
+        const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+        if (u.pathname.startsWith('/api/video')) {
+          setVideoUrl(u.toString());
+          return;
+        }
+        
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          setVideoUrl(`/api/video?url=${src}`);
+        } else {
+          // URL is not encoded, encode it once
+          setVideoUrl(`/api/video?url=${encodeURIComponent(src)}`);
+        }
+      } catch {
+        if (isAlreadyEncoded) {
+          // URL is already encoded, pass it directly to avoid double-encoding
+          setVideoUrl(`/api/video?url=${src}`);
+        } else {
+          // URL is not encoded, encode it once
+          setVideoUrl(`/api/video?url=${encodeURIComponent(src)}`);
+        }
       }
-    } catch {
-      if (isAlreadyEncoded) {
-        // URL is already encoded, pass it directly to avoid double-encoding
-        return `/api/video?url=${src}`;
-      } else {
-        // URL is not encoded, encode it once
-        return `/api/video?url=${encodeURIComponent(src)}`;
+    };
+
+    resolveVideoUrl();
+
+    // Cleanup blob URL on unmount or when src changes
+    return () => {
+      if (blobCleanupRef.current) {
+        blobCleanupRef.current();
+        blobCleanupRef.current = null;
       }
-    }
-  })();
+    };
+  }, [src, bucket, path, postId]);
 
   const setVideoRef = (el: HTMLVideoElement | null) => {
     videoRef.current = el;

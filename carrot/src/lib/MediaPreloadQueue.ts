@@ -299,6 +299,17 @@ class MediaPreloadQueue {
     return this.completedTasks.has(taskId);
   }
 
+  // Get completed task data for a specific post and task type
+  getCompletedTask(postId: string, taskType: TaskType): TaskResult | null {
+    // Look for completed task with matching postId and type
+    for (const [taskId, result] of this.completedTasks.entries()) {
+      if (result.postId === postId && result.type === taskType && result.success) {
+        return result;
+      }
+    }
+    return null;
+  }
+
   // Get queue statistics
   getStats() {
     const activeCounts = new Map<TaskType, number>();

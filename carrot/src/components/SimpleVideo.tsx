@@ -32,6 +32,7 @@ export default function SimpleVideo({
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const blobCleanupRef = useRef<(() => void) | null>(null);
 
   // FeedMediaManager integration for single-video playback
   useEffect(() => {
@@ -143,11 +144,14 @@ export default function SimpleVideo({
           console.warn('[SimpleVideo] Failed to promote visible video', e);
         }
       } else {
-        // Video is not visible - pause it
+        // Video is not visible - pause it (preloading handled by FeedMediaManager)
         try { 
           video.pause(); 
           console.log('[SimpleVideo] Paused video due to low visibility', { postId, intersectionRatio: entry.intersectionRatio });
-        } catch {}
+          // Note: Preloading is handled by FeedMediaManager to avoid duplicate requests
+        } catch (e) {
+          console.warn('[SimpleVideo] Failed to pause off-screen video', e);
+        }
       }
     }, { threshold: [0, 0.5, 1] });
     
@@ -168,8 +172,46 @@ export default function SimpleVideo({
       return;
     }
 
-    // Simple URL construction - handle Firebase URLs properly
-    let proxyUrl: string;
+    // Check if we have preloaded data for this video first
+    const checkPreloadedData = async () => {
+      if (postId) {
+        try {
+          const { default: MediaPreloadQueue } = await import('../lib/MediaPreloadQueue');
+          const preloadedData = MediaPreloadQueue.instance.getCompletedTask(postId, 'VIDEO_PREROLL_6S');
+          
+          if (preloadedData && preloadedData.data) {
+            console.log('[SimpleVideo] Using preloaded data for instant startup', { postId });
+            // Convert ArrayBuffer to Blob, then create blob URL
+            const arrayBuffer = preloadedData.data as ArrayBuffer;
+            const blob = new Blob([arrayBuffer], { type: 'video/mp4' });
+            const blobUrl = URL.createObjectURL(blob);
+            setVideoSrc(blobUrl);
+            setIsLoading(false);
+            
+            // Store cleanup function
+            blobCleanupRef.current = () => URL.revokeObjectURL(blobUrl);
+            return { success: true };
+          }
+        } catch (e) {
+          console.warn('[SimpleVideo] Failed to check preloaded data:', e);
+        }
+      }
+      return { success: false }; // No preloaded data available
+    };
+
+    // Try preloaded data first, then fallback to normal URL processing
+    checkPreloadedData().then((result) => {
+      if (result.success) {
+        return; // Already handled with preloaded data
+      }
+      
+      // Fallback to normal URL processing
+      processNormalUrl();
+    });
+
+    const processNormalUrl = () => {
+      // Simple URL construction - handle Firebase URLs properly
+      let proxyUrl: string;
     
     if (src.startsWith('/api/video-simple')) {
       // Already proxied through video-simple
@@ -252,15 +294,21 @@ export default function SimpleVideo({
       isAlreadyProxied: src.startsWith('/api/video')
     });
     
-    setVideoSrc(proxyUrl);
-    // Show video immediately when source is set - don't wait for events
-    setIsLoading(false);
+      setVideoSrc(proxyUrl);
+      // Show video immediately when source is set - don't wait for events
+      setIsLoading(false);
+    }; // Close processNormalUrl function
     
-    // Cleanup timeout on unmount
+    // Cleanup timeout and blob URLs on unmount
     return () => {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
+      }
+      // Clean up blob URL if it exists
+      if (blobCleanupRef.current) {
+        blobCleanupRef.current();
+        blobCleanupRef.current = null;
       }
     };
   }, [src]);
