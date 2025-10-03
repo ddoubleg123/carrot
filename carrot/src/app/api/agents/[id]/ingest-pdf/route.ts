@@ -48,27 +48,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       try {
         // Lazy import to avoid bundling when unavailable
         // Optional dependency: suppress TS resolution error when not installed
-        // @ts-ignore - pdf-parse may not be present in every deployment
-        const pdfParse = (await import('pdf-parse')).default as any
-        const res = await fetch(url)
-        if (!res.ok) throw new Error(`Failed to download PDF: ${res.status}`)
-        const buf = Buffer.from(await res.arrayBuffer())
-        const parsed = await pdfParse(buf, maxPages ? { max: maxPages } : undefined)
-        const text: string = parsed?.text || ''
-        if (!text.trim()) throw new Error('Parsed PDF text is empty')
-
-        // Chunk
-        const { chunkText } = await import('@/lib/text/chunker')
-        const chunks = chunkText(text, chunkSize)
-        let fed = 0
-        for (let i = 0; i < chunks.length; i++) {
-          const part = chunks[i]
-          await feedChunk(part, { part: i+1, total: chunks.length })
-          fed++
-          // simple throttle
-          await new Promise(r=> setTimeout(r, 50))
-        }
-        return NextResponse.json({ ok: true, mode: 'raw', chunks: chunks.length, fed })
+        // PDF parsing is temporarily disabled due to build issues
+        throw new Error('PDF parsing is temporarily unavailable due to build configuration issues');
       } catch (e:any) {
         console.error('[ingest-pdf] RAW mode failed:', e)
         return NextResponse.json({ ok: false, error: 'PDF parser not available on server for RAW ingestion' }, { status: 501 })

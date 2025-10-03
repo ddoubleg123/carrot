@@ -151,12 +151,13 @@ export async function POST(
             title: item.title,
             url: item.url,
             author: item.source_authority || 'Unknown',
-            description: item.description,
-            type: item.type || 'article',
-            relevanceScore: item.relevance_score || 0.8,
-            status: 'pending_audit',
-            discoveredBy: session.user.id,
-            discoveredAt: new Date()
+            addedBy: session.user.id,
+            citeMeta: {
+              description: item.description,
+              type: item.type || 'article',
+              relevanceScore: item.relevance_score || 0.8,
+              status: 'pending_audit'
+            }
           }
         });
 
@@ -164,10 +165,10 @@ export async function POST(
           id: source.id,
           title: source.title,
           url: source.url,
-          type: source.type,
-          description: source.description,
-          relevanceScore: source.relevanceScore,
-          status: source.status
+          type: (source.citeMeta as any)?.type || 'article',
+          description: (source.citeMeta as any)?.description || '',
+          relevanceScore: (source.citeMeta as any)?.relevanceScore || 0.8,
+          status: (source.citeMeta as any)?.status || 'pending_audit'
         });
       } catch (dbError) {
         console.error('[Start Discovery] Failed to save item:', item.title, dbError);
