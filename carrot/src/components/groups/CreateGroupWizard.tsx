@@ -896,7 +896,15 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
         console.log('[CreateGroupWizard] Success response data:', groupData);
         const totalTime = performance.now() - startTime;
         telemetry.trackGroupCreateSuccess(groupData.id, totalTime);
-        onSuccess(groupData.id);
+        
+        // Redirect to the group page using the handle
+        if (groupData.patch?.handle) {
+          console.log('[CreateGroupWizard] Redirecting to group page:', groupData.patch.handle);
+          window.location.href = `/patch/${groupData.patch.handle}`;
+        } else {
+          console.warn('[CreateGroupWizard] No handle found in response, calling onSuccess with ID');
+          onSuccess(groupData.id);
+        }
         onClose();
       } catch (error) {
         console.error('Failed to create group:', error);
