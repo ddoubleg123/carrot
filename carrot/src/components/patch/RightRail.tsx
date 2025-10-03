@@ -67,6 +67,7 @@ export default function RightRail({
 
   return (
     <div className="space-y-6">
+      {/* Fixed container bleeding v2 */}
       {/* Followers & AI Agents Card */}
       <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
         <div className="space-y-6">

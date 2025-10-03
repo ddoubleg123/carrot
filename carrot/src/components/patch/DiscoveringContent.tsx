@@ -318,6 +318,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         }}>
           No content discovered yet
         </h3>
+        {/* Force rebuild - v2 */}
         <p style={{
           fontSize: TOKENS.typography.body,
           color: TOKENS.colors.slate,

@@ -154,7 +154,7 @@ export default function PatchHeader({
                 </p>
               )}
               
-              {/* Topic Chips */}
+              {/* Topic Chips - Fixed duplicates v2 */}
               {patch.tags && patch.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">
                   {[...new Set(patch.tags)].map((tag) => (
