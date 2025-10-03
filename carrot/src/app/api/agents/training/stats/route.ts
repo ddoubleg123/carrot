@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
+import { FEATURED_AGENTS } from '@/lib/agents'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -8,15 +9,21 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const prisma = new PrismaClient() as any
   try {
-    // Load agents
-    const agents = await prisma.agent.findMany({ select: { id: true, name: true } }).catch(() => [])
+    // Load DB agents
+    const dbAgents = await prisma.agent.findMany({ select: { id: true, name: true } }).catch(() => [])
+    // Build canonical agent list from FEATURED_AGENTS, hydrated by DB when names match
+    const norm = (s: string) => String(s||'').toLowerCase().replace(/\s+/g,' ').trim()
+    const byNameDB = new Map<string, any>()
+    for (const a of dbAgents) byNameDB.set(norm(a.name), a)
+    const canonical = (FEATURED_AGENTS || []).map((f: any) => {
+      const hit = byNameDB.get(norm(f.name))
+      return { id: hit?.id || f.id, name: f.name }
+    })
 
     // Load all plans (id -> agentId)
     const plans = await prisma.trainingPlan.findMany({ select: { id: true, agentId: true } }).catch(() => [])
     const plansByAgent: Record<string, string[]> = {}
-    for (const p of plans) {
-      (plansByAgent[p.agentId] ||= []).push(p.id)
-    }
+    for (const p of plans) { (plansByAgent[p.agentId] ||= []).push(p.id) }
 
     // Load discovery entries for all plans in one go
     const planIds = plans.map((p: any) => p.id)
@@ -32,6 +39,16 @@ export async function GET() {
       perSkill: Record<string, { retrieved: number; filtered: number; fed: number; failed: number }>
     }> = {}
 
+    // Initialize zero records for all canonical agents so they appear even without discoveries
+    for (const a of canonical) {
+      perAgent[a.id] = {
+        agentId: a.id,
+        agentName: a.name,
+        skills: [],
+        perSkill: {},
+      }
+    }
+
     const planAgentMap = new Map<string, string>(plans.map((p: any) => [p.id, p.agentId]))
     for (const d of discoveries as any[]) {
       const agentId = planAgentMap.get(d.planId)
@@ -39,7 +56,7 @@ export async function GET() {
       const topic = d.topic || 'unknown'
       const rec = (perAgent[agentId] ||= {
         agentId,
-        agentName: agents.find((a: any) => a.id === agentId)?.name,
+        agentName: canonical.find((a: any) => a.id === agentId)?.name,
         skills: [],
         perSkill: {},
       })
@@ -63,19 +80,22 @@ export async function GET() {
     const result = {
       ok: true,
       totals: {
-        agents: agents.length,
+        agents: canonical.length,
         plans: plans.length,
         discoveries: (discoveries as any[]).length,
       },
-      byAgent: Object.entries(perAgent).map(([agentId, rec]) => ({
-        agentId,
-        agentName: rec.agentName || agentId,
-        skills: rec.skills.sort((a, b) => a.localeCompare(b)),
-        perSkill: rec.perSkill,
-        totalSkills: rec.skills.length,
-        totalMemories: memoryCounts[agentId] || 0,
-        totalFed: Object.values(rec.perSkill).reduce((n, v) => n + (v.fed || 0), 0),
-      })),
+      byAgent: canonical.map(a => {
+        const rec = perAgent[a.id] || { skills: [], perSkill: {} as any }
+        return {
+          agentId: a.id,
+          agentName: a.name,
+          skills: (rec.skills || []).sort((x: string, y: string) => x.localeCompare(y)),
+          perSkill: rec.perSkill || {},
+          totalSkills: (rec.skills || []).length,
+          totalMemories: memoryCounts[a.id] || 0,
+          totalFed: Object.values(rec.perSkill || {}).reduce((n: number, v: any) => n + (v.fed || 0), 0),
+        }
+      }),
     }
 
     return NextResponse.json(result)

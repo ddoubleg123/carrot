@@ -1,3 +1,9 @@
+  // Helper: avatar URL (fallback if none in metadata)
+  const avatarFor = (name: string, url?: string) => {
+    if (url) return url
+    const seed = encodeURIComponent(name || 'Agent')
+    return `https://api.dicebear.com/7.x/shapes/svg?seed=${seed}&radius=50&backgroundType=gradientLinear`
+  }
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -48,6 +54,12 @@ interface FeedPreview {
 }
 
 export default function FeedAgentsPage() {
+  // Helper: avatar URL (fallback if none in metadata)
+  const avatarFor = (name: string, url?: string) => {
+    if (url) return url
+    const seed = encodeURIComponent(name || 'Agent')
+    return `https://api.dicebear.com/7.x/shapes/svg?seed=${seed}&radius=50&backgroundType=gradientLinear`
+  }
   const [agents, setAgents] = useState<Agent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -1103,17 +1115,11 @@ export default function FeedAgentsPage() {
                         className="w-4 h-4 accent-blue-600"
                         aria-label={`Select ${agent.name}`}
                       />
-                      {agent.metadata.avatar ? (
-                        <AvatarImage
-                          src={agent.metadata.avatar}
-                          alt={agent.name}
-                          size={48}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                          {agent.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                      )}
+                      <AvatarImage
+                        src={avatarFor(agent.name, (agent.metadata as any)?.avatar)}
+                        alt={agent.name}
+                        size={48}
+                      />
                       <div>
                         <CardTitle className="text-lg">{agent.name}</CardTitle>
                         <CardDescription>

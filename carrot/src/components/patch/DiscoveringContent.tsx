@@ -316,7 +316,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           margin: 0,
           marginBottom: TOKENS.spacing.sm
         }}>
-          No content discovered yet - DEPLOYMENT TEST
+          RENDER DEPLOYMENT TEST - CHANGES ARE LIVE
         </h3>
         {/* Force rebuild - v2 */}
         <p style={{
