@@ -29,10 +29,17 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
   const isImage = asset.type?.toLowerCase() === "image";
   // Always proxy through /api/img to avoid CORS issues with Firebase/GCS
   const src = (() => {
-    const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || undefined)
+    const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || asset.url || undefined)
                         : (asset.thumbUrl || asset.url || undefined);
     if (!raw) {
-      console.warn('[MediaCard] No thumbnail URL available for asset:', { id: asset.id, type: asset.type, asset });
+      console.warn('[MediaCard] No thumbnail URL available for asset:', { 
+        id: asset.id, 
+        type: asset.type, 
+        posterUrl: asset.posterUrl,
+        thumbUrl: asset.thumbUrl,
+        url: asset.url,
+        asset 
+      });
       return undefined;
     }
     // If already proxied or a data/blob URL, pass through unchanged
@@ -63,23 +70,27 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
     >
       <div className="aspect-video w-full">
         {isImage || isVideo ? (
-          <Thumb
-            src={src}
-            type={isVideo ? "VIDEO" : "IMAGE"}
-            alt={asset.title || (isVideo ? "video" : "image")}
-            className={cn("h-full w-full", asset.hidden && "opacity-60")}
-            loading="eager"
-            decoding="async"
-            fetchPriority="high"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C]">
-            {isVideo ? <Film className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
-            {!src && (
+          src ? (
+            <Thumb
+              src={src}
+              type={isVideo ? "VIDEO" : "IMAGE"}
+              alt={asset.title || (isVideo ? "video" : "image")}
+              className={cn("h-full w-full", asset.hidden && "opacity-60")}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C] relative">
+              {isVideo ? <Film className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
               <div className="absolute inset-0 flex items-center justify-center bg-yellow-50 text-yellow-600 text-xs">
                 No thumbnail
               </div>
-            )}
+            </div>
+          )
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-[#F7F8FA] text-[#60646C]">
+            {isVideo ? <Film className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
           </div>
         )}
       </div>
