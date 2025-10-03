@@ -43,7 +43,7 @@ export async function GET() {
         patchMemberships: {
           select: {
             id: true,
-            createdAt: true,
+            joinedAt: true,
           }
         }
       }
