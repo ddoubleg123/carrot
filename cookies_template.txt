@@ -1,0 +1,13 @@
+# Netscape HTTP Cookie File
+# This is a template - you need to replace this with real YouTube cookies
+# 
+# To get real cookies:
+# 1. Install "Get cookies.txt" browser extension
+# 2. Go to youtube.com and sign in
+# 3. Click the extension and export cookies for youtube.com
+# 4. Replace this file with the exported cookies
+#
+# Example format (replace with real cookies):
+# .youtube.com	TRUE	/	FALSE	1234567890	VISITOR_INFO1_LIVE	abc123def456
+# .youtube.com	TRUE	/	FALSE	1234567890	YSC	xyz789uvw012
+# .youtube.com	TRUE	/	FALSE	1234567890	PREF	z=1234567890:y=1:tz=UTC

@@ -29,6 +29,9 @@ RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
 # Copy source code
 COPY src/ ./src/
 
+# Copy cookies file for YouTube ingestion
+COPY cookies.txt ./cookies.txt
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/healthz || exit 1

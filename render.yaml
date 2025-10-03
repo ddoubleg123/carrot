@@ -14,3 +14,17 @@ services:
         value: dev_ingest_secret
       - key: PORT
         value: 10000
+      - key: YT_DLP_PATH
+        value: yt-dlp
+      - key: YT_DLP_COOKIES_FROM_BROWSER
+        value: chrome
+      - key: YT_DLP_COOKIES_FROM_BROWSER_PROFILE
+        value: chrome:Default
+      - key: YT_DLP_COOKIES
+        value: /app/cookies.txt
+      - key: INGEST_CALLBACK_URL
+        value: https://carrot-app.onrender.com/api/ingest/callback
+      - key: INGEST_CALLBACK_SECRET
+        value: dev_ingest_secret
+      - key: WORKER_PUBLIC_URL
+        value: https://carrot-worker.onrender.com
