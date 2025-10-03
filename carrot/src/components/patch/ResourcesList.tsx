@@ -228,7 +228,12 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
             </div>
           </div>
         ) : (
-          filteredSources.map((source) => {
+          Array.isArray(filteredSources) ? filteredSources.map((source) => {
+            if (!source || typeof source !== 'object') {
+              console.warn('[ResourcesList] Invalid source object:', source);
+              return null;
+            }
+            
             const relevanceScore = source.relevanceScore || source.citeMeta?.relevanceScore || 0;
             const status = source.status || source.citeMeta?.status || 'pending_audit';
             const type = source.type || source.citeMeta?.type || 'article';
@@ -345,7 +350,15 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
                 </div>
               </div>
             );
-          })
+          }).filter(Boolean) : (
+            <div className={cardVariants.default}>
+              <div className="text-center py-8">
+                <ExternalLink className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">Error loading sources</h3>
+                <p className="text-[#60646C]">There was a problem loading the sources. Please try again.</p>
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>
