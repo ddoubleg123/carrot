@@ -372,23 +372,57 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     // Do not poll for temporary IDs generated optimistically
     if (ingestJobId.startsWith('temp-')) return;
     let cancelled = false;
+    let pollCount = 0;
+    const maxPolls = 60; // 60 seconds timeout (1 second intervals)
+    
     const iv = setInterval(async () => {
+      pollCount++;
+      console.log('[ComposerModal] Polling attempt:', pollCount, 'of', maxPolls);
+      
+      // Timeout after maxPolls attempts
+      if (pollCount >= maxPolls) {
+        console.error('[ComposerModal] Ingestion timeout after', maxPolls, 'polls');
+        setIngestError('Ingestion timed out. The worker service may be unavailable.');
+        setIngestStatus('failed');
+        clearInterval(iv);
+        setIngestJobId(null);
+        return;
+      }
       try {
+        console.log('[ComposerModal] Polling ingestion status for job:', ingestJobId);
         const r = await fetch(`/api/ingest?jobId=${ingestJobId}&t=${Date.now()}`, { cache: 'no-store' });
+        console.log('[ComposerModal] Polling response:', { status: r.status, ok: r.ok });
+        
         if (!r.ok) {
           // If the app restarted and lost in-memory jobs, surface a clear error instead of staying stuck
           if (r.status === 404) {
+            console.error('[ComposerModal] Job not found (404)');
             setIngestError('Ingest job not found (server restarted). Please try again.');
             setIngestStatus('failed');
             clearInterval(iv);
             setIngestJobId(null);
+          } else {
+            console.error('[ComposerModal] Polling failed:', r.status, r.statusText);
+            const errorText = await r.text();
+            console.error('[ComposerModal] Error response body:', errorText);
           }
           return;
         }
         const data = await r.json();
+        console.log('[ComposerModal] Polling data:', data);
         const job = data?.job;
-        if (!job) return;
+        if (!job) {
+          console.warn('[ComposerModal] No job data in response:', data);
+          return;
+        }
         if (cancelled) return;
+        
+        console.log('[ComposerModal] Job status update:', { 
+          status: job.status, 
+          progress: job.progress, 
+          error: job.error 
+        });
+        
         setIngestStatus(job.status || null);
         setIngestProgress(prev => (typeof job.progress === 'number' ? job.progress : (prev ?? 0)));
         if (job.status === 'completed') {
@@ -489,6 +523,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           }
         }
         if (job.status === 'failed') {
+          console.error('[ComposerModal] Job failed:', job.error);
           setIngestError(job.error || 'Ingestion failed');
           showErrorToast('Ingestion failed');
           clearInterval(iv);
