@@ -91,7 +91,7 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
         name: name.trim(),
         description: String(description || '').trim(),
         createdBy: session.user.id,
-        tags: tags.filter(tag => typeof tag === 'string'), // Ensure all tags are strings
+        tags: tags.filter((tag: any) => typeof tag === 'string'), // Ensure all tags are strings
         theme: 'light' // Default theme
       },
       include: {
