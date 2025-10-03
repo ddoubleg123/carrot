@@ -270,25 +270,36 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         ok: res.ok
       });
       
+      // Get the response body to see what we actually received
+      const responseText = await res.text();
+      console.log('[ComposerModal] Response body:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('[ComposerModal] Parsed response data:', data);
+      } catch (e) {
+        console.error('[ComposerModal] Failed to parse response JSON:', e);
+        throw new Error('Invalid response from server');
+      }
+      
       // Handle non-OK responses with detailed error messages
       if (!res.ok) {
         let errorMsg = `Failed to create ingest job (${res.status})`;
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.error || errorMsg;
-          if (errorData.details) {
-            console.error('[ComposerModal] Ingestion error details:', errorData.details);
-          }
-        } catch (e) {
-          // If we can't parse JSON, use the status text
-          errorMsg = `Failed to process video: ${res.statusText || 'Unknown error'}`;
+        if (data?.error) {
+          errorMsg = data.error;
+        }
+        if (data?.details) {
+          console.error('[ComposerModal] Ingestion error details:', data.details);
         }
         throw new Error(errorMsg);
       }
       
-      const data = await res.json();
       const id = data?.job?.id as string | undefined;
-      if (!id) throw new Error('Ingest job id missing');
+      if (!id) {
+        console.error('[ComposerModal] No job ID in response:', data);
+        throw new Error('Ingest job id missing');
+      }
       
       console.debug('[ComposerModal] Ingestion started successfully', { jobId: id });
       setIngestJobId(id);
