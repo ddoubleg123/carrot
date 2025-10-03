@@ -170,14 +170,14 @@ export default function PatchHeader({
               )}
             </div>
             
-            {/* Right side: Actions */}
+            {/* Right side: Actions - ALIGNED LEFT */}
             <div className="flex flex-col gap-2 flex-shrink-0">
         <Button
           onClick={isMember ? () => {} : handleJoin}
           variant={isMember ? "outline" : "secondary"}
           className={isMember 
-            ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 w-32 justify-start" 
-            : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 w-32 justify-start"
+            ? "border-white/30 text-white hover:bg-white/10 bg-transparent pl-0 pr-4 py-2 w-32 justify-start" 
+            : "bg-white text-[#FF6A00] hover:bg-white/90 pl-0 pr-4 py-2 w-32 justify-start"
           }
         >
           <Users className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -187,7 +187,7 @@ export default function PatchHeader({
         <Button
           variant="ghost"
           onClick={handleShare}
-          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+          className="text-white hover:bg-white/10 pl-0 pr-4 py-2 w-32 justify-start"
         >
           <Share2 className="w-4 h-4 mr-2 flex-shrink-0" />
           <span className="text-sm font-medium">Share</span>
@@ -196,7 +196,7 @@ export default function PatchHeader({
         <Button
           variant="ghost"
           onClick={handleSettings}
-          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+          className="text-white hover:bg-white/10 pl-0 pr-4 py-2 w-32 justify-start"
         >
           <Settings className="w-4 h-4 mr-2 flex-shrink-0" />
           <span className="text-sm font-medium">Settings</span>
@@ -210,7 +210,7 @@ export default function PatchHeader({
             const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
             handleThemeChange({ mode: 'preset', preset: nextIndex });
           }}
-          className="text-white hover:bg-white/10 px-4 py-2 w-32 justify-start"
+          className="text-white hover:bg-white/10 pl-0 pr-4 py-2 w-32 justify-start"
           title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
         >
           <Zap className="w-4 h-4 mr-2 flex-shrink-0" />

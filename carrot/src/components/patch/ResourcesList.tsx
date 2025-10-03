@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { cardVariants, sectionHeading } from '@/styles/cards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, ExternalLink, Copy, Check, Calendar, User, Building, Plus } from 'lucide-react';
+import { Search, ExternalLink, Copy, Check, Calendar, User, Building, Plus, Trash2, AlertTriangle, Star } from 'lucide-react';
 
 interface Source {
   id: string;
@@ -14,12 +14,20 @@ interface Source {
   author?: string | null;
   publisher?: string | null;
   publishedAt?: Date | null;
+  relevanceScore?: number;
+  status?: 'pending_audit' | 'approved' | 'rejected';
+  type?: string;
+  description?: string;
   citeMeta?: {
     title: string;
     url: string;
     author?: string;
     publisher?: string;
     publishedAt?: string;
+    type?: string;
+    description?: string;
+    relevanceScore?: number;
+    status?: string;
   } | null;
 }
 
@@ -38,17 +46,60 @@ interface Patch {
 
 interface ResourcesListProps {
   patch: Patch;
+  patchHandle: string;
 }
 
-export default function ResourcesList({ patch }: ResourcesListProps) {
-  // Mock data for now - in real implementation, this would come from props or API
-  const sources: Source[] = [
-    { id: '1', title: 'Congressional Research Service Report', url: 'https://example.com/crs-report', author: 'CRS', publishedAt: new Date() },
-    { id: '2', title: 'Public Opinion Poll Results', url: 'https://example.com/gallup-poll', author: 'Gallup', publishedAt: new Date() },
-    { id: '3', title: 'Academic Study on Term Limits', url: 'https://example.com/academic-study', author: 'Dr. Smith', publishedAt: new Date() },
-  ];
+export default function ResourcesList({ patch, patchHandle }: ResourcesListProps) {
+  const [sources, setSources] = useState<Source[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Fetch AI-discovered sources
+  useEffect(() => {
+    const fetchSources = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
+        if (response.ok) {
+          const data = await response.json();
+          setSources(data.items || []);
+        } else {
+          console.error('Failed to fetch sources');
+        }
+      } catch (error) {
+        console.error('Error fetching sources:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSources();
+  }, [patchHandle]);
+
+  // Delete source
+  const handleDeleteSource = async (sourceId: string) => {
+    if (!confirm('Are you sure you want to delete this source?')) return;
+    
+    try {
+      setDeletingId(sourceId);
+      const response = await fetch(`/api/sources/${sourceId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        setSources(prev => prev.filter(s => s.id !== sourceId));
+      } else {
+        alert('Failed to delete source');
+      }
+    } catch (error) {
+      console.error('Error deleting source:', error);
+      alert('Failed to delete source');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Filter sources based on search query
   const filteredSources = useMemo(() => {
@@ -59,7 +110,8 @@ export default function ResourcesList({ patch }: ResourcesListProps) {
       source.title.toLowerCase().includes(query) ||
       source.author?.toLowerCase().includes(query) ||
       source.publisher?.toLowerCase().includes(query) ||
-      source.url.toLowerCase().includes(query)
+      source.url.toLowerCase().includes(query) ||
+      source.description?.toLowerCase().includes(query)
     );
   }, [sources, searchQuery]);
 
@@ -79,45 +131,41 @@ export default function ResourcesList({ patch }: ResourcesListProps) {
 
     // Use citeMeta for proper citation
     const author = meta.author ? `${meta.author}. ` : '';
-    const title = meta.title;
+    const title = meta.title || source.title;
     const publisher = meta.publisher ? ` ${meta.publisher}` : '';
-    const date = meta.publishedAt ? ` (${new Date(meta.publishedAt).getFullYear()})` : '';
-    const url = ` ${meta.url}`;
+    const date = meta.publishedAt ? ` (${meta.publishedAt})` : '';
+    const url = ` ${meta.url || source.url}`;
     
     return `${author}"${title}."${publisher}${date}${url}`;
   };
 
+  // Copy citation to clipboard
   const copyCitation = async (source: Source) => {
-    const citation = generateCitation(source);
     try {
+      const citation = generateCitation(source);
       await navigator.clipboard.writeText(citation);
       setCopiedId(source.id);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy citation:', err);
+    } catch (error) {
+      console.error('Failed to copy citation:', error);
     }
   };
 
-  const getFaviconUrl = (url: string): string => {
+  // Get domain from URL
+  const getDomain = (url: string): string => {
     try {
-      const domain = new URL(url).hostname;
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
+      return new URL(url).hostname.replace('www.', '');
     } catch {
-      return '/favicon.ico';
+      return url;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header with search */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className={sectionHeading}>Resources</h2>
-          <p className="text-sm text-[#60646C]">
-            Saved sources and references
-          </p>
-        </div>
-        <Button className="bg-[#0A5AFF] hover:bg-[#0A5AFF]/90 text-white">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className={sectionHeading}>Sources</h2>
+        <Button variant="outline" size="sm">
           <Plus className="w-4 h-4 mr-2" />
           Add Source
         </Button>
@@ -137,13 +185,21 @@ export default function ResourcesList({ patch }: ResourcesListProps) {
       {/* Results count */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#60646C]">
-          {filteredSources.length} source{filteredSources.length !== 1 ? 's' : ''}
+          {filteredSources.length} AI-discovered source{filteredSources.length !== 1 ? 's' : ''}
         </p>
       </div>
 
       {/* Sources list */}
-      <div className="space-y-3">
-        {filteredSources.length === 0 ? (
+      <div className="space-y-4">
+        {isLoading ? (
+          <div className={cardVariants.default}>
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-2 border-[#FF6A00] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">Loading AI-discovered sources...</h3>
+              <p className="text-[#60646C]">Fetching relevant content for this topic</p>
+            </div>
+          </div>
+        ) : filteredSources.length === 0 ? (
           <div className={cardVariants.default}>
             <div className="text-center py-8">
               <ExternalLink className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
@@ -151,95 +207,129 @@ export default function ResourcesList({ patch }: ResourcesListProps) {
               <p className="text-[#60646C]">
                 {searchQuery
                   ? 'Try adjusting your search terms.'
-                  : 'No sources have been added to this patch yet.'}
+                  : 'AI is still discovering relevant sources for this topic.'}
               </p>
             </div>
           </div>
         ) : (
-          filteredSources.map((source) => (
-            <div key={source.id} className={cardVariants.default}>
-              <div className="flex items-start gap-4">
-                {/* Favicon */}
-                <div className="flex-shrink-0 mt-1">
-                  <img
-                    src={getFaviconUrl(source.url)}
-                    alt=""
-                    className="w-4 h-4"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                </div>
+          filteredSources.map((source) => {
+            const relevanceScore = source.relevanceScore || source.citeMeta?.relevanceScore || 0;
+            const status = source.status || source.citeMeta?.status || 'pending_audit';
+            const type = source.type || source.citeMeta?.type || 'article';
+            const description = source.description || source.citeMeta?.description || '';
+            
+            return (
+              <div key={source.id} className={`${cardVariants.default} relative group hover:shadow-lg transition-shadow`}>
+                <div className="flex items-start gap-4">
+                  {/* AI Status Indicator */}
+                  <div className="flex-shrink-0 mt-1">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      status === 'approved' ? 'bg-green-100' : 
+                      status === 'rejected' ? 'bg-red-100' : 
+                      'bg-yellow-100'
+                    }`}>
+                      {status === 'approved' ? (
+                        <Star className="w-4 h-4 text-green-600" />
+                      ) : status === 'rejected' ? (
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                      ) : (
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                      )}
+                    </div>
+                  </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-[#0B0B0F] mb-1 line-clamp-2">
-                        {source.title}
-                      </h3>
-                      
-                      <div className="flex items-center gap-4 text-xs text-[#60646C] mb-2">
-                        {source.author && (
-                          <div className="flex items-center gap-1">
-                            <User className="w-3 h-3" />
-                            <span>{source.author}</span>
-                          </div>
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-lg font-semibold text-[#0B0B0F] line-clamp-2">
+                            {source.title}
+                          </h3>
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(relevanceScore * 100)}% match
+                          </Badge>
+                        </div>
+                        
+                        {description && (
+                          <p className="text-sm text-[#60646C] mb-3 line-clamp-2">
+                            {description}
+                          </p>
                         )}
-                        {source.publisher && (
+                        
+                        <div className="flex items-center gap-4 text-sm text-[#60646C] mb-3">
                           <div className="flex items-center gap-1">
-                            <Building className="w-3 h-3" />
-                            <span>{source.publisher}</span>
+                            <Building className="w-4 h-4" />
+                            <span>{getDomain(source.url)}</span>
                           </div>
-                        )}
-                        {source.publishedAt && (
                           <div className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            <span>{source.publishedAt.toLocaleDateString()}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {type}
+                            </Badge>
                           </div>
-                        )}
+                          {source.author && (
+                            <div className="flex items-center gap-1">
+                              <User className="w-4 h-4" />
+                              <span>{source.author}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {getDomain(source.url)}
+                          </Badge>
+                          <Badge 
+                            variant={status === 'approved' ? 'default' : status === 'rejected' ? 'destructive' : 'secondary'} 
+                            className="text-xs"
+                          >
+                            {status.replace('_', ' ')}
+                          </Badge>
+                        </div>
                       </div>
 
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-[#0A5AFF] hover:underline break-all"
-                      >
-                        {source.url}
-                      </a>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyCitation(source)}
-                        className="p-2"
-                        title="Copy citation"
-                      >
-                        {copiedId === source.id ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="p-2"
-                        title="Open source"
-                        onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 ml-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyCitation(source)}
+                          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          {copiedId === source.id ? (
+                            <Check className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.open(source.url, '_blank')}
+                          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteSource(source.id)}
+                          disabled={deletingId === source.id}
+                          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          {deletingId === source.id ? (
+                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

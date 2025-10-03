@@ -119,11 +119,17 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         const data = await response.json();
         const newItems = data.items || [];
         
+        // Log when new items are found
+        if (newItems.length > items.length) {
+          console.log(`[Discovery] Found ${newItems.length} items (was ${items.length})`, newItems);
+        }
+        
         // Track first item discovery
         if (newItems.length > 0 && items.length === 0 && firstItemTime === null) {
           const timeToFirstItem = performance.now();
           setFirstItemTime(timeToFirstItem);
           telemetry.trackDiscoveryFirstItem(patchHandle, timeToFirstItem);
+          console.log('[Discovery] First item discovered!', newItems[0]);
         }
         
         setItems(newItems);
@@ -317,17 +323,24 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           margin: 0,
           marginBottom: TOKENS.spacing.sm
         }}>
-          RENDER DEPLOYMENT TEST - CHANGES ARE LIVE
+          Discovery In Process
         </h3>
-        {/* Force rebuild - v2 */}
         <p style={{
           fontSize: TOKENS.typography.body,
           color: TOKENS.colors.slate,
           margin: 0,
           marginBottom: TOKENS.spacing.lg
         }}>
-          Start learning about this topic with AI-powered content discovery.
+          AI is searching for relevant content about this topic...
         </p>
+        <div style={{
+          fontSize: TOKENS.typography.caption,
+          color: TOKENS.colors.slate,
+          marginBottom: TOKENS.spacing.lg,
+          fontStyle: 'italic'
+        }}>
+          Items found: {items.length} | Status: {isDiscovering ? 'Searching...' : 'Processing...'}
+        </div>
         <div style={{
           padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
           border: 'none',
@@ -350,7 +363,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
             borderTopColor: 'transparent',
             animation: 'spin 1s linear infinite'
           }} />
-          Auto-Starting Discovery...
+          {isLoading ? 'Starting Discovery...' : 'Searching for Content...'}
         </div>
         <style jsx>{`
           @keyframes spin {

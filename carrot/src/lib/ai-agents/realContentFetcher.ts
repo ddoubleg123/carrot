@@ -50,6 +50,149 @@ export class RealContentFetcher {
   }
 
   /**
+   * Fetch books from Open Library (no API key required)
+   */
+  static async fetchFromOpenLibrary(request: FetchRequest): Promise<RetrievedContent[]> {
+    try {
+      const { query, maxResults = 10 } = request;
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${Math.min(maxResults, 50)}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const docs: any[] = Array.isArray(data?.docs) ? data.docs : [];
+      return docs.slice(0, maxResults).map((d: any, idx: number) => {
+        const workKey = d.key || (Array.isArray(d.work_key) ? d.work_key[0] : null);
+        const authors = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || 'Open Library');
+        const title = d.title || d.title_suggest || 'Untitled';
+        const olUrl = workKey ? `https://openlibrary.org${workKey}` : `https://openlibrary.org/search?q=${encodeURIComponent(title)}`;
+        const firstSentence = typeof d.first_sentence === 'string' ? d.first_sentence : (Array.isArray(d.first_sentence) ? d.first_sentence[0] : '');
+        const content = firstSentence || (d.subtitle || 'Open Library work');
+        return {
+          title,
+          url: olUrl,
+          content,
+          sourceType: 'url' as const,
+          sourceTitle: title,
+          sourceAuthor: authors,
+          relevanceScore: 0.62 + Math.max(0, (maxResults - idx)) / (maxResults * 20),
+        } as RetrievedContent;
+      });
+    } catch (e) {
+      console.error('Error fetching from Open Library:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch books from Gutendex (Project Gutenberg JSON, no key required)
+   */
+  static async fetchFromGutendex(request: FetchRequest): Promise<RetrievedContent[]> {
+    try {
+      const { query, maxResults = 10 } = request;
+      const url = `https://gutendex.com/books?search=${encodeURIComponent(query)}&languages=en`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const items: any[] = Array.isArray(data?.results) ? data.results : [];
+      return items.slice(0, maxResults).map((b: any, idx: number) => {
+        const title = b.title || 'Gutenberg Book';
+        const authors = Array.isArray(b.authors) && b.authors.length ? b.authors.map((a: any) => a.name).join(', ') : 'Unknown';
+        // Prefer readable HTML, then text, then fallback to the book page
+        const formats = b.formats || {};
+        const html = formats['text/html; charset=utf-8'] || formats['text/html'];
+        const pdf = formats['application/pdf'];
+        const plain = formats['text/plain; charset=utf-8'] || formats['text/plain'];
+        const url = html || pdf || plain || `https://www.gutenberg.org/ebooks/${b.id}`;
+        const subjects = Array.isArray(b.subjects) ? b.subjects.slice(0, 5).join(', ') : '';
+        const content = b.description || subjects || 'Project Gutenberg public domain book';
+        return {
+          title,
+          url,
+          content,
+          sourceType: 'url' as const,
+          sourceTitle: title,
+          sourceAuthor: authors,
+          relevanceScore: 0.7 + Math.max(0, (maxResults - idx)) / (maxResults * 20),
+        } as RetrievedContent;
+      });
+    } catch (e) {
+      console.error('Error fetching from Gutendex:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch books from Internet Archive (no key required)
+   */
+  static async fetchFromInternetArchive(request: FetchRequest): Promise<RetrievedContent[]> {
+    try {
+      const { query, maxResults = 10 } = request;
+      // Search only text media
+      const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}+mediatype:(texts)&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=description&sort[]=downloads+desc&rows=${Math.min(maxResults, 50)}&page=1&output=json`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const docs: any[] = Array.isArray(data?.response?.docs) ? data.response.docs : [];
+      return docs.slice(0, maxResults).map((d: any, idx: number) => {
+        const title = d.title || 'Internet Archive Item';
+        const author = d.creator || 'Internet Archive';
+        const id = d.identifier;
+        const iaUrl = id ? `https://archive.org/details/${id}` : 'https://archive.org/';
+        const content = (Array.isArray(d.description) ? d.description[0] : d.description) || 'Archived text';
+        return {
+          title,
+          url: iaUrl,
+          content,
+          sourceType: 'url' as const,
+          sourceTitle: title,
+          sourceAuthor: Array.isArray(author) ? author.join(', ') : author,
+          relevanceScore: 0.58 + Math.max(0, (maxResults - idx)) / (maxResults * 25),
+        } as RetrievedContent;
+      });
+    } catch (e) {
+      console.error('Error fetching from Internet Archive:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch books from Google Books (API key recommended)
+   */
+  static async fetchFromGoogleBooks(request: FetchRequest): Promise<RetrievedContent[]> {
+    try {
+      const { query, maxResults = 10, config } = request;
+      const key = config?.apiKey || process.env.GOOGLE_BOOKS_API_KEY;
+      const params = new URLSearchParams({ q: query, maxResults: String(Math.min(maxResults, 40)) });
+      if (key) params.set('key', key);
+      const url = `https://www.googleapis.com/books/v1/volumes?${params.toString()}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const items: any[] = Array.isArray(data?.items) ? data.items : [];
+      return items.slice(0, maxResults).map((it: any, idx: number) => {
+        const v = it.volumeInfo || {};
+        const title = v.title || 'Google Books Title';
+        const authors = Array.isArray(v.authors) ? v.authors.join(', ') : (v.authors || '');
+        const infoLink = v.infoLink || v.previewLink || (it.selfLink || '');
+        const content = v.description || (Array.isArray(v.categories) ? v.categories.join(', ') : '');
+        return {
+          title,
+          url: infoLink,
+          content: content || 'Google Books entry',
+          sourceType: 'url' as const,
+          sourceTitle: title,
+          sourceAuthor: authors || 'Unknown',
+          relevanceScore: 0.64 + Math.max(0, (maxResults - idx)) / (maxResults * 20),
+        } as RetrievedContent;
+      });
+    } catch (e) {
+      console.error('Error fetching from Google Books:', e);
+      return [];
+    } 
+  }
+  
+
+  /**
    * Fetch content from PubMed (biomedical research)
    */
   static async fetchFromPubMed(request: FetchRequest): Promise<RetrievedContent[]> {
@@ -346,6 +489,20 @@ export class RealContentFetcher {
         case 'bing':
         case 'web':
           results = await this.fetchFromBing(request);
+          break;
+        case 'openlibrary':
+          results = await this.fetchFromOpenLibrary(request);
+          break;
+        case 'gutendex':
+          results = await this.fetchFromGutendex(request);
+          break;
+        case 'internetarchive':
+        case 'internet archive':
+          results = await this.fetchFromInternetArchive(request);
+          break;
+        case 'googlebooks':
+        case 'google books':
+          results = await this.fetchFromGoogleBooks(request);
           break;
         case 'pubmed':
           results = await this.fetchFromPubMed(request);

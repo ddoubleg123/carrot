@@ -360,11 +360,27 @@ export class ContentRetriever {
    */
   static async searchBooks(query: string, maxResults: number = 5): Promise<RetrievedContent[]> {
     try {
-      return await RealContentFetcher.fetchContent({
-        query,
-        sourceName: 'project gutenberg',
-        maxResults
-      });
+      // Fetch from multiple public sources
+      const [openLib, gutendex, internetArchive, googleBooks] = await Promise.all([
+        RealContentFetcher.fetchContent({ query, sourceName: 'openlibrary', maxResults }),
+        RealContentFetcher.fetchContent({ query, sourceName: 'gutendex', maxResults }),
+        RealContentFetcher.fetchContent({ query, sourceName: 'internetarchive', maxResults }),
+        RealContentFetcher.fetchContent({ query, sourceName: 'googlebooks', maxResults, config: { apiKey: process.env.GOOGLE_BOOKS_API_KEY } as any }),
+      ]);
+
+      // Merge and de-duplicate by URL then by title
+      const merged = [...openLib, ...gutendex, ...internetArchive, ...googleBooks];
+      const byUrl = new Map<string, RetrievedContent>();
+      for (const item of merged) {
+        const key = (item.url || '').trim().toLowerCase();
+        if (key && !byUrl.has(key)) byUrl.set(key, item);
+      }
+      let deduped = Array.from(byUrl.values());
+      if (deduped.length === 0) deduped = merged;
+
+      // Sort by relevanceScore descending
+      deduped.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+      return deduped.slice(0, maxResults);
     } catch (error) {
       console.error('Error searching books:', error);
       return [];

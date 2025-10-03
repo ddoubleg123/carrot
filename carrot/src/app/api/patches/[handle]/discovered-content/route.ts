@@ -21,33 +21,32 @@ export async function GET(
       return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
     }
 
-    // Fetch discovered content for this patch
-    // Check if DiscoveredContent table exists, if not return empty array
-    let discoveredContent: any[] = [];
-    try {
-      discoveredContent = await prisma.discoveredContent.findMany({
-        where: {
-          patchId: patch.id,
-          status: { in: ['pending', 'approved', 'audited'] } // Exclude rejected content
-        },
-        orderBy: [
-          { relevanceScore: 'desc' },
-          { createdAt: 'desc' }
-        ]
-      });
-    } catch (tableError: any) {
-      // If table doesn't exist, return empty array
-      if (tableError.code === 'P2021' || tableError.message?.includes('does not exist')) {
-        console.log('DiscoveredContent table does not exist yet, returning empty array');
-        discoveredContent = [];
-      } else {
-        throw tableError; // Re-throw if it's a different error
-      }
-    }
+    // Fetch discovered content from Source table (where discovery saves items)
+    const sources = await prisma.source.findMany({
+      where: {
+        patchId: patch.id
+      },
+      orderBy: [
+        { createdAt: 'desc' }
+      ]
+    });
+
+    // Transform sources to discovered content format
+    const discoveredContent = sources.map(source => ({
+      id: source.id,
+      title: source.title,
+      url: source.url,
+      type: (source.citeMeta as any)?.type || 'article',
+      description: (source.citeMeta as any)?.description || '',
+      relevanceScore: (source.citeMeta as any)?.relevanceScore || 0.8,
+      status: (source.citeMeta as any)?.status || 'pending_audit',
+      createdAt: source.createdAt
+    }));
 
     return NextResponse.json({
       success: true,
-      discoveredContent,
+      items: discoveredContent,
+      isActive: discoveredContent.length > 0,
       totalItems: discoveredContent.length
     });
 

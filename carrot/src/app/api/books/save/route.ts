@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     const title: string | undefined = body.title
 
     // Basic allowlist checks (defense-in-depth if scanner absent)
-    const allow: string[] = Array.isArray(body.allowDomains) ? body.allowDomains : ['arxiv.org','gutenberg.org','archive.org','nih.gov','ncbi.nlm.nih.gov']
+    const allow: string[] = Array.isArray(body.allowDomains) ? body.allowDomains : ['arxiv.org','gutenberg.org','archive.org','nih.gov','ncbi.nlm.nih.gov','openlibrary.org','books.google.com']
     try {
       const u = new URL(url)
       if (!allow.includes(u.hostname) && !process.env.FILE_SCANNER_URL) {

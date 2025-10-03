@@ -306,7 +306,7 @@ export default async function PatchPage({ params, searchParams }: PatchPageProps
                   {activeTab === 'overview' && <Overview patch={patch} />}
                   {activeTab === 'documents' && <DocumentsView patch={patch} />}
                   {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
-                  {activeTab === 'sources' && <SourcesView patch={patch} />}
+                  {activeTab === 'sources' && <SourcesView patch={patch} patchHandle={handle} />}
                   {activeTab === 'discussions' && <DiscussionsView patch={patch} />}
                 </PatchTabs>
               </div>
