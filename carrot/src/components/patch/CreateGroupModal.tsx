@@ -17,14 +17,10 @@ interface GroupFormData {
 
 export default function CreateGroupModal({ isOpen, onClose, onSubmit }: CreateGroupModalProps) {
   const handleSuccess = async (groupId: string) => {
-    // For now, we'll call onSubmit with empty data since the wizard handles the form
-    // In a real implementation, we'd pass the form data from the wizard
-    await onSubmit({
-      name: '',
-      description: '',
-      tags: [],
-      categories: []
-    });
+    // The group has already been created successfully by the wizard
+    // We don't need to call onSubmit again - just close the modal
+    console.log('[CreateGroupModal] Group created successfully, closing modal');
+    onClose();
   };
 
   return (
