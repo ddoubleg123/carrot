@@ -362,7 +362,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             setEditedThumb(null);
             setVideoDuration(0);
             setShowMediaPicker(false);
-            setExternalUrl('');
+            // Don't clear external URL after successful ingestion - preserve for posting
+            // setExternalUrl('');
             setExternalTosAccepted(false);
             clearInterval(iv);
             setIngestJobId(null);
@@ -557,9 +558,11 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           localStorage.setItem('carrot-color-scheme-next-random', 'false');
         }
       } catch {}
-      // Ensure external URL field is clean on open
-      setExternalUrl('');
-      setExternalTosAccepted(false);
+      // Only reset external URL on first open, not on subsequent opens
+      if (!externalUrl) {
+        setExternalUrl('');
+        setExternalTosAccepted(false);
+      }
       // Reset posting state in case it was left true from a prior attempt
       setIsPosting(false);
       // Warm up ffmpeg to reduce first render latency (silent best-effort)
@@ -604,7 +607,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       setEditedThumb(null);
       setVideoDuration(0);
       previewVideoRef.current = null;
-      setExternalTosAccepted(false);
+      // Don't reset external URL state on close - preserve user input
+      // setExternalTosAccepted(false);
       setIngestJobId(null);
       setIngestStatus(null);
       setIngestProgress(null);
@@ -1364,7 +1368,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                       setVideoTrimEnd(0);
                       setVideoAspect('16:9');
                       setVideoDuration(0);
-                      setExternalUrl('');
+                      // Don't clear external URL when removing video - preserve user input
+                      // setExternalUrl('');
                       mediaBaseUrlRef.current = null;
                     }}
                   />

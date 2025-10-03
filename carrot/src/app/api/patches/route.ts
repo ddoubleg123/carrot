@@ -28,18 +28,39 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     // Parse request body
     let body;
     try {
-      body = await request.json();
-      console.log('[API] Received request body:', JSON.stringify(body, null, 2));
+      const rawBody = await request.text();
+      console.log('[API] Raw request body:', rawBody);
+      
+      if (!rawBody || rawBody.trim() === '') {
+        console.error('[API] Empty request body');
+        return NextResponse.json({ error: 'Request body is empty' }, { status: 400 });
+      }
+      
+      body = JSON.parse(rawBody);
+      console.log('[API] Parsed request body:', JSON.stringify(body, null, 2));
     } catch (error) {
       console.error('[API] Error parsing request body:', error);
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
-    const { name, description, tags = [], categories = [] } = body;
+    // Extract and validate fields
+    const name = body?.name;
+    const description = body?.description || '';
+    const tags = Array.isArray(body?.tags) ? body.tags : [];
+    const categories = Array.isArray(body?.categories) ? body.categories : [];
+
+    console.log('[API] Extracted fields:', { name, description, tags, categories });
+    console.log('[API] Field types:', { 
+      nameType: typeof name, 
+      descriptionType: typeof description, 
+      tagsType: typeof tags, 
+      categoriesType: typeof categories 
+    });
 
     // Validate required fields
-    console.log('[API] Extracted fields:', { name, description, tags, categories });
-    if (!name || !name.trim()) {
-      console.log('[API] Validation failed: name is missing or empty');
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      console.log('[API] Validation failed: name is missing, not a string, or empty');
+      console.log('[API] Name value:', name);
+      console.log('[API] Name type:', typeof name);
       return NextResponse.json({ error: 'Group name is required' }, { status: 400 });
     }
 
@@ -68,9 +89,9 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       data: {
         handle,
         name: name.trim(),
-        description: description?.trim() || '',
+        description: String(description || '').trim(),
         createdBy: session.user.id,
-        tags: tags, // Use AI-generated tags
+        tags: tags.filter(tag => typeof tag === 'string'), // Ensure all tags are strings
         theme: 'light' // Default theme
       },
       include: {

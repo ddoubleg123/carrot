@@ -18,6 +18,7 @@ import AgentTrainingWorkflow from '@/components/ai-agents/AgentTrainingWorkflow'
 import AgentTrainingDashboard from '@/components/ai-agents/AgentTrainingDashboard';
 import AgentSelfAssessmentChat from '@/components/ai-agents/AgentSelfAssessmentChat';
 import DiscoveryHistoryViewer from '@/components/ai-agents/DiscoveryHistoryViewer';
+import AgentsOverview from '@/components/ai-agents/AgentsOverview';
 import { FEATURED_AGENTS } from '@/lib/agents';
 import { OptimizedImage, AvatarImage } from '@/components/ui/OptimizedImage';
 
@@ -582,6 +583,15 @@ export default function FeedAgentsPage() {
       const j = await res.json();
       if (!res.ok || !j.ok) { showToast(j.message || 'Failed to start batch', 'error'); return; }
       setBatchId(j.batch.id);
+
+      // NEW: Kick off gap-driven feeding across PDFs/Wikipedia/Books for all selected agents
+      try {
+        await fetch('/api/agents/batch/feed-gaps', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentIds: selectedAgentIds, perAgent: { maxTopics: 4, maxPdfsPerTopic: 2 } })
+        });
+        showToast('Started gap-based feeding for selected agents (PDFs, books, Wikipedia).', 'info');
+      } catch {}
     } catch (e:any) {
       showToast(e?.message || 'Error starting assessment batch', 'error');
     }
@@ -1048,12 +1058,13 @@ export default function FeedAgentsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v)=> setActiveTab(v as any)} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="agents">Agent Registry</TabsTrigger>
             <TabsTrigger value="feed">Feed Content</TabsTrigger>
             <TabsTrigger value="memories">Memory Viewer</TabsTrigger>
             <TabsTrigger value="training">Training Tracker</TabsTrigger>
             <TabsTrigger value="dashboard">Training Dashboard</TabsTrigger>
+            <TabsTrigger value="overview">Agents Overview</TabsTrigger>
             <TabsTrigger value="discoveries">Discovery History</TabsTrigger>
           </TabsList>
 
@@ -1151,6 +1162,11 @@ export default function FeedAgentsPage() {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          {/* Agents Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <AgentsOverview />
           </TabsContent>
 
           {/* Feed Content Tab */}

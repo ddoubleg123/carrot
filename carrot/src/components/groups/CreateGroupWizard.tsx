@@ -826,11 +826,19 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           throw new Error('Group name is required');
         }
         
+        // Ensure all data is properly structured
+        const cleanFormData = {
+          name: String(formData.name || '').trim(),
+          description: String(formData.description || '').trim(),
+          tags: Array.isArray(formData.tags) ? formData.tags.filter(tag => typeof tag === 'string') : [],
+          categories: Array.isArray(formData.categories) ? formData.categories.filter(cat => typeof cat === 'string') : []
+        };
+        
         const payload = {
-          name: formData.name.trim(),
-          description: formData.description?.trim() || '',
-          tags: formData.tags || [],
-          categories: formData.categories || []
+          name: cleanFormData.name,
+          description: cleanFormData.description,
+          tags: cleanFormData.tags,
+          categories: cleanFormData.categories
         };
         
         console.log('[CreateGroupWizard] Sending payload:', payload);

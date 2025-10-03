@@ -49,6 +49,13 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
   try {
+    // DEBUG: Log environment variables
+    console.log('[INGEST DEBUG] Environment check:', {
+      INGEST_WORKER_URL: process.env.INGEST_WORKER_URL,
+      RAILWAY_SERVICE_URL: process.env.INGEST_WORKER_URL || 'http://localhost:8000',
+      INGEST_WORKER_SECRET: process.env.INGEST_WORKER_SECRET ? 'SET' : 'MISSING'
+    });
+
     const body: IngestRequest = await request.json();
     const { url, inMs, outMs, aspect, postId } = body;
 
@@ -70,7 +77,11 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     }
 
     // Start ingestion job on worker service (forward trim params if provided)
-    const response = await fetch(`${RAILWAY_SERVICE_URL}/ingest`, {
+    const workerUrl = `${RAILWAY_SERVICE_URL}/ingest`;
+    console.log('[INGEST DEBUG] Calling worker at:', workerUrl);
+    console.log('[INGEST DEBUG] Request payload:', { url, inMs, outMs, aspect, postId });
+    
+    const response = await fetch(workerUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
