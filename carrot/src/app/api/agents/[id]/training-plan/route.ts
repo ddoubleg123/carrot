@@ -14,7 +14,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const body = await req.json()
     const topics: string[] = Array.isArray(body.topics) ? body.topics : []
     const perTopicMax: number = body.options?.perTopicMax ?? 200
-    const sourceTypes: string[] = body.options?.sourceTypes ?? ['wikipedia','arxiv','academic','books','news','github','stackoverflow','pubmed']
+    const sourceTypes: string[] = body.options?.sourceTypes ?? ['web','wikipedia','arxiv','academic','books','news','github','stackoverflow','pubmed']
     const throttleMs: number | undefined = body.options?.throttleMs
     const maxTasksPerTick: number | undefined = body.options?.maxTasksPerTick
     const verifyWithDeepseek: boolean | undefined = body.options?.verifyWithDeepseek

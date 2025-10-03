@@ -483,6 +483,12 @@ export default function FeedAgentsPage() {
   const [retrievalQuery, setRetrievalQuery] = useState('');
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrievalResults, setRetrievalResults] = useState<any[]>([]);
+  // Feed Topic PDFs pipeline
+  const [pdfTopic, setPdfTopic] = useState('');
+  const [pdfMax, setPdfMax] = useState(3);
+  const [pdfPreferRaw, setPdfPreferRaw] = useState(true);
+  const [isFeedingPdfs, setIsFeedingPdfs] = useState(false);
+  const [pdfFeedResults, setPdfFeedResults] = useState<any[]>([]);
 
   // Load agents on component mount
   useEffect(() => {
@@ -775,6 +781,29 @@ export default function FeedAgentsPage() {
       alert('Error retrieving content');
     } finally {
       setIsRetrieving(false);
+    }
+  };
+
+  // Feed Topic PDFs end-to-end pipeline trigger
+  const handleFeedTopicPdfs = async () => {
+    if (!selectedAgent || !pdfTopic.trim()) return;
+    setIsFeedingPdfs(true);
+    try {
+      const res = await fetch(`/api/agents/${selectedAgent.id}/feed-topic-pdfs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: pdfTopic, maxPdfs: pdfMax, preferRaw: pdfPreferRaw, tags: ['pdf', pdfTopic] })
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) {
+        showToast(j.error || 'Failed to feed PDFs', 'error');
+      } else {
+        setPdfFeedResults(j.results || []);
+        showToast(`Fed ${j.totals?.succeeded || 0}/${j.totals?.requested || 0} PDFs to ${selectedAgent.name}`, 'success');
+      }
+    } catch (e:any) {
+      showToast(e?.message || 'Error feeding PDFs', 'error');
+    } finally {
+      setIsFeedingPdfs(false);
     }
   };
 

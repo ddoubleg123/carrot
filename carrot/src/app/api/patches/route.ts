@@ -3,13 +3,16 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 
+
+
 export async function POST(request: Request, context: { params: Promise<{}> }) {
-  console.log('[API] ===== PATCHES POST ENDPOINT CALLED =====');
-  console.log('[API] Request URL:', request.url);
-  console.log('[API] Request method:', request.method);
-  console.log('[API] Timestamp:', new Date().toISOString());
-  console.log('[API] Request headers:', Object.fromEntries(request.headers.entries()));
-  console.log('[API] Request body available:', request.body ? 'Yes' : 'No');
+  // CRITICAL: This should appear in production logs
+  console.error('[CRITICAL] ===== PATCHES POST ENDPOINT CALLED =====');
+  console.error('[CRITICAL] Request URL:', request.url);
+  console.error('[CRITICAL] Request method:', request.method);
+  console.error('[CRITICAL] Timestamp:', new Date().toISOString());
+  console.error('[CRITICAL] Request headers:', Object.fromEntries(request.headers.entries()));
+  console.error('[CRITICAL] Request body available:', request.body ? 'Yes' : 'No');
   
   try {
     // Check authentication
@@ -128,6 +131,7 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
 }
 
 export async function GET(request: Request, context: { params: Promise<{}> }) {
+  console.error('[CRITICAL] PATCHES GET ENDPOINT CALLED');
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';

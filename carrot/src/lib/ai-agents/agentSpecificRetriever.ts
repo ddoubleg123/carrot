@@ -146,15 +146,20 @@ If unsure, set ok=false.`
       // Balance selection across sources to avoid Wikipedia dominance
       const bySource = new Map<string, any[]>()
       for (const item of unique) {
-        const key = (item.sourceType || 'unknown').toLowerCase()
+        let key = (item.sourceType || 'unknown').toLowerCase()
+        // Treat direct PDF links as a dedicated high-priority source
+        try {
+          const u = String(item.url || '')
+          if (u.toLowerCase().endsWith('.pdf')) key = 'pdf'
+        } catch {}
         const arr = bySource.get(key) || []
         arr.push(item)
         bySource.set(key, arr)
       }
       // Cap to 33% of requested results per single source
       const maxPerSource = Math.max(1, Math.floor((maxResults || 10) / 3))
-      // Prefer research-heavy sources first, then general
-      const preferredOrder = ['arxiv','pubmed','academic','news','github','books','wikipedia','unknown']
+      // Prefer books/PDFs and research-heavy sources first, then general web
+      const preferredOrder = ['pdf','books','arxiv','pubmed','academic','news','github','wikipedia','web','unknown']
       const sources = Array.from(bySource.keys()).sort((a,b)=> preferredOrder.indexOf(a) - preferredOrder.indexOf(b))
       const balanced: any[] = []
       const counts = new Map<string, number>()

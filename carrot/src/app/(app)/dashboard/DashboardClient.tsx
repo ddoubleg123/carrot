@@ -10,7 +10,6 @@ import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
 import { VideoProvider } from '../../../context/VideoContext';
-import { FeedTabsContainer } from '../../../components/FeedTabsContainer';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -829,11 +828,6 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
             )}
           </div>
-        </div>
-        
-        {/* Scrollable Feed Tabs */}
-        <div className="px-4">
-          <FeedTabsContainer />
         </div>
         
         {/* Scrollable Feed Content */}

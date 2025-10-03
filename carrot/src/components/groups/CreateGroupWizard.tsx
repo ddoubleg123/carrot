@@ -835,6 +835,18 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
         
         console.log('[CreateGroupWizard] Sending payload:', payload);
         console.log('[CreateGroupWizard] Form data before send:', formData);
+        console.log('[CreateGroupWizard] Payload stringified:', JSON.stringify(payload));
+        console.log('[CreateGroupWizard] Payload name value:', payload.name);
+        console.log('[CreateGroupWizard] Payload name type:', typeof payload.name);
+        console.log('[CreateGroupWizard] Payload name length:', payload.name?.length);
+        
+        // Add request interceptor logging
+        console.log('[CreateGroupWizard] Making fetch request to:', '/api/patches');
+        console.log('[CreateGroupWizard] Request details:', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
         
         const response = await fetch('/api/patches', {
           method: 'POST',
@@ -843,9 +855,17 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           },
           body: JSON.stringify(payload),
         });
+        
+        console.log('[CreateGroupWizard] Response status:', response.status);
+        console.log('[CreateGroupWizard] Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (!response.ok) {
           const errorData = await response.json();
+          console.error('[CreateGroupWizard] Error response:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorData: errorData
+          });
           throw new Error(errorData.error || 'Failed to create group');
         }
 
