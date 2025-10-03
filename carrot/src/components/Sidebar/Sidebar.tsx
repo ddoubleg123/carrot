@@ -6,8 +6,42 @@ import '../../app/(app)/dashboard/dashboard-tokens.css';
 import { useSession } from 'next-auth/react';
 import CarrotLogo from '../CarrotLogo';
 import { SidebarIcons } from '../icons/SidebarIcons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { logoutClient } from '../../lib/logoutClient';
+
+// CarrotsEarned component for sidebar
+function CarrotsEarned() {
+  const [totalCarrots, setTotalCarrots] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/user/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setTotalCarrots(data.totalCarrots);
+        }
+      } catch (error) {
+        console.error('Error fetching carrots:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) {
+    return <span className="animate-pulse">Loading...</span>;
+  }
+
+  return (
+    <span>
+      {totalCarrots !== null ? `${totalCarrots.toLocaleString()} Carrots Earned` : '0 Carrots Earned'}
+    </span>
+  );
+}
 
 const MENU = [
   {
@@ -185,7 +219,7 @@ export default function Sidebar() {
         {/* Stats Section - With more spacing */}
         <div className="flex-shrink-0">
           <div className="px-4 text-[13px] text-white/80 font-normal mb-12 max-lg:hidden">
-            1,859 Carrots Earned
+            <CarrotsEarned />
           </div>
         </div>
         

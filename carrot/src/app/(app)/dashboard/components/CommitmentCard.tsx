@@ -459,13 +459,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   {author && author.username && String(author.username).trim() ? (String(author.username).startsWith("@") ? String(author.username) : `@${String(author.username)}`) : "@user"}
                 </span>
                 {(() => {
-                  const cc = props.homeCountry || (author as any)?.flag || null;
+                  const cc = props.homeCountry || (author as any)?.flag || (author as any)?.country || null;
                   // Debug logging for flag data
                   if (process.env.NODE_ENV !== 'production') {
                     console.log('[CommitmentCard] Flag debug:', {
                       postId: id,
                       homeCountry: props.homeCountry,
                       authorFlag: (author as any)?.flag,
+                      authorCountry: (author as any)?.country,
                       finalCountryCode: cc,
                       authorData: author
                     });

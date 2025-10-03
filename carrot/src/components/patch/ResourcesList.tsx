@@ -64,12 +64,18 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
         const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
         if (response.ok) {
           const data = await response.json();
-          setSources(data.items || []);
+          console.log('[ResourcesList] API response:', data);
+          // Ensure we have a valid array
+          const items = Array.isArray(data.items) ? data.items : [];
+          console.log('[ResourcesList] Setting sources:', items);
+          setSources(items);
         } else {
           console.error('Failed to fetch sources');
+          setSources([]); // Set empty array on error
         }
       } catch (error) {
         console.error('Error fetching sources:', error);
+        setSources([]); // Set empty array on error
       } finally {
         setIsLoading(false);
       }
@@ -103,16 +109,26 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
 
   // Filter sources based on search query
   const filteredSources = useMemo(() => {
-    if (!searchQuery) return sources;
+    console.log('[ResourcesList] Computing filteredSources:', { sources, searchQuery });
+    if (!sources || !Array.isArray(sources)) {
+      console.log('[ResourcesList] No valid sources array, returning empty array');
+      return [];
+    }
+    if (!searchQuery) {
+      console.log('[ResourcesList] No search query, returning all sources:', sources.length);
+      return sources;
+    }
 
     const query = searchQuery.toLowerCase();
-    return sources.filter(source => 
-      source.title.toLowerCase().includes(query) ||
+    const filtered = sources.filter(source => 
+      source.title?.toLowerCase().includes(query) ||
       source.author?.toLowerCase().includes(query) ||
       source.publisher?.toLowerCase().includes(query) ||
-      source.url.toLowerCase().includes(query) ||
+      source.url?.toLowerCase().includes(query) ||
       source.description?.toLowerCase().includes(query)
     );
+    console.log('[ResourcesList] Filtered sources:', filtered.length);
+    return filtered;
   }, [sources, searchQuery]);
 
   // Generate citation text
