@@ -290,17 +290,9 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
           }
         }
         
-        // For Firebase Storage videos, try to find existing thumbnail
-        const d1 = deriveBucketAndPath(dto.url);
-        if (d1.path) {
-          // Try to find a thumbnail with the same base path
-          const basePath = d1.path.replace(/\.(mp4|webm|mov)$/, '');
-          const thumbnailPath = `${basePath}_thumb.jpg`;
-          const b = d1.bucket || (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
-          return b
-            ? `/api/img?bucket=${encodeURIComponent(b)}&path=${encodeURIComponent(thumbnailPath)}&w=320&h=180&format=webp`
-            : `/api/img?path=${encodeURIComponent(thumbnailPath)}&w=320&h=180&format=webp`;
-        }
+        // For Firebase Storage videos, use the video URL directly
+        // This will show the video poster frame in the browser
+        return dto.url;
       }
       
       // Fallback to URLs via proxy (may still be video poster/thumb URLs)

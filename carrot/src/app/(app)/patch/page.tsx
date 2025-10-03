@@ -3,13 +3,8 @@ import { Plus, Search } from 'lucide-react';
 import PatchPageClient from './PatchPageClient';
 
 export default async function PatchPage() {
-  // Only fetch the two allowed patches: history and term-limits-politicians
+  // Fetch recent patches for Explore Groups
   const patches = await prisma.patch.findMany({
-    where: {
-      handle: {
-        in: ['history', 'term-limits-politicians']
-      }
-    },
     include: {
       _count: {
         select: {
@@ -22,8 +17,9 @@ export default async function PatchPage() {
     },
     orderBy: {
       createdAt: 'desc'
-    }
+    },
+    take: 60
   });
 
-  return <PatchPageClient patches={patches} />;
+  return <PatchPageClient patches={ patches } />;
 }
