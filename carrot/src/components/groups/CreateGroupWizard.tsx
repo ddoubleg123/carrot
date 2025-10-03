@@ -867,8 +867,17 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
         console.log('[CreateGroupWizard] Response status:', response.status);
         console.log('[CreateGroupWizard] Response headers:', Object.fromEntries(response.headers.entries()));
 
+        // Get the raw response text first to see what we're actually receiving
+        const responseText = await response.text();
+        console.log('[CreateGroupWizard] Raw response text:', responseText);
+
         if (!response.ok) {
-          const errorData = await response.json();
+          let errorData;
+          try {
+            errorData = JSON.parse(responseText);
+          } catch (e) {
+            errorData = { error: responseText };
+          }
           console.error('[CreateGroupWizard] Error response:', {
             status: response.status,
             statusText: response.statusText,
@@ -877,7 +886,14 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
           throw new Error(errorData.error || 'Failed to create group');
         }
 
-        const groupData = await response.json();
+        let groupData;
+        try {
+          groupData = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[CreateGroupWizard] Failed to parse response JSON:', e);
+          throw new Error('Invalid response from server');
+        }
+        console.log('[CreateGroupWizard] Success response data:', groupData);
         const totalTime = performance.now() - startTime;
         telemetry.trackGroupCreateSuccess(groupData.id, totalTime);
         onSuccess(groupData.id);
