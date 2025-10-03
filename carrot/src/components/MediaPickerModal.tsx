@@ -277,9 +277,36 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
             : `/api/img?path=${encodeURIComponent(d2.path)}&w=320&h=180&format=webp`;
         }
       }
+      
+      // For videos, try to generate thumbnail from video URL
+      if (dto.type === 'video' && dto.url) {
+        // Check if it's a Cloudflare Stream video
+        if (dto.url.includes('videodelivery.net')) {
+          // Extract cfUid from Cloudflare Stream URL
+          const cfMatch = dto.url.match(/videodelivery\.net\/([^\/]+)/);
+          if (cfMatch) {
+            const cfUid = cfMatch[1];
+            return `https://videodelivery.net/${cfUid}/thumbnails/thumbnail.jpg?time=1s`;
+          }
+        }
+        
+        // For Firebase Storage videos, try to find existing thumbnail
+        const d1 = deriveBucketAndPath(dto.url);
+        if (d1.path) {
+          // Try to find a thumbnail with the same base path
+          const basePath = d1.path.replace(/\.(mp4|webm|mov)$/, '');
+          const thumbnailPath = `${basePath}_thumb.jpg`;
+          const b = d1.bucket || (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+          return b
+            ? `/api/img?bucket=${encodeURIComponent(b)}&path=${encodeURIComponent(thumbnailPath)}&w=320&h=180&format=webp`
+            : `/api/img?path=${encodeURIComponent(thumbnailPath)}&w=320&h=180&format=webp`;
+        }
+      }
+      
       // Fallback to URLs via proxy (may still be video poster/thumb URLs)
       if (dto.thumbUrl) return `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=320&h=180&format=webp`;
       if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}&w=320&h=180&format=webp`;
+      if (dto.url && dto.type === 'video') return `/api/img?url=${encodeURIComponent(dto.url)}&w=320&h=180&format=webp`;
       return undefined;
     };
 
