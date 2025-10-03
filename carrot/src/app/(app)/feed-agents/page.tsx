@@ -1,10 +1,11 @@
+'use client';
+
   // Helper: avatar URL (fallback if none in metadata)
   const avatarFor = (name: string, url?: string) => {
     if (url) return url
     const seed = encodeURIComponent(name || 'Agent')
     return `https://api.dicebear.com/7.x/shapes/svg?seed=${seed}&radius=50&backgroundType=gradientLinear`
   }
-'use client';
 
 import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Users, Brain, BookOpen, Upload, Zap } from 'lucide-react';
