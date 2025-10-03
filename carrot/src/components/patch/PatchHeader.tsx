@@ -157,7 +157,7 @@ export default function PatchHeader({
               {/* Topic Chips */}
               {patch.tags && patch.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">
-                  {patch.tags.map((tag) => (
+                  {[...new Set(patch.tags)].map((tag) => (
                     <Badge
                       key={tag}
                       variant="secondary"

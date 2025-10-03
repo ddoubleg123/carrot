@@ -262,6 +262,41 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     );
   }
 
+  const handleStartDiscovery = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Call the DeepSeek-powered discovery API
+      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'start_deepseek_search'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to start content discovery');
+      }
+      
+      const data = await response.json();
+      console.log('Discovery started:', data);
+      
+      // Start polling for results
+      setIsDiscovering(true);
+      loadDiscoveredContent();
+      
+    } catch (err) {
+      console.error('Error starting discovery:', err);
+      setError('Failed to start content discovery. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (items.length === 0) {
     return (
       <div style={{
@@ -286,10 +321,65 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         <p style={{
           fontSize: TOKENS.typography.body,
           color: TOKENS.colors.slate,
-          margin: 0
+          margin: 0,
+          marginBottom: TOKENS.spacing.lg
         }}>
-          Content discovery will begin automatically when the system is ready.
+          Start learning about this topic with AI-powered content discovery.
         </p>
+        <button
+          onClick={handleStartDiscovery}
+          disabled={isLoading}
+          style={{
+            padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
+            border: 'none',
+            borderRadius: TOKENS.radii.md,
+            background: TOKENS.colors.actionOrange,
+            color: TOKENS.colors.surface,
+            fontSize: TOKENS.typography.body,
+            fontWeight: 600,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: TOKENS.spacing.sm,
+            margin: '0 auto',
+            transition: `all ${TOKENS.motion.normal} ease-in-out`,
+            opacity: isLoading ? 0.7 : 1
+          }}
+          onMouseEnter={(e) => {
+            if (!isLoading) {
+              e.currentTarget.style.background = '#E55A00';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isLoading) {
+              e.currentTarget.style.background = TOKENS.colors.actionOrange;
+            }
+          }}
+        >
+          {isLoading ? (
+            <>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                border: `2px solid ${TOKENS.colors.surface}`,
+                borderTopColor: 'transparent',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Starting Discovery...
+            </>
+          ) : (
+            <>
+              <Search size={16} />
+              Start Learning
+            </>
+          )}
+        </button>
+        <style jsx>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
