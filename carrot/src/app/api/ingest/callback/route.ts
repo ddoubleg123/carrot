@@ -73,14 +73,20 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       if (!existing) {
         try {
           const srcUrl = videoUrl || mediaUrl || '';
-          existing = await createJob({
-            sourceUrl: srcUrl || 'about:blank',
-            sourceType: 'youtube',
-            userId: null,
-            postId: postId || null,
-            status: (status as any) || 'processing',
-          } as any);
-          console.log(`[callback] Created ingest job placeholder (local id: ${existing?.id}) for external jobId ${jobId}`);
+          // Create job directly with the external jobId instead of generating a new one
+          const job = await prisma.ingestJob.create({
+            data: {
+              id: jobId, // Use the external job ID from the worker
+              sourceUrl: srcUrl || 'about:blank',
+              sourceType: 'youtube',
+              userId: null,
+              postId: postId || null,
+              status: (status as any) || 'processing',
+              progress: 0,
+            }
+          });
+          existing = job;
+          console.log(`[callback] Created ingest job with external jobId ${jobId}`);
         } catch (e) {
           console.warn('[callback] Failed to create placeholder job; proceeding to update or post patch anyway');
         }
