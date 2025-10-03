@@ -29,8 +29,10 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
   const isImage = asset.type?.toLowerCase() === "image";
   // Always proxy through /api/img to avoid CORS issues with Firebase/GCS
   const src = (() => {
-    const raw = isVideo ? (asset.posterUrl || asset.thumbUrl || asset.url || undefined)
-                        : (asset.thumbUrl || asset.url || undefined);
+    // For videos, use thumbUrl as posterUrl if posterUrl is not available
+    const videoThumbnail = isVideo ? (asset.posterUrl || asset.thumbUrl || asset.url || undefined)
+                                   : (asset.thumbUrl || asset.url || undefined);
+    const raw = videoThumbnail;
     if (!raw) {
       console.warn('[MediaCard] No thumbnail URL available for asset:', { 
         id: asset.id, 
@@ -42,6 +44,15 @@ export const MediaCard = React.memo(function MediaCard({ asset, selected, onSele
       });
       return undefined;
     }
+    
+    console.log('[MediaCard] Found thumbnail source:', { 
+      id: asset.id, 
+      type: asset.type, 
+      raw,
+      posterUrl: asset.posterUrl,
+      thumbUrl: asset.thumbUrl,
+      url: asset.url
+    });
     // If already proxied or a data/blob URL, pass through unchanged
     if (raw.startsWith('/api/img') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       console.log('[MediaCard] Using already proxied URL:', raw);

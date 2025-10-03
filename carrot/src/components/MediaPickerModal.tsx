@@ -283,20 +283,30 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
       return undefined;
     };
 
-    const list = (serverItems || []).map((dto) => ({
-      id: dto.id,
-      type: dto.type, // 'image' | 'video' | 'gif' | 'audio'
-      // Important: gallery never loads video sources; only images are proxied for thumbs
-      url: dto.type === 'image' && dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}&w=1440&h=810&format=webp` : undefined,
-      title: dto.title || null,
-      // For thumbnails/posters, try to use a proxied image path if possible
-      thumbUrl: toProxyUrl(dto) || null,
-      posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}&w=640&h=360&format=webp` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp` : null),
-      durationSec: dto.durationSec ?? null,
-      hidden: !!dto.hidden,
-      inUseCount: (dto as any).inUseCount ?? null,
-      labels: dto.labels || [],
-    }));
+    const list = (serverItems || []).map((dto) => {
+      console.log('[MediaPickerModal] Mapping DTO to GalleryAsset:', {
+        id: dto.id,
+        type: dto.type,
+        thumbUrl: dto.thumbUrl,
+        url: dto.url,
+        toProxyUrl: toProxyUrl(dto)
+      });
+      
+      return {
+        id: dto.id,
+        type: dto.type, // 'image' | 'video' | 'gif' | 'audio'
+        // Important: gallery never loads video sources; only images are proxied for thumbs
+        url: dto.type === 'image' && dto.url ? `/api/img?url=${encodeURIComponent(dto.url)}&w=1440&h=810&format=webp` : undefined,
+        title: dto.title || null,
+        // For thumbnails/posters, try to use a proxied image path if possible
+        thumbUrl: toProxyUrl(dto) || null,
+        posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}&w=640&h=360&format=webp` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp` : null),
+        durationSec: dto.durationSec ?? null,
+        hidden: !!dto.hidden,
+        inUseCount: (dto as any).inUseCount ?? null,
+        labels: dto.labels || [],
+      };
+    });
     return list;
   }, [serverItems]);
 
