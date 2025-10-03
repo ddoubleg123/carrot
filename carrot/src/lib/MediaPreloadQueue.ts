@@ -411,8 +411,16 @@ class MediaPreloadQueue {
       return false;
     }
 
+    // More lenient sequential gating - only block if way too far ahead
     const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
-    if (task.feedIndex > currentIndex + this.SEQUENTIAL_CONFIG.maxSequentialGap) {
+    const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap * 2; // Double the gap for better preloading
+    if (task.feedIndex > currentIndex + maxGap) {
+      console.log('[MediaPreloadQueue] Task blocked by sequential gap', { 
+        taskId: task.id, 
+        feedIndex: task.feedIndex, 
+        currentIndex, 
+        maxGap 
+      });
       return false;
     }
 
@@ -622,6 +630,23 @@ class MediaPreloadQueue {
         console.log('[MediaPreloadQueue] Video sequence advanced', { 
           feedIndex: task.feedIndex,
           lastCompleted: this.lastCompletedVideoIndex
+        });
+      }
+    } else {
+      // Even on failure, advance the sequence to prevent blocking
+      if (task.type === TaskType.POSTER) {
+        this.lastCompletedPosterIndex = Math.max(this.lastCompletedPosterIndex, task.feedIndex);
+        console.log('[MediaPreloadQueue] Poster sequence advanced (failed task)', { 
+          feedIndex: task.feedIndex,
+          lastCompleted: this.lastCompletedPosterIndex,
+          error: result.error?.message
+        });
+      } else if (task.type === TaskType.VIDEO_PREROLL_6S) {
+        this.lastCompletedVideoIndex = Math.max(this.lastCompletedVideoIndex, task.feedIndex);
+        console.log('[MediaPreloadQueue] Video sequence advanced (failed task)', { 
+          feedIndex: task.feedIndex,
+          lastCompleted: this.lastCompletedVideoIndex,
+          error: result.error?.message
         });
       }
     }

@@ -133,7 +133,11 @@ class FeedMediaManager {
     this._posts = posts;
     this.updateScreenHeight();
     this.queueInitialPosts();
-    console.log('[FeedMediaManager] Initialized with posts', { count: posts.length });
+    console.log('[FeedMediaManager] Initialized with posts', { 
+      count: posts.length,
+      videoPosts: posts.filter(p => p.type === 'video').length,
+      firstFewPosts: posts.slice(0, 5).map(p => ({ id: p.id, type: p.type, hasVideoUrl: !!p.videoUrl }))
+    });
   }
 
   setViewportIndex(index: number): void {
@@ -147,12 +151,12 @@ class FeedMediaManager {
   }
 
   private queueInitialPosts(): void {
-    const endIndex = Math.min(15, this._posts.length); // Increased from 10 to 15 for better preloading
+    const endIndex = Math.min(25, this._posts.length); // Increased from 15 to 25 for much better preloading
     console.log(`[FeedMediaManager] Queueing initial posts: ${endIndex} posts`);
     for (let i = 0; i < endIndex; i++) {
       const post = this._posts[i];
-      // First 3 posts get VISIBLE priority for immediate loading, others get NEXT_10
-      const priority = i < 3 ? Priority.VISIBLE : Priority.NEXT_10;
+      // First 5 posts get VISIBLE priority for immediate loading, others get NEXT_10
+      const priority = i < 5 ? Priority.VISIBLE : Priority.NEXT_10;
       console.log(`[FeedMediaManager] Post ${i}: ${post.type} with priority ${priority}`);
       this.queuePostTasks(post, priority);
     }
@@ -169,12 +173,12 @@ class FeedMediaManager {
     }
 
     const nextStart = this._currentViewportIndex + 1;
-    const nextEnd = Math.min(nextStart + 15, this._posts.length); // Increased from 10 to 15
+    const nextEnd = Math.min(nextStart + 25, this._posts.length); // Increased from 15 to 25
     for (let i = nextStart; i < nextEnd; i++) {
       this.queuePostTasks(this._posts[i], Priority.NEXT_10);
     }
 
-    const prevStart = Math.max(0, this._currentViewportIndex - 8); // Increased from 5 to 8
+    const prevStart = Math.max(0, this._currentViewportIndex - 12); // Increased from 8 to 12
     const prevEnd = this._currentViewportIndex;
     for (let i = prevStart; i < prevEnd; i++) {
       this.queuePostTasks(this._posts[i], Priority.PREV_5);
@@ -218,8 +222,18 @@ class FeedMediaManager {
         if (videoUrl) {
           // Current post (VISIBLE) gets full video download, others get 6-second preroll
           const videoTaskType = priority === Priority.VISIBLE ? TaskType.VIDEO_FULL : TaskType.VIDEO_PREROLL_6S;
-          console.log(`[FeedMediaManager] Queuing video for post ${post.id} (index ${post.feedIndex}): ${videoTaskType} with priority ${priority}`);
+          console.log(`[FeedMediaManager] Queuing video for post ${post.id} (index ${post.feedIndex}): ${videoTaskType} with priority ${priority}`, {
+            videoUrl: videoUrl.substring(0, 100) + '...',
+            posterUrl: posterUrl?.substring(0, 100) + '...'
+          });
           this.preloadQueue.enqueue(post.id, videoTaskType, priority, post.feedIndex, videoUrl, post.bucket, post.path);
+        } else {
+          console.warn(`[FeedMediaManager] No video URL for post ${post.id} (index ${post.feedIndex})`, {
+            hasVideoUrl: !!post.videoUrl,
+            hasBucket: !!post.bucket,
+            hasPath: !!post.path,
+            videoUrl: post.videoUrl?.substring(0, 100) + '...'
+          });
         }
         break;
 
@@ -258,8 +272,8 @@ class FeedMediaManager {
   }
 
   private cancelDistantTasks(): void {
-    const keepRange = 15; // Keep 15 posts ahead as specified
-    const minIndex = Math.max(0, this._currentViewportIndex - 8); // Keep 8 posts behind
+    const keepRange = 25; // Keep 25 posts ahead as specified
+    const minIndex = Math.max(0, this._currentViewportIndex - 12); // Keep 12 posts behind
     const maxIndex = Math.min(this._posts.length - 1, this._currentViewportIndex + keepRange);
 
     for (const post of this._posts) {

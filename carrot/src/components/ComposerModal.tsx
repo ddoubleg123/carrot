@@ -240,14 +240,35 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
     setIngestJobId(tempId);
     setIngestStatus('queued');
     setIngestProgress(0);
+    
+    console.log('[ComposerModal] Button clicked - starting ingestion process', {
+      tempId,
+      url,
+      externalTosAccepted
+    });
     try {
       const type = detectSourceType(url);
-      console.debug('[ComposerModal] Starting external ingestion', { url, type });
+      console.log('[ComposerModal] Starting external ingestion', { 
+        url, 
+        type, 
+        externalTosAccepted,
+        isExternalUrlValid 
+      });
+      
+      const requestBody = { url, type, source: 'composer' };
+      console.log('[ComposerModal] Sending request to /api/ingest:', requestBody);
+      
       const res = await fetchWithTimeout('/api/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, type, source: 'composer' }),
+        body: JSON.stringify(requestBody),
       }, 60000);
+      
+      console.log('[ComposerModal] Received response:', {
+        status: res.status,
+        statusText: res.statusText,
+        ok: res.ok
+      });
       
       // Handle non-OK responses with detailed error messages
       if (!res.ok) {
@@ -276,6 +297,14 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       // Clear persisted snapshot; state is now owned by live job id
       try { sessionStorage.removeItem('composer_external_state'); } catch {}
     } catch (e: any) {
+      console.error('[ComposerModal] Ingestion error:', {
+        error: e,
+        message: e?.message,
+        name: e?.name,
+        url,
+        type: detectSourceType(url)
+      });
+      
       const isAbort = e?.name === 'AbortError' || /aborted/i.test(e?.message || '');
       if (isAbort) {
         // Keep optimistic temp job and silently retry in background without timeout
