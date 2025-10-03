@@ -66,10 +66,10 @@ export default function RightRail({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Fixed container bleeding v2 */}
+    <div className="space-y-6 w-full max-w-sm">
+      {/* Fixed container bleeding v3 - proper width constraints */}
       {/* Followers & AI Agents Card */}
-      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
+      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full overflow-hidden">
         <div className="space-y-6">
           {/* Followers Section */}
           <div>
@@ -174,7 +174,7 @@ export default function RightRail({
 
       {/* Update Cadence Info (Optional) */}
       {botSubscriptions.length > 0 && (
-        <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-5 md:p-6">
+        <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full overflow-hidden">
           <h3 className="text-lg font-semibold text-[#0B0B0F] mb-3">Update Cadence</h3>
           <div className="space-y-2 text-sm text-[#60646C]">
             <div className="flex justify-between">

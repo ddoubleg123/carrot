@@ -219,23 +219,6 @@ export default function PatchHeader({
             </div>
           </div>
 
-          {/* Tags - Limited to 2 rows */}
-          <div className="flex items-center gap-2 flex-wrap mt-4 max-h-12 overflow-hidden">
-            {[...new Set(patch.tags)].slice(0, 8).map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className="text-xs px-2 py-1 rounded-full bg-white/20 text-white border-white/30"
-              >
-                {tag}
-              </Badge>
-            ))}
-            {[...new Set(patch.tags)].length > 8 && (
-              <span className="text-xs text-white/70">
-                +{[...new Set(patch.tags)].length - 8} more
-              </span>
-            )}
-          </div>
 
           {/* Counts Row */}
           <div className="mt-3 flex flex-wrap gap-3 text-white/90 text-sm">
