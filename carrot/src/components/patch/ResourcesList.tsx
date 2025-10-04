@@ -65,8 +65,8 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
         if (response.ok) {
           const data = await response.json();
           console.log('[ResourcesList] API response:', data);
-          // Ensure we have a valid array
-          const items = Array.isArray(data.items) ? data.items : [];
+          // Ensure we have a valid array - check both data.items and data directly
+          const items = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
           console.log('[ResourcesList] Setting sources:', items);
           setSources(items);
         } else {
@@ -110,23 +110,41 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
   // Filter sources based on search query
   const filteredSources = useMemo(() => {
     console.log('[ResourcesList] Computing filteredSources:', { sources, searchQuery });
-    if (!sources || !Array.isArray(sources)) {
-      console.log('[ResourcesList] No valid sources array, returning empty array');
+    
+    // Multiple safety checks
+    if (!sources) {
+      console.log('[ResourcesList] Sources is null/undefined, returning empty array');
       return [];
     }
+    
+    if (!Array.isArray(sources)) {
+      console.log('[ResourcesList] Sources is not an array:', typeof sources, sources);
+      return [];
+    }
+    
+    if (sources.length === 0) {
+      console.log('[ResourcesList] Sources array is empty');
+      return [];
+    }
+    
     if (!searchQuery) {
       console.log('[ResourcesList] No search query, returning all sources:', sources.length);
       return sources;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = sources.filter(source => 
-      source.title?.toLowerCase().includes(query) ||
-      source.author?.toLowerCase().includes(query) ||
-      source.publisher?.toLowerCase().includes(query) ||
-      source.url?.toLowerCase().includes(query) ||
-      source.description?.toLowerCase().includes(query)
-    );
+    const filtered = sources.filter(source => {
+      if (!source || typeof source !== 'object') {
+        console.warn('[ResourcesList] Invalid source object in filter:', source);
+        return false;
+      }
+      
+      return source.title?.toLowerCase().includes(query) ||
+        source.author?.toLowerCase().includes(query) ||
+        source.publisher?.toLowerCase().includes(query) ||
+        source.url?.toLowerCase().includes(query) ||
+        source.description?.toLowerCase().includes(query);
+    });
     console.log('[ResourcesList] Filtered sources:', filtered.length);
     return filtered;
   }, [sources, searchQuery]);
@@ -201,7 +219,7 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
       {/* Results count */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#60646C]">
-          {filteredSources.length} AI-discovered source{filteredSources.length !== 1 ? 's' : ''}
+          {Array.isArray(filteredSources) ? filteredSources.length : 0} AI-discovered source{(Array.isArray(filteredSources) ? filteredSources.length : 0) !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -215,7 +233,7 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
               <p className="text-[#60646C]">Fetching relevant content for this topic</p>
             </div>
           </div>
-        ) : filteredSources.length === 0 ? (
+        ) : !Array.isArray(filteredSources) || filteredSources.length === 0 ? (
           <div className={cardVariants.default}>
             <div className="text-center py-8">
               <ExternalLink className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
