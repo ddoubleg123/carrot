@@ -92,10 +92,13 @@ export default async function PatchPage({
 
     // Get followers data
     const actualFollowers = patch.members.map(member => ({
-      id: member.user.id,
-      name: member.user.name,
-      image: member.user.image,
-      country: member.user.country
+      id: member.id,
+      user: {
+        id: member.user.id,
+        name: member.user.name,
+        image: member.user.image,
+        username: member.user.name // Using name as username since there's no username field
+      }
     }));
 
     const actualFollowerCount = actualFollowers.length;
