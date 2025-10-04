@@ -64,11 +64,15 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
     // Get user theme if logged in
     let actualUserTheme = null;
     if (userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { theme: true }
+      const userPatchTheme = await prisma.userPatchTheme.findUnique({
+        where: {
+          user_patch_theme_unique: {
+            userId: userId,
+            patchId: patch.id
+          }
+        }
       });
-      actualUserTheme = user?.theme;
+      actualUserTheme = userPatchTheme;
     }
 
     // Get followers data
