@@ -2,6 +2,12 @@
 
 import { useEffect, useRef } from 'react';
 
+// Web API types for performance tracking
+interface LayoutShift extends PerformanceEntry {
+  value: number;
+  hadRecentInput: boolean;
+}
+
 // Minimal Web Vitals tracking without external deps
 // Tracks: CLS, LCP, INP (or FID fallback)
 export default function PerfTracker() {
