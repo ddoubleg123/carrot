@@ -246,11 +246,14 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
             </div>
           </div>
         ) : (
-          Array.isArray(filteredSources) ? filteredSources.map((source) => {
-            if (!source || typeof source !== 'object') {
-              console.warn('[ResourcesList] Invalid source object:', source);
-              return null;
-            }
+          Array.isArray(filteredSources) ? (() => {
+            try {
+              return filteredSources.map((source, index) => {
+                // Additional safety check for each source
+                if (!source || typeof source !== 'object') {
+                  console.warn('[ResourcesList] Invalid source at index', index, source);
+                  return null;
+                }
             
             const relevanceScore = source.relevanceScore || source.citeMeta?.relevanceScore || 0;
             const status = source.status || source.citeMeta?.status || 'pending_audit';
@@ -368,7 +371,20 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
                 </div>
               </div>
             );
-          }).filter(Boolean) : (
+          }).filter(Boolean);
+            } catch (error) {
+              console.error('[ResourcesList] Error rendering sources:', error);
+              return (
+                <div className={cardVariants.default}>
+                  <div className="text-center py-8">
+                    <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-[#0B0B0F] mb-2">Error rendering sources</h3>
+                    <p className="text-[#60646C]">There was an error displaying the sources. Please refresh the page.</p>
+                  </div>
+                </div>
+              );
+            }
+          })() : (
             <div className={cardVariants.default}>
               <div className="text-center py-8">
                 <ExternalLink className="w-12 h-12 text-[#60646C] mx-auto mb-4" />
