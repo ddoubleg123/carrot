@@ -41,7 +41,7 @@ function getPresetIndex(preset: string | null | undefined): number | undefined {
             userTheme={actualUserTheme ? {
               mode: actualUserTheme.mode as 'preset' | 'image',
               preset: getPresetIndex(actualUserTheme.preset),
-{{ ... }}
+              image: actualUserTheme.image || undefined
             } : null}
           />
 
