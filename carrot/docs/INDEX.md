@@ -21,6 +21,17 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
 | [**TRANSCRIPTION_SERVICE.md**](./TRANSCRIPTION_SERVICE.md) | Vosk speech-to-text service deployment and configuration | Jan 2025 |
+| [**MEDIA_PRELOADING_STRATEGY.md**](./MEDIA_PRELOADING_STRATEGY.md) | Media optimization and preloading strategies | Jan 2025 |
+
+### 🎯 **Discovery System**
+| Document | Description | Last Updated |
+|----------|-------------|--------------|
+| [**DISCOVERY_SYSTEM.md**](./DISCOVERY_SYSTEM.md) | Complete discovery system architecture and features | Jan 2025 |
+| [**API_REFERENCE.md**](./API_REFERENCE.md) | Comprehensive API documentation for discovery system | Jan 2025 |
+| [**COMPONENT_GUIDE.md**](./COMPONENT_GUIDE.md) | React component documentation and usage examples | Jan 2025 |
+| [**DEPLOYMENT_GUIDE.md**](./DEPLOYMENT_GUIDE.md) | Production deployment instructions and configuration | Jan 2025 |
+| [**FREE_IMAGE_APIS.md**](./FREE_IMAGE_APIS.md) | Legal-compliant image sources and API integration | Jan 2025 |
+| [**JANUS_SETUP.md**](./JANUS_SETUP.md) | AI image generation configuration with DeepSeek Janus | Jan 2025 |
 
 ### 📋 **Project Management**
 | Document | Description | Last Updated |
@@ -31,8 +42,10 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 
 ### For New Developers
 1. **Start Here**: [README.md](./README.md) - Project overview and setup
-2. **Design System**: [DESIGN_PLAN.md](./DESIGN_PLAN.md) - Understanding the UI/UX
-3. **Development**: [STYLES_README.md](./STYLES_README.md) - Working with design tokens
+2. **Discovery System**: [DISCOVERY_SYSTEM.md](./DISCOVERY_SYSTEM.md) - Core system architecture
+3. **API Reference**: [API_REFERENCE.md](./API_REFERENCE.md) - API endpoints and usage
+4. **Components**: [COMPONENT_GUIDE.md](./COMPONENT_GUIDE.md) - React component documentation
+5. **Deployment**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Production setup
 
 ### For Designers
 1. **Design System**: [DESIGN_PLAN.md](./DESIGN_PLAN.md) - Complete design guidelines
@@ -40,8 +53,10 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 3. **Media Design**: [FEED_MEDIA_DESIGN.md](./FEED_MEDIA_DESIGN.md) - Video and media patterns
 
 ### For DevOps/Infrastructure
-1. **Transcription Service**: [TRANSCRIPTION_SERVICE.md](./TRANSCRIPTION_SERVICE.md) - Vosk deployment
-2. **Project Overview**: [README.md](./README.md) - Architecture and deployment
+1. **Deployment Guide**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Production deployment
+2. **Transcription Service**: [TRANSCRIPTION_SERVICE.md](./TRANSCRIPTION_SERVICE.md) - Vosk deployment
+3. **Image APIs**: [FREE_IMAGE_APIS.md](./FREE_IMAGE_APIS.md) - Legal image sources
+4. **Janus Setup**: [JANUS_SETUP.md](./JANUS_SETUP.md) - AI image generation
 
 ## 📖 **Document Categories**
 
@@ -89,14 +104,20 @@ Welcome to the Carrot application documentation hub. This index provides quick n
 ### **Media & Video**
 - [FEED_MEDIA_DESIGN.md](./FEED_MEDIA_DESIGN.md) - Media optimization
 - [TRANSCRIPTION_SERVICE.md](./TRANSCRIPTION_SERVICE.md) - Speech-to-text
+- [FREE_IMAGE_APIS.md](./FREE_IMAGE_APIS.md) - Legal image sources
+- [JANUS_SETUP.md](./JANUS_SETUP.md) - AI image generation
 
 ### **Development**
 - [README.md](./README.md) - Setup and development workflow
 - [STYLES_README.md](./STYLES_README.md) - Design token usage
+- [API_REFERENCE.md](./API_REFERENCE.md) - API endpoints and usage
+- [COMPONENT_GUIDE.md](./COMPONENT_GUIDE.md) - React components
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Production deployment
 
 ## 📊 **Documentation Stats**
 
-- **Total Documents**: 7
+- **Total Documents**: 13
+- **Discovery System**: 6
 - **Design Documents**: 3
 - **Technical Documents**: 2
 - **AI Documents**: 2

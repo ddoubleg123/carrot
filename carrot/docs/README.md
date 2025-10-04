@@ -1,172 +1,250 @@
-# Carrot App Documentation
+# Carrot Patch Discovery System Documentation
 
-Welcome to the Carrot application documentation. This folder contains comprehensive guides for understanding, developing, and maintaining the Carrot social platform.
+Welcome to the comprehensive documentation for the Carrot Patch Discovery System - a rich, educational, and visually stunning content enrichment platform.
 
-## 📚 Documentation Index
+## 🎯 **What is the Discovery System?**
 
-### 🎨 Design & UI
-- **[DESIGN_PLAN.md](./DESIGN_PLAN.md)** - Complete design system, color tokens, typography, and component patterns
-- **[STYLES_README.md](./STYLES_README.md)** - Design token system, CSS custom properties, and styling guidelines
-- **[FEED_MEDIA_DESIGN.md](./FEED_MEDIA_DESIGN.md)** - Media preloading, video playback, and feed optimization
+The Discovery System transforms discovered URLs into rich, educational content experiences with two core principles:
 
-### 🤖 AI & Automation
-- **[AGENT_AUTO_JOIN_LOGIC.md](./AGENT_AUTO_JOIN_LOGIC.md)** - Smart agent matching system for the Rabbit AI Council
+1. **Every item has substance** - AI-generated summaries, key points, quotes, and transcripts
+2. **Every item is beautiful** - Hero visuals, clean hierarchy, and consistent design
 
-### 🔧 Services & Infrastructure
-- **[TRANSCRIPTION_SERVICE.md](./TRANSCRIPTION_SERVICE.md)** - Vosk speech-to-text service deployment and configuration
+## 📚 **Documentation Overview**
 
-### 📋 Project Management
-- **[ONBOARDING_MILESTONE.md](./ONBOARDING_MILESTONE.md)** - Onboarding flow implementation milestones
+### **Core Documentation**
+- **[Discovery System Overview](./DISCOVERY_SYSTEM.md)** - Complete system architecture and features
+- **[API Reference](./API_REFERENCE.md)** - Comprehensive API documentation
+- **[Component Guide](./COMPONENT_GUIDE.md)** - React component documentation
+- **[Deployment Guide](./DEPLOYMENT_GUIDE.md)** - Production deployment instructions
 
-## 🚀 Quick Start
+### **Image & Media**
+- **[Free Image APIs](./FREE_IMAGE_APIS.md)** - Legal-compliant image sources
+- **[Janus Setup](./JANUS_SETUP.md)** - AI image generation configuration
+- **[Media Preloading Strategy](./MEDIA_PRELOADING_STRATEGY.md)** - Performance optimization
 
-### Development Setup
+### **Design & UX**
+- **[Design Plan](./DESIGN_PLAN.md)** - Visual design principles
+- **[Feed Media Design](./FEED_MEDIA_DESIGN.md)** - Media display guidelines
+- **[Styles README](./STYLES_README.md)** - Design system documentation
+
+### **AI & Agents**
+- **[AI Agent Deep Knowledge Program](./AI_AGENT_DEEP_KNOWLEDGE_PROGRAM.md)** - AI agent training
+- **[Agent Auto Join Logic](./AGENT_AUTO_JOIN_LOGIC.md)** - Agent automation
+- **[Transcription Service](./TRANSCRIPTION_SERVICE.md)** - Audio/video processing
+
+### **User Experience**
+- **[Onboarding Milestone](./ONBOARDING_MILESTONE.md)** - User onboarding flow
+- **[Index](./INDEX.md)** - System overview
+
+## 🚀 **Quick Start**
+
+### **1. Development Setup**
 ```bash
+# Clone repository
+git clone https://github.com/your-org/carrot-patch.git
+cd carrot-patch
+
 # Install dependencies
-npm ci
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your API keys
+
+# Run database migrations
+npx prisma db push
 
 # Start development server
 npm run dev
-
-# Health checks
-curl http://localhost:3000/api/healthz
 ```
 
-### Key Endpoints
-- **Health**: `/api/healthz`
-- **Media Health**: `/api/healthz/media`
-- **Schema Health**: `/api/dev/admin/schema-health` (dev-only)
-- **User Avatar**: `/api/me/avatar`
-- **Session**: `/api/auth/session`
+### **2. API Keys Required**
+- **Janus API** - For AI image generation
+- **Pexels API** - For free stock images
+- **Unsplash API** - For free stock images
+- **Pixabay API** - For free stock images
 
-## 🏗️ Architecture Overview
+### **3. Test the System**
+- Open http://localhost:3000
+- Create a patch
+- Add some URLs to discover
+- Watch the enrichment process
 
-### Core Technologies
-- **Next.js 15** - React framework with App Router
-- **Prisma** - Database ORM with SQLite (dev) / PostgreSQL (prod)
-- **Firebase** - Authentication, Storage, and Firestore
-- **Cloudflare Stream** - Video processing and delivery
-- **Vosk** - Speech-to-text transcription service
+## 🎨 **Key Features**
 
-### Key Features
-- **Social Feed** - Video posts with automatic transcription
-- **AI Council** - Smart agent matching and conversation system
-- **Media Management** - Automatic video processing and optimization
-- **Design System** - Consistent UI with orange-focused branding
+### **Rich Content Processing**
+- **AI Summaries** - 120-180 character summaries
+- **Key Points** - 3-5 bullet points per item
+- **Notable Quotes** - Highlighted quotes from content
+- **Reading Time** - Estimated reading time
+- **Entity Extraction** - People, places, organizations
 
-## 📁 Project Structure
+### **Beautiful Visuals**
+- **5-Tier Image Strategy** - AI generation + free APIs + safe extraction
+- **Legal Compliance** - All images verified for commercial use
+- **Responsive Design** - Mobile-first, beautiful on all devices
+- **Consistent Branding** - Carrot design tokens throughout
+
+### **Smart Discovery**
+- **Content Analysis** - Extracts relevant keywords and themes
+- **Quality Scoring** - Ranks content by relevance and quality
+- **Diversity Buckets** - Ensures varied content sources
+- **Real-time Updates** - Live discovery with progress indicators
+
+## 🏗️ **System Architecture**
 
 ```
-carrot/
-├── docs/                    # 📚 All documentation
-├── src/
-│   ├── app/                # Next.js App Router pages
-│   ├── components/         # Reusable UI components
-│   ├── lib/               # Utility functions and services
-│   ├── styles/            # Design tokens and CSS
-│   └── types/             # TypeScript type definitions
-├── public/
-│   ├── agents/            # AI agent avatars
-│   └── flags/             # Country flag SVGs
-├── prisma/                # Database schema and migrations
-└── transcription-service/ # Vosk transcription service
+URL → Fetcher → Enricher → Moderation → Ranker → Ready
+  ↓
+Content Processing (AI summaries, key points)
+  ↓
+Image Generation (Janus AI + Free APIs)
+  ↓
+Quality Scoring (relevance + quality + freshness)
+  ↓
+Display (Rich cards with actions)
 ```
 
-## 🎯 Key Pages & Features
+## 🔧 **Technology Stack**
 
-### Main Application
-- **Home Feed** (`/`) - Video posts with transcription
-- **Carrot Patch** (`/patch`) - Knowledge sharing with Plato hero
-- **Rabbit AI Council** (`/rabbit`) - AI agent conversations
-- **Settings** (`/settings`) - User preferences and configuration
+### **Frontend**
+- **Next.js 14** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **shadcn/ui** - Component library
+- **Lucide React** - Icon library
 
-### AI System
-- **20 AI Agents** - Historical figures with specialized expertise
-- **Smart Matching** - Fuse.js-powered agent selection
-- **Conversation Threads** - Multi-agent discussions
-- **Learning System** - User interaction tracking for improvement
+### **Backend**
+- **Prisma** - Database ORM
+- **PostgreSQL** - Primary database
+- **NextAuth.js** - Authentication
+- **JSDOM** - HTML parsing
+- **DeepSeek Janus** - AI image generation
 
-## 🔧 Development Workflow
+### **APIs**
+- **Pexels** - Free stock images
+- **Unsplash** - Free stock images
+- **Pixabay** - Free stock images
+- **Wikimedia Commons** - Public domain images
+- **NASA** - Public domain images
 
-### Database Management
-```bash
-# Generate Prisma client
-npx prisma generate
+## 📊 **Performance & Quality**
 
-# Run migrations (SQLite dev)
-npx prisma migrate dev
+### **Content Quality**
+- **Minimum 200 words** or transcript required
+- **Hero images** for every item
+- **Professional summaries** generated by AI
+- **Relevant key points** extracted automatically
 
-# Deploy migrations (PostgreSQL prod)
-npx prisma migrate deploy
-```
+### **Visual Quality**
+- **High resolution** images (800×450 minimum)
+- **Optimized formats** (JPG, PNG, WebP)
+- **Fast loading** with lazy loading
+- **Responsive design** for all devices
 
-### Design System
-- Use design tokens from `src/styles/design-tokens.css`
-- Follow component patterns in `DESIGN_PLAN.md`
-- Maintain orange-focused color scheme
-- Ensure accessibility compliance (WCAG 2.2 AA)
+### **Legal Compliance**
+- **Copyright-free** AI-generated images
+- **Commercial use** verified for all sources
+- **Attribution handling** automatic
+- **License verification** built-in
 
-### AI Agent Development
-- Add new agents to `src/lib/agentMatching.ts`
-- Expand keyword arrays for better matching
-- Test with various query types
-- Monitor user interaction logs
+## 🎯 **Use Cases**
 
-## 🚀 Deployment
+### **Content Discovery**
+- **Research** - Find relevant articles and resources
+- **Learning** - Discover educational content
+- **News** - Stay updated on topics of interest
+- **Inspiration** - Find creative and innovative content
 
-### Production Environment
-- **Database**: PostgreSQL on Render
-- **Hosting**: Render Node.js service
-- **Storage**: Firebase Storage
-- **Transcription**: Google Cloud Run (Vosk)
-- **Video**: Cloudflare Stream
+### **Content Curation**
+- **Timeline** - Add items to project timelines
+- **Facts** - Extract key facts and data points
+- **Sources** - Build reference libraries
+- **Discussions** - Start conversations about content
 
-### Environment Variables
-```bash
-DATABASE_URL=postgresql://...
-NEXTAUTH_URL=https://your-app.onrender.com
-NEXTAUTH_SECRET=your-secret
-FIREBASE_PROJECT_ID=your-project
-TRANSCRIPTION_SERVICE_URL=https://vosk-service.run.app
-```
+### **Team Collaboration**
+- **Share** - Share discovered content with team
+- **Discuss** - Comment and discuss findings
+- **Save** - Bookmark important content
+- **Organize** - Categorize and tag content
 
-## 📊 Monitoring & Health
+## 🔄 **Workflow**
 
-### Health Endpoints
-- **App Health**: `/api/healthz`
-- **Media Health**: `/api/healthz/media`
-- **Database Health**: `/api/dev/admin/schema-health`
+### **Discovery Process**
+1. **Submit URLs** - Add URLs to discover
+2. **Content Fetching** - Extract text and metadata
+3. **AI Enrichment** - Generate summaries and images
+4. **Quality Check** - Verify content and media
+5. **Ranking** - Score and prioritize
+6. **Display** - Show in discovery interface
 
-### Key Metrics
-- **Performance**: LCP, INP, CLS scores
-- **Transcription**: Success rate, processing time
-- **AI Matching**: Agent selection accuracy
-- **User Engagement**: Feed interactions, agent usage
+### **User Interaction**
+1. **Browse** - View discovered content
+2. **Filter** - By type, date, relevance
+3. **Sort** - By score, date, quality
+4. **Interact** - Open, attach, discuss, save
+5. **Engage** - Read, share, bookmark
 
-## 🤝 Contributing
+## 🛡️ **Security & Privacy**
 
-### Code Standards
-- **TypeScript** for type safety
-- **ESLint** for code quality
-- **Prettier** for formatting
-- **Design tokens** for consistent styling
+### **Data Protection**
+- **URL Sanitization** - Clean and validate inputs
+- **Content Filtering** - Remove malicious content
+- **Rate Limiting** - Prevent abuse
+- **Authentication** - Secure API access
 
-### Documentation Updates
-- Update relevant docs when adding features
-- Follow the established documentation structure
-- Include examples and usage patterns
-- Test all code examples
+### **Legal Compliance**
+- **Copyright** - All images legally compliant
+- **Attribution** - Proper credit where required
+- **Privacy** - No personal data collection
+- **Terms** - Respect source site terms
 
-## 📞 Support
+## 📈 **Analytics & Monitoring**
 
-For questions about:
-- **Design System** → See `DESIGN_PLAN.md` and `STYLES_README.md`
-- **AI Agents** → See `AGENT_AUTO_JOIN_LOGIC.md`
-- **Transcription** → See `TRANSCRIPTION_SERVICE.md`
-- **General Development** → Check this README and individual component docs
+### **Key Metrics**
+- **Processing Success Rate** - Items successfully enriched
+- **Image Quality Score** - Visual relevance and quality
+- **User Engagement** - Click-through rates, time spent
+- **API Usage** - Rate limits, costs, performance
+
+### **Error Tracking**
+- **Processing Failures** - Content extraction errors
+- **Image Failures** - Generation and extraction errors
+- **API Errors** - Rate limits, authentication, network
+- **User Errors** - Invalid inputs, permissions
+
+## 🚀 **Getting Help**
+
+### **Documentation**
+- Check the relevant documentation file first
+- Look for examples and code snippets
+- Review the API reference for technical details
+
+### **Support**
+- **GitHub Issues** - Report bugs and request features
+- **Discord** - Community support and discussions
+- **Email** - Direct support for critical issues
+
+### **Contributing**
+- **Fork** the repository
+- **Create** a feature branch
+- **Submit** a pull request
+- **Follow** the coding standards
+
+## 📝 **License**
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+## 🙏 **Acknowledgments**
+
+- **DeepSeek** - For the Janus AI image generation model
+- **Pexels, Unsplash, Pixabay** - For free stock images
+- **Wikimedia Commons, NASA** - For public domain images
+- **Next.js Team** - For the amazing React framework
+- **Prisma Team** - For the excellent database ORM
 
 ---
 
-**Last Updated**: January 2025  
-**Version**: 1.0.0  
-**Maintainer**: Development Team
+**Happy Discovering! 🥕**
+
+The Carrot Patch Discovery System transforms simple URLs into rich, educational, and visually stunning content experiences. Start exploring and discover the power of intelligent content enrichment.
