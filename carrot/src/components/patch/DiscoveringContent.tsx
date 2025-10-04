@@ -429,100 +429,108 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.md }}>
-        {Array.isArray(items) ? items.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              padding: TOKENS.spacing.lg,
-              border: `1px solid ${TOKENS.colors.line}`,
-              borderRadius: TOKENS.radii.md,
-              background: TOKENS.colors.surface,
-              transition: `all ${TOKENS.motion.normal} ease-in-out`
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
-              e.currentTarget.style.boxShadow = `0 2px 8px rgba(10, 90, 255, 0.1)`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = TOKENS.colors.line;
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: TOKENS.spacing.sm }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.sm }}>
-                <span style={{ fontSize: '16px' }}>{getTypeIcon(item.type)}</span>
-                <span style={{
+        {Array.isArray(items) && items.length > 0 ? items.map((item) => {
+          // Safety check: ensure item has all required properties
+          if (!item || typeof item !== 'object') {
+            console.warn('[Discovery] Invalid item:', item);
+            return null;
+          }
+          
+          return (
+            <div
+              key={item.id || Math.random()}
+              style={{
+                padding: TOKENS.spacing.lg,
+                border: `1px solid ${TOKENS.colors.line}`,
+                borderRadius: TOKENS.radii.md,
+                background: TOKENS.colors.surface,
+                transition: `all ${TOKENS.motion.normal} ease-in-out`
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
+                e.currentTarget.style.boxShadow = `0 2px 8px rgba(10, 90, 255, 0.1)`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = TOKENS.colors.line;
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: TOKENS.spacing.sm }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.sm }}>
+                  <span style={{ fontSize: '16px' }}>{getTypeIcon(item.type || 'post')}</span>
+                  <span style={{
+                    fontSize: TOKENS.typography.caption,
+                    color: TOKENS.colors.slate,
+                    fontWeight: 500
+                  }}>
+                    {getTypeLabel(item.type || 'post')}
+                  </span>
+                  <span style={{
+                    padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
+                    background: getStatusColor(item.status || 'pending'),
+                    color: TOKENS.colors.surface,
+                    borderRadius: TOKENS.radii.sm,
+                    fontSize: TOKENS.typography.caption,
+                    fontWeight: 600
+                  }}>
+                    {item.status || 'pending'}
+                  </span>
+                </div>
+                <div style={{
                   fontSize: TOKENS.typography.caption,
-                  color: TOKENS.colors.slate,
-                  fontWeight: 500
+                  color: TOKENS.colors.slate
                 }}>
-                  {getTypeLabel(item.type)}
-                </span>
-                <span style={{
-                  padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
-                  background: getStatusColor(item.status),
-                  color: TOKENS.colors.surface,
-                  borderRadius: TOKENS.radii.sm,
-                  fontSize: TOKENS.typography.caption,
-                  fontWeight: 600
-                }}>
-                  {item.status}
-                </span>
+                  {Math.round((item.relevanceScore || 0) * 100)}% match
+                </div>
               </div>
-              <div style={{
-                fontSize: TOKENS.typography.caption,
-                color: TOKENS.colors.slate
+              
+              <h4 style={{
+                fontSize: TOKENS.typography.body,
+                fontWeight: 600,
+                color: TOKENS.colors.ink,
+                margin: 0,
+                marginBottom: TOKENS.spacing.sm
               }}>
-                {Math.round(item.relevanceScore * 100)}% match
-              </div>
+                {item.title || 'Untitled'}
+              </h4>
+              
+              <p style={{
+                fontSize: TOKENS.typography.body,
+                color: TOKENS.colors.slate,
+                margin: 0,
+                marginBottom: TOKENS.spacing.sm,
+                lineHeight: 1.5
+              }}>
+                {item.content && item.content.length > 150 ? `${item.content.substring(0, 150)}...` : (item.content || 'No content available')}
+              </p>
+              
+              {item.sourceUrl && (
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: TOKENS.typography.caption,
+                    color: TOKENS.colors.civicBlue,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: TOKENS.spacing.xs
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.textDecoration = 'underline';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.textDecoration = 'none';
+                  }}
+                >
+                  <ExternalLink size={12} />
+                  View source
+                </a>
+              )}
             </div>
-            
-            <h4 style={{
-              fontSize: TOKENS.typography.body,
-              fontWeight: 600,
-              color: TOKENS.colors.ink,
-              margin: 0,
-              marginBottom: TOKENS.spacing.sm
-            }}>
-              {item.title}
-            </h4>
-            
-            <p style={{
-              fontSize: TOKENS.typography.body,
-              color: TOKENS.colors.slate,
-              margin: 0,
-              marginBottom: TOKENS.spacing.sm,
-              lineHeight: 1.5
-            }}>
-              {item.content.length > 150 ? `${item.content.substring(0, 150)}...` : item.content}
-            </p>
-            
-            {item.sourceUrl && (
-              <a
-                href={item.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: TOKENS.typography.caption,
-                  color: TOKENS.colors.civicBlue,
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: TOKENS.spacing.xs
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.textDecoration = 'underline';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.textDecoration = 'none';
-                }}
-              >
-                <ExternalLink size={12} />
-                View source
-              </a>
-            )}
-          </div>
-        )) : (
+          );
+        }) : (
           <div style={{
             padding: TOKENS.spacing.lg,
             border: `1px solid ${TOKENS.colors.line}`,

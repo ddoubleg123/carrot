@@ -462,11 +462,11 @@ function ConversationThread({
 
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Messages */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-6 py-6 flex flex-col max-h-full"
+        className="flex-1 overflow-y-auto px-6 py-6 flex flex-col"
       >
         <div className="space-y-4">
           {thread.messages.map((message) => (
@@ -931,7 +931,7 @@ export default function RabbitPage() {
   // Original Grid View (Default State)
   if (currentView === 'grid') {
   return (
-    <div className="bg-white">
+    <div className="min-h-screen bg-white">
       {/* Generous white space and main phrase */}
       <div className="pt-24 pb-12">
         <div className="text-center">
@@ -1000,7 +1000,7 @@ export default function RabbitPage() {
 
   // Conversation View (After User Engagement)
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Unified Header - extends from left to right - STICKY */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
         {/* Left side - Chat title */}
@@ -1031,9 +1031,9 @@ export default function RabbitPage() {
 
 
       {/* Main Content Area */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Main Conversation Area */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0">
           {currentThread && (
             <ConversationThread 
               thread={currentThread}
@@ -1043,7 +1043,7 @@ export default function RabbitPage() {
         </div>
 
         {/* Agent Roster Sidebar */}
-        <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col min-h-0">
           <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>}>
             <AgentRoster
               agents={agents}
