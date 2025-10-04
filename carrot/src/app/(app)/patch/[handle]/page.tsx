@@ -29,9 +29,16 @@ function getPresetIndex(preset: string | null | undefined): number | undefined {
   return presetMap[preset] ?? undefined;
 }
 
-export default async function PatchPage({ params }: { params: Promise<{ handle: string }> }) {
+export default async function PatchPage({ 
+  params, 
+  searchParams 
+}: { 
+  params: Promise<{ handle: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   try {
     const { handle } = await params;
+    const search = await searchParams;
     
     // Fetch patch data
     const patch = await prisma.patch.findUnique({
@@ -108,8 +115,8 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
       description: `${member.user.name} joined the patch`
     }));
 
-    // Determine active tab (default to 'overview')
-    const activeTab = 'overview';
+    // Determine active tab from URL search params (default to 'overview')
+    const activeTab = (search.tab as string) || 'overview';
 
     return (
       <Suspense fallback={
