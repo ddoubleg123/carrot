@@ -1,453 +1,528 @@
-"use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import AudioPlayer from "../AudioPlayer";
-import { createPortal } from "react-dom";
-import FlagChip from "../flags/FlagChip";
-import CommentsDrawer from "./CommentsDrawer";
-import VideoPortalMount from "../video/VideoPortalMount";
+'use client';
 
-// Resolve bucket at build time for client fallback path mode
-// Use the same logic as firebase.ts to ensure .firebasestorage.app bucket names
-const PUBLIC_BUCKET = (() => {
-  const bucket = process.env.NEXT_PUBLIC_FIREBASE_BUCKET ||
-    process.env.FIREBASE_STORAGE_BUCKET ||
-    process.env.FIREBASE_BUCKET ||
-    '';
-  
-  // If bucket ends with .firebasestorage.app, keep it as-is
-  if (bucket.includes('.firebasestorage.app')) {
-    return bucket;
-  }
-  
-  // If bucket ends with .appspot.com, convert to .firebasestorage.app
-  if (bucket.endsWith('.appspot.com')) {
-    return bucket.replace('.appspot.com', '.firebasestorage.app');
-  }
-  
-  // If no bucket specified, construct from project ID
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (projectId) {
-    return `${projectId}.firebasestorage.app`;
-  }
-  
-  return bucket;
-})();
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { X, MessageCircle, Share2, Heart, Bookmark, MoreHorizontal } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
-type PostModalData = {
+interface Comment {
   id: string;
-  content?: string | null;
-  createdAt?: string;
-  User?: {
+  content: string;
+  author: {
     id: string;
-    username?: string | null;
-    profilePhoto?: string | null;
-    profilePhotoPath?: string | null;
-    country?: string | null;
-  } | null;
-  imageUrls?: string | null;
-  videoUrl?: string | null;
-  thumbnailUrl?: string | null;
-  audioUrl?: string | null;
-  captionVttUrl?: string | null;
-  // Visuals
-  gradientDirection?: string | null;
-  gradientFromColor?: string | null;
-  gradientViaColor?: string | null;
-  gradientToColor?: string | null;
-};
-
-function usePost(id?: string | null) {
-  const [data, setData] = useState<PostModalData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!id) return;
-    const ac = new AbortController();
-    setLoading(true);
-    setError(null);
-    fetch(`/api/posts/${id}`, { signal: ac.signal, keepalive: false, cache: 'no-cache' })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.json();
-      })
-      .then((j) => { if (!ac.signal.aborted) setData(j); })
-      .catch((e) => { if (!ac.signal.aborted) setError(String(e?.message || e)); })
-      .finally(() => { if (!ac.signal.aborted) setLoading(false); });
-    return () => { ac.abort(); };
-  }, [id]);
-  return { data, loading, error };
+    name: string;
+    avatar?: string;
+  };
+  createdAt: string;
+  likes: number;
+  isLiked: boolean;
 }
 
-export default function PostModal({ id, onClose }: { id: string; onClose: () => void }) {
-  const { data, loading } = usePost(id);
-  const params = useSearchParams();
-  const initialPanel = (params?.get('panel') as ('comments' | null)) || null;
-  const [showComments, setShowComments] = useState(initialPanel === 'comments');
-  const [mediaEl, setMediaEl] = useState<HTMLVideoElement | HTMLAudioElement | null>(null);
-  const [adopted, setAdopted] = useState(false);
-  const [fadeIn, setFadeIn] = useState(false);
-  type Seg = { start: number; end?: number; text: string };
-  const [segments, setSegments] = useState<Seg[]>([]);
-  const [segmentsLoading, setSegmentsLoading] = useState(false);
-  const [segmentsError, setSegmentsError] = useState<string | null>(null);
-  const [lang, setLang] = useState('en');
-  const [translated, setTranslated] = useState<string | null>(null);
-  const [translateLoading, setTranslateLoading] = useState(false);
-  const [translateError, setTranslateError] = useState<string | null>(null);
-  const [regenBusy, setRegenBusy] = useState(false);
-  const [regenMsg, setRegenMsg] = useState<string | null>(null);
-  const username = data?.User?.username ? (data.User.username.startsWith("@") ? data.User.username : `@${data.User.username}`) : "@user";
-  const avatar = useMemo(() => {
-    const p = data?.User;
-    if (!p) return "/avatar-placeholder.svg";
-    if (p.profilePhotoPath) return `/api/img?path=${encodeURIComponent(p.profilePhotoPath)}`;
-    if (p.profilePhoto && /^https?:\/\//i.test(p.profilePhoto)) return `/api/img?url=${encodeURIComponent(p.profilePhoto)}`;
-    return "/avatar-placeholder.svg";
-  }, [data?.User]);
+interface Post {
+  id: string;
+  content: string;
+  author: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  mediaUrl?: string;
+  mediaType?: 'video' | 'image';
+  likes: number;
+  comments: number;
+  shares: number;
+  isLiked: boolean;
+  isBookmarked: boolean;
+  createdAt: string;
+}
 
-  // Transcript removed from modal per design; handled elsewhere if needed
+interface PostModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  post: Post;
+  videoElement?: HTMLVideoElement | null;
+  isVideo?: boolean;
+}
 
-  // Regenerate transcript via existing trigger endpoint, then poll post for updated caption/transcription
-  // Transcript regeneration removed from modal
+export default function PostModal({ 
+  isOpen, 
+  onClose, 
+  post, 
+  videoElement, 
+  isVideo = false 
+}: PostModalProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const commentsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Render media body without nested ternaries (fallback when DOM-transfer is not used)
-  function renderMediaFallback() {
-    if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
-    if (data?.videoUrl) {
-      const url = data.videoUrl;
-      
-      // If URL is already proxied through /api/video, use it directly
-      if (url.startsWith('/api/video')) {
-        const poster = data.thumbnailUrl ? (() => {
-          if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
-          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
-          return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
-        })() : undefined;
-        return (
-          <video
-            controls
-            playsInline
-            poster={poster}
-            className="w-full h-full object-contain bg-black"
-            ref={(el) => setMediaEl(el)}
-            onError={(e) => {
-              console.error('[PostModal] Video loading error:', e);
-              // Try to reload the video after a short delay
-              setTimeout(() => {
-                const videoEl = e.currentTarget;
-                if (videoEl) {
-                  videoEl.load();
-                }
-              }, 1000);
-            }}
-            onLoadStart={() => console.log('[PostModal] Video loading started')}
-            onCanPlay={() => console.log('[PostModal] Video can play')}
-          >
-            <source src={url} />
-          </video>
-        );
-      }
-      
-      const needsProxy = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com') || url.includes('firebasestorage.app');
-      // Prefer durable path-mode when server sent bucket+path
-      if ((data as any)?.videoBucket && (data as any)?.videoPath) {
-        const b = String((data as any).videoBucket);
-        const p = String((data as any).videoPath);
-        const poster = data.thumbnailUrl ? (() => {
-          if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
-          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
-          return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
-        })() : undefined;
-        return (
-          <video
-            controls
-            playsInline
-            poster={poster}
-            className="w-full h-full object-contain bg-black"
-            ref={(el) => setMediaEl(el)}
-            onError={(e) => {
-              console.error('[PostModal] Video loading error (path mode):', e);
-              // Try to reload the video after a short delay
-              setTimeout(() => {
-                const videoEl = e.currentTarget;
-                if (videoEl) {
-                  videoEl.load();
-                }
-              }, 1000);
-            }}
-            onLoadStart={() => console.log('[PostModal] Video loading started (path mode)')}
-            onCanPlay={() => console.log('[PostModal] Video can play (path mode)')}
-          >
-            <source src={`/api/video?path=${encodeURIComponent(p)}&bucket=${encodeURIComponent(b)}`} />
-          </video>
-        );
-      }
-      // Prefer path-mode extraction like feed player to avoid expired tokens
-      let resolved = url;
-      try {
-        const u = new URL(url);
-        const host = u.hostname;
-        let bucket: string | undefined; let path: string | undefined;
-        // firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
-        const m1 = u.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
-        if (host === 'firebasestorage.googleapis.com' && m1) {
-          bucket = decodeURIComponent(m1[1]);
-          path = decodeURIComponent(m1[2]);
-        }
-        // storage.googleapis.com/<bucket>/<path>
-        if (!path) {
-          const m2 = u.pathname.match(/^\/([^/]+)\/(.+)$/);
-          if (host === 'storage.googleapis.com' && m2) {
-            bucket = decodeURIComponent(m2[1]);
-            path = decodeURIComponent(m2[2]);
-          }
-        }
-        // <project>.firebasestorage.app/o/<ENCODED_PATH>
-        if (!path) {
-          const m4 = u.pathname.match(/^\/o\/([^?]+)$/);
-          if (host.endsWith('.firebasestorage.app') && m4) {
-            bucket = PUBLIC_BUCKET || undefined;
-            path = decodeURIComponent(m4[1]);
-          }
-        }
-        if (path) {
-          const finalBucket = (bucket || PUBLIC_BUCKET || '').trim();
-          if (finalBucket) {
-            resolved = `/api/video?path=${encodeURIComponent(path)}&bucket=${encodeURIComponent(finalBucket)}`;
-          }
-        }
-        // Fallback to url-mode via proxy if we couldn't extract safely
-        if (!resolved.startsWith('/api/video')) {
-          let u2 = url;
-          if (needsProxy && u2.includes('firebasestorage.googleapis.com') && !u2.includes('alt=media')) {
-            u2 = `${u2}${u2.includes('?') ? '&' : '?'}alt=media`;
-          }
-          resolved = needsProxy ? `/api/video?url=${encodeURIComponent(u2)}` : url;
-        }
-      } catch {
-        let u2 = url;
-        if (needsProxy && u2.includes('firebasestorage.googleapis.com') && !u2.includes('alt=media')) {
-          u2 = `${u2}${u2.includes('?') ? '&' : '?'}alt=media`;
-        }
-        resolved = needsProxy ? `/api/video?url=${encodeURIComponent(u2)}` : url;
-      }
-      // Proxy poster image to avoid CORS
-      const poster = data.thumbnailUrl ? (() => {
-        if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
-        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
-        return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
-      })() : undefined;
-      return (
-        <video
-          controls
-          playsInline
-          poster={poster}
-          className="w-full h-full object-contain bg-black"
-          ref={(el) => setMediaEl(el)}
-          onError={(e) => {
-            console.error('[PostModal] Video loading error (resolved):', e);
-            // Try to reload the video after a short delay
-            setTimeout(() => {
-              const videoEl = e.currentTarget;
-              if (videoEl) {
-                videoEl.load();
-              }
-            }, 1000);
-          }}
-          onLoadStart={() => console.log('[PostModal] Video loading started (resolved)')}
-          onCanPlay={() => console.log('[PostModal] Video can play (resolved)')}
-        >
-          <source src={resolved} />
-        </video>
-      );
-    }
-    if (data?.imageUrls) {
-      let arr: string[] = [];
-      try { arr = typeof data.imageUrls === 'string' ? JSON.parse(data.imageUrls) : data.imageUrls; } catch {}
-      const src = arr[0];
-      return src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`/api/img?url=${encodeURIComponent(src)}`}
-          alt={data?.content ? `${data.content.slice(0, 60)} (image)` : 'Post image'}
-          loading="lazy"
-          decoding="async"
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <div className="flex items-center justify-center h-64 text-sm text-gray-500">
-          <div className="text-center">
-            <div className="text-lg mb-2">📷</div>
-            <div>No media available</div>
-            <div className="text-xs text-gray-400 mt-1">This post doesn't contain any media</div>
-          </div>
-        </div>
-      );
-    }
-    if (data?.audioUrl) {
-      return (
-        <div className="w-full">
-          <AudioPlayer audioUrl={data.audioUrl} allowBlob={false} onAudioRef={(el) => setMediaEl(el)} />
-        </div>
-      );
-    }
-    return (
-      <div className="flex items-center justify-center h-64 text-sm text-gray-500">
-        <div className="text-center">
-          <div className="text-lg mb-2">📷</div>
-          <div>No media available</div>
-          <div className="text-xs text-gray-400 mt-1">This post doesn't contain any media</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Watch for DOM-transfer adoption into the portal; if a <video> appears, hide the fallback
+  // Fetch comments when modal opens
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const sel = `[data-video-portal-for="${id}"] video`;
-    const update = () => {
-      try { setAdopted(Boolean(document.querySelector(sel))); } catch {}
+    if (isOpen && post.id) {
+      fetchComments();
+    }
+  }, [isOpen, post.id]);
+
+  // Handle video element reuse
+  useEffect(() => {
+    if (isOpen && isVideo && videoElement && videoContainerRef.current) {
+      // Move video element to modal container
+      videoContainerRef.current.appendChild(videoElement);
+      
+      // Restore video state from dataset
+      const originalTime = parseFloat(videoElement.dataset.originalTime || '0');
+      const originalPaused = videoElement.dataset.originalPaused === 'true';
+      const originalVolume = parseFloat(videoElement.dataset.originalVolume || '1');
+      const originalPlaybackRate = parseFloat(videoElement.dataset.originalPlaybackRate || '1');
+      
+      videoElement.currentTime = originalTime;
+      videoElement.volume = originalVolume;
+      videoElement.playbackRate = originalPlaybackRate;
+      
+      if (!originalPaused) {
+        videoElement.play().catch(console.error);
+      }
+    }
+  }, [isOpen, isVideo, videoElement]);
+
+  // Handle ESC key and cleanup
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        onClose();
+      }
     };
-    update();
-    const onReady = (e: any) => { if (e?.detail?.postId === id) setTimeout(update, 10); };
-    const onDismiss = (e: any) => { if (e?.detail?.postId === id) setTimeout(update, 10); };
-    window.addEventListener('carrot-video-portal-ready', onReady as any);
-    window.addEventListener('carrot-video-portal-dismiss', onDismiss as any);
-    const t = setInterval(update, 300); // brief polling while modal is open
-    return () => { window.removeEventListener('carrot-video-portal-ready', onReady as any); window.removeEventListener('carrot-video-portal-dismiss', onDismiss as any); clearInterval(t); };
-  }, [id]);
 
-  // Small fade-in to smooth the handoff/hydration
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'unset';
+      
+      // Clean up video element if modal is closing
+      if (!isOpen && videoElement && videoContainerRef.current) {
+        // Video element will be restored by usePostModal hook
+        // Just ensure it's removed from modal container
+        if (videoContainerRef.current.contains(videoElement)) {
+          videoContainerRef.current.removeChild(videoElement);
+        }
+      }
+    };
+  }, [isOpen, onClose, videoElement]);
+
+  // Focus trap
   useEffect(() => {
-    let raf = 0;
-    raf = requestAnimationFrame(() => setFadeIn(true));
-    return () => { cancelAnimationFrame(raf); setFadeIn(false); };
-  }, []);
+    if (isOpen && modalRef.current) {
+      const focusableElements = modalRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements[0] as HTMLElement;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
 
-  const body = (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[720px] w-full max-w-full">
-        <div className="rounded-2xl shadow-xl overflow-hidden bg-white">
-          {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b bg-white/95 backdrop-blur">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-9 w-9 rounded-full overflow-hidden bg-gray-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatar}
-                  alt={username ? `${username}'s avatar` : 'User avatar'}
-                  loading="lazy"
-                  decoding="async"
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900 truncate">{username}</span>
-                <FlagChip countryCode={data?.User?.country || undefined} />
-                <span className="text-xs text-gray-500">• {data?.createdAt ? new Date(data.createdAt).toLocaleString() : ""}</span>
-              </div>
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key === 'Tab') {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              lastElement?.focus();
+              e.preventDefault();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              firstElement?.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleTabKey);
+      firstElement?.focus();
+
+      return () => {
+        document.removeEventListener('keydown', handleTabKey);
+      };
+    }
+  }, [isOpen]);
+
+  const fetchComments = async () => {
+    setIsLoadingComments(true);
+    try {
+      const response = await fetch(`/api/comments?postId=${post.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setComments(data.comments || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch comments:', error);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || isSubmittingComment) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          postId: post.id,
+          content: newComment.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        const newCommentData = await response.json();
+        setComments(prev => [newCommentData, ...prev]);
+        setNewComment('');
+      }
+    } catch (error) {
+      console.error('Failed to submit comment:', error);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleLike = async () => {
+    // Implement like functionality
+    console.log('Like post:', post.id);
+  };
+
+  const handleBookmark = async () => {
+    // Implement bookmark functionality
+    console.log('Bookmark post:', post.id);
+  };
+
+  const handleShare = async () => {
+    // Implement share functionality
+    console.log('Share post:', post.id);
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return 'now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    return `${Math.floor(diffInSeconds / 86400)}d`;
+  };
+
+  if (!isOpen) return null;
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      
+      {/* Modal */}
+      <div
+        ref={modalRef}
+        className="relative w-full h-full max-w-7xl max-h-[95vh] mx-4 my-4 bg-white rounded-2xl shadow-2xl overflow-hidden"
+        role="document"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={post.author.avatar} alt={post.author.name} />
+              <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div>
+              <h2 id="modal-title" className="font-semibold text-gray-900">
+                {post.author.name}
+              </h2>
+              <p className="text-sm text-gray-500">{formatTimeAgo(post.createdAt)}</p>
             </div>
-            <button className="px-2 py-1 rounded hover:bg-gray-100" aria-label="Close" onClick={onClose}>✕</button>
           </div>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-8 w-8 p-0"
+            aria-label="Close modal"
+          >
+            <X size={20} />
+          </Button>
+        </div>
 
-          {/* Simple toolbar: Content and Comments */}
-          <div className="px-4 pt-3">
-            <div className="flex items-center gap-2 border-b">
-              <span className="px-3 py-2 text-sm border-b-2 border-gray-900 text-gray-900">Content</span>
-              <div className="ml-auto" />
-              <button className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800" onClick={() => setShowComments(true)}>Comments</button>
-            </div>
-          </div>
-
-          {/* Panel bodies */}
-          <div className="p-3">
-            <div
-              className="rounded-xl overflow-hidden"
-              style={{
-                background: `linear-gradient(135deg, ${data?.gradientFromColor || '#0f172a'}, ${data?.gradientViaColor || data?.gradientFromColor || '#1f2937'}, ${data?.gradientToColor || '#0f172a'})`
-              }}
+        {/* Content */}
+        <div className="flex h-[calc(100vh-120px)]">
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col">
+            {/* Video/Media Area */}
+            <div 
+              ref={videoContainerRef}
+              className="flex-1 bg-black flex items-center justify-center relative"
             >
-              <div className="w-full transition-opacity duration-150" style={{ aspectRatio: '16 / 9', opacity: fadeIn ? 1 : 0.01 }}>
-                {/* Primary: DOM transfer mount */}
-                <VideoPortalMount postId={id} className="w-full h-full" />
-                {/* Fallback: render a separate element only if we have not adopted the feed element */}
-                {!adopted && (
-                  <div className="w-full h-full flex items-center justify-center">{renderMediaFallback()}</div>
-                )}
+              {isVideo && videoElement ? (
+                <div className="w-full h-full">
+                  {/* Video element will be moved here */}
+                </div>
+              ) : post.mediaUrl ? (
+                <img
+                  src={post.mediaUrl}
+                  alt="Post content"
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <div className="text-center text-gray-500">
+                  <p>No media content</p>
+                </div>
+              )}
+            </div>
+
+            {/* Post Content */}
+            <div className="p-4 border-t border-gray-200">
+              <p className="text-gray-900 whitespace-pre-wrap">{post.content}</p>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex items-center justify-between p-4 border-t border-gray-200">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLike}
+                  className={`h-8 w-8 p-0 ${post.isLiked ? 'text-red-500' : 'text-gray-500'}`}
+                >
+                  <Heart size={20} className={post.isLiked ? 'fill-current' : ''} />
+                </Button>
+                <span className="text-sm text-gray-500">{post.likes}</span>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-gray-500"
+                >
+                  <MessageCircle size={20} />
+                </Button>
+                <span className="text-sm text-gray-500">{post.comments}</span>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShare}
+                  className="h-8 w-8 p-0 text-gray-500"
+                >
+                  <Share2 size={20} />
+                </Button>
+                <span className="text-sm text-gray-500">{post.shares}</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBookmark}
+                  className={`h-8 w-8 p-0 ${post.isBookmarked ? 'text-blue-500' : 'text-gray-500'}`}
+                >
+                  <Bookmark size={20} className={post.isBookmarked ? 'fill-current' : ''} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-gray-500"
+                >
+                  <MoreHorizontal size={20} />
+                </Button>
               </div>
             </div>
-            {data?.content ? (
-              <div className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words">{data.content}</div>
-            ) : null}
           </div>
-          {/* Transcript/Translate removed per design */}
 
-          {/* Footer actions (kept minimal; main actions live on cards) */}
-          <div className="px-4 pb-4 text-xs text-gray-500">Tip: Use the action bar in the feed to like, share, save, or open transcript/translate directly.</div>
+          {/* Comments Sidebar (Desktop) */}
+          <div className="hidden lg:block w-80 border-l border-gray-200 flex flex-col">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold text-gray-900">Comments</h3>
+            </div>
+            
+            <div 
+              ref={commentsContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-4"
+            >
+              {isLoadingComments ? (
+                <div className="text-center text-gray-500 py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500 mx-auto"></div>
+                  <p className="mt-2">Loading comments...</p>
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <MessageCircle size={32} className="mx-auto mb-2 text-gray-300" />
+                  <p>No comments yet</p>
+                  <p className="text-sm">Be the first to comment!</p>
+                </div>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <Avatar className="h-8 w-8 flex-shrink-0">
+                      <AvatarImage src={comment.author.avatar} alt={comment.author.name} />
+                      <AvatarFallback>{comment.author.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm text-gray-900">
+                          {comment.author.name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatTimeAgo(comment.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {comment.content}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-6 px-2 text-xs ${comment.isLiked ? 'text-red-500' : 'text-gray-500'}`}
+                        >
+                          <Heart size={12} className={comment.isLiked ? 'fill-current' : ''} />
+                          <span className="ml-1">{comment.likes}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-gray-500"
+                        >
+                          Reply
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Comment Input */}
+            <div className="p-4 border-t border-gray-200">
+              <form onSubmit={handleSubmitComment} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isSubmittingComment}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!newComment.trim() || isSubmittingComment}
+                  className="px-4"
+                >
+                  {isSubmittingComment ? 'Posting...' : 'Post'}
+                </Button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Comments Section */}
+        <div className="lg:hidden border-t border-gray-200">
+          <div className="p-4">
+            <h3 className="font-semibold text-gray-900 mb-4">Comments</h3>
+            
+            <div className="max-h-64 overflow-y-auto space-y-4 mb-4">
+              {isLoadingComments ? (
+                <div className="text-center text-gray-500 py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500 mx-auto"></div>
+                  <p className="mt-2 text-sm">Loading comments...</p>
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="text-center text-gray-500 py-4">
+                  <MessageCircle size={24} className="mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">No comments yet</p>
+                </div>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <Avatar className="h-8 w-8 flex-shrink-0">
+                      <AvatarImage src={comment.author.avatar} alt={comment.author.name} />
+                      <AvatarFallback>{comment.author.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm text-gray-900">
+                          {comment.author.name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatTimeAgo(comment.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {comment.content}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-6 px-2 text-xs ${comment.isLiked ? 'text-red-500' : 'text-gray-500'}`}
+                        >
+                          <Heart size={12} className={comment.isLiked ? 'fill-current' : ''} />
+                          <span className="ml-1">{comment.likes}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-gray-500"
+                        >
+                          Reply
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Mobile Comment Input */}
+            <form onSubmit={handleSubmitComment} className="flex gap-2">
+              <input
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isSubmittingComment}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!newComment.trim() || isSubmittingComment}
+                className="px-4"
+              >
+                {isSubmittingComment ? 'Posting...' : 'Post'}
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
     </div>
   );
 
-  if (typeof document === "undefined") return null;
-  return (
-    <>
-      {createPortal(body, document.body)}
-      {showComments && createPortal(
-        <CommentsDrawer postId={id} onClose={() => setShowComments(false)} />,
-        document.body
-      )}
-    </>
-  );
-}
-
-function formatTimeMs(ms: number) {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const ss = s % 60;
-  return `${m}:${ss.toString().padStart(2,'0')}`;
-}
-
-function parseVttTimestamp(ts: string): number {
-  // Format: hh:mm:ss.mmm (hours optional in many files but we will support)
-  const m = ts.trim().match(/(?:(\d{1,2}):)?(\d{2}):(\d{2})[\.,](\d{3})/);
-  if (!m) return 0;
-  const h = parseInt(m[1] || '0', 10);
-  const min = parseInt(m[2] || '0', 10);
-  const sec = parseInt(m[3] || '0', 10);
-  const ms = parseInt(m[4] || '0', 10);
-  return ((h * 3600 + min * 60 + sec) * 1000) + ms;
-}
-
-function parseWebVtt(text: string): { start: number; end?: number; text: string }[] {
-  const lines = text.replace(/\r/g, '').split('\n');
-  const out: { start: number; end?: number; text: string }[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    i++;
-    if (!line) continue;
-    // Skip header or cue identifiers
-    if (/^WEBVTT/i.test(line)) continue;
-    // Timestamp line typically contains -->
-    if (line.includes('-->')) {
-      const [a, b] = line.split('-->').map(s => s.trim());
-      const start = parseVttTimestamp(a);
-      const end = b ? parseVttTimestamp(b.split(' ')[0]) : undefined;
-      // Gather subsequent text lines until blank
-      const buf: string[] = [];
-      while (i < lines.length && lines[i].trim() !== '') {
-        buf.push(lines[i]);
-        i++;
-      }
-      const cueText = buf.join(' ').replace(/<[^>]+>/g, '').trim();
-      if (cueText) out.push({ start, end, text: cueText });
-    }
-  }
-  return out;
+  return createPortal(modalContent, document.body);
 }

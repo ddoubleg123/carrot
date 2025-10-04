@@ -1,118 +1,149 @@
-import { NextResponse } from 'next/server';
-import prisma from '../../../lib/prisma';
-import { auth } from '../../../auth';
-import { rateLimit } from '../../../lib/ratelimit';
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
-function avatarForUser(u: any): string | null {
-  if (!u) return null;
-  if (u.profilePhotoPath) return `/api/img?path=${encodeURIComponent(u.profilePhotoPath)}`;
-  if (u.profilePhoto && /^https?:\/\//i.test(u.profilePhoto)) return `/api/img?url=${encodeURIComponent(u.profilePhoto)}`;
-  if (u.image && /^https?:\/\//i.test(u.image)) return `/api/img?url=${encodeURIComponent(u.image)}`;
-  return u.image || u.profilePhoto || null;
-}
-
-// GET /api/comments?postId=...&sort=top|newest&cursor=...&limit=...
-export async function GET(req: Request) {
+// GET /api/comments?postId=xxx
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId');
-    const sort = (searchParams.get('sort') || 'top').toLowerCase();
-    const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '20', 10) || 20));
-    const cursor = searchParams.get('cursor') || undefined;
-    if (!postId) return NextResponse.json([], { status: 200 });
 
-    // For now, both 'top' and 'newest' use id-desc ordering (deterministic and cursor-friendly)
-    const orderBy = { id: 'desc' as const };
+    if (!postId) {
+      return NextResponse.json(
+        { error: 'Post ID is required' },
+        { status: 400 }
+      );
+    }
 
-    const rows = await prisma.comment.findMany({
-      where: { postId },
-      orderBy,
-      take: limit,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    // Fetch comments for the post
+    const comments = await prisma.comment.findMany({
+      where: {
+        postId: postId,
+      },
       include: {
-        user: {
+        author: {
           select: {
             id: true,
-            username: true,
+            name: true,
             image: true,
-            profilePhoto: true,
-            profilePhotoPath: true,
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
           },
         },
       },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    }).catch((error) => {
+      console.error('Database error fetching comments:', error);
+      return [];
     });
 
-    const out = rows.map((r: any) => ({
-      id: r.id,
-      text: r.text,
-      createdAt: r.createdAt,
-      user: {
-        id: r.user?.id,
-        username: r.user?.username,
-        avatar: avatarForUser(r.user),
+    // Transform comments to match expected format
+    const transformedComments = comments.map(comment => ({
+      id: comment.id,
+      content: comment.content,
+      author: {
+        id: comment.author.id,
+        name: comment.author.name,
+        avatar: comment.author.image,
       },
+      createdAt: comment.createdAt.toISOString(),
+      likes: comment._count.likes,
+      isLiked: false, // TODO: Check if current user liked this comment
     }));
-    const nextCursor = rows.length === limit ? rows[rows.length - 1]?.id : undefined;
-    return NextResponse.json({ items: out, nextCursor });
-  } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+
+    return NextResponse.json({
+      success: true,
+      comments: transformedComments,
+    });
+
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch comments' },
+      { status: 500 }
+    );
   }
 }
 
-// POST /api/comments { postId, content }
-export async function POST(req: Request) {
+// POST /api/comments
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // Basic rate limit: 5 comments / 30s per user
-    const key = `cmt:${session.user.id}`;
-    const rl = rateLimit(key, 5, 30_000);
-    if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded', retryAfterMs: rl.retryAfterMs }, { status: 429 });
-    const body = await req.json().catch(() => ({}));
-    const postId = String(body?.postId || '');
-    const content = String(body?.content || '').trim();
-    if (!postId) return NextResponse.json({ error: 'Missing postId' }, { status: 400 });
-    if (!content) return NextResponse.json({ error: 'Empty content' }, { status: 400 });
-    if (content.length > 500) return NextResponse.json({ error: 'Comment too long (max 500)' }, { status: 400 });
+    const session = await getServerSession(authOptions);
 
-    // Ensure post exists (soft check)
-    const postExists = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
-    if (!postExists) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-    const created = await prisma.comment.create({
+    const body = await request.json();
+    const { postId, content } = body;
+
+    if (!postId || !content?.trim()) {
+      return NextResponse.json(
+        { error: 'Post ID and content are required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify post exists
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+    });
+
+    if (!post) {
+      return NextResponse.json(
+        { error: 'Post not found' },
+        { status: 404 }
+      );
+    }
+
+    // Create comment
+    const comment = await prisma.comment.create({
       data: {
-        postId,
-        userId: session.user.id,
-        text: content,
+        content: content.trim(),
+        postId: postId,
+        authorId: session.user.id,
       },
       include: {
-        user: {
+        author: {
           select: {
             id: true,
-            username: true,
+            name: true,
             image: true,
-            profilePhoto: true,
-            profilePhotoPath: true,
           },
         },
       },
     });
 
-    const out = {
-      id: created.id,
-      text: created.text,
-      createdAt: created.createdAt,
-      user: {
-        id: created.user?.id,
-        username: created.user?.username,
-        avatar: avatarForUser(created.user),
+    // Transform comment to match expected format
+    const transformedComment = {
+      id: comment.id,
+      content: comment.content,
+      author: {
+        id: comment.author.id,
+        name: comment.author.name,
+        avatar: comment.author.image,
       },
+      createdAt: comment.createdAt.toISOString(),
+      likes: 0,
+      isLiked: false,
     };
-    return NextResponse.json(out, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+
+    return NextResponse.json(transformedComment, { status: 201 });
+
+  } catch (error) {
+    console.error('Error creating comment:', error);
+    return NextResponse.json(
+      { error: 'Failed to create comment' },
+      { status: 500 }
+    );
   }
 }
