@@ -469,7 +469,10 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
                   <button
                     type="button"
                     disabled={!canAttachExternal}
-                    onClick={() => startExternalIngestion()}
+                    onClick={() => {
+                      console.log('[MediaPickerModal] Ingest button clicked, canAttachExternal:', canAttachExternal);
+                      startExternalIngestion();
+                    }}
                     className="px-4 py-2 rounded-full bg-gradient-to-r from-orange-400 to-red-500 text-white font-medium disabled:opacity-50"
                   >
                     {isIngestActive ? 'Working…' : 'Ingest video'}

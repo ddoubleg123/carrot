@@ -127,6 +127,12 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   }, [urlTrimmed, externalTosAccepted, ingestJobId, isIngestActive]);
   // Computed: whether external URL attach is allowed
   const canAttachExternal = useMemo(() => {
+    console.log('[ComposerModal] canAttachExternal check:', {
+      isIngestActive,
+      externalTosAccepted,
+      isExternalUrlValid,
+      urlTrimmed
+    });
     if (isIngestActive) return false;
     if (!externalTosAccepted) return false;
     if (!isExternalUrlValid) return false;
@@ -210,6 +216,15 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
   // Start ingestion for external URL
   const startExternalIngestion = async () => {
+    console.log('[ComposerModal] startExternalIngestion called with state:', {
+      url: urlTrimmed,
+      externalTosAccepted,
+      isExternalUrlValid,
+      isIngestActive,
+      canAttachExternal,
+      ingestJobId
+    });
+    
     // Align validation with UI gating
     const url = urlTrimmed;
     if (!url) {
