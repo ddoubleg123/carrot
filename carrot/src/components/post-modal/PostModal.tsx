@@ -135,8 +135,9 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
               console.error('[PostModal] Video loading error:', e);
               // Try to reload the video after a short delay
               setTimeout(() => {
-                if (el) {
-                  el.load();
+                const videoEl = e.currentTarget;
+                if (videoEl) {
+                  videoEl.load();
                 }
               }, 1000);
             }}
@@ -169,8 +170,9 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
               console.error('[PostModal] Video loading error (path mode):', e);
               // Try to reload the video after a short delay
               setTimeout(() => {
-                if (el) {
-                  el.load();
+                const videoEl = e.currentTarget;
+                if (videoEl) {
+                  videoEl.load();
                 }
               }, 1000);
             }}
@@ -247,8 +249,9 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
             console.error('[PostModal] Video loading error (resolved):', e);
             // Try to reload the video after a short delay
             setTimeout(() => {
-              if (el) {
-                el.load();
+              const videoEl = e.currentTarget;
+              if (videoEl) {
+                videoEl.load();
               }
             }, 1000);
           }}
