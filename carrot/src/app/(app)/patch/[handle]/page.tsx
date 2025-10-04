@@ -49,7 +49,15 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
             }
           }
         },
-        botSubscriptions: true
+        botSubscriptions: true,
+        _count: {
+          select: {
+            members: true,
+            posts: true,
+            events: true,
+            sources: true
+          }
+        }
       }
     });
 
