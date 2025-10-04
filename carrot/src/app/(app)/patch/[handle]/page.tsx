@@ -49,18 +49,7 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
             }
           }
         },
-        botSubscriptions: {
-          include: {
-            bot: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-                avatar: true
-              }
-            }
-          }
-        }
+        botSubscriptions: true
       }
     });
 
@@ -91,7 +80,12 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
     }));
 
     const actualFollowerCount = actualFollowers.length;
-    const botSubscriptionsWithBotData = patch.botSubscriptions;
+    const botSubscriptionsWithBotData = patch.botSubscriptions.map(sub => ({
+      id: sub.id,
+      botId: sub.botId,
+      ownerUserId: sub.ownerUserId,
+      createdAt: sub.createdAt
+    }));
 
     // Format events for timeline
     const formattedEvents = patch.members.map(member => ({
