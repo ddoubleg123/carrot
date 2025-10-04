@@ -16,11 +16,7 @@ services:
         value: 10000
       - key: YT_DLP_PATH
         value: yt-dlp
-      - key: YT_DLP_COOKIES_FROM_BROWSER
-        value: chrome
-      - key: YT_DLP_COOKIES_FROM_BROWSER_PROFILE
-        value: chrome:Default
-      - key: YT_DLP_COOKIES
+      - key: YT_DLP_COOKIES_FILE
         value: /app/cookies.txt
       - key: INGEST_CALLBACK_URL
         value: https://carrot-app.onrender.com/api/ingest/callback
