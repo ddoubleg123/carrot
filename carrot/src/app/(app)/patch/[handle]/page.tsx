@@ -129,7 +129,7 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
             userTheme={actualUserTheme ? {
               mode: actualUserTheme.mode as 'preset' | 'image',
               preset: getPresetIndex(actualUserTheme.preset),
-              image: actualUserTheme.image || undefined
+              imageUrl: actualUserTheme.imageUrl || undefined
             } : null}
           />
 
