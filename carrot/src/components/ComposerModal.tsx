@@ -1185,16 +1185,22 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
       // Upload edited thumbnail (data URL) to Firebase to ensure persistence
       let thumbnailUrlToSend: string | null = editedThumb || null;
-      if (editedThumb && editedThumb.startsWith('data:')) {
+      
+      // If no edited thumbnail but we have generated thumbnails, use the selected one
+      if (!thumbnailUrlToSend && videoThumbnails.length > 0 && currentThumbnailIndex < videoThumbnails.length) {
+        thumbnailUrlToSend = videoThumbnails[currentThumbnailIndex];
+      }
+      
+      if (thumbnailUrlToSend && thumbnailUrlToSend.startsWith('data:')) {
         try {
-          const resp = await fetch(editedThumb);
+          const resp = await fetch(thumbnailUrlToSend);
           const blob = await resp.blob();
           const thumbFile = new File([blob], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
           const uploaded = await uploadFilesToFirebase([thumbFile], 'posts/thumbs/');
           const up = Array.isArray(uploaded) && uploaded.length ? (uploaded[0] as string) : null;
           if (up) thumbnailUrlToSend = up;
         } catch (e) {
-          console.warn('[ComposerModal] Failed to upload edited thumbnail, continuing without persistent thumbnail', e);
+          console.warn('[ComposerModal] Failed to upload selected thumbnail, continuing without persistent thumbnail', e);
         }
       }
       const newPost: any = {
@@ -1571,6 +1577,15 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
               setMediaType('video');
               setMediaPreview(proxiedUrl || null);
               setExternalUrl(item.url || '');
+              
+              // Generate thumbnails for gallery-selected videos
+              if (item.url) {
+                try { 
+                  generateVideoThumbnails(item.url); 
+                } catch (error) {
+                  console.warn('[Composer] Failed to generate thumbnails for gallery video:', error);
+                }
+              }
             } else if (item.type === 'image' || item.type === 'gif') {
               setMediaType('image');
               setMediaPreview(proxiedUrl || null);

@@ -260,7 +260,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
           ? `/api/img?bucket=${encodeURIComponent(envBucket)}&path=${encodeURIComponent(dto.storagePath)}&w=320&h=180&format=webp`
           : `/api/img?path=${encodeURIComponent(dto.storagePath)}&w=320&h=180&format=webp`;
       }
-      // Try deriving a path from Firebase-style URLs as a last resort
+      // Try deriving a path from Firebase-style URLs as a last resort (images only)
       if (dto.type === 'image') {
         const d1 = deriveBucketAndPath(dto.thumbUrl);
         if (d1.path) {
@@ -277,28 +277,17 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
             : `/api/img?path=${encodeURIComponent(d2.path)}&w=320&h=180&format=webp`;
         }
       }
-      
-      // For videos, try to generate thumbnail from video URL
-      if (dto.type === 'video' && dto.url) {
-        // Check if it's a Cloudflare Stream video
-        if (dto.url.includes('videodelivery.net')) {
-          // Extract cfUid from Cloudflare Stream URL
-          const cfMatch = dto.url.match(/videodelivery\.net\/([^\/]+)/);
-          if (cfMatch) {
-            const cfUid = cfMatch[1];
-            return `https://videodelivery.net/${cfUid}/thumbnails/thumbnail.jpg?time=1s`;
-          }
-        }
-        
-        // For Firebase Storage videos, use the video URL directly
-        // This will show the video poster frame in the browser
-        return dto.url;
+
+      // For videos without a stored thumbnail, use a deterministic generated poster (SVG), not the raw video URL
+      if (dto.type === 'video') {
+        if (dto.thumbUrl) return `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp`;
+        if (dto.url) return `/api/img?generatePoster=1&videoUrl=${encodeURIComponent(dto.url)}`;
+        return undefined;
       }
-      
-      // Fallback to URLs via proxy (may still be video poster/thumb URLs)
+
+      // Fallback to URLs via proxy (images)
       if (dto.thumbUrl) return `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=320&h=180&format=webp`;
       if (dto.url && dto.type === 'image') return `/api/img?url=${encodeURIComponent(dto.url)}&w=320&h=180&format=webp`;
-      if (dto.url && dto.type === 'video') return `/api/img?url=${encodeURIComponent(dto.url)}&w=320&h=180&format=webp`;
       return undefined;
     };
 
@@ -319,7 +308,13 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
         title: dto.title || null,
         // For thumbnails/posters, try to use a proxied image path if possible
         thumbUrl: toProxyUrl(dto) || null,
-        posterUrl: (dto as any).posterUrl ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}&w=640&h=360&format=webp` : (dto.type === 'video' && dto.thumbUrl ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp` : null),
+        posterUrl: (dto as any).posterUrl
+          ? `/api/img?url=${encodeURIComponent((dto as any).posterUrl)}&w=640&h=360&format=webp`
+          : (dto.type === 'video'
+              ? (dto.thumbUrl
+                  ? `/api/img?url=${encodeURIComponent(dto.thumbUrl)}&w=640&h=360&format=webp`
+                  : (dto.url ? `/api/img?generatePoster=1&videoUrl=${encodeURIComponent(dto.url)}` : null))
+              : null),
         durationSec: dto.durationSec ?? null,
         hidden: !!dto.hidden,
         inUseCount: (dto as any).inUseCount ?? null,
