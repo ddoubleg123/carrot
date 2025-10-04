@@ -1,6 +1,6 @@
 'use client';
 
-  // Helper: avatar URL (fallback if none in metadata)
+  // Helper (kept for compatibility): avatar URL (fallback if none in metadata)
   const avatarFor = (name: string, url?: string) => {
     if (url) return url
     const seed = encodeURIComponent(name || 'Agent')
@@ -1030,17 +1030,11 @@ export default function FeedAgentsPage() {
                 {filteredAgents.map((agent) => (
                   <SelectItem key={agent.id} value={agent.id} className="bg-white hover:bg-gray-50 focus:bg-gray-50">
                     <div className="flex items-center gap-2 w-full">
-                      {agent.metadata.avatar ? (
-                        <AvatarImage
-                          src={agent.metadata.avatar}
-                          alt={agent.name}
-                          size={32}
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-medium text-sm flex-shrink-0">
-                          {agent.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                      )}
+                      <AvatarImage
+                        src={(agent.metadata as any)?.avatar || '/avatar-placeholder.svg'}
+                        alt={agent.name}
+                        size={32}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-gray-900 truncate">{agent.name}</div>
                         <div className="text-xs text-gray-500 truncate">{agent.domainExpertise.slice(0, 2).join(', ')}</div>
@@ -1126,7 +1120,7 @@ export default function FeedAgentsPage() {
                         aria-label={`Select ${agent.name}`}
                       />
                       <AvatarImage
-                        src={avatarFor(agent.name, (agent.metadata as any)?.avatar)}
+                        src={(agent.metadata as any)?.avatar || '/avatar-placeholder.svg'}
                         alt={agent.name}
                         size={48}
                       />
@@ -1140,7 +1134,7 @@ export default function FeedAgentsPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-3">
-                      {agent.persona}
+                      {(agent.metadata as any)?.role || agent.persona}
                     </p>
                     <div className="flex flex-wrap gap-1 mb-4">
                       {agent.domainExpertise.slice(0, 3).map((expertise) => (
