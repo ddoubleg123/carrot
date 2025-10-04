@@ -117,7 +117,11 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
       if (response.ok) {
         const data = await response.json();
-        const newItems = data.items || [];
+        console.log('[Discovery] API response:', data);
+        
+        // Safety check: ensure data.items is an array
+        const newItems = Array.isArray(data.items) ? data.items : [];
+        console.log('[Discovery] Processed items:', newItems.length, 'items');
         
         // Log when new items are found
         if (newItems.length > items.length) {
@@ -140,6 +144,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         telemetry.trackDiscoveryError(patchHandle, 'API request failed');
       }
     } catch (err) {
+      console.error('[Discovery] Error loading content:', err);
       setError('Connection lost. We\'ll keep trying.');
       telemetry.trackDiscoveryError(patchHandle, 'Network error');
     } finally {
@@ -424,7 +429,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.md }}>
-        {items.map((item) => (
+        {Array.isArray(items) ? items.map((item) => (
           <div
             key={item.id}
             style={{
@@ -517,7 +522,23 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
               </a>
             )}
           </div>
-        ))}
+        )) : (
+          <div style={{
+            padding: TOKENS.spacing.lg,
+            border: `1px solid ${TOKENS.colors.line}`,
+            borderRadius: TOKENS.radii.md,
+            background: TOKENS.colors.surface,
+            textAlign: 'center'
+          }}>
+            <p style={{
+              fontSize: TOKENS.typography.body,
+              color: TOKENS.colors.slate,
+              margin: 0
+            }}>
+              No items to display
+            </p>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
