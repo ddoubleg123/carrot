@@ -1618,8 +1618,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
               id: item.id, 
               type: item.type, 
               url: item.url, 
-              thumbUrl: item.thumbUrl,
-              posterUrl: item.posterUrl 
+              thumbUrl: item.thumbUrl
             });
             
             // Minimal integration: set preview and type, close picker
