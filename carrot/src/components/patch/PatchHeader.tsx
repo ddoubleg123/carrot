@@ -56,30 +56,39 @@ export default function PatchHeader({
     // TODO: Implement optimistic join functionality
   };
 
-  const handleShare = () => {
-    // Open share sheet
-    console.log('Share clicked');
-    // TODO: Implement share functionality
-  };
+  
 
   const handleSettings = () => {
-    // Open settings modal with delete option
-    console.log('Settings clicked');
-    // TODO: Implement settings modal with delete functionality
-    // For now, show a simple confirm dialog
+    // Open settings modal with delete option (simple confirm for now)
     if (confirm(`Are you sure you want to delete the "${patch.name}" patch? This action cannot be undone.`)) {
-      // TODO: Implement actual delete API call
-      console.log('Delete confirmed for patch:', patch.id);
-      // After successful delete, redirect to home or dashboard
-      router.push('/dashboard');
+      (async () => {
+        try {
+          const res = await fetch(`/api/patches/${patch.handle}`, { method: 'DELETE' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.success) {
+            alert(`Delete failed: ${data?.error || res.status}`);
+            return;
+          }
+          // Redirect back to carrot patch page
+          router.push('/patch');
+        } catch (e) {
+          console.error('Delete error', e);
+          alert('Delete failed');
+        }
+      })();
     }
   };
 
   const handleThemeChange = (newTheme: UserPatchTheme) => {
     setCurrentTheme(newTheme);
     onThemeChange?.(newTheme);
-    // Save to API
-    // TODO: Implement API call to save theme
+    // TODO: Persist via API if needed
+  };
+
+  const handleShare = () => {
+    // Open share sheet
+    console.log('Share clicked');
+    // TODO: Implement share functionality
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,8 +179,8 @@ export default function PatchHeader({
               )}
             </div>
             
-            {/* Right side: Actions - ALIGNED LEFT */}
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            {/* Right side: Actions - ICONS STACKED VERTICALLY */}
+            <div className="flex flex-col gap-2 flex-shrink-0 items-start">
         <Button
           onClick={isMember ? () => {} : handleJoin}
           variant={isMember ? "outline" : "secondary"}
