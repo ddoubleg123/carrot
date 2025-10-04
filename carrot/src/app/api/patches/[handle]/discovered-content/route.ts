@@ -9,16 +9,21 @@ export async function GET(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
+    const t0 = Date.now();
     const { handle } = await params;
 
     // Find the patch by handle
+    const t1 = Date.now();
     const patch = await prisma.patch.findUnique({
       where: { handle },
       select: { id: true }
     });
+    const t2 = Date.now();
 
     if (!patch) {
-      return NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+      const res = NextResponse.json({ error: 'Patch not found' }, { status: 404 });
+      try { res.headers.set('Server-Timing', `prep;dur=${t1 - t0}`); } catch {}
+      return res;
     }
 
     // Fetch discovered content from Source table (where discovery saves items)
@@ -30,6 +35,7 @@ export async function GET(
         { createdAt: 'desc' }
       ]
     });
+    const t3 = Date.now();
 
     // Transform sources to discovered content format
     const discoveredContent = sources.map(source => ({
@@ -43,12 +49,20 @@ export async function GET(
       createdAt: source.createdAt
     }));
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       items: discoveredContent,
       isActive: discoveredContent.length > 0,
       totalItems: discoveredContent.length
     });
+    // Report simple timing: param resolution, patch lookup, sources fetch
+    const timings = [
+      `prep;desc=param_resolve;dur=${t1 - t0}`,
+      `patch;desc=patch_lookup;dur=${t2 - t1}`,
+      `sources;desc=sources_fetch;dur=${t3 - t2}`
+    ].join(', ');
+    try { res.headers.set('Server-Timing', timings); } catch {}
+    return res;
 
   } catch (error) {
     console.error('Error fetching discovered content:', error);

@@ -27,28 +27,44 @@ export default function DiscoveredContent({ patchHandle }: DiscoveredContentProp
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
-  const fetchContent = async () => {
-    try {
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch discovered content');
-      }
-      const data = await response.json();
-      setContent(data.discoveredContent || []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let abort = new AbortController();
+    let timer: any;
+
+    const fetchContent = async () => {
+      try {
+        const response = await fetch(`/api/patches/${patchHandle}/discovered-content`, { signal: abort.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error('Failed to fetch discovered content');
+        const data = await response.json();
+        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.discoveredContent) ? data.discoveredContent : [];
+        // Normalize fields to our view model
+        const mapped: DiscoveredContentItem[] = items.map((it: any) => ({
+          id: String(it.id ?? crypto.randomUUID?.() ?? Math.random()),
+          type: String(it.type ?? 'source'),
+          title: String(it.title ?? 'Untitled'),
+          content: String(it.content ?? it.description ?? ''),
+          relevanceScore: Number(it.relevanceScore ?? 0),
+          sourceUrl: typeof it.url === 'string' ? it.url : (typeof it.sourceUrl === 'string' ? it.sourceUrl : undefined),
+          tags: Array.isArray(it.tags) ? it.tags : [],
+          status: String(it.status ?? 'pending'),
+          auditScore: typeof it.auditScore === 'number' ? it.auditScore : undefined,
+          auditNotes: typeof it.auditNotes === 'string' ? it.auditNotes : undefined,
+          createdAt: typeof it.createdAt === 'string' ? it.createdAt : new Date().toISOString(),
+        }));
+        setContent(mapped);
+        setError(null);
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Initial load and poll every 10s (lighter)
     fetchContent();
-    
-    // Poll for new content every 5 seconds
-    const interval = setInterval(fetchContent, 5000);
-    return () => clearInterval(interval);
+    timer = setInterval(fetchContent, 10000);
+    return () => { try { abort.abort(); } catch {} clearInterval(timer); };
   }, [patchHandle]);
 
   const getTypeIcon = (type: string) => {

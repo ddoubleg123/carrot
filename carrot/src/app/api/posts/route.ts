@@ -61,6 +61,63 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     externalUrl,
     // Cloudflare fields removed for Firebase-only plan
   } = body;
+  // Attempt to derive a durable storage path from a Firebase thumbnail URL
+  const deriveThumbInfo = (u?: string | null): { url?: string | null; path?: string | null } => {
+    if (!u || typeof u !== 'string') return { url: u || null, path: null };
+    try {
+      const url = new URL(u);
+      const host = url.hostname;
+      const sp = url.searchParams;
+      let path: string | undefined;
+      let originalPath: string | undefined;
+      // firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>
+      const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+      if (host === 'firebasestorage.googleapis.com' && m1) {
+        path = decodeURIComponent(m1[2]);
+        originalPath = m1[2];
+      }
+      // <sub>.firebasestorage.app/o/<ENCODED_PATH>
+      if (!path) {
+        const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
+        if (host.endsWith('.firebasestorage.app') && m4) {
+          path = decodeURIComponent(m4[1]);
+          originalPath = m4[1];
+        }
+      }
+      // Generic: any /o/<ENCODED_PATH>
+      if (!path) {
+        const m3 = url.pathname.match(/\/o\/([^?]+)$/);
+        if (m3) {
+          path = decodeURIComponent(m3[1]);
+          originalPath = m3[1];
+        }
+      }
+      // Build normalized URL that ensures alt=media is present and preserves token if any
+      let normalized: string | null = null;
+      try {
+        if (host === 'firebasestorage.googleapis.com') {
+          const m = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
+          if (m) {
+            const bucket = decodeURIComponent(m[1]);
+            const encPath = (originalPath && path && originalPath !== path) ? originalPath : encodeURIComponent(path || '');
+            const token = sp.get('token');
+            const durable = new URL(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encPath}?alt=media`);
+            if (token) durable.searchParams.set('token', token);
+            normalized = durable.toString();
+          }
+        } else if (host.endsWith('.firebasestorage.app') && path) {
+          const enc = (originalPath && originalPath !== path) ? originalPath : encodeURIComponent(path);
+          const token = sp.get('token');
+          const durable = new URL(`https://${host}/o/${enc}?alt=media`);
+          if (token) durable.searchParams.set('token', token);
+          normalized = durable.toString();
+        }
+      } catch {}
+      return { url: normalized || u, path: path || null };
+    } catch {
+      return { url: u, path: null };
+    }
+  };
   try {
     // In mock feed mode, avoid DB and echo a fake-created post for local testing
     if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
@@ -218,6 +275,10 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       } catch {}
     }
 
+    // Normalize incoming thumbnail if present and capture thumbPath
+    const thumbInfo = deriveThumbInfo(thumbnailUrl);
+    const safeThumbUrl = thumbInfo.url ?? thumbnailUrl ?? null;
+
     // Create post first
     const post = await prisma.post.create({
       data: {
@@ -233,7 +294,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             ? JSON.stringify([imageUrls])
             : '[]',
         videoUrl: effectiveVideoUrl,
-        thumbnailUrl,
+        thumbnailUrl: safeThumbUrl,
         gifUrl,
         audioUrl: effectiveAudioUrl,
         audioTranscription,
@@ -289,7 +350,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
               url: effectiveVideoUrl || null,
               type: 'video',
               title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
-              thumbUrl: thumbnailUrl || null,
+              thumbUrl: safeThumbUrl || null,
+              thumbPath: thumbInfo.path || null,
               source: 'post',
               // CF fields removed
             },
@@ -309,7 +371,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
                 url: effectiveVideoUrl || null,
                 type: 'video',
                 title: (content && typeof content === 'string') ? content.slice(0, 80) : null,
-                thumbUrl: thumbnailUrl || null,
+                thumbUrl: safeThumbUrl || null,
+                thumbPath: thumbInfo.path || null,
                 source: 'post-retry',
                 // CF fields removed
               },

@@ -184,6 +184,7 @@ app.get('/debug', async (req, res) => {
   YT_DLP_PATH: process.env.YT_DLP_PATH,
   YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
   YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
+  YT_DLP_COOKIES_FROM_BROWSER_PROFILE: process.env.YT_DLP_COOKIES_FROM_BROWSER_PROFILE,
   INGEST_TRIM_SECONDS: process.env.INGEST_TRIM_SECONDS,
 },
     binaries: checkPaths,
@@ -229,7 +230,9 @@ async function getCookiesArgs() {
   try {
     const fromBrowser = (process.env.YT_DLP_COOKIES_FROM_BROWSER || '').trim();
     if (fromBrowser) {
-      return ['--cookies-from-browser', fromBrowser];
+      const profile = (process.env.YT_DLP_COOKIES_FROM_BROWSER_PROFILE || '').trim();
+      const browserArg = profile ? `${fromBrowser}:${profile}` : fromBrowser;
+      return ['--cookies-from-browser', browserArg];
     }
 
     const raw = process.env.YT_DLP_COOKIES;
