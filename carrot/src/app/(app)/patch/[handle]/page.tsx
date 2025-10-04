@@ -191,7 +191,7 @@ export default async function PatchPage({
   }
 }
 
-export async function generateMetadata({ params }: PatchPageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params;
 
   const patch = await prisma.patch.findUnique({
