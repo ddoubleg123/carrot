@@ -26,19 +26,21 @@ export async function GET(
       return res;
     }
 
-    // Fetch discovered content from Source table (where discovery saves items)
-    const sources = await prisma.source.findMany({
-      where: {
-        patchId: patch.id
-      },
-      orderBy: [
-        { createdAt: 'desc' }
-      ]
-    });
+    // Fetch discovered content from both Source and DiscoveredContent tables
+    const [sources, discoveredContent] = await Promise.all([
+      prisma.source.findMany({
+        where: { patchId: patch.id },
+        orderBy: [{ createdAt: 'desc' }]
+      }),
+      prisma.discoveredContent.findMany({
+        where: { patchId: patch.id },
+        orderBy: [{ createdAt: 'desc' }]
+      })
+    ]);
     const t3 = Date.now();
 
     // Transform sources to discovered content format
-    const discoveredContent = sources.map(source => ({
+    const sourceItems = sources.map(source => ({
       id: source.id,
       title: source.title,
       url: source.url,
@@ -46,8 +48,51 @@ export async function GET(
       description: (source.citeMeta as any)?.description || '',
       relevanceScore: (source.citeMeta as any)?.relevanceScore || 0.8,
       status: (source.citeMeta as any)?.status || 'pending_audit',
-      createdAt: source.createdAt
+      createdAt: source.createdAt,
+      // Legacy format - no enriched content
+      enrichedContent: undefined,
+      mediaAssets: undefined,
+      metadata: undefined,
+      qualityScore: undefined
     }));
+
+    // Transform discovered content to rich format
+    const enrichedItems = discoveredContent.map(item => ({
+      id: item.id,
+      title: item.title,
+      url: item.sourceUrl,
+      canonicalUrl: item.canonicalUrl,
+      type: item.type,
+      description: item.content, // Legacy content field
+      relevanceScore: item.relevanceScore,
+      status: item.status,
+      createdAt: item.createdAt,
+      // Rich content data
+      enrichedContent: item.enrichedContent as any,
+      mediaAssets: item.mediaAssets as any,
+      metadata: item.metadata as any,
+      qualityScore: item.qualityScore,
+      freshnessScore: item.freshnessScore,
+      diversityBucket: item.diversityBucket
+    }));
+
+    // Combine and deduplicate by URL
+    const allItems = [...sourceItems, ...enrichedItems];
+    const uniqueItems = allItems.reduce((acc, item) => {
+      const key = item.url || item.id;
+      if (!acc.has(key)) {
+        acc.set(key, item);
+      } else {
+        // Prefer enriched content over legacy
+        const existing = acc.get(key);
+        if (item.enrichedContent && !existing?.enrichedContent) {
+          acc.set(key, item);
+        }
+      }
+      return acc;
+    }, new Map());
+
+    const discoveredContent = Array.from(uniqueItems.values());
 
     const res = NextResponse.json({
       success: true,

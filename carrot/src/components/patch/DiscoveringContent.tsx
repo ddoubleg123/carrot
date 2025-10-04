@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, ExternalLink, Filter, SortAsc } from 'lucide-react';
 import telemetry from '@/lib/telemetry';
+import DiscoveryCard from './DiscoveryCard';
 
 // Design tokens from Carrot standards
 const TOKENS = {
@@ -46,12 +47,38 @@ const TOKENS = {
 
 interface DiscoveredItem {
   id: string;
-  type: 'post' | 'video' | 'document' | 'source';
+  type: 'article' | 'video' | 'pdf' | 'post';
   title: string;
   content: string;
   sourceUrl?: string;
+  canonicalUrl?: string;
   relevanceScore: number;
-  status: 'pending' | 'audited' | 'approved' | 'rejected';
+  status: 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review';
+  enrichedContent?: {
+    summary150?: string;
+    keyPoints?: string[];
+    notableQuote?: string;
+    fullText?: string;
+    transcript?: string;
+  };
+  mediaAssets?: {
+    hero?: string;
+    gallery?: string[];
+    videoThumb?: string;
+    pdfPreview?: string;
+  };
+  metadata?: {
+    author?: string;
+    publishDate?: string;
+    source?: string;
+    readingTime?: number;
+    tags?: string[];
+    entities?: string[];
+    citation?: any;
+  };
+  qualityScore?: number;
+  freshnessScore?: number;
+  diversityBucket?: string;
   createdAt: string;
 }
 
@@ -65,6 +92,8 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [error, setError] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(true);
   const [firstItemTime, setFirstItemTime] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState<'relevance' | 'newest' | 'quality'>('relevance');
+  const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'post'>('all');
 
   const handleStartDiscovery = async () => {
     try {
@@ -176,13 +205,43 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return TOKENS.colors.success;
-      case 'rejected': return TOKENS.colors.danger;
-      case 'audited': return TOKENS.colors.warning;
-      default: return TOKENS.colors.slate;
-    }
+  // Sort and filter items
+  const getSortedAndFilteredItems = () => {
+    let filtered = items.filter(item => {
+      if (filterType === 'all') return true;
+      return item.type === filterType;
+    });
+
+    // Sort items
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'relevance':
+          return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+        case 'newest':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'quality':
+          return (b.qualityScore || 0) - (a.qualityScore || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  };
+
+  const handleAttach = (itemId: string, type: 'timeline' | 'fact' | 'source') => {
+    console.log(`Attaching item ${itemId} to ${type}`);
+    // TODO: Implement attachment logic
+  };
+
+  const handleDiscuss = (itemId: string) => {
+    console.log(`Opening discussion for item ${itemId}`);
+    // TODO: Implement discussion logic
+  };
+
+  const handleSave = (itemId: string) => {
+    console.log(`Saving item ${itemId}`);
+    // TODO: Implement save logic
   };
 
   if (isLoading) {
@@ -428,8 +487,44 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         We're actively finding posts, videos, and drills that match this group. New items will appear here.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.md }}>
-        {Array.isArray(items) && items.length > 0 ? items.map((item) => {
+      {/* Controls */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-gray-500" />
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as any)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            >
+              <option value="all">All Types</option>
+              <option value="article">Articles</option>
+              <option value="video">Videos</option>
+              <option value="pdf">PDFs</option>
+              <option value="post">Posts</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <SortAsc size={16} className="text-gray-500" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            >
+              <option value="relevance">Top</option>
+              <option value="newest">Newest</option>
+              <option value="quality">Quality</option>
+            </select>
+          </div>
+        </div>
+        <div className="text-sm text-gray-500">
+          {getSortedAndFilteredItems().length} items
+        </div>
+      </div>
+
+      {/* Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {getSortedAndFilteredItems().map((item) => {
           // Safety check: ensure item has all required properties
           if (!item || typeof item !== 'object') {
             console.warn('[Discovery] Invalid item:', item);
@@ -437,117 +532,40 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           }
           
           return (
-            <div
+            <DiscoveryCard
               key={item.id || Math.random()}
-              style={{
-                padding: TOKENS.spacing.lg,
-                border: `1px solid ${TOKENS.colors.line}`,
-                borderRadius: TOKENS.radii.md,
-                background: TOKENS.colors.surface,
-                transition: `all ${TOKENS.motion.normal} ease-in-out`
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = TOKENS.colors.civicBlue;
-                e.currentTarget.style.boxShadow = `0 2px 8px rgba(10, 90, 255, 0.1)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = TOKENS.colors.line;
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: TOKENS.spacing.sm }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.sm }}>
-                  <span style={{ fontSize: '16px' }}>{getTypeIcon(item.type || 'post')}</span>
-                  <span style={{
-                    fontSize: TOKENS.typography.caption,
-                    color: TOKENS.colors.slate,
-                    fontWeight: 500
-                  }}>
-                    {getTypeLabel(item.type || 'post')}
-                  </span>
-                  <span style={{
-                    padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
-                    background: getStatusColor(item.status || 'pending'),
-                    color: TOKENS.colors.surface,
-                    borderRadius: TOKENS.radii.sm,
-                    fontSize: TOKENS.typography.caption,
-                    fontWeight: 600
-                  }}>
-                    {item.status || 'pending'}
-                  </span>
-                </div>
-                <div style={{
-                  fontSize: TOKENS.typography.caption,
-                  color: TOKENS.colors.slate
-                }}>
-                  {Math.round((item.relevanceScore || 0) * 100)}% match
-                </div>
-              </div>
-              
-              <h4 style={{
-                fontSize: TOKENS.typography.body,
-                fontWeight: 600,
-                color: TOKENS.colors.ink,
-                margin: 0,
-                marginBottom: TOKENS.spacing.sm
-              }}>
-                {item.title || 'Untitled'}
-              </h4>
-              
-              <p style={{
-                fontSize: TOKENS.typography.body,
-                color: TOKENS.colors.slate,
-                margin: 0,
-                marginBottom: TOKENS.spacing.sm,
-                lineHeight: 1.5
-              }}>
-                {item.content && item.content.length > 150 ? `${item.content.substring(0, 150)}...` : (item.content || 'No content available')}
-              </p>
-              
-              {item.sourceUrl && (
-                <a
-                  href={item.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    fontSize: TOKENS.typography.caption,
-                    color: TOKENS.colors.civicBlue,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: TOKENS.spacing.xs
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.textDecoration = 'underline';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.textDecoration = 'none';
-                  }}
-                >
-                  <ExternalLink size={12} />
-                  View source
-                </a>
-              )}
-            </div>
+              id={item.id}
+              title={item.title || 'Untitled'}
+              type={item.type || 'article'}
+              sourceUrl={item.sourceUrl}
+              canonicalUrl={item.canonicalUrl}
+              relevanceScore={item.relevanceScore}
+              status={item.status || 'queued'}
+              enrichedContent={item.enrichedContent}
+              mediaAssets={item.mediaAssets}
+              metadata={item.metadata}
+              qualityScore={item.qualityScore}
+              onAttach={(type) => handleAttach(item.id, type)}
+              onDiscuss={() => handleDiscuss(item.id)}
+              onSave={() => handleSave(item.id)}
+            />
           );
-        }) : (
-          <div style={{
-            padding: TOKENS.spacing.lg,
-            border: `1px solid ${TOKENS.colors.line}`,
-            borderRadius: TOKENS.radii.md,
-            background: TOKENS.colors.surface,
-            textAlign: 'center'
-          }}>
-            <p style={{
-              fontSize: TOKENS.typography.body,
-              color: TOKENS.colors.slate,
-              margin: 0
-            }}>
-              No items to display
-            </p>
-          </div>
-        )}
+        })}
       </div>
+
+      {/* Empty State */}
+      {getSortedAndFilteredItems().length === 0 && (
+        <div className="text-center py-12">
+          <Search size={48} className="text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No content found</h3>
+          <p className="text-gray-500">
+            {filterType === 'all' 
+              ? 'No content has been discovered yet. Check back soon!'
+              : `No ${filterType}s found. Try changing the filter.`
+            }
+          </p>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes spin {

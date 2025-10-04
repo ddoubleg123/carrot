@@ -747,15 +747,25 @@ model BotSubscription {
 model DiscoveredContent {
   id              String   @id @default(cuid())
   patchId         String   @map("patch_id")
-  type            String   // 'document' | 'source' | 'discussion_topic' | 'timeline_event'
+  type            String   // 'article' | 'video' | 'pdf' | 'post'
   title           String
-  content         String
+  content         String   // Legacy field - will be replaced by enrichedContent
   relevanceScore  Int      @map("relevance_score") // 1-10
   sourceUrl       String?  @map("source_url")
+  canonicalUrl    String?  @map("canonical_url")
   tags            String[]
-  status          String   @default("pending") // 'pending' | 'approved' | 'rejected' | 'audited'
+  status          String   @default("queued") // 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review'
   auditScore      Int?     @map("audit_score") // 1-10, set after DeepSeek audit
   auditNotes      String?  @map("audit_notes")
+  
+  // Enriched content data
+  enrichedContent Json?    @map("enriched_content") // { summary150, keyPoints[], notableQuote, fullText?, transcript? }
+  mediaAssets     Json?    @map("media_assets")     // { hero, gallery[], videoThumb?, pdfPreview? }
+  metadata        Json?    @map("metadata")         // { author, publishDate, source, readingTime, tags[], entities[], citation }
+  qualityScore    Float?   @map("quality_score")    // 0-1 quality rating
+  freshnessScore  Float?   @map("freshness_score")  // 0-1 freshness rating
+  diversityBucket String?  @map("diversity_bucket") // For diversity scoring
+  
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -764,6 +774,7 @@ model DiscoveredContent {
   @@index([patchId])
   @@index([type])
   @@index([status])
+  @@index([canonicalUrl])
   @@index([relevanceScore])
   @@map("discovered_content")
 }
