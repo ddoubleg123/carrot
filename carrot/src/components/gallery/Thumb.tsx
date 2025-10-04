@@ -21,7 +21,10 @@ export function Thumb({ src, type, alt = "media", className, placeholder, loadin
   };
   
   const isVideoUrl = (url: string) => {
-    return /\.(mp4|webm|mov|avi|mkv)$/i.test(url) || url.includes('videodelivery.net') || url.includes('firebasestorage.googleapis.com');
+    // If we're going through our image proxy, it's always an image response
+    if (url.startsWith('/api/img')) return false;
+    // Heuristics for direct video URLs
+    return /\.(mp4|webm|mov|avi|mkv)(\?|$)/i.test(url) || url.includes('videodelivery.net');
   };
   
   return (

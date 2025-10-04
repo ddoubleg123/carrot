@@ -229,6 +229,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
           });
           const encPath = encodeURIComponent(objectPath);
           const thumbUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName)}/o/${encPath}?alt=media&token=${encodeURIComponent(token)}`;
+          const thumbPath = objectPath; // store raw storage path for stable proxying via /api/img
 
           // Update post and asset as needed
           if (needsPost) {
@@ -236,7 +237,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
             updatedPosts++;
           }
           if (asset && needsAsset) {
-            await (prisma as any).mediaAsset.update({ where: { id: asset.id }, data: { thumbUrl } });
+            await (prisma as any).mediaAsset.update({ where: { id: asset.id }, data: { thumbUrl, thumbPath } });
             updatedAssets++;
           }
           generated++;

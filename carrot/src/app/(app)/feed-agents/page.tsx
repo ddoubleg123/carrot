@@ -318,9 +318,14 @@ export default function FeedAgentsPage() {
         showToast(`Failed to update ${failed} training plan(s): ${failedReasons}`, 'error');
       }
 
-      // Refresh plan status
-      if (lastPlanId) {
-        setTimeout(() => fetchPlanStatus(lastPlanId), 500);
+      // Refresh plan status for all plans
+      if (succeeded > 0) {
+        // Refresh the current plan status
+        if (lastPlanId) {
+          setTimeout(() => fetchPlanStatus(lastPlanId), 500);
+        }
+        // Also refresh all plans to update the UI
+        setTimeout(() => fetchCurrentTrainingStatus(), 500);
       }
     } catch (error) {
       console.error('Error updating all discovery:', error);
@@ -434,6 +439,10 @@ export default function FeedAgentsPage() {
           if (j2.ok) setPlanStatus(j2);
         } catch {}
       }
+      
+      // Also refresh all plans to update the UI
+      setTimeout(() => fetchCurrentTrainingStatus(), 500);
+      
       showToast(pause ? 'Discovery paused' : 'Discovery resumed', 'success');
     } catch (e: any) {
       showToast(e?.message || 'Error updating discovery state', 'error');
