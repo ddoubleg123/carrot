@@ -13,7 +13,7 @@ import SourcesView from '@/components/patch/SourcesView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
-import PatchPageSkeleton from '@/components/patch/PatchPageSkeleton'
+// No need to import PatchPageSkeleton - using inline loading component
 
 // Helper function to convert preset string to index
 function getPresetIndex(preset: string | null | undefined): number | undefined {
@@ -106,7 +106,11 @@ export default async function PatchPage({ params }: { params: Promise<{ handle: 
     const activeTab = 'overview';
 
     return (
-      <Suspense fallback={<PatchPageSkeleton />}>
+      <Suspense fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        </div>
+      }>
         <div className="min-h-screen bg-white">
           {/* Web Vitals telemetry */}
           <PerfTracker />
