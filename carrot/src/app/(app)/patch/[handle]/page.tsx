@@ -13,17 +13,20 @@ import SourcesView from '@/components/patch/SourcesView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
-import PerfTracker from '@/components/PerfTracker'
 
 // Helper function to convert preset string to index
 function getPresetIndex(preset: string | null | undefined): number | undefined {
   if (!preset) return undefined;
   
-{{ ... }}
-        url: source.url,
-        author: source.author || undefined
-      }))
-    }));
+  // Map preset strings to indices
+  const presetMap: { [key: string]: number } = {
+    'following': 0,
+    'for-you': 1,
+    'subjects': 2
+  };
+  
+  return presetMap[preset] ?? undefined;
+}
 
       <Suspense fallback={<PatchPageSkeleton />}>
         <div className="min-h-screen bg-white">
