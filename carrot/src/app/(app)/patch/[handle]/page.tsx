@@ -13,6 +13,7 @@ import SourcesView from '@/components/patch/SourcesView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
+import PatchPageSkeleton from '@/components/patch/PatchPageSkeleton'
 
 // Helper function to convert preset string to index
 function getPresetIndex(preset: string | null | undefined): number | undefined {
@@ -28,6 +29,83 @@ function getPresetIndex(preset: string | null | undefined): number | undefined {
   return presetMap[preset] ?? undefined;
 }
 
+export default async function PatchPage({ params }: { params: Promise<{ handle: string }> }) {
+  try {
+    const { handle } = await params;
+    
+    // Fetch patch data
+    const patch = await prisma.patch.findUnique({
+      where: { handle },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+                country: true
+              }
+            }
+          }
+        },
+        botSubscriptions: {
+          include: {
+            bot: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                avatar: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!patch) {
+      notFound();
+    }
+
+    // Get user session
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    // Get user theme if logged in
+    let actualUserTheme = null;
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { theme: true }
+      });
+      actualUserTheme = user?.theme;
+    }
+
+    // Get followers data
+    const actualFollowers = patch.members.map(member => ({
+      id: member.user.id,
+      name: member.user.name,
+      image: member.user.image,
+      country: member.user.country
+    }));
+
+    const actualFollowerCount = actualFollowers.length;
+    const botSubscriptionsWithBotData = patch.botSubscriptions;
+
+    // Format events for timeline
+    const formattedEvents = patch.members.map(member => ({
+      id: `member-${member.user.id}`,
+      type: 'member_joined',
+      timestamp: member.joinedAt,
+      user: member.user,
+      description: `${member.user.name} joined the patch`
+    }));
+
+    // Determine active tab (default to 'overview')
+    const activeTab = 'overview';
+
+    return (
       <Suspense fallback={<PatchPageSkeleton />}>
         <div className="min-h-screen bg-white">
           {/* Web Vitals telemetry */}
@@ -78,7 +156,7 @@ function getPresetIndex(preset: string | null | undefined): number | undefined {
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      handle: await params.then(p => p.handle).catch(() => 'unknown')
+      handle: 'unknown'
     });
     return (
       <div className="min-h-screen flex items-center justify-center">
