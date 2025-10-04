@@ -131,6 +131,17 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
             poster={poster}
             className="w-full h-full object-contain bg-black"
             ref={(el) => setMediaEl(el)}
+            onError={(e) => {
+              console.error('[PostModal] Video loading error:', e);
+              // Try to reload the video after a short delay
+              setTimeout(() => {
+                if (el) {
+                  el.load();
+                }
+              }, 1000);
+            }}
+            onLoadStart={() => console.log('[PostModal] Video loading started')}
+            onCanPlay={() => console.log('[PostModal] Video can play')}
           >
             <source src={url} />
           </video>
@@ -154,6 +165,17 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
             poster={poster}
             className="w-full h-full object-contain bg-black"
             ref={(el) => setMediaEl(el)}
+            onError={(e) => {
+              console.error('[PostModal] Video loading error (path mode):', e);
+              // Try to reload the video after a short delay
+              setTimeout(() => {
+                if (el) {
+                  el.load();
+                }
+              }, 1000);
+            }}
+            onLoadStart={() => console.log('[PostModal] Video loading started (path mode)')}
+            onCanPlay={() => console.log('[PostModal] Video can play (path mode)')}
           >
             <source src={`/api/video?path=${encodeURIComponent(p)}&bucket=${encodeURIComponent(b)}`} />
           </video>
@@ -221,6 +243,17 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
           poster={poster}
           className="w-full h-full object-contain bg-black"
           ref={(el) => setMediaEl(el)}
+          onError={(e) => {
+            console.error('[PostModal] Video loading error (resolved):', e);
+            // Try to reload the video after a short delay
+            setTimeout(() => {
+              if (el) {
+                el.load();
+              }
+            }, 1000);
+          }}
+          onLoadStart={() => console.log('[PostModal] Video loading started (resolved)')}
+          onCanPlay={() => console.log('[PostModal] Video can play (resolved)')}
         >
           <source src={resolved} />
         </video>
@@ -240,7 +273,13 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
           className="w-full h-full object-contain"
         />
       ) : (
-        <div className="text-sm text-gray-500">No media</div>
+        <div className="flex items-center justify-center h-64 text-sm text-gray-500">
+          <div className="text-center">
+            <div className="text-lg mb-2">📷</div>
+            <div>No media available</div>
+            <div className="text-xs text-gray-400 mt-1">This post doesn't contain any media</div>
+          </div>
+        </div>
       );
     }
     if (data?.audioUrl) {
@@ -250,7 +289,15 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
         </div>
       );
     }
-    return <div className="text-sm text-gray-500">No media</div>;
+    return (
+      <div className="flex items-center justify-center h-64 text-sm text-gray-500">
+        <div className="text-center">
+          <div className="text-lg mb-2">📷</div>
+          <div>No media available</div>
+          <div className="text-xs text-gray-400 mt-1">This post doesn't contain any media</div>
+        </div>
+      </div>
+    );
   }
 
   // Watch for DOM-transfer adoption into the portal; if a <video> appears, hide the fallback

@@ -324,6 +324,46 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     console.log(`🔍 POST /api/posts - Post audioUrl: ${post.audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
     
+    // Create or update corresponding media asset for gallery display
+    if (effectiveVideoUrl || effectiveAudioUrl || (imageUrls && imageUrls.length > 0)) {
+      const mediaUrl = effectiveVideoUrl || effectiveAudioUrl || (Array.isArray(imageUrls) ? imageUrls[0] : imageUrls);
+      const mediaType = effectiveVideoUrl ? 'video' : (effectiveAudioUrl ? 'audio' : 'image');
+      
+      if (mediaUrl) {
+        try {
+          // Check if media asset already exists
+          const existingAsset = await prisma.mediaAsset.findFirst({
+            where: { userId: session.user.id, url: mediaUrl }
+          });
+
+          if (existingAsset) {
+            // Update existing asset with thumbnail if we have one
+            if (safeThumbUrl && !existingAsset.thumbUrl) {
+              await prisma.mediaAsset.update({
+                where: { id: existingAsset.id },
+                data: { thumbUrl: safeThumbUrl }
+              });
+            }
+          } else {
+            // Create new media asset
+            await prisma.mediaAsset.create({
+              data: {
+                userId: session.user.id,
+                url: mediaUrl,
+                type: mediaType,
+                title: content?.slice(0, 80) || null,
+                thumbUrl: safeThumbUrl,
+                source: 'post'
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('[POST /api/posts] Failed to create/update media asset:', e);
+          // Non-fatal error, continue
+        }
+      }
+    }
+    
     // Invalidate posts cache when new post is created
     cache.delete(cacheKeys.posts());
     try {

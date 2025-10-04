@@ -202,7 +202,7 @@ export default function ModernHeader() {
           <div className="flex items-center space-x-2">
             
             {/* Primary Navigation Icons - Left of Notifications */}
-            <nav className="hidden md:flex items-center space-x-1">
+            <nav className="hidden md:flex items-center space-x-2">
               {PRIMARY_NAV.map((item) => {
                 const isActive = safePath === item.href || safePath.startsWith(item.href + '/');
                 const IconComponent = item.icon;

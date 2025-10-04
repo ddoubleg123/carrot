@@ -26,6 +26,8 @@ export async function POST(request: Request) {
     // Prepare user data for Prisma update, filtering out undefined values
     const updateData: any = {
       isOnboarded: true,
+      // Set default country to US if not already set
+      country: 'US',
       // Track TOS and Privacy Policy acceptance with current timestamp
       tosAcceptedAt: new Date(),
       privacyAcceptedAt: new Date(),

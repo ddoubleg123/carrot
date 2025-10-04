@@ -69,8 +69,8 @@ export default function PatchHeader({
             alert(`Delete failed: ${data?.error || res.status}`);
             return;
           }
-          // Redirect back to carrot patch page
-          router.push('/patch');
+          // Redirect back to dashboard after deletion
+          router.push('/dashboard');
         } catch (e) {
           console.error('Delete error', e);
           alert('Delete failed');

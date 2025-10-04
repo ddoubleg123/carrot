@@ -81,26 +81,82 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     console.log('[INGEST DEBUG] Calling worker at:', workerUrl);
     console.log('[INGEST DEBUG] Request payload:', { url, inMs, outMs, aspect, postId });
     
-    const response = await fetch(workerUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-worker-secret': INGEST_WORKER_SECRET,
-      },
-      body: JSON.stringify({ url, inMs, outMs, aspect, postId }),
-    });
+    let response;
+    try {
+      response = await fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-worker-secret': INGEST_WORKER_SECRET,
+        },
+        body: JSON.stringify({ url, inMs, outMs, aspect, postId }),
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+    } catch (fetchError) {
+      console.error('[INGEST DEBUG] Fetch error:', fetchError);
+      
+      // If the service is completely unavailable, return a fallback response
+      if (fetchError instanceof Error && (
+        fetchError.message.includes('ECONNREFUSED') ||
+        fetchError.message.includes('ENOTFOUND') ||
+        fetchError.message.includes('timeout')
+      )) {
+        return NextResponse.json({
+          job: {
+            id: `fallback-${Date.now()}`,
+            status: 'error',
+            progress: 0,
+            url,
+            message: 'Ingestion service is currently unavailable. Please try again later.',
+            error: 'Service unavailable',
+            inMs: typeof inMs === 'number' ? inMs : null,
+            outMs: typeof outMs === 'number' ? outMs : null,
+            aspect: aspect || null,
+            postId: postId || null,
+          }
+        });
+      }
+      
+      throw fetchError;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Ingest worker error (POST /ingest):', {
         status: response.status,
-        body: errorText
+        body: errorText,
+        workerUrl,
+        environment: {
+          INGEST_WORKER_URL: process.env.INGEST_WORKER_URL,
+          RAILWAY_SERVICE_URL: RAILWAY_SERVICE_URL,
+          INGEST_WORKER_SECRET: process.env.INGEST_WORKER_SECRET ? 'SET' : 'MISSING'
+        }
       });
+      
+      // Provide more specific error messages based on status
+      let errorMessage = 'Ingestion service unavailable';
+      if (response.status === 404) {
+        errorMessage = 'Ingestion service not found. Please check if the service is running.';
+      } else if (response.status === 500) {
+        errorMessage = 'Ingestion service encountered an error. Please try again later.';
+      } else if (response.status === 401) {
+        errorMessage = 'Ingestion service authentication failed. Please check configuration.';
+      }
+      
       return NextResponse.json(
         {
-          error: 'Ingestion service unavailable',
+          error: errorMessage,
           upstreamStatus: response.status,
-          upstreamBody: (errorText || '').slice(0, 4000)
+          upstreamBody: (errorText || '').slice(0, 4000),
+          debug: process.env.NODE_ENV === 'development' ? {
+            workerUrl,
+            environment: {
+              INGEST_WORKER_URL: process.env.INGEST_WORKER_URL,
+              RAILWAY_SERVICE_URL: RAILWAY_SERVICE_URL,
+              INGEST_WORKER_SECRET: process.env.INGEST_WORKER_SECRET ? 'SET' : 'MISSING'
+            }
+          } : undefined
         },
         { status: 503 }
       );

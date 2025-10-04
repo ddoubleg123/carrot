@@ -120,7 +120,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         console.log('[Discovery] API response:', data);
         
         // Safety check: ensure data.items is an array
-        const newItems = Array.isArray(data.items) ? data.items : [];
+        const newItems = Array.isArray(data?.items) ? data.items : [];
         console.log('[Discovery] Processed items:', newItems.length, 'items');
         
         // Log when new items are found
@@ -137,7 +137,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         }
         
         setItems(newItems);
-        setIsDiscovering(data.isActive || false);
+        setIsDiscovering(data?.isActive || false);
         setError(null);
       } else {
         setError('We couldn\'t check sources. Retry.');

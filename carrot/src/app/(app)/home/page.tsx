@@ -38,10 +38,27 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
       }
     } catch {}
     const base2 = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
-    const response = await fetch(`${base2}/api/posts`, {
-      headers: { 'Cookie': cookieHeader },
-      cache: 'no-store',
-    });
+    let response;
+    try {
+      response = await fetch(`${base2}/api/posts`, {
+        headers: { 'Cookie': cookieHeader },
+        cache: 'no-store',
+      });
+    } catch (error) {
+      console.error('[home] Fetch error, retrying with different approach:', error);
+      // Retry with a different approach
+      try {
+        response = await fetch(`${base2}/api/posts`, {
+          headers: { 'Cookie': cookieHeader },
+          cache: 'no-store',
+          // Add timeout and retry options
+          signal: AbortSignal.timeout(10000), // 10 second timeout
+        });
+      } catch (retryError) {
+        console.error('[home] Retry also failed:', retryError);
+        return [];
+      }
+    }
     
     if (!response.ok) {
       // Avoid noisy stack in dev when DB is intentionally unavailable

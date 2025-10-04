@@ -90,14 +90,17 @@ class FeedMediaManager {
     if (!this._inst) {
       this._inst = new FeedMediaManager();
       // Attach a single global click handler to promote clicked videos to manual Active
+      // Only handle clicks on video elements, not on their children (like controls)
       try {
         if (typeof window !== 'undefined' && !this._inst._manualHooked) {
           window.addEventListener('click', (e: MouseEvent) => {
             const target = e.target as Element | null;
             if (!target) return;
-            const videoEl = target.closest('video');
-            if (!videoEl) return;
-            const handle = this._inst!.getHandleByElement(videoEl);
+            
+            // Only handle direct clicks on video elements, not on their children
+            if (target.tagName !== 'VIDEO') return;
+            
+            const handle = this._inst!.getHandleByElement(target as HTMLVideoElement);
             if (handle) this._inst!.setActive(handle, { manual: true });
           }, { capture: true });
           this._inst._manualHooked = true;

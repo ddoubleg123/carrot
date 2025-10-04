@@ -17,6 +17,7 @@ const PRECONFIGURED_USERS = {
     updatedAt: new Date().toISOString(),
     // Add any other fields you want pre-configured
     bio: 'Developer and creator',
+    country: 'US', // Default to United States
     location: 'San Francisco, CA',
     website: 'https://danielgouldman.com'
   }

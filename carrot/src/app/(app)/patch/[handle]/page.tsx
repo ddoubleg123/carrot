@@ -158,7 +158,7 @@ export default async function PatchPage({
               </div>
 
               {/* Right Rail */}
-              <div className="w-[320px]">
+              <div className="w-[320px] shrink-0">
                 <RightRail
                   patch={patch}
                   followers={actualFollowers}
