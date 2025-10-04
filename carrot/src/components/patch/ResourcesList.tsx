@@ -56,6 +56,14 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Safety check to ensure sources is always an array
+  useEffect(() => {
+    if (!Array.isArray(sources)) {
+      console.warn('[ResourcesList] Sources is not an array, resetting to empty array:', sources);
+      setSources([]);
+    }
+  }, [sources]);
+
   // Fetch AI-discovered sources
   useEffect(() => {
     const fetchSources = async () => {
@@ -109,7 +117,7 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
 
   // Filter sources based on search query
   const filteredSources = useMemo(() => {
-    console.log('[ResourcesList] Computing filteredSources:', { sources, searchQuery });
+    console.log('[ResourcesList] Computing filteredSources:', { sources, searchQuery, sourcesType: typeof sources, isArray: Array.isArray(sources) });
     
     // Multiple safety checks
     if (!sources) {
@@ -246,8 +254,9 @@ export default function ResourcesList({ patch, patchHandle }: ResourcesListProps
             </div>
           </div>
         ) : (
-          Array.isArray(filteredSources) ? (() => {
+          Array.isArray(filteredSources) && filteredSources.length > 0 ? (() => {
             try {
+              console.log('[ResourcesList] About to map over filteredSources:', filteredSources.length, 'items');
               return filteredSources.map((source, index) => {
                 // Additional safety check for each source
                 if (!source || typeof source !== 'object') {
