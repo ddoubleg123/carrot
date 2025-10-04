@@ -27,7 +27,7 @@ export async function GET(
     }
 
     // Fetch discovered content from both Source and DiscoveredContent tables
-    const [sources, discoveredContent] = await Promise.all([
+    const [sources, discoveredContentData] = await Promise.all([
       prisma.source.findMany({
         where: { patchId: patch.id },
         orderBy: [{ createdAt: 'desc' }]
@@ -57,7 +57,7 @@ export async function GET(
     }));
 
     // Transform discovered content to rich format
-    const enrichedItems = discoveredContent.map(item => ({
+    const enrichedItems = discoveredContentData.map(item => ({
       id: item.id,
       title: item.title,
       url: item.sourceUrl,

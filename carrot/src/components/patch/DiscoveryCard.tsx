@@ -5,7 +5,7 @@ import { ExternalLink, Clock, User, Calendar, MessageCircle, Bookmark, MoreHoriz
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+// import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 // Design tokens
 const COLORS = {
@@ -276,24 +276,20 @@ export default function DiscoveryCard({
             </Button>
 
             {onAttach && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="h-8 px-3 text-xs">
-                    Attach →
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onAttach('timeline')}>
-                    Timeline
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onAttach('fact')}>
-                    Fact
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onAttach('source')}>
-                    Source
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 px-3 text-xs"
+                onClick={() => {
+                  // Simple implementation - you can enhance this later
+                  const choice = prompt('Attach to: timeline, fact, or source?');
+                  if (choice && ['timeline', 'fact', 'source'].includes(choice.toLowerCase())) {
+                    onAttach(choice.toLowerCase() as 'timeline' | 'fact' | 'source');
+                  }
+                }}
+              >
+                Attach →
+              </Button>
             )}
           </div>
 
