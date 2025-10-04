@@ -157,10 +157,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         name: '',
         username: String(finalUsername || 'user'),
         avatar: String(finalAvatar || '/avatar-placeholder.svg'),
-        flag: userObj?.country || null,
+        flag: userObj?.country || (session?.user as any)?.country || null,
         id: String(post.userId || 'unknown'),
       },
-      homeCountry: userObj?.country || null,
+      homeCountry: userObj?.country || (session?.user as any)?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },
       stats: {
         likes: Math.floor(Math.random() * 50),

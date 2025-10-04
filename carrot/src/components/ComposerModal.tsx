@@ -963,16 +963,33 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
   const generateVideoThumbnails = (videoUrl: string) => {
     const video = document.createElement('video');
-    video.src = videoUrl;
+    
+    // Handle Firebase Storage URLs by proxying through our API
+    if (videoUrl.includes('firebasestorage.googleapis.com') || videoUrl.includes('storage.googleapis.com')) {
+      // Use our video proxy API to avoid CORS issues
+      video.src = `/api/video?url=${encodeURIComponent(videoUrl)}`;
+    } else {
+      video.src = videoUrl;
+    }
+    
     video.crossOrigin = 'anonymous';
     
+    // Add error handling for video loading
+    video.addEventListener('error', (e) => {
+      console.error('[ComposerModal] Video failed to load for thumbnail generation:', { videoUrl, error: e });
+    });
+    
     video.addEventListener('loadedmetadata', () => {
+      console.log('[ComposerModal] Video metadata loaded for thumbnail generation:', { videoUrl, duration: video.duration });
       const duration = video.duration;
       const thumbnails: string[] = [];
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      if (!ctx) return;
+      if (!ctx) {
+        console.error('[ComposerModal] Failed to get canvas context for thumbnail generation');
+        return;
+      }
       
       canvas.width = 320;
       canvas.height = 180;
@@ -1022,7 +1039,10 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             console.warn('Thumbnail generation failed for time:', time, error);
           }
         }
+        console.log('[ComposerModal] Generated thumbnails:', { count: thumbnails.length, videoUrl });
         setVideoThumbnails(thumbnails);
+        // Reset thumbnail index when new thumbnails are generated
+        setCurrentThumbnailIndex(0);
       };
       
       generateSequentially();
@@ -1201,9 +1221,17 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       // Upload edited thumbnail (data URL) to Firebase to ensure persistence
       let thumbnailUrlToSend: string | null = editedThumb || null;
       
+      console.log('[ComposerModal] Thumbnail selection debug:', {
+        editedThumb: !!editedThumb,
+        videoThumbnailsCount: videoThumbnails.length,
+        currentThumbnailIndex,
+        hasSelectedThumbnail: currentThumbnailIndex < videoThumbnails.length
+      });
+      
       // If no edited thumbnail but we have generated thumbnails, use the selected one
       if (!thumbnailUrlToSend && videoThumbnails.length > 0 && currentThumbnailIndex < videoThumbnails.length) {
         thumbnailUrlToSend = videoThumbnails[currentThumbnailIndex];
+        console.log('[ComposerModal] Using selected thumbnail:', { index: currentThumbnailIndex, isDataUrl: thumbnailUrlToSend?.startsWith('data:') });
       }
       
       if (thumbnailUrlToSend && thumbnailUrlToSend.startsWith('data:')) {
@@ -1586,6 +1614,14 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           canAttachExternal={canAttachExternal}
           isIngestActive={isIngestActive}
           onSelectFromGallery={(item) => {
+            console.log('[ComposerModal] Gallery item selected:', { 
+              id: item.id, 
+              type: item.type, 
+              url: item.url, 
+              thumbUrl: item.thumbUrl,
+              posterUrl: item.posterUrl 
+            });
+            
             // Minimal integration: set preview and type, close picker
             const proxiedUrl = item.url ? `/api/img?url=${encodeURIComponent(item.url)}` : (item.thumbUrl ? `/api/img?url=${encodeURIComponent(item.thumbUrl)}` : undefined);
             if (item.type === 'video') {
@@ -1595,11 +1631,14 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
               
               // Generate thumbnails for gallery-selected videos
               if (item.url) {
+                console.log('[ComposerModal] Starting thumbnail generation for gallery video:', item.url);
                 try { 
                   generateVideoThumbnails(item.url); 
                 } catch (error) {
-                  console.warn('[Composer] Failed to generate thumbnails for gallery video:', error);
+                  console.error('[Composer] Failed to generate thumbnails for gallery video:', error);
                 }
+              } else {
+                console.warn('[ComposerModal] No URL available for gallery video thumbnail generation');
               }
             } else if (item.type === 'image' || item.type === 'gif') {
               setMediaType('image');

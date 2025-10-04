@@ -116,6 +116,27 @@ export default function PostModal({ id, onClose }: { id: string; onClose: () => 
     if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
     if (data?.videoUrl) {
       const url = data.videoUrl;
+      
+      // If URL is already proxied through /api/video, use it directly
+      if (url.startsWith('/api/video')) {
+        const poster = data.thumbnailUrl ? (() => {
+          if (data.thumbnailUrl.startsWith('/api/img')) return data.thumbnailUrl;
+          const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(data.thumbnailUrl);
+          return `/api/img?url=${isAlreadyEncoded ? data.thumbnailUrl : encodeURIComponent(data.thumbnailUrl)}`;
+        })() : undefined;
+        return (
+          <video
+            controls
+            playsInline
+            poster={poster}
+            className="w-full h-full object-contain bg-black"
+            ref={(el) => setMediaEl(el)}
+          >
+            <source src={url} />
+          </video>
+        );
+      }
+      
       const needsProxy = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com') || url.includes('firebasestorage.app');
       // Prefer durable path-mode when server sent bucket+path
       if ((data as any)?.videoBucket && (data as any)?.videoPath) {

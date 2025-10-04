@@ -17,7 +17,8 @@ const DEFAULT_ACCEPT_LANG = process.env.YTDLP_ACCEPT_LANGUAGE || 'en-US,en;q=0.9
 
 // Boot banner to help verify which commit is running in container logs
 console.log('[BOOT] carrot-worker starting', {
-  commit: process.env.RELEASE_SHA || process.env.GITHUB_SHA || process.env.RENDER_GIT_COMMIT || 'unknown'
+  commit: process.env.RELEASE_SHA || process.env.GITHUB_SHA || process.env.RENDER_GIT_COMMIT || 'unknown',
+  cookieMethod: process.env.YT_DLP_COOKIES_FROM_BROWSER ? 'browser' : 'file'
 });
 
 // Lightweight fetch helper (uses global fetch if available; falls back to node-fetch)

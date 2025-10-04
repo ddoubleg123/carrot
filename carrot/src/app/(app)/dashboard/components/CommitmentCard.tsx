@@ -677,6 +677,11 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             <div
               className="rounded-xl p-2 relative"
               style={hasGradient ? { background: gradientCss } : undefined}
+              onClick={(e) => {
+                // Prevent video clicks from opening PostModal
+                e.stopPropagation();
+                e.preventDefault();
+              }}
             >
               {/* Video rendered by player; original parent is captured dynamically when opening lightbox */}
               {(() => {
