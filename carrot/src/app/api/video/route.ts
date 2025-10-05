@@ -51,14 +51,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     let decodedOnce = false;
 
     // Helper: stream via Firebase Admin (supports private objects and Range)
-    const adminDownload = async (bucketName: string, objectPath: string) => {
+    const adminDownload = async (bucketName: string, objectPath: string): Promise<Response> => {
       try {
         // Initialize admin app if needed
         if (!admin.apps || !admin.apps.length) {
           const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
           if (!PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
             console.warn('[api/video] Firebase Admin SDK not configured, falling back to direct proxy');
-            return null; // Fall back to direct proxy
+            throw new Error('Firebase Admin SDK not configured'); // Throw error to trigger fallback
           }
           admin.initializeApp({
             credential: admin.credential.cert({
