@@ -50,6 +50,7 @@ const ReusableVideoPlayer = forwardRef<ReusableVideoPlayerRef, ReusableVideoPlay
     onTimeUpdate,
     onLoadedMetadata,
     onError,
+    onFullscreen,
   }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
