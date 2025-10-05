@@ -22,6 +22,37 @@ function calcReadingTimeSec(text: string) {
   return Math.max(30, Math.round(words / 3.5)); // ~210 wpm
 }
 
+// Grammar polishing for transcripts (capitalization, punctuation, minor fixes)
+export async function polishTranscript(text: string): Promise<string> {
+  if (!text || !text.trim()) return '';
+  const useMock = !process.env.DEEPSEEK_API_URL || !process.env.DEEPSEEK_API_KEY;
+  if (useMock) {
+    // Lightweight mock: ensure first letter capitalized and periods at line ends
+    const s = text
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const capped = line.charAt(0).toUpperCase() + line.slice(1);
+        return /[\.!?]$/.test(capped) ? capped : capped + '.';
+      })
+      .join('\n');
+    return s;
+  }
+  const res = await fetch(process.env.DEEPSEEK_API_URL!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({ task: 'polish_transcript', text }),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`DeepSeek polish error ${res.status}`);
+  const data = await res.json();
+  return typeof data?.text === 'string' ? data.text : text;
+}
+
 export async function deepseekAudit(input: AuditInput): Promise<AuditOutput> {
   // If env configured, call real API here
   const useMock = !process.env.DEEPSEEK_API_URL || !process.env.DEEPSEEK_API_KEY;

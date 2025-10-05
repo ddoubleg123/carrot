@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { chooseCanonical } from '@/lib/ingest/canonical';
 import { deepseekAudit } from '@/lib/audit/deepseek';
+import { relevanceScore } from '@/lib/router/relevance';
+import { transcribeWithVosk } from '@/lib/asr/vosk';
+import { polishTranscript } from '@/lib/audit/deepseek';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,6 +21,7 @@ export async function POST(req: NextRequest) {
     const title = typeof body?.title === 'string' ? body.title : undefined;
     const type = (['article','video','image','pdf','text'] as const).includes(body?.type) ? body.type : 'article';
     const patchHint = typeof body?.patchHint === 'string' ? body.patchHint : undefined;
+    const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl : undefined;
 
     const canonicalUrl = chooseCanonical(url, undefined) || undefined;
 
@@ -43,26 +47,47 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Minimal enrichment (mock DeepSeek) using URL as text seed
-    const audit = await deepseekAudit({ text: `${title || ''} ${url || ''}`.trim() || 'content', kind: type as any });
-
-    await prisma.discoveredContent.update({
-      where: { id: item.id },
-      data: {
-        // Store key enrichment in metadata and content for compatibility
-        content: audit.summaryShort,
-        metadata: {
-          readingTime: audit.readingTimeSec,
-          categories: audit.categories,
-          tags: audit.tags,
-          keyPoints: audit.keyPoints,
-          notableQuote: audit.notableQuote,
-          canonicalUrl,
+    if (type === 'video' && mediaUrl) {
+      // Video path: transcribe with Vosk, polish with DeepSeek, then audit+route
+      const vosk = await transcribeWithVosk({ audioUrl: mediaUrl });
+      if (!vosk.success || !vosk.transcription) {
+        // Fall back to URL-only audit if ASR fails
+        const fallbackAudit = await deepseekAudit({ text: `${title || ''} ${url || ''}`.trim() || 'video', kind: 'video' });
+        const { score, decision } = relevanceScore({ content: { tags: fallbackAudit.tags } });
+        await prisma.discoveredContent.update({
+          where: { id: item.id },
+          data: {
+            content: fallbackAudit.summaryShort,
+            status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
+            relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
+          },
+        });
+      } else {
+        const polished = await polishTranscript(vosk.transcription);
+        const vidAudit = await deepseekAudit({ text: polished, kind: 'video' });
+        const { score, decision } = relevanceScore({ content: { tags: vidAudit.tags } });
+        await prisma.discoveredContent.update({
+          where: { id: item.id },
+          data: {
+            content: vidAudit.summaryShort,
+            status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
+            relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
+          },
+        });
+      }
+    } else {
+      // Non-video or no mediaUrl: audit title/url text
+      const audit = await deepseekAudit({ text: `${title || ''} ${url || ''}`.trim() || 'content', kind: type as any });
+      const { score, decision } = relevanceScore({ content: { tags: audit.tags } });
+      await prisma.discoveredContent.update({
+        where: { id: item.id },
+        data: {
+          content: audit.summaryShort,
+          status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
+          relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
         },
-        qualityScore: audit.qualityScore,
-        status: 'ready',
-      },
-    });
+      });
+    }
 
     return NextResponse.json({ ok: true, id: item.id });
   } catch (err: any) {
