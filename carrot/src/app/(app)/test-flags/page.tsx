@@ -53,7 +53,7 @@ const testPosts = [
       name: '',
       username: '@nouser',
       avatar: '/avatar-placeholder.svg',
-      flag: null, // No flag
+      flag: undefined, // No flag
       id: 'test-user-2',
     },
     homeCountry: null,
@@ -199,13 +199,8 @@ export default function TestFlagsPage() {
               <CommitmentCard
                 {...post}
                 onVote={() => {}}
-                onSave={() => {}}
-                onShare={() => {}}
-                onComment={() => {}}
-                onEdit={() => {}}
                 onDelete={() => {}}
-                isOwner={false}
-                openPostModal={() => {}}
+                currentUserId="test-user"
               />
             </div>
           ))}

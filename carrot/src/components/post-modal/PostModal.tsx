@@ -204,7 +204,7 @@ export default function PostModal({
         setComments([]); // Set empty array on error
       }
     } catch (error) {
-      if (error.name !== 'AbortError') {
+      if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Failed to fetch comments:', error);
       }
       setComments([]); // Set empty array on error

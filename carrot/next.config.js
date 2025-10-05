@@ -6,9 +6,9 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // Disable HTTP/2 to prevent protocol errors on Render
+  // HTTP/2 is disabled by default in Next.js 15+
   experimental: {
-    http2: false,
+    // http2: false, // Removed - not supported in Next.js 15+
   },
   // Add compression and caching optimizations
   compress: true,

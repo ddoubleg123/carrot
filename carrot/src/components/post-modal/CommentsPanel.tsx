@@ -55,7 +55,7 @@ export default function CommentsPanel({ postId, onClose }: CommentsPanelProps) {
       const data = await response.json();
       setComments(data.comments || []);
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      if (err instanceof Error && err.name !== 'AbortError') {
         setError('Failed to load comments');
         console.error('Comments fetch error:', err);
       }
