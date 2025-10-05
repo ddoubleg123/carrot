@@ -486,8 +486,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       authorData: author
                     });
                   }
-                  // Always show flag chip, even if no country code (will show fallback)
-                  return <FlagChip countryCode={cc} />;
+                  // Only show flag chip if we have a valid country code
+                  return cc ? <FlagChip countryCode={cc} /> : null;
                 })()}
                 <button
                   type="button"
@@ -755,6 +755,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       posterUrl={thumbnailUrl || undefined}
                       captionVttUrl={captionVttUrl || undefined}
                       onVideoRef={attachVideoRef}
+                      onFullscreen={() => openPostModal(id, 'comments')}
                       autoPlay
                       muted
                       className="rounded-xl overflow-hidden"

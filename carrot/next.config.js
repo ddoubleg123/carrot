@@ -6,6 +6,13 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
+  // Disable HTTP/2 to prevent protocol errors on Render
+  experimental: {
+    http2: false,
+  },
+  // Add compression and caching optimizations
+  compress: true,
+  poweredByHeader: false,
   images: {
     domains: [
       'firebasestorage.googleapis.com',
@@ -75,6 +82,29 @@ const nextConfig = {
               "connect-src 'self' blob: https://*.googleapis.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://api.giphy.com https://tenor.googleapis.com https://huggingface.co https://*.huggingface.co https://cdn-lfs.huggingface.co https://cdn.knightlab.com",
               "frame-ancestors 'self'"
             ].join('; ')
+          },
+          // Add headers to help with chunk loading and HTTP/2 issues
+          {
+            key: 'Connection',
+            value: 'keep-alive'
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          }
+        ]
+      },
+      // Specific headers for Next.js static chunks
+      {
+        source: '/_next/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          },
+          {
+            key: 'Connection',
+            value: 'keep-alive'
           }
         ]
       }

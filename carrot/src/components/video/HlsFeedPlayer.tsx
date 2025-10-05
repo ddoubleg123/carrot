@@ -14,6 +14,7 @@ export type HlsFeedPlayerProps = {
   onError?: (e: Error) => void;
   className?: string;
   onVideoRef?: (el: HTMLVideoElement | null) => void;
+  onFullscreen?: () => void; // Callback for fullscreen button
 };
 
 // Lightweight HLS player for feed tiles.
@@ -31,6 +32,7 @@ export default function HlsFeedPlayer({
   onError,
   className = "",
   onVideoRef,
+  onFullscreen,
 }: HlsFeedPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const setVideoRef = (el: HTMLVideoElement | null) => {
@@ -440,13 +442,13 @@ export default function HlsFeedPlayer({
   }, [assetId]);
 
   return (
-    <div className={`relative w-full ${className}`}>
+    <div className={`relative w-full group ${className}`}>
       <video
         ref={setVideoRef}
         poster={posterUrl ?? undefined}
         playsInline
         muted={muted}
-        controls
+        controls={false} // Disable native controls
         className="w-full rounded-xl bg-black"
       >
         {captionVttUrl ? (
@@ -460,6 +462,24 @@ export default function HlsFeedPlayer({
           />
         ) : null}
       </video>
+      
+      {/* Custom fullscreen button overlay */}
+      {onFullscreen && (
+        <button
+          className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 hover:bg-black/70 text-white p-2 rounded-full"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onFullscreen();
+          }}
+          title="Open in fullscreen"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        </button>
+      )}
+      
       {!ready && (
         <div className="absolute inset-0 grid place-items-center text-white/80 text-sm">
           Loading…

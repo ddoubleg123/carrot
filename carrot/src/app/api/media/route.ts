@@ -186,6 +186,57 @@ export async function GET(req: Request) {
       }
     } catch {}
 
+    // Also add posts with thumbnails as gallery items if we have few or no media assets
+    if (rows.length < 5) {
+      try {
+        console.log('[api/media] Adding posts with thumbnails to gallery...');
+        const postsWithThumbs = await prisma.post.findMany({
+          where: {
+            thumbnailUrl: { not: null },
+            videoUrl: { not: null }
+          },
+          select: {
+            id: true,
+            userId: true,
+            videoUrl: true,
+            thumbnailUrl: true,
+            content: true,
+            createdAt: true
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        });
+
+        console.log('[api/media] Found posts with thumbnails:', postsWithThumbs.length);
+
+        // Convert posts to media asset format
+        const postAssets = postsWithThumbs.map(post => ({
+          id: `post-${post.id}`,
+          userId: post.userId,
+          type: 'video',
+          url: post.videoUrl,
+          storagePath: null,
+          thumbUrl: post.thumbnailUrl,
+          thumbPath: null,
+          title: post.content ? post.content.substring(0, 50) + '...' : 'Video Post',
+          source: 'post',
+          durationSec: null,
+          width: null,
+          height: null,
+          createdAt: post.createdAt,
+          updatedAt: post.createdAt
+        }));
+
+        // Add post assets to the results, avoiding duplicates
+        const existingUrls = new Set(rows.map((r: any) => r.url));
+        const newPostAssets = postAssets.filter(asset => !existingUrls.has(asset.url));
+        rows = [...rows, ...newPostAssets];
+        console.log('[api/media] Added post assets to gallery:', newPostAssets.length);
+      } catch (e) {
+        console.error('[api/media] Error adding posts to gallery:', e);
+      }
+    }
+
     // Map to client DTO
     let items = rows.map((r: any) => ({
       id: r.id,

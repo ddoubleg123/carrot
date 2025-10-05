@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useSearchParams } from "next/navigation";
-import PostModal from "./PostModal";
+import LightweightPostModal from "./LightweightPostModal";
 import { useModalRoute } from "../../hooks/useModalRoute";
 
 export default function PostModalController() {
@@ -36,7 +36,7 @@ export default function PostModalController() {
   };
 
   return (
-    <PostModal 
+    <LightweightPostModal 
       isOpen={show} 
       onClose={closePostModal} 
       post={mockPost}

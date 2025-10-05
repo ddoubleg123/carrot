@@ -16,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{}> }) {
       );
     }
 
-    // Fetch comments for the post
+    // Fetch comments for the post (optimized query)
     const comments = await prisma.comment.findMany({
       where: {
         postId: postId,
@@ -33,6 +33,7 @@ export async function GET(request: Request, context: { params: Promise<{}> }) {
       orderBy: {
         createdAt: 'desc',
       },
+      take: 50, // Limit to 50 comments for performance
     }).catch((error) => {
       console.error('Database error fetching comments:', error);
       return [];

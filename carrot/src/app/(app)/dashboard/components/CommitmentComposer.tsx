@@ -1017,15 +1017,15 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                           name: user.name || user.email?.split('@')[0] || 'You',
                           username: (user as any).username ? `@${(user as any).username}` : '@daniel',
                           avatar: user.image || null,
-                          // Use country code for immediate FlagChip rendering
-                          flag: 'US'
+                          // No default country
+                          flag: null
                         },
                         location: {
                           city: 'San Francisco',
                           state: 'CA'
                         },
-                        // Provide homeCountry to render flag chip without refresh
-                        homeCountry: 'US',
+                        // No default country
+                        homeCountry: null,
                         likes: 0,
                         comments: 0,
                         shares: 0,

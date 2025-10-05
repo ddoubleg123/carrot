@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import CarrotSpinner from '@/components/ui/CarrotSpinner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -88,7 +89,9 @@ export default function SourcesPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {loading ? (
-          <Card><CardContent className="p-4">Loading sources…</CardContent></Card>
+          <Card>
+            <CardContent className="p-6"><CarrotSpinner label="Loading sources…" /></CardContent>
+          </Card>
         ) : (
           sources.map((s) => (
             <Card key={s.id}>

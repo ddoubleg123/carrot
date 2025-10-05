@@ -61,32 +61,41 @@ export default function PostModal({
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const commentsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch comments when modal opens
+  // Fetch comments when modal opens (with debouncing)
   useEffect(() => {
     if (isOpen && post.id) {
-      fetchComments();
+      // Add small delay to prevent blocking UI
+      const timer = setTimeout(() => {
+        fetchComments();
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, post.id]);
 
-  // Handle video element reuse
+  // Handle video element reuse (optimized)
   useEffect(() => {
     if (isOpen && isVideo && videoElement && videoContainerRef.current) {
-      // Move video element to modal container
-      videoContainerRef.current.appendChild(videoElement);
-      
-      // Restore video state from dataset
-      const originalTime = parseFloat(videoElement.dataset.originalTime || '0');
-      const originalPaused = videoElement.dataset.originalPaused === 'true';
-      const originalVolume = parseFloat(videoElement.dataset.originalVolume || '1');
-      const originalPlaybackRate = parseFloat(videoElement.dataset.originalPlaybackRate || '1');
-      
-      videoElement.currentTime = originalTime;
-      videoElement.volume = originalVolume;
-      videoElement.playbackRate = originalPlaybackRate;
-      
-      if (!originalPaused) {
-        videoElement.play().catch(console.error);
-      }
+      // Use requestAnimationFrame to avoid blocking UI
+      requestAnimationFrame(() => {
+        if (videoContainerRef.current && videoElement) {
+          // Move video element to modal container
+          videoContainerRef.current.appendChild(videoElement);
+          
+          // Restore video state from dataset
+          const originalTime = parseFloat(videoElement.dataset.originalTime || '0');
+          const originalPaused = videoElement.dataset.originalPaused === 'true';
+          const originalVolume = parseFloat(videoElement.dataset.originalVolume || '1');
+          const originalPlaybackRate = parseFloat(videoElement.dataset.originalPlaybackRate || '1');
+          
+          videoElement.currentTime = originalTime;
+          videoElement.volume = originalVolume;
+          videoElement.playbackRate = originalPlaybackRate;
+          
+          if (!originalPaused) {
+            videoElement.play().catch(console.error);
+          }
+        }
+      });
     }
   }, [isOpen, isVideo, videoElement]);
 
@@ -124,13 +133,14 @@ export default function PostModal({
       document.removeEventListener('keydown', handleEscKey);
       document.body.style.overflow = 'unset';
       
-      // Clean up video element if modal is closing
+      // Clean up video element if modal is closing (optimized)
       if (!isOpen && videoElement && videoContainerRef.current) {
-        // Video element will be restored by usePostModal hook
-        // Just ensure it's removed from modal container
-        if (videoContainerRef.current.contains(videoElement)) {
-          videoContainerRef.current.removeChild(videoElement);
-        }
+        // Use requestAnimationFrame for smooth cleanup
+        requestAnimationFrame(() => {
+          if (videoContainerRef.current && videoContainerRef.current.contains(videoElement)) {
+            videoContainerRef.current.removeChild(videoElement);
+          }
+        });
       }
     };
   }, [isOpen, onClose, videoElement]);
@@ -172,13 +182,32 @@ export default function PostModal({
   const fetchComments = async () => {
     setIsLoadingComments(true);
     try {
-      const response = await fetch(`/api/comments?postId=${post.id}`);
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const response = await fetch(`/api/comments?postId=${post.id}`, {
+        signal: controller.signal,
+        cache: 'no-cache', // Ensure fresh data
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (response.ok) {
         const data = await response.json();
         setComments(data.comments || []);
+      } else {
+        console.warn('Failed to fetch comments:', response.status);
+        setComments([]); // Set empty array on error
       }
     } catch (error) {
-      console.error('Failed to fetch comments:', error);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to fetch comments:', error);
+      }
+      setComments([]); // Set empty array on error
     } finally {
       setIsLoadingComments(false);
     }

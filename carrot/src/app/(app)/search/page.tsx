@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import CarrotSpinner from '@/components/ui/CarrotSpinner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -119,7 +120,7 @@ export default function SearchPage() {
               <h3 className="text-sm font-medium flex items-center gap-2"><Globe className="w-4 h-4"/>Open sources</h3>
               <div>
                 {loadingRepos ? (
-                  <Card><CardContent className="p-4 text-sm">Loading OpenLibrary repositories…</CardContent></Card>
+                  <Card><CardContent className="p-6"><CarrotSpinner label="Loading OpenLibrary repositories…" /></CardContent></Card>
                 ) : (
                   <RepoGrid repos={filteredRepos} />
                 )}
