@@ -1,3 +1,5 @@
+import { fetchWithRetry, isNetworkProtocolError } from './retryUtils';
+
 export enum TaskType {
   POSTER = 'POSTER',
   VIDEO_PREROLL_6S = 'VIDEO_PREROLL_6S', 
@@ -465,9 +467,13 @@ class MediaPreloadQueue {
       switch (type) {
         case TaskType.POSTER:
         case TaskType.IMAGE: {
-          const imageResponse = await fetch(url, { 
+          const imageResponse = await fetchWithRetry(url, { 
             signal: abortController.signal,
             headers: { 'Accept': 'image/*' }
+          }, {
+            maxRetries: 2,
+            baseDelay: 500,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
           const blob = await imageResponse.blob();
@@ -478,10 +484,14 @@ class MediaPreloadQueue {
 
         case TaskType.VIDEO_PREROLL_6S: {
           // First, get the video metadata to calculate 6 seconds worth of data
-          const headResponse = await fetch(url, {
+          const headResponse = await fetchWithRetry(url, {
             method: 'HEAD',
             signal: abortController.signal,
             headers: { 'Accept': 'video/*' }
+          }, {
+            maxRetries: 2,
+            baseDelay: 500,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           
           if (!headResponse.ok) throw new Error(`HEAD HTTP ${headResponse.status}`);
@@ -493,12 +503,16 @@ class MediaPreloadQueue {
           // This should be enough for most videos to get 6 seconds of content with better quality
           const prerollSize = Math.min(1024 * 1024, contentLength || 1024 * 1024);
           
-          const videoResponse = await fetch(url, {
+          const videoResponse = await fetchWithRetry(url, {
             signal: abortController.signal,
             headers: { 
               'Range': `bytes=0-${prerollSize - 1}`,
               'Accept': 'video/*'
             }
+          }, {
+            maxRetries: 2,
+            baseDelay: 1000,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -508,9 +522,13 @@ class MediaPreloadQueue {
         }
 
         case TaskType.VIDEO_FULL: {
-          const videoResponse = await fetch(url, {
+          const videoResponse = await fetchWithRetry(url, {
             signal: abortController.signal,
             headers: { 'Accept': 'video/*' }
+          }, {
+            maxRetries: 2,
+            baseDelay: 1000,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -520,12 +538,16 @@ class MediaPreloadQueue {
         }
 
         case TaskType.AUDIO_META: {
-          const audioResponse = await fetch(url, {
+          const audioResponse = await fetchWithRetry(url, {
             signal: abortController.signal,
             headers: { 
               'Range': 'bytes=0-524288', 
               'Accept': 'audio/*'
             }
+          }, {
+            maxRetries: 2,
+            baseDelay: 500,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -535,9 +557,13 @@ class MediaPreloadQueue {
         }
 
         case TaskType.AUDIO_FULL: {
-          const audioResponse = await fetch(url, {
+          const audioResponse = await fetchWithRetry(url, {
             signal: abortController.signal,
             headers: { 'Accept': 'audio/*' }
+          }, {
+            maxRetries: 2,
+            baseDelay: 1000,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -547,7 +573,14 @@ class MediaPreloadQueue {
         }
 
         case TaskType.TEXT_FULL: {
-          const textResponse = await fetch(url, { signal: abortController.signal, headers: { 'Accept': 'application/json, text/*;q=0.9,*/*;q=0.8' } });
+          const textResponse = await fetchWithRetry(url, { 
+            signal: abortController.signal, 
+            headers: { 'Accept': 'application/json, text/*;q=0.9,*/*;q=0.8' } 
+          }, {
+            maxRetries: 2,
+            baseDelay: 500,
+            retryCondition: (error) => isNetworkProtocolError(error)
+          });
           if (!textResponse.ok) throw new Error(`HTTP ${textResponse.status}`);
           const text = await textResponse.text();
           data = text;
@@ -583,12 +616,15 @@ class MediaPreloadQueue {
       });
 
     } catch (error) {
+      const errorObj = error as Error;
+      const isNetworkError = isNetworkProtocolError(errorObj);
+      
       const result: TaskResult = {
         id: taskId,
         postId: task.postId,
         type,
         success: false,
-        error: error as Error,
+        error: errorObj,
         duration: Date.now() - task.startedAt!,
         completedAt: Date.now()
       };
@@ -600,8 +636,10 @@ class MediaPreloadQueue {
       console.warn('[MediaPreloadQueue] Task failed', { 
         taskId, 
         feedIndex: task.feedIndex,
-        error: (error as Error).message,
-        isBlocking: task.isBlocking
+        error: errorObj.message,
+        isNetworkError,
+        isBlocking: task.isBlocking,
+        url: url.substring(0, 100) + (url.length > 100 ? '...' : '')
       });
 
     } finally {

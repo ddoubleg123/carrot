@@ -3,6 +3,7 @@ import prisma from '../../../lib/prisma';
 import { auth } from '@/auth';
 import { projectPost } from './_project';
 import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
+import { createResilientFetch } from '@/lib/retryUtils';
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
@@ -435,7 +436,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         console.log(`🎵 Triggering transcription for post ${post.id} with ${mediaType} URL: ${mediaUrl.substring(0, 80)}...`);
         
         // Use fire-and-forget approach - trigger transcription via internal API
-        fetch(`${process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'}/api/audio/trigger-transcription`, {
+        const resilientFetch = createResilientFetch();
+        resilientFetch(`${process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'}/api/audio/trigger-transcription`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -469,7 +471,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       const { trimInMs, trimOutMs, trimAspect } = body || {};
       if ((typeof trimInMs === 'number' || typeof trimOutMs === 'number') && effectiveVideoUrl) {
         const base = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
-        const resp = await fetch(`${base}/api/ingest`, {
+        const resilientFetch = createResilientFetch();
+        const resp = await resilientFetch(`${base}/api/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: effectiveVideoUrl, inMs: trimInMs ?? null, outMs: trimOutMs ?? null, aspect: trimAspect ?? null, postId: post.id }),

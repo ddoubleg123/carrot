@@ -1,6 +1,7 @@
 import { auth } from './firebase';
 import type { Auth } from 'firebase/auth';
 import { signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { createResilientFetch } from './retryUtils';
 
 export async function ensureFirebaseSignedIn() {
   console.log('[ensureFirebaseSignedIn] Current Firebase user:', (auth as Auth).currentUser?.uid);
@@ -8,7 +9,8 @@ export async function ensureFirebaseSignedIn() {
   if (!(auth as Auth).currentUser) {
     console.log('[ensureFirebaseSignedIn] No Firebase user, fetching custom token...');
     
-    const res = await fetch('/api/firebase-custom-token');
+    const resilientFetch = createResilientFetch();
+    const res = await resilientFetch('/api/firebase-custom-token');
     console.log('[ensureFirebaseSignedIn] Custom token response:', res.status, res.statusText);
     
     if (!res.ok) {

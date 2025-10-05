@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { createResilientFetch } from '@/lib/retryUtils';
 
 export async function GET() {
   try {

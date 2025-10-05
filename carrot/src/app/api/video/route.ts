@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const admin = require('firebase-admin');
+import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -125,10 +126,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       const ifNoneMatch = req.headers.get('if-none-match');
       if (ifNoneMatch) headers.set('if-none-match', ifNoneMatch);
 
-      const upstreamRes = await fetch(url, {
+      const upstreamRes = await fetchWithRetry(url, {
         method: 'GET',
         headers,
         redirect: 'follow',
+      }, {
+        maxRetries: 2,
+        baseDelay: 1000,
+        retryCondition: (error) => isNetworkProtocolError(error)
       });
 
       const responseHeaders = new Headers(upstreamRes.headers);
@@ -328,13 +333,18 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       });
     } catch {}
     
-    // Add timeout and better error handling for the fetch
-    const upstream = await fetchDedupe(k, () => fetch(k, {
+    // Add timeout and better error handling for the fetch with retry logic
+    const upstream = await fetchDedupe(k, () => fetchWithRetry(k, {
       method: 'GET',
       headers: fwdHeaders,
       redirect: 'follow',
       cache: 'no-store',
       signal: AbortSignal.timeout(15000), // 15 second timeout
+    }, {
+      maxRetries: 2,
+      baseDelay: 1000,
+      maxDelay: 5000,
+      retryCondition: (error) => isNetworkProtocolError(error)
     }).catch(error => {
       console.error('[api/video] Fetch error:', error);
       throw new Error(`Failed to fetch video: ${error.message}`);
@@ -421,18 +431,20 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     });
     
     // Check if this is a network protocol error
-    const isNetworkError = e.message?.includes('ERR_HTTP2_PROTOCOL_ERROR') || 
-                          e.message?.includes('ERR_QUIC_PROTOCOL_ERROR') ||
-                          e.message?.includes('ECONNRESET') ||
-                          e.message?.includes('ENOTFOUND');
+    const isNetworkError = isNetworkProtocolError(e);
     
     if (isNetworkError) {
-      console.warn('[api/video] Network protocol error detected, returning 503 for retry');
+      console.warn('[api/video] Network protocol error detected, returning 503 for retry', {
+        error: e.message,
+        url: req.url,
+        isRetryable: true
+      });
       return NextResponse.json({ 
         error: 'Network error - please retry', 
         details: 'Temporary network issue',
         retryable: true,
-        url: req.url 
+        url: req.url,
+        errorType: 'network_protocol_error'
       }, { status: 503 });
     }
     

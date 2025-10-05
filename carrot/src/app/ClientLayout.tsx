@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import WindsurfAttributes from '../components/WindsurfAttributes';
+import NetworkStatusIndicator from '../components/NetworkStatusIndicator';
 import dynamic from 'next/dynamic';
 import { useEffect } from 'react';
 
@@ -49,6 +50,7 @@ export default function ClientLayout({
     return (
       <>
         <WindsurfAttributes />
+        <NetworkStatusIndicator />
         <Sidebar />
         <main className="min-h-screen bg-gray-50">{children}</main>
       </>
@@ -59,6 +61,7 @@ export default function ClientLayout({
   return (
     <>
       <WindsurfAttributes />
+      <NetworkStatusIndicator />
       <main className="min-h-screen bg-gray-50">{children}</main>
     </>
   );

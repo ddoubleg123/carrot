@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import * as admin from 'firebase-admin';
+import { createResilientFetch } from '@/lib/retryUtils';
 
 // Detect presence of required admin credentials once
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
