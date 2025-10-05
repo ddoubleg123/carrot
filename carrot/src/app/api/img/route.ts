@@ -201,6 +201,11 @@ async function passthrough(upstream: Response) {
   headers.set('cache-control', 'public, max-age=604800, s-maxage=604800, immutable')
   headers.set('vary', 'accept')
   headers.set('x-proxy', 'img-pass')
+  // Add CORS headers
+  headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, If-None-Match, If-Modified-Since')
+  headers.set('Access-Control-Expose-Headers', 'Content-Length, Cache-Control, ETag, Last-Modified')
   return new NextResponse(body, { status, headers })
 }
 
@@ -504,6 +509,25 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
       'cache-control': 'public, max-age=604800, s-maxage=604800, immutable',
       'vary': 'accept',
       'x-proxy': 'img-transform',
+      // Add CORS headers
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, If-None-Match, If-Modified-Since',
+      'Access-Control-Expose-Headers': 'Content-Length, Cache-Control',
     },
   })
+}
+
+export async function OPTIONS(_req: Request, _ctx: { params: Promise<{}> }) {
+  // Handle CORS preflight requests
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Cache-Control, If-None-Match, If-Modified-Since',
+      'Access-Control-Expose-Headers': 'Content-Length, Cache-Control, ETag, Last-Modified',
+      'Access-Control-Max-Age': '86400', // 24 hours
+    },
+  });
 }

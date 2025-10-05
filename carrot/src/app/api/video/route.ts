@@ -317,11 +317,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       } catch {}
     }
 
-    // Forward important headers
+    // Forward important headers (exclude problematic headers that cause CORS issues)
     const fwdHeaders: HeadersInit = {};
     const range = req.headers.get('range') || rangeParam; if (range) fwdHeaders['Range'] = range;
     const ifNoneMatch = req.headers.get('if-none-match'); if (ifNoneMatch) fwdHeaders['If-None-Match'] = ifNoneMatch;
     const ifModifiedSince = req.headers.get('if-modified-since'); if (ifModifiedSince) fwdHeaders['If-Modified-Since'] = ifModifiedSince;
+    
+    // Explicitly exclude headers that cause CORS issues with Firebase Storage
+    // Don't forward upgrade-insecure-requests, user-agent, or other browser-specific headers
 
     // In-flight dedupe: avoid multiple parallel fetches for the same normalized URL
     const k = target.toString();
@@ -381,8 +384,11 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }
     } catch {}
 
-    // Add CORS for our origin
+    // Add CORS for our origin with more permissive headers
     headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Cache-Control, If-None-Match, If-Modified-Since');
+    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Cache-Control, Accept-Ranges');
     // Short negative caching to prevent request storms on missing/forbidden objects
     if (status === 404 || status === 410 || status === 403) {
       headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
@@ -459,6 +465,20 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 export async function HEAD(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
   const res = await GET(req, _ctx);
   return new NextResponse(null, { status: res.status, headers: res.headers });
+}
+
+export async function OPTIONS(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
+  // Handle CORS preflight requests
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, Content-Type, Cache-Control, If-None-Match, If-Modified-Since',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Cache-Control, Accept-Ranges',
+      'Access-Control-Max-Age': '86400', // 24 hours
+    },
+  });
 }
 
 // --- In-flight dedupe helper (simple in-memory short-lived cache) ---

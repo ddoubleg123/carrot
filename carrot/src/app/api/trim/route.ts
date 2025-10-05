@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createJob, updateJob } from '@/lib/ingestJobs';
+import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
 
 export const runtime = 'nodejs';
 
@@ -59,13 +60,17 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       const attempts: Array<{ target: string; status?: number; body?: string; error?: string }> = [];
       for (const target of candidates) {
         try {
-          const wr = await fetch(target, {
+          const wr = await fetchWithRetry(target, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(workerSecret ? { 'x-worker-secret': workerSecret } : {}),
             },
             body: JSON.stringify({ id: job.id, sourceUrl, startSec, endSec, postId }),
+          }, {
+            maxRetries: 2,
+            baseDelay: 1000,
+            retryCondition: (error) => isNetworkProtocolError(error)
           });
           if (!wr.ok) {
             const text = await wr.text().catch(() => '');

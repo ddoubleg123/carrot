@@ -237,11 +237,26 @@ export default function SimpleVideo({
       // Additional check: if the URL still contains encoded Firebase URLs, try to clean it up
       if (proxyUrl.includes('firebasestorage.googleapis.com') && proxyUrl.includes('%')) {
         try {
-          // Try to decode any remaining encoded parts
-          const urlObj = new URL(proxyUrl);
-          const cleanUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.search}`;
-          console.log('[SimpleVideo] Cleaned Firebase URL:', { original: proxyUrl, cleaned: cleanUrl });
-          proxyUrl = cleanUrl;
+          // Only try to parse as URL if it's an absolute URL
+          if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
+            const urlObj = new URL(proxyUrl);
+            const cleanUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.search}`;
+            console.log('[SimpleVideo] Cleaned Firebase URL:', { original: proxyUrl, cleaned: cleanUrl });
+            proxyUrl = cleanUrl;
+          } else {
+            // For relative URLs, just decode the query parameters
+            const urlParts = proxyUrl.split('?');
+            if (urlParts.length === 2) {
+              const [path, query] = urlParts;
+              try {
+                const decodedQuery = decodeURIComponent(query);
+                proxyUrl = `${path}?${decodedQuery}`;
+                console.log('[SimpleVideo] Decoded query parameters:', { original: proxyUrl, decoded: proxyUrl });
+              } catch (e) {
+                console.warn('[SimpleVideo] Failed to decode query parameters:', e);
+              }
+            }
+          }
         } catch (e) {
           console.warn('[SimpleVideo] Failed to clean Firebase URL:', e);
         }

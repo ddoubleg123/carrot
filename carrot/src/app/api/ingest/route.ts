@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
 
 const RAILWAY_SERVICE_URL = process.env.INGEST_WORKER_URL || 'http://localhost:8000';
 const INGEST_WORKER_SECRET = process.env.INGEST_WORKER_SECRET || 'dev_ingest_secret';
@@ -83,7 +84,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     
     let response;
     try {
-      response = await fetch(workerUrl, {
+      response = await fetchWithRetry(workerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,16 +93,24 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         body: JSON.stringify({ url, inMs, outMs, aspect, postId }),
         // Add timeout to prevent hanging
         signal: AbortSignal.timeout(30000), // 30 second timeout
+      }, {
+        maxRetries: 2,
+        baseDelay: 1000,
+        maxDelay: 5000,
+        retryCondition: (error) => isNetworkProtocolError(error)
       });
     } catch (fetchError) {
       console.error('[INGEST DEBUG] Fetch error:', fetchError);
       
+      // Check if this is a network protocol error
+      const isNetworkError = fetchError instanceof Error ? isNetworkProtocolError(fetchError) : false;
+      
       // If the service is completely unavailable, return a fallback response
-      if (fetchError instanceof Error && (
+      if (isNetworkError || (fetchError instanceof Error && (
         fetchError.message.includes('ECONNREFUSED') ||
         fetchError.message.includes('ENOTFOUND') ||
         fetchError.message.includes('timeout')
-      )) {
+      ))) {
         return NextResponse.json({
           job: {
             id: `fallback-${Date.now()}`,
@@ -214,7 +223,16 @@ export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
     }
 
     // Get job status from Railway service
-    const response = await fetch(`${RAILWAY_SERVICE_URL}/jobs/${jobId}`);
+    const response = await fetchWithRetry(`${RAILWAY_SERVICE_URL}/jobs/${jobId}`, {
+      method: 'GET',
+      headers: {
+        'x-worker-secret': INGEST_WORKER_SECRET,
+      },
+    }, {
+      maxRetries: 2,
+      baseDelay: 1000,
+      retryCondition: (error) => isNetworkProtocolError(error)
+    });
 
     if (!response.ok) {
       if (response.status === 404) {

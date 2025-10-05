@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
 
 // Simple audio proxy to work around Firebase Storage CORS for media playback
 // Usage: /api/audio?url=<encoded Firebase download URL>
@@ -45,11 +46,15 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       target.searchParams.set('alt', 'media');
     }
 
-    const upstream = await fetch(target.toString(), {
+    const upstream = await fetchWithRetry(target.toString(), {
       method: 'GET',
       headers: fwdHeaders,
       redirect: 'follow',
       // No need for cache: let Firebase and browser handle caching
+    }, {
+      maxRetries: 2,
+      baseDelay: 1000,
+      retryCondition: (error) => isNetworkProtocolError(error)
     });
 
     const status = upstream.status;
