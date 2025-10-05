@@ -22,16 +22,11 @@ export async function GET(request: NextRequest) {
         postId: postId,
       },
       include: {
-        author: {
+        user: {
           select: {
             id: true,
             name: true,
             image: true,
-          },
-        },
-        _count: {
-          select: {
-            likes: true,
           },
         },
       },
@@ -46,15 +41,15 @@ export async function GET(request: NextRequest) {
     // Transform comments to match expected format
     const transformedComments = comments.map(comment => ({
       id: comment.id,
-      content: comment.content,
+      content: comment.text,
       author: {
-        id: comment.author.id,
-        name: comment.author.name,
-        avatar: comment.author.image,
+        id: comment.user.id,
+        name: comment.user.name,
+        avatar: comment.user.image,
       },
       createdAt: comment.createdAt.toISOString(),
-      likes: comment._count.likes,
-      isLiked: false, // TODO: Check if current user liked this comment
+      likes: 0, // Comments don't have likes in this schema
+      isLiked: false,
     }));
 
     return NextResponse.json({
@@ -109,12 +104,12 @@ export async function POST(request: NextRequest) {
     // Create comment
     const comment = await prisma.comment.create({
       data: {
-        content: content.trim(),
+        text: content.trim(),
         postId: postId,
-        authorId: session.user.id,
+        userId: 'temp-user-id', // TODO: Replace with actual user ID when auth is enabled
       },
       include: {
-        author: {
+        user: {
           select: {
             id: true,
             name: true,
@@ -127,11 +122,11 @@ export async function POST(request: NextRequest) {
     // Transform comment to match expected format
     const transformedComment = {
       id: comment.id,
-      content: comment.content,
+      content: comment.text,
       author: {
-        id: comment.author.id,
-        name: comment.author.name,
-        avatar: comment.author.image,
+        id: comment.user.id,
+        name: comment.user.name,
+        avatar: comment.user.image,
       },
       createdAt: comment.createdAt.toISOString(),
       likes: 0,
