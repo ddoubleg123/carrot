@@ -51,6 +51,8 @@ export default async function PatchPage({
                 id: true,
                 name: true,
                 image: true,
+                profilePhoto: true,
+                username: true,
                 country: true
               }
             }

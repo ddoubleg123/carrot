@@ -112,7 +112,20 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       });
       
       if (!response.ok) {
-        throw new Error('Failed to start content discovery');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Discovery API error:', response.status, errorData);
+        
+        // Handle specific error cases
+        if (response.status === 401) {
+          setError('Please log in to start content discovery.');
+        } else if (response.status === 403) {
+          setError('You don\'t have permission to start discovery for this patch.');
+        } else if (response.status === 404) {
+          setError('Patch not found. Please refresh the page.');
+        } else {
+          setError('Discovery service is temporarily unavailable. Please try again later.');
+        }
+        return;
       }
       
       const data = await response.json();
@@ -124,7 +137,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       
     } catch (err) {
       console.error('Error starting discovery:', err);
-      setError('Failed to start content discovery. Please try again.');
+      setError('Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -133,11 +146,11 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   useEffect(() => {
     telemetry.trackDiscoveryStarted(patchHandle);
     
-    // Automatically start discovery when component mounts
-    handleStartDiscovery();
+    // Try to load existing content first
+    loadDiscoveredContent();
     
     // Set up polling for new content
-    const interval = setInterval(loadDiscoveredContent, 5000);
+    const interval = setInterval(loadDiscoveredContent, 10000); // Reduced frequency
     return () => clearInterval(interval);
   }, [patchHandle]);
 
@@ -169,13 +182,27 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         setIsDiscovering(data?.isActive || false);
         setError(null);
       } else {
-        setError('We couldn\'t check sources. Retry.');
-        telemetry.trackDiscoveryError(patchHandle, 'API request failed');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[Discovery] API error:', response.status, errorData);
+        
+        // Only show error if we don't have any items yet
+        if (items.length === 0) {
+          if (response.status === 404) {
+            setError('Patch not found. Please refresh the page.');
+          } else {
+            setError('We couldn\'t check sources. Retry.');
+          }
+          telemetry.trackDiscoveryError(patchHandle, 'API request failed');
+        }
       }
     } catch (err) {
       console.error('[Discovery] Error loading content:', err);
-      setError('Connection lost. We\'ll keep trying.');
-      telemetry.trackDiscoveryError(patchHandle, 'Network error');
+      
+      // Only show error if we don't have any items yet
+      if (items.length === 0) {
+        setError('Connection lost. We\'ll keep trying.');
+        telemetry.trackDiscoveryError(patchHandle, 'Network error');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -368,7 +395,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     );
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && !error) {
     return (
       <div style={{
         padding: TOKENS.spacing.xl,
@@ -405,30 +432,44 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         }}>
           Items found: {items.length} | Status: {isDiscovering ? 'Searching...' : 'Processing...'}
         </div>
-        <div style={{
-          padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
-          border: 'none',
-          borderRadius: TOKENS.radii.md,
-          background: TOKENS.colors.actionOrange,
-          color: TOKENS.colors.surface,
-          fontSize: TOKENS.typography.body,
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: TOKENS.spacing.sm,
-          margin: '0 auto',
-          opacity: isLoading ? 0.7 : 1
-        }}>
-          <div style={{
-            width: '16px',
-            height: '16px',
-            borderRadius: '50%',
-            border: `2px solid ${TOKENS.colors.surface}`,
-            borderTopColor: 'transparent',
-            animation: 'spin 1s linear infinite'
-          }} />
-          {isLoading ? 'Starting Discovery...' : 'Searching for Content...'}
-        </div>
+        <button
+          onClick={handleStartDiscovery}
+          disabled={isLoading}
+          style={{
+            padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
+            border: 'none',
+            borderRadius: TOKENS.radii.md,
+            background: TOKENS.colors.actionOrange,
+            color: TOKENS.colors.surface,
+            fontSize: TOKENS.typography.body,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: TOKENS.spacing.sm,
+            margin: '0 auto',
+            opacity: isLoading ? 0.7 : 1,
+            cursor: isLoading ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {isLoading ? (
+            <>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                border: `2px solid ${TOKENS.colors.surface}`,
+                borderTopColor: 'transparent',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Starting Discovery...
+            </>
+          ) : (
+            <>
+              <Search size={16} />
+              Start Content Discovery
+            </>
+          )}
+        </button>
         <style jsx>{`
           @keyframes spin {
             to { transform: rotate(360deg); }
