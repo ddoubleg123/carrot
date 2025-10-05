@@ -174,7 +174,7 @@ const ReusableVideoPlayer = forwardRef<ReusableVideoPlayerRef, ReusableVideoPlay
         video.removeEventListener('error', handleError);
         video.removeEventListener('volumechange', handleVolumeChange);
       };
-    }, [onPlay, onPause, onEnded, onTimeUpdate, onLoadedMetadata, onError]);
+    }, [onPlay, onPause, onEnded, onTimeUpdate, onLoadedMetadata, onError, onFullscreen]);
 
     const togglePlay = () => {
       if (videoRef.current) {
