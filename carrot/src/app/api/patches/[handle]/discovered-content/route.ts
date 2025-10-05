@@ -111,8 +111,16 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching discovered content:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      handle: await params.then(p => p.handle).catch(() => 'unknown')
+    });
     return NextResponse.json(
-      { error: 'Failed to fetch discovered content' },
+      { 
+        error: 'Failed to fetch discovered content',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

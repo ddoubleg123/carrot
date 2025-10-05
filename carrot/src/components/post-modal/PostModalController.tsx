@@ -12,17 +12,21 @@ export default function PostModalController() {
 
   if (!show || !postId) return null;
   
+  // Try to find the video element for this post
+  const videoElement = document.querySelector(`[data-post-video-id="${postId}"]`) as HTMLVideoElement | null;
+  const isVideo = !!videoElement;
+  
   // Create a mock post object for the new PostModal interface
   const mockPost = {
     id: postId,
-    content: 'Loading post...',
+    content: '', // Don't show "Loading post..." - let the modal handle loading states
     author: {
       id: 'temp',
       name: 'Loading...',
       avatar: undefined,
     },
     mediaUrl: undefined,
-    mediaType: undefined,
+    mediaType: isVideo ? 'video' as const : undefined,
     likes: 0,
     comments: 0,
     shares: 0,
@@ -36,8 +40,8 @@ export default function PostModalController() {
       isOpen={show} 
       onClose={closePostModal} 
       post={mockPost}
-      videoElement={null}
-      isVideo={false}
+      videoElement={videoElement}
+      isVideo={isVideo}
     />
   );
 }

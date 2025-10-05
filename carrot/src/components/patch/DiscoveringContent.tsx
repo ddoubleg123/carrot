@@ -122,6 +122,8 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           setError('You don\'t have permission to start discovery for this patch.');
         } else if (response.status === 404) {
           setError('Patch not found. Please refresh the page.');
+        } else if (response.status === 500) {
+          setError('Discovery service configuration error. Please check API keys and try again.');
         } else {
           setError('Discovery service is temporarily unavailable. Please try again later.');
         }
@@ -184,15 +186,23 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('[Discovery] API error:', response.status, errorData);
+        console.error('[Discovery] Full error details:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          patchHandle
+        });
         
         // Only show error if we don't have any items yet
         if (items.length === 0) {
           if (response.status === 404) {
             setError('Patch not found. Please refresh the page.');
+          } else if (response.status === 500) {
+            setError(`Server error: ${errorData.details || errorData.error || 'Unknown error'}`);
           } else {
-            setError('We couldn\'t check sources. Retry.');
+            setError(`We couldn't check sources (${response.status}). Retry.`);
           }
-          telemetry.trackDiscoveryError(patchHandle, 'API request failed');
+          telemetry.trackDiscoveryError(patchHandle, `API request failed: ${response.status}`);
         }
       }
     } catch (err) {
@@ -365,6 +375,32 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         }}>
           {error}
         </p>
+        {error.includes('configuration error') && (
+          <div style={{
+            padding: TOKENS.spacing.md,
+            background: '#FEF3C7',
+            border: `1px solid ${TOKENS.colors.warning}`,
+            borderRadius: TOKENS.radii.md,
+            marginBottom: TOKENS.spacing.lg
+          }}>
+            <p style={{
+              fontSize: TOKENS.typography.caption,
+              color: TOKENS.colors.warning,
+              margin: 0,
+              fontWeight: 600
+            }}>
+              💡 Setup Required: Add DEEPSEEK_API_KEY to your environment variables
+            </p>
+            <p style={{
+              fontSize: TOKENS.typography.caption,
+              color: TOKENS.colors.slate,
+              margin: 0,
+              marginTop: TOKENS.spacing.xs
+            }}>
+              See DISCOVERY_SETUP_GUIDE.md for detailed instructions
+            </p>
+          </div>
+        )}
         <button
           onClick={handleRetry}
           style={{

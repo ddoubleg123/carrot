@@ -91,7 +91,16 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     // Fetch user again to verify DB value
     const verifyUser = await prisma.user.findUnique({ where: { email: session.user.email } });
     log('DB user after update:', JSON.stringify(verifyUser));
-    return new Response(null, { status: 204 });
+    
+    // Return success with a flag to indicate session should be refreshed
+    return new Response(JSON.stringify({ 
+      success: true, 
+      sessionRefresh: true,
+      message: 'Profile updated successfully. Please refresh the page to see changes.'
+    }), { 
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error: any) {
     const errMsg = error?.message || error;
     log('Error occurred:', errMsg);

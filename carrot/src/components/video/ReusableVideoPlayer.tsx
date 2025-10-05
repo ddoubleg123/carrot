@@ -18,6 +18,7 @@ interface ReusableVideoPlayerProps {
   onTimeUpdate?: (currentTime: number) => void;
   onLoadedMetadata?: (duration: number) => void;
   onError?: (error: string) => void;
+  onFullscreen?: () => void;
 }
 
 export interface ReusableVideoPlayerRef {
@@ -272,7 +273,11 @@ const ReusableVideoPlayer = forwardRef<ReusableVideoPlayerRef, ReusableVideoPlay
                 size="sm"
                 className="h-8 w-8 p-0 text-white hover:bg-white/20"
                 onClick={() => {
-                  if (videoRef.current) {
+                  // Trigger fullscreen modal instead of native fullscreen
+                  if (onFullscreen) {
+                    onFullscreen();
+                  } else if (videoRef.current) {
+                    // Fallback to native fullscreen if no modal handler
                     if (videoRef.current.requestFullscreen) {
                       videoRef.current.requestFullscreen();
                     }

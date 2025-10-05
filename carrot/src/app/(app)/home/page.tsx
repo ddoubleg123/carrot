@@ -127,7 +127,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         name: (p && p.name) || '',
         username: String((p && p.username && p.username.trim()) || 'daniel'),
         avatar,
-        flag: (p && p.country) || null,
+        flag: (p && p.country) || 'US', // Default to US if no country
         id: safePost.userId,
       };
       
@@ -137,7 +137,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         carrotText: safePost.carrotText,
         stickText: safePost.stickText,
         author: safeUser,
-        homeCountry: (p && p.country) || null,
+        homeCountry: (p && p.country) || 'US', // Default to US if no country
         location: { zip: '10001', city: 'New York', state: 'NY' },
         stats: {
           likes: Math.floor(Math.random() * 50),

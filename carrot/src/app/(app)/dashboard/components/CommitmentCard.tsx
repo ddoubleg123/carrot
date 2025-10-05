@@ -439,7 +439,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative">
                 {author?.avatar ? (
                   <Image
-                    src={`/api/img?url=${encodeURIComponent(author.avatar || '/avatar-placeholder.svg')}`}
+                    src={author.avatar.startsWith('http') ? `/api/img?url=${encodeURIComponent(author.avatar)}` : author.avatar}
                     alt={author?.username && String(author.username).trim() ? `${String(author.username)}'s avatar` : 'User avatar'}
                     fill
                     sizes="40px"
@@ -447,8 +447,23 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     loading="lazy"
                     unoptimized
                     style={{ objectFit: 'cover' }}
+                    onError={(e) => {
+                      console.log('[CommitmentCard] Avatar load error:', {
+                        postId: id,
+                        avatar: author.avatar,
+                        error: e
+                      });
+                      // Fallback to placeholder on error
+                      e.currentTarget.src = '/avatar-placeholder.svg';
+                    }}
                   />
-                ) : null}
+                ) : (
+                  <div className="h-full w-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-gray-500 text-sm font-medium">
+                      {author?.username ? author.username.charAt(0).toUpperCase() : '?'}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -471,7 +486,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       authorData: author
                     });
                   }
-                  return cc ? (<FlagChip countryCode={cc} />) : null;
+                  // Always show flag chip, even if no country code (will show fallback)
+                  return <FlagChip countryCode={cc} />;
                 })()}
                 <button
                   type="button"
@@ -675,7 +691,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {(cfUid || cfPlaybackUrlHls || videoUrl) && (
           <div className="mt-3">
             <div
-              className="rounded-xl p-2 relative"
+              className="rounded-xl p-2 relative group"
               style={hasGradient ? { background: gradientCss } : undefined}
               onClick={(e) => {
                 // Prevent video clicks from opening PostModal
@@ -683,6 +699,20 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 e.preventDefault();
               }}
             >
+              {/* Fullscreen button overlay */}
+              <button
+                className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 hover:bg-black/70 text-white p-2 rounded-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  openPostModal(id, 'comments');
+                }}
+                title="Open in fullscreen"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
               {/* Video rendered by player; original parent is captured dynamically when opening lightbox */}
               {(() => {
                 const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;

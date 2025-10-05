@@ -88,7 +88,20 @@ function countryToEmoji(codeOrName?: string | null): string | null {
   const A = 0x1F1E6;
   const a = 65; // 'A'
   const chars = [cc.charCodeAt(0) - a + A, cc.charCodeAt(1) - a + A];
-  return String.fromCodePoint(chars[0], chars[1]);
+  const emoji = String.fromCodePoint(chars[0], chars[1]);
+  
+  // Debug logging for flag emoji generation
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[FlagChip] Emoji generation:', {
+      input: codeOrName,
+      normalized: norm,
+      countryCode: cc,
+      chars: chars,
+      emoji: emoji
+    });
+  }
+  
+  return emoji;
 }
 
 export default function FlagChip({ countryCode, label, className }: { countryCode?: string | null; label?: string; className?: string }) {

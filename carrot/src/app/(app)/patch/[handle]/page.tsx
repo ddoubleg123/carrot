@@ -99,7 +99,8 @@ export default async function PatchPage({
         id: member.user.id,
         name: member.user.name,
         image: member.user.image,
-        username: member.user.name // Using name as username since there's no username field
+        profilePhoto: member.user.profilePhoto,
+        username: member.user.username
       }
     }));
 

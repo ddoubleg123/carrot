@@ -10,7 +10,8 @@ export function useModalRoute() {
     sp.set('modal', '1');
     sp.set('post', postId);
     if (panel) sp.set('panel', panel);
-    router.push(`?${sp.toString()}`, { scroll: false });
+    // Use replace instead of push for instant modal opening
+    router.replace(`?${sp.toString()}`, { scroll: false });
   }
 
   function closePostModal() {

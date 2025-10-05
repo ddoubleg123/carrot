@@ -262,7 +262,8 @@ export const authOptions = {
               username: true, 
               profilePhoto: true, 
               image: true,
-              isOnboarded: true 
+              isOnboarded: true,
+              updatedAt: true // Include updatedAt to detect changes
             }
           });
           
@@ -274,6 +275,21 @@ export const authOptions = {
             });
             userData.image = token.picture || token.image;
           }
+          
+          // Check if user data has been updated since last session
+          if (userData && token.lastUserUpdate) {
+            const lastUpdate = new Date(userData.updatedAt);
+            const tokenUpdate = new Date(token.lastUserUpdate);
+            if (lastUpdate > tokenUpdate) {
+              console.log('[NextAuth][session] User data updated, forcing session refresh');
+              // Force session refresh by updating the token
+              token.lastUserUpdate = userData.updatedAt;
+            }
+          } else if (userData) {
+            // First time, set the last update time
+            token.lastUserUpdate = userData.updatedAt;
+          }
+          
           await prisma.$disconnect();
           console.log('[NextAuth][session] Database user found:', userData);
         }

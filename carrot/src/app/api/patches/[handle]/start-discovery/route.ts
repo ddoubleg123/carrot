@@ -53,6 +53,14 @@ export async function POST(
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
+    // Check if DeepSeek API key is configured
+    if (!process.env.DEEPSEEK_API_KEY) {
+      console.error('[Start Discovery] DEEPSEEK_API_KEY not configured');
+      return NextResponse.json({ 
+        error: 'Discovery service not configured. Please set DEEPSEEK_API_KEY environment variable.' 
+      }, { status: 500 });
+    }
+
     // Start DeepSeek-powered content discovery
     console.log('[Start Discovery] Starting DeepSeek search for patch:', {
       patchId: patch.id,
