@@ -9,7 +9,6 @@
     ],
     "method": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["*"],
-    "requestHeader": ["*"]
+    "responseHeader": ["*"]
   }
 ]

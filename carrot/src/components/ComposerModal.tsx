@@ -52,6 +52,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   const [isUploading, setIsUploading] = useState(false);
   const [videoThumbnails, setVideoThumbnails] = useState<string[]>([]);
   const [currentThumbnailIndex, setCurrentThumbnailIndex] = useState(0);
+  const [useGalleryMode, setUseGalleryMode] = useState(false);
   // Video edit state
   // Inline trim (no modal)
   const [videoTrimStart, setVideoTrimStart] = useState(0);
@@ -695,6 +696,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       setVideoTrimEnd(0);
       setVideoAspect('16:9');
       setEditedThumb(null);
+      setUseGalleryMode(false);
       setVideoDuration(0);
       previewVideoRef.current = null;
       // Don't reset external URL state on close - preserve user input
@@ -948,6 +950,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         const videoUrl = URL.createObjectURL(file);
         console.log("[DEBUG] Created object URL:", videoUrl, "for file size:", file.size, "bytes");
         setMediaPreview(videoUrl);
+        // Disable gallery mode for uploaded files, use generated thumbnails
+        setUseGalleryMode(false);
         generateVideoThumbnails(videoUrl);
         // Initialize trim values; end will be set on metadata load
         setVideoTrimStart(0);
@@ -1492,6 +1496,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                       setVideoTrimEnd(0);
                       setVideoAspect('16:9');
                       setVideoDuration(0);
+                      setUseGalleryMode(false);
                       // Don't clear external URL when removing video - preserve user input
                       // setExternalUrl('');
                       mediaBaseUrlRef.current = null;
@@ -1501,6 +1506,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                     thumbnails={videoThumbnails}
                     currentIndex={currentThumbnailIndex}
                     onSelect={(i) => setCurrentThumbnailIndex(i)}
+                    useGallery={useGalleryMode}
                   />
                   <VideoTrimControls
                     videoDuration={videoDuration}
@@ -1628,7 +1634,10 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
               setMediaPreview(proxiedUrl || null);
               setExternalUrl(item.url || '');
               
-              // Generate thumbnails for gallery-selected videos
+              // Enable gallery mode to show existing thumbnails from database
+              setUseGalleryMode(true);
+              
+              // Generate thumbnails for gallery-selected videos as fallback
               if (item.url) {
                 console.log('[ComposerModal] Starting thumbnail generation for gallery video:', item.url);
                 try { 
@@ -1642,6 +1651,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             } else if (item.type === 'image' || item.type === 'gif') {
               setMediaType('image');
               setMediaPreview(proxiedUrl || null);
+              setUseGalleryMode(false);
             }
             setShowMediaPicker(false);
           }}

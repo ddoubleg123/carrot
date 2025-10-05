@@ -101,8 +101,8 @@ export async function fetchWithRetry(
         // Force HTTP/1.1 to avoid HTTP/2 protocol errors
         headers: {
           ...options.headers,
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          'Connection': 'keep-alive'
+          // Removed 'Upgrade-Insecure-Requests' header as it causes CORS issues
         }
       });
 
