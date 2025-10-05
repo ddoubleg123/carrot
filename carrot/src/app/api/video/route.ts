@@ -51,7 +51,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     let decodedOnce = false;
 
     // Helper: stream via Firebase Admin (supports private objects and Range)
-    const adminDownload = async (bucketName: string, objectPath: string): Promise<Response> => {
+    const adminDownload = async (bucketName: string, objectPath: string): Promise<NextResponse> => {
       try {
         // Initialize admin app if needed
         if (!admin.apps || !admin.apps.length) {
