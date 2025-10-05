@@ -4,6 +4,8 @@ export interface AIImageGenerationResult {
   hero?: string;
   gallery: string[];
   fallback: string;
+  videoThumb?: string;
+  pdfPreview?: string;
 }
 
 export interface ImagePrompt {
@@ -39,10 +41,13 @@ export class AIImageGenerator {
       // Filter out failed generations
       const validGalleryImages = galleryImages.filter(img => img !== null) as string[];
 
+      const fallbackResult = this.generateFallback(url, type);
       return {
-        hero: heroImage || this.generateFallback(url, type).fallback,
+        hero: heroImage || fallbackResult.fallback,
         gallery: validGalleryImages,
-        fallback: this.generateFallback(url, type).fallback
+        fallback: fallbackResult.fallback,
+        videoThumb: type === 'video' ? (heroImage || fallbackResult.fallback) : undefined,
+        pdfPreview: type === 'pdf' ? (heroImage || fallbackResult.fallback) : undefined
       };
     } catch (error) {
       console.error('AI image generation failed:', error);
@@ -278,7 +283,9 @@ export class AIImageGenerator {
     
     return {
       fallback,
-      gallery: [fallback]
+      gallery: [fallback],
+      videoThumb: type === 'video' ? fallback : undefined,
+      pdfPreview: type === 'pdf' ? fallback : undefined
     };
   }
 
