@@ -69,7 +69,7 @@ export class ContentProcessor {
       try {
         const aiImageResult = await AIImageGenerator.generateImagesForContent(
           title,
-          contentData.fullText || contentData.summary150,
+          (contentData as any).fullText || contentData.summary150,
           type,
           url
         );
