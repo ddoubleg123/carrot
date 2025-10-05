@@ -86,7 +86,7 @@ export class ContentProcessor {
         try {
           const freeImageResult = await FreeImageAPIs.getBestImageForContent(
             title,
-            contentData.fullText || contentData.summary150,
+            (contentData as any).fullText || contentData.summary150,
             type
           );
           
