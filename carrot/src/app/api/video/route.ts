@@ -133,7 +133,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       }, {
         maxRetries: 2,
         baseDelay: 1000,
-        retryCondition: (error) => isNetworkProtocolError(error)
+        retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
       });
 
       const responseHeaders = new Headers(upstreamRes.headers);
@@ -347,7 +347,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       maxRetries: 2,
       baseDelay: 1000,
       maxDelay: 5000,
-      retryCondition: (error) => isNetworkProtocolError(error)
+      retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
     }).catch(error => {
       console.error('[api/video] Fetch error:', error);
       throw new Error(`Failed to fetch video: ${error.message}`);

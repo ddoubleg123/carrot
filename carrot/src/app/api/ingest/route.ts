@@ -97,7 +97,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         maxRetries: 2,
         baseDelay: 1000,
         maxDelay: 5000,
-        retryCondition: (error) => isNetworkProtocolError(error)
+        retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
       });
     } catch (fetchError) {
       console.error('[INGEST DEBUG] Fetch error:', fetchError);
@@ -231,7 +231,7 @@ export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
     }, {
       maxRetries: 2,
       baseDelay: 1000,
-      retryCondition: (error) => isNetworkProtocolError(error)
+      retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
     });
 
     if (!response.ok) {

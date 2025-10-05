@@ -473,7 +473,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 500,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
           const blob = await imageResponse.blob();
@@ -491,7 +491,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 500,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           
           if (!headResponse.ok) throw new Error(`HEAD HTTP ${headResponse.status}`);
@@ -512,7 +512,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 1000,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -528,7 +528,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 1000,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -547,7 +547,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 500,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -563,7 +563,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 1000,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -579,7 +579,7 @@ class MediaPreloadQueue {
           }, {
             maxRetries: 2,
             baseDelay: 500,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!textResponse.ok) throw new Error(`HTTP ${textResponse.status}`);
           const text = await textResponse.text();

@@ -54,7 +54,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     }, {
       maxRetries: 2,
       baseDelay: 1000,
-      retryCondition: (error) => isNetworkProtocolError(error)
+      retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
     });
 
     const status = upstream.status;

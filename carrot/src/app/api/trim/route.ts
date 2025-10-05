@@ -70,7 +70,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
           }, {
             maxRetries: 2,
             baseDelay: 1000,
-            retryCondition: (error) => isNetworkProtocolError(error)
+            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!wr.ok) {
             const text = await wr.text().catch(() => '');
