@@ -104,6 +104,7 @@ export default function PostCardWithModal({ post }: PostCardWithModalProps) {
                 controls={true}
                 autoPlay={false}
                 muted={true}
+                onFullscreen={handleFullscreenClick}
               />
             ) : (
               <img
