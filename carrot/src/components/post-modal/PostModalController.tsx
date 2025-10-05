@@ -11,5 +11,33 @@ export default function PostModalController() {
   const postId = params?.get('post') || '';
 
   if (!show || !postId) return null;
-  return <PostModal id={postId} onClose={closePostModal} />;
+  
+  // Create a mock post object for the new PostModal interface
+  const mockPost = {
+    id: postId,
+    content: 'Loading post...',
+    author: {
+      id: 'temp',
+      name: 'Loading...',
+      avatar: undefined,
+    },
+    mediaUrl: undefined,
+    mediaType: undefined,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    isLiked: false,
+    isBookmarked: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  return (
+    <PostModal 
+      isOpen={show} 
+      onClose={closePostModal} 
+      post={mockPost}
+      videoElement={null}
+      isVideo={false}
+    />
+  );
 }
