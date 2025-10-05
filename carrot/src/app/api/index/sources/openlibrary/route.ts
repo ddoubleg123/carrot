@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { indexOpenLibrary } from '@/scripts/indexers/openlibrary';
 
 export const runtime = 'nodejs';
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  *
  * Returns a summary and count of chunks (content is omitted by default).
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get('limit') || '20', 10);

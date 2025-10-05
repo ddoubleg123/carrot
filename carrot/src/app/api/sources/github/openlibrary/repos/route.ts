@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  *  - per_page (default 100)
  *  - page (default 1)
  */
-export async function GET(req: NextRequest) {
+export async function GET(req: Request, context: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(req.url);
     const per_page = searchParams.get('per_page') || '100';

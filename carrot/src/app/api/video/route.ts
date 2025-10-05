@@ -57,7 +57,8 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         if (!admin.apps || !admin.apps.length) {
           const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
           if (!PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-            throw new Error('Firebase Admin SDK not configured');
+            console.warn('[api/video] Firebase Admin SDK not configured, falling back to direct proxy');
+            return null; // Fall back to direct proxy
           }
           admin.initializeApp({
             credential: admin.credential.cert({
@@ -418,6 +419,23 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       url: req.url,
       headers: Object.fromEntries(req.headers.entries())
     });
+    
+    // Check if this is a network protocol error
+    const isNetworkError = e.message?.includes('ERR_HTTP2_PROTOCOL_ERROR') || 
+                          e.message?.includes('ERR_QUIC_PROTOCOL_ERROR') ||
+                          e.message?.includes('ECONNRESET') ||
+                          e.message?.includes('ENOTFOUND');
+    
+    if (isNetworkError) {
+      console.warn('[api/video] Network protocol error detected, returning 503 for retry');
+      return NextResponse.json({ 
+        error: 'Network error - please retry', 
+        details: 'Temporary network issue',
+        retryable: true,
+        url: req.url 
+      }, { status: 503 });
+    }
+    
     return NextResponse.json({ 
       error: 'Video proxy failed', 
       details: e.message,

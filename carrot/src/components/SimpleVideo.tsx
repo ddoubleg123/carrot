@@ -29,6 +29,7 @@ export default function SimpleVideo({
   const [hasError, setHasError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [networkRetryCount, setNetworkRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -233,6 +234,19 @@ export default function SimpleVideo({
         proxyUrl = src;
       }
       
+      // Additional check: if the URL still contains encoded Firebase URLs, try to clean it up
+      if (proxyUrl.includes('firebasestorage.googleapis.com') && proxyUrl.includes('%')) {
+        try {
+          // Try to decode any remaining encoded parts
+          const urlObj = new URL(proxyUrl);
+          const cleanUrl = `${urlObj.origin}${urlObj.pathname}${urlObj.search}`;
+          console.log('[SimpleVideo] Cleaned Firebase URL:', { original: proxyUrl, cleaned: cleanUrl });
+          proxyUrl = cleanUrl;
+        } catch (e) {
+          console.warn('[SimpleVideo] Failed to clean Firebase URL:', e);
+        }
+      }
+      
       // Log URL analysis for debugging
       console.log('[SimpleVideo] URL analysis:', {
         isDoubleEncoded: src.includes('%252F'),
@@ -380,19 +394,40 @@ export default function SimpleVideo({
       retryCount
     });
     
-    // Retry once for Firebase Storage URLs
-    if (retryCount < 1 && video.src.includes('firebasestorage.googleapis.com')) {
-      console.log('[SimpleVideo] Retrying Firebase Storage URL...');
-      setRetryCount(prev => prev + 1);
+    // Check if this is a network protocol error
+    const isNetworkError = video.error?.code === MediaError.MEDIA_ERR_NETWORK ||
+                          video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+                          video.src.includes('firebasestorage.googleapis.com');
+    
+    // Retry for network errors with exponential backoff
+    const maxRetries = isNetworkError ? 3 : 1;
+    const currentRetryCount = isNetworkError ? networkRetryCount : retryCount;
+    
+    if (currentRetryCount < maxRetries) {
+      console.log('[SimpleVideo] Retrying video load...', { 
+        retryCount: currentRetryCount + 1, 
+        maxRetries,
+        errorCode: video.error?.code,
+        isNetworkError,
+        src: video.src 
+      });
+      
+      if (isNetworkError) {
+        setNetworkRetryCount(prev => prev + 1);
+      } else {
+        setRetryCount(prev => prev + 1);
+      }
+      
       setIsLoading(true);
       setHasError(false);
       
-      // Force reload the video
+      // Exponential backoff for retries
+      const delay = Math.min(1000 * Math.pow(2, currentRetryCount), 8000);
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.load();
         }
-      }, 1000);
+      }, delay);
       return;
     }
     

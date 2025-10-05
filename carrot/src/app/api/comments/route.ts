@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 // import { getServerSession } from 'next-auth/next';
 // import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/comments?postId=xxx
-export async function GET(request: NextRequest) {
+export async function GET(request: Request, context: { params: Promise<{}> }) {
   try {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('postId');
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/comments
-export async function POST(request: NextRequest) {
+export async function POST(request: Request, context: { params: Promise<{}> }) {
   try {
     // const session = await getServerSession(authOptions);
     // Temporarily disabled authentication for build

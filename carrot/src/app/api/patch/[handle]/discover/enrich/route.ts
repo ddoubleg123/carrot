@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ContentProcessor } from '@/lib/content-enrichment/contentProcessor';
 
 export async function POST(
-  request: NextRequest,
+  request: Request,
   context: { params: Promise<{ handle: string }> }
 ) {
   try {

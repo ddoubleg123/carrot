@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { transcribeWithVosk } from '@/lib/asr/vosk';
 import { polishTranscript, deepseekAudit } from '@/lib/audit/deepseek';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  *
  * body: { postId?: string, audioUrl?: string, contentId?: string, mediaUrl?: string }
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const body = await req.json();
     const postId = typeof body?.postId === 'string' ? body.postId : undefined;

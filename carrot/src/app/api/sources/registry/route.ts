@@ -4,7 +4,7 @@ import { listSources } from '@/lib/sources/registry';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request, context: { params: Promise<{}> }) {
   try {
     const sources = listSources();
     return NextResponse.json({ ok: true, sources });

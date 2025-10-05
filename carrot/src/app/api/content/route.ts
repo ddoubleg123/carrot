@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { chooseCanonical } from '@/lib/ingest/canonical';
 import { deepseekAudit } from '@/lib/audit/deepseek';
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  * Accepts { url?: string, title?: string, type?: 'article'|'video'|'image'|'pdf'|'text', agentId?, patchHint? }
  * Creates a DiscoveredContent row and performs lightweight enrichment inline (mock) for demo.
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const body = await req.json();
     const url = typeof body?.url === 'string' ? body.url : undefined;
