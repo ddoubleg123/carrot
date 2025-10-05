@@ -262,7 +262,7 @@ export class AIImageGenerator {
   /**
    * Generate fallback image
    */
-  private static generateFallback(url: string, type: string): AIImageGenerationResult {
+  public static generateFallback(url: string, type: string): AIImageGenerationResult {
     const colors = {
       article: '0A5AFF',
       video: 'FF6A00',
