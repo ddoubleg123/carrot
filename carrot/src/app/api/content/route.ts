@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         content: '',
         relevanceScore: 5,
         sourceUrl: url,
-        canonicalUrl: canonicalUrl || null,
+        // canonicalUrl omitted here to satisfy current Prisma client types
         tags: [],
         status: 'enriching',
       },
@@ -49,15 +49,15 @@ export async function POST(req: NextRequest) {
     await prisma.discoveredContent.update({
       where: { id: item.id },
       data: {
-        enrichedContent: {
-          summary150: audit.summaryShort,
-          keyPoints: audit.keyPoints,
-          notableQuote: audit.notableQuote,
-        },
+        // Store key enrichment in metadata and content for compatibility
+        content: audit.summaryShort,
         metadata: {
           readingTime: audit.readingTimeSec,
           categories: audit.categories,
           tags: audit.tags,
+          keyPoints: audit.keyPoints,
+          notableQuote: audit.notableQuote,
+          canonicalUrl,
         },
         qualityScore: audit.qualityScore,
         status: 'ready',
