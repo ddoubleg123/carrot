@@ -6,13 +6,40 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // HTTP/2 is disabled by default in Next.js 15+
+  // Disable HTTP/2 to prevent protocol errors on Render
   experimental: {
-    // http2: false, // Removed - not supported in Next.js 15+
+    http2: false,
   },
   // Add compression and caching optimizations
   compress: true,
   poweredByHeader: false,
+  // Optimize for production deployment
+  swcMinify: true,
+  // Disable static optimization for better compatibility
+  trailingSlash: false,
+  // Add webpack optimizations for chunk loading
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Optimize chunk loading for production
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: -10,
+            chunks: 'all',
+          },
+        },
+      };
+    }
+    return config;
+  },
   images: {
     domains: [
       'firebasestorage.googleapis.com',
@@ -91,6 +118,11 @@ const nextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable'
+          },
+          // Force HTTP/1.1 to prevent HTTP/2 protocol errors
+          {
+            key: 'Upgrade',
+            value: 'HTTP/1.1'
           }
         ]
       },
