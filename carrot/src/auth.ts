@@ -262,8 +262,7 @@ export const authOptions = {
               username: true, 
               profilePhoto: true, 
               image: true,
-              isOnboarded: true,
-              updatedAt: true // Include updatedAt to detect changes
+              isOnboarded: true
             }
           });
           
@@ -276,19 +275,8 @@ export const authOptions = {
             userData.image = token.picture || token.image;
           }
           
-          // Check if user data has been updated since last session
-          if (userData && token.lastUserUpdate) {
-            const lastUpdate = new Date(userData.updatedAt);
-            const tokenUpdate = new Date(token.lastUserUpdate);
-            if (lastUpdate > tokenUpdate) {
-              console.log('[NextAuth][session] User data updated, forcing session refresh');
-              // Force session refresh by updating the token
-              token.lastUserUpdate = userData.updatedAt;
-            }
-          } else if (userData) {
-            // First time, set the last update time
-            token.lastUserUpdate = userData.updatedAt;
-          }
+          // Always use fresh data from database to ensure profile photo updates are reflected
+          console.log('[NextAuth][session] Using fresh user data from database');
           
           await prisma.$disconnect();
           console.log('[NextAuth][session] Database user found:', userData);
