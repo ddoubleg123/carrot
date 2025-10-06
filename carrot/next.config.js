@@ -13,6 +13,10 @@ const nextConfig = {
   swcMinify: true,
   // Disable static optimization for better compatibility
   trailingSlash: false,
+  // Disable HTTP/2 completely
+  experimental: {
+    http2: false,
+  },
   // Add webpack optimizations for chunk loading
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
@@ -21,6 +25,8 @@ const nextConfig = {
         chunks: 'all',
         minSize: 20000,
         maxSize: 244000,
+        maxAsyncRequests: 30,
+        maxInitialRequests: 30,
         cacheGroups: {
           default: {
             minChunks: 2,
@@ -33,12 +39,22 @@ const nextConfig = {
             priority: -10,
             chunks: 'all',
             enforce: true,
+            maxSize: 244000,
           },
           common: {
             name: 'common',
             minChunks: 2,
             priority: -5,
             reuseExistingChunk: true,
+            enforce: true,
+            maxSize: 244000,
+          },
+          // Separate React chunks
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+            name: 'react',
+            priority: 20,
+            chunks: 'all',
             enforce: true,
           },
         },
@@ -48,6 +64,10 @@ const nextConfig = {
       config.optimization.runtimeChunk = {
         name: 'runtime',
       };
+      
+      // Add chunk loading error handling
+      config.optimization.chunkIds = 'deterministic';
+      config.optimization.moduleIds = 'deterministic';
     }
     return config;
   },
@@ -134,6 +154,14 @@ const nextConfig = {
           {
             key: 'Alt-Svc',
             value: 'clear'
+          },
+          {
+            key: 'Upgrade',
+            value: 'HTTP/1.1'
+          },
+          {
+            key: 'HTTP2-Settings',
+            value: ''
           }
         ]
       },
@@ -148,6 +176,14 @@ const nextConfig = {
           {
             key: 'Connection',
             value: 'keep-alive'
+          },
+          {
+            key: 'Alt-Svc',
+            value: 'clear'
+          },
+          {
+            key: 'Upgrade',
+            value: 'HTTP/1.1'
           }
         ]
       }

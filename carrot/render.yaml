@@ -50,9 +50,7 @@ services:
         value: dev_ingest_secret
       - key: WORKER_PUBLIC_URL
         value: https://carrot-worker.onrender.com
-      # Disable HTTP/2 to prevent protocol errors
-      - key: HTTP2_DISABLED
-        value: true
+      # HTTP/2 disabled via Alt-Svc header in next.config.js
       # Optimize for production
       - key: NEXT_TELEMETRY_DISABLED
         value: 1
@@ -63,6 +61,11 @@ services:
         value: true
       - key: NODE_OPTIONS
         value: "--max-old-space-size=4096"
+      # Force HTTP/1.1 and disable HTTP/2
+      - key: HTTP_VERSION
+        value: "1.1"
+      - key: DISABLE_HTTP2
+        value: "true"
 
 databases:
   - name: carrot-db
