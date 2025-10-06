@@ -7,28 +7,21 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
-  // Optimize webpack for better chunk loading
+  // Completely disable chunk splitting to prevent HTTP/2 issues
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // Configure chunk splitting to be more conservative
+      // Disable all chunk splitting
+      config.optimization.splitChunks = false;
+      config.optimization.runtimeChunk = false;
+      
+      // Force single bundle
       config.optimization.splitChunks = {
         chunks: 'all',
         cacheGroups: {
-          default: {
-            minChunks: 1,
-            priority: -20,
-            reuseExistingChunk: true,
-          },
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            priority: -10,
-            chunks: 'all',
-          },
+          default: false,
+          vendors: false,
         },
       };
-      // Use single runtime chunk
-      config.optimization.runtimeChunk = 'single';
     }
     return config;
   },
@@ -105,6 +98,15 @@ const nextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable'
+          },
+          // Force HTTP/1.1 to prevent HTTP/2 protocol errors
+          {
+            key: 'Connection',
+            value: 'close'
+          },
+          {
+            key: 'Upgrade',
+            value: 'HTTP/1.1'
           }
         ]
       }
