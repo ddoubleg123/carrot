@@ -136,7 +136,6 @@ export async function fetchWithRetry(
       
       // Force HTTP/1.1 with aggressive headers
       const headers: Record<string, string> = {
-        ...options.headers,
         'Connection': 'keep-alive',
         'Keep-Alive': 'timeout=5, max=1000',
         'Upgrade-Insecure-Requests': '1',
@@ -150,6 +149,8 @@ export async function fetchWithRetry(
         // Additional HTTP/1.1 forcing headers
         'Accept-Encoding': 'gzip, deflate',
         'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1)',
+        // Merge with existing headers
+        ...(options.headers as Record<string, string>),
       };
 
       // Remove problematic headers for Firebase Storage

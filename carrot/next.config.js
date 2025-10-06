@@ -17,13 +17,13 @@ const nextConfig = {
       timeout: 60000,
       freeSocketTimeout: 30000,
     },
-    // Disable HTTP/2 features
-    serverComponentsExternalPackages: [],
     // Force legacy HTTP parser
     serverActions: {
       allowedOrigins: ['localhost:3000', 'carrot-app.onrender.com'],
     },
   },
+  // Move serverComponentsExternalPackages to root level
+  serverExternalPackages: [],
   // Disable HTTP/2 and force HTTP/1.1
   poweredByHeader: false,
   compress: false, // Disable compression to avoid HTTP/2 issues
