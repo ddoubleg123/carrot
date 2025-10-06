@@ -6,11 +6,8 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // Add compression and caching optimizations
-  compress: true,
-  poweredByHeader: false,
-  // Optimize for production deployment
-  swcMinify: true,
+  // Enable static export to eliminate chunk loading issues
+  output: 'export',
   // Disable static optimization for better compatibility
   trailingSlash: false,
   // Disable HTTP/2 completely
@@ -19,34 +16,9 @@ const nextConfig = {
     // Force HTTP/1.1 for Render deployment
     serverComponentsExternalPackages: [],
   },
-  // Add webpack optimizations for chunk loading
+  // Remove webpack optimizations since we're doing static export
   webpack: (config, { isServer, dev }) => {
-    if (!isServer && !dev) {
-      // Disable chunk splitting to prevent chunk loading errors
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        minSize: 0,
-        maxSize: 0,
-        maxAsyncRequests: 1,
-        maxInitialRequests: 1,
-        cacheGroups: {
-          default: false,
-          vendors: false,
-          common: false,
-          react: false,
-        },
-      };
-      
-      // Disable runtime chunk to prevent additional chunk loading
-      config.optimization.runtimeChunk = false;
-      
-      // Use simpler chunk IDs
-      config.optimization.chunkIds = 'named';
-      config.optimization.moduleIds = 'named';
-      
-      // Disable code splitting for better reliability
-      config.optimization.concatenateModules = true;
-    }
+    // Static export doesn't need complex webpack optimization
     return config;
   },
   images: {
@@ -86,20 +58,21 @@ const nextConfig = {
       },
     ],
   },
-  async rewrites() {
-    return [
-      // Proxy all media through Firebase Function
-      {
-        source: '/media/:path*',
-        destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/media/:path*',
-      },
-      // Proxy worker API through Firebase Function
-      {
-        source: '/api/worker/:path*',
-        destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/:path*',
-      },
-    ];
-  },
+  // Remove rewrites since static export doesn't support them
+  // async rewrites() {
+  //   return [
+  //     // Proxy all media through Firebase Function
+  //     {
+  //       source: '/media/:path*',
+  //       destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/media/:path*',
+  //     },
+  //     // Proxy worker API through Firebase Function
+  //     {
+  //       source: '/api/worker/:path*',
+  //       destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/:path*',
+  //     },
+  //   ];
+  // },
   async headers() {
     return [
       {
@@ -119,62 +92,15 @@ const nextConfig = {
               "frame-ancestors 'self'"
             ].join('; ')
           },
-          // Add headers to help with chunk loading and HTTP/2 issues
-          {
-            key: 'Connection',
-            value: 'keep-alive'
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable'
-          },
-          // Disable HTTP/2 to prevent protocol errors
-          {
-            key: 'Alt-Svc',
-            value: 'clear'
-          },
-          {
-            key: 'Upgrade',
-            value: 'HTTP/1.1'
-          },
-          {
-            key: 'HTTP2-Settings',
-            value: ''
-          },
-          {
-            key: 'Connection',
-            value: 'close'
-          },
-          {
-            key: 'X-Forwarded-Proto',
-            value: 'http'
-          }
-        ]
-      },
-      // Specific headers for Next.js static chunks
-      {
-        source: '/_next/static/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable'
-          },
-          {
-            key: 'Connection',
-            value: 'close'
-          },
-          {
-            key: 'Alt-Svc',
-            value: 'clear'
-          },
-          {
-            key: 'Upgrade',
-            value: 'HTTP/1.1'
-          },
-          {
-            key: 'X-Forwarded-Proto',
-            value: 'http'
-          }
+              // Add headers to help with static file serving
+              {
+                key: 'Connection',
+                value: 'keep-alive'
+              },
+              {
+                key: 'Cache-Control',
+                value: 'public, max-age=31536000, immutable'
+              }
         ]
       }
     ];

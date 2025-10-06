@@ -3,8 +3,8 @@ services:
     name: carrot-app
     env: node
     plan: free
-    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy" npm run build
-    startCommand: npm start
+        buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096" npm run build
+        startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
