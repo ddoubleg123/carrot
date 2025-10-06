@@ -6,10 +6,6 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // Disable HTTP/2 to prevent protocol errors on Render
-  experimental: {
-    http2: false,
-  },
   // Add compression and caching optimizations
   compress: true,
   poweredByHeader: false,
@@ -18,11 +14,13 @@ const nextConfig = {
   // Disable static optimization for better compatibility
   trailingSlash: false,
   // Add webpack optimizations for chunk loading
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
+  webpack: (config, { isServer, dev }) => {
+    if (!isServer && !dev) {
       // Optimize chunk loading for production
       config.optimization.splitChunks = {
         chunks: 'all',
+        minSize: 20000,
+        maxSize: 244000,
         cacheGroups: {
           default: {
             minChunks: 2,
@@ -34,8 +32,21 @@ const nextConfig = {
             name: 'vendors',
             priority: -10,
             chunks: 'all',
+            enforce: true,
+          },
+          common: {
+            name: 'common',
+            minChunks: 2,
+            priority: -5,
+            reuseExistingChunk: true,
+            enforce: true,
           },
         },
+      };
+      
+      // Add chunk loading optimization
+      config.optimization.runtimeChunk = {
+        name: 'runtime',
       };
     }
     return config;
@@ -119,10 +130,10 @@ const nextConfig = {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable'
           },
-          // Force HTTP/1.1 to prevent HTTP/2 protocol errors
+          // Disable HTTP/2 to prevent protocol errors
           {
-            key: 'Upgrade',
-            value: 'HTTP/1.1'
+            key: 'Alt-Svc',
+            value: 'clear'
           }
         ]
       },

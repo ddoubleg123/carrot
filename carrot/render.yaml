@@ -3,7 +3,7 @@ services:
     name: carrot-app
     env: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -58,6 +58,11 @@ services:
         value: 1
       - key: ANALYZE
         value: false
+      # Additional optimizations for chunk loading
+      - key: NEXT_BUILD_CACHE
+        value: true
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=4096"
 
 databases:
   - name: carrot-db
