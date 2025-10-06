@@ -7,20 +7,40 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
-  // Completely disable chunk splitting to prevent HTTP/2 issues
+  // Optimize chunk splitting to prevent HTTP/2 issues while maintaining performance
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // Disable all chunk splitting
-      config.optimization.splitChunks = false;
-      config.optimization.runtimeChunk = false;
-      
-      // Force single bundle
+      // Configure chunk splitting to reduce HTTP/2 issues
       config.optimization.splitChunks = {
         chunks: 'all',
+        minSize: 20000,
+        maxSize: 244000,
         cacheGroups: {
-          default: false,
-          vendors: false,
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: -10,
+            chunks: 'all',
+            maxSize: 244000,
+          },
+          common: {
+            name: 'common',
+            minChunks: 2,
+            priority: -5,
+            reuseExistingChunk: true,
+            maxSize: 244000,
+          },
         },
+      };
+      
+      // Keep runtime chunk for better caching
+      config.optimization.runtimeChunk = {
+        name: 'runtime',
       };
     }
     return config;
@@ -99,14 +119,14 @@ const nextConfig = {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable'
           },
-          // Force HTTP/1.1 to prevent HTTP/2 protocol errors
+          // Optimize for HTTP/2 while maintaining compatibility
           {
             key: 'Connection',
-            value: 'close'
+            value: 'keep-alive'
           },
           {
-            key: 'Upgrade',
-            value: 'HTTP/1.1'
+            key: 'Keep-Alive',
+            value: 'timeout=5, max=1000'
           }
         ]
       }

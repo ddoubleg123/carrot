@@ -98,11 +98,12 @@ export async function fetchWithRetry(
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        // Force HTTP/1.1 to avoid HTTP/2 protocol errors
+        // Optimize headers for better HTTP/2 compatibility
         headers: {
           ...options.headers,
-          'Connection': 'keep-alive'
-          // Removed 'Upgrade-Insecure-Requests' header as it causes CORS issues
+          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
 

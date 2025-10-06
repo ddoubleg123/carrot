@@ -8,7 +8,9 @@
     "start": "next start -p ${PORT:-10000}",
     "postinstall": "prisma generate",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "deploy-check": "node scripts/deploy-check.js",
+    "build:production": "npm run deploy-check && npm run build"
   },
   "engines": {
     "node": "20.x",

@@ -469,10 +469,15 @@ class MediaPreloadQueue {
         case TaskType.IMAGE: {
           const imageResponse = await fetchWithRetry(url, { 
             signal: abortController.signal,
-            headers: { 'Accept': 'image/*' }
+            headers: { 
+              'Accept': 'image/*',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
+            }
           }, {
-            maxRetries: 2,
-            baseDelay: 500,
+            maxRetries: 3,
+            baseDelay: 1000,
+            maxDelay: 5000,
             retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
@@ -487,10 +492,15 @@ class MediaPreloadQueue {
           const headResponse = await fetchWithRetry(url, {
             method: 'HEAD',
             signal: abortController.signal,
-            headers: { 'Accept': 'video/*' }
+            headers: { 
+              'Accept': 'video/*',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
+            }
           }, {
-            maxRetries: 2,
-            baseDelay: 500,
+            maxRetries: 3,
+            baseDelay: 1000,
+            maxDelay: 5000,
             retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           
@@ -507,11 +517,14 @@ class MediaPreloadQueue {
             signal: abortController.signal,
             headers: { 
               'Range': `bytes=0-${prerollSize - 1}`,
-              'Accept': 'video/*'
+              'Accept': 'video/*',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
             }
           }, {
-            maxRetries: 2,
-            baseDelay: 1000,
+            maxRetries: 3,
+            baseDelay: 1500,
+            maxDelay: 8000,
             retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);

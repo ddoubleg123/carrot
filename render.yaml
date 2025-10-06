@@ -5,6 +5,9 @@ services:
     dockerContext: .
     dockerfilePath: ./Dockerfile
     plan: free
+    # Add health check and deployment settings
+    healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -26,3 +29,8 @@ services:
         value: dev_ingest_secret
       - key: WORKER_PUBLIC_URL
         value: https://carrot-worker.onrender.com
+      # Add HTTP/2 optimization settings
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=2048 --http-parser=legacy"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"

@@ -387,8 +387,9 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     // Add CORS for our origin with more permissive headers
     headers.set('Access-Control-Allow-Origin', '*');
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Cache-Control, If-None-Match, If-Modified-Since');
+    headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Cache-Control, If-None-Match, If-Modified-Since, Connection');
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Cache-Control, Accept-Ranges');
+    headers.set('Connection', 'keep-alive');
     // Short negative caching to prevent request storms on missing/forbidden objects
     if (status === 404 || status === 410 || status === 403) {
       headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
