@@ -2,9 +2,11 @@
 export class ChunkErrorHandler {
   private static instance: ChunkErrorHandler;
   private retryCount = 0;
-  private maxRetries = 2; // Reduced retries for faster recovery
-  private retryDelay = 500; // Faster initial retry
+  private maxRetries = 1; // Single retry for immediate recovery
+  private retryDelay = 100; // Very fast retry
   private isHandling = false;
+  private lastErrorTime = 0;
+  private errorCooldown = 5000; // 5 second cooldown between error handling
 
   static getInstance(): ChunkErrorHandler {
     if (!ChunkErrorHandler.instance) {
@@ -14,12 +16,21 @@ export class ChunkErrorHandler {
   }
 
   async handleChunkError(error: Error, chunkId?: string): Promise<void> {
+    const now = Date.now();
+    
+    // Check cooldown to prevent rapid-fire error handling
+    if (now - this.lastErrorTime < this.errorCooldown) {
+      console.warn(`[ChunkErrorHandler] Error handling on cooldown, skipping...`);
+      return;
+    }
+    
     if (this.isHandling) {
       console.warn(`[ChunkErrorHandler] Already handling chunk error, skipping...`);
       return;
     }
 
     this.isHandling = true;
+    this.lastErrorTime = now;
     console.warn(`[ChunkErrorHandler] Chunk loading failed:`, error.message, chunkId ? `(chunk: ${chunkId})` : '');
     
     try {
@@ -35,6 +46,8 @@ export class ChunkErrorHandler {
       const url = new URL(window.location.href);
       url.searchParams.set('_chunk_reload', Date.now().toString());
       url.searchParams.set('_cache_bust', Math.random().toString(36).substring(2));
+      url.searchParams.set('_force_http1', 'true');
+      url.searchParams.set('_disable_http2', 'true');
       window.location.href = url.toString();
       
     } catch (clearError) {
@@ -43,6 +56,7 @@ export class ChunkErrorHandler {
       // Force reload even if cache clearing fails
       const url = new URL(window.location.href);
       url.searchParams.set('_emergency_reload', Date.now().toString());
+      url.searchParams.set('_force_http1', 'true');
       window.location.href = url.toString();
     }
   }

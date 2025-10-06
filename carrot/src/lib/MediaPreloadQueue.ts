@@ -1,5 +1,6 @@
 import { fetchWithRetry, isNetworkProtocolError } from './retryUtils';
 import { firebaseApiClient } from './apiClient';
+import { http1Fetch } from './http1Fetch';
 
 export enum TaskType {
   POSTER = 'POSTER',
@@ -471,19 +472,13 @@ class MediaPreloadQueue {
       // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
       const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
       
-      const imageResponse = await fetchWithRetry(url, { 
+      const imageResponse = await http1Fetch(url, { 
         signal: abortController.signal,
         headers: { 
           'Accept': 'image/*',
-          'Connection': 'keep-alive',
-          // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
-          ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
-        }
-      }, {
+        },
         maxRetries: 3,
-        baseDelay: 1000,
-        maxDelay: 5000,
-        retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+        retryDelay: 1000
       });
       if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
       const blob = await imageResponse.blob();
@@ -497,20 +492,14 @@ class MediaPreloadQueue {
           const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
           
           // First, get the video metadata to calculate 6 seconds worth of data
-          const headResponse = await fetchWithRetry(url, {
+          const headResponse = await http1Fetch(url, {
             method: 'HEAD',
             signal: abortController.signal,
             headers: { 
               'Accept': 'video/*',
-              'Connection': 'keep-alive',
-              // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
-              ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
-            }
-          }, {
-            maxRetries: 3,
-            baseDelay: 1000,
-            maxDelay: 5000,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            },
+            maxRetries: 2,
+            retryDelay: 500
           });
           
           if (!headResponse.ok) throw new Error(`HEAD HTTP ${headResponse.status}`);
@@ -522,20 +511,14 @@ class MediaPreloadQueue {
           // This should be enough for most videos to get 6 seconds of content with better quality
           const prerollSize = Math.min(1024 * 1024, contentLength || 1024 * 1024);
           
-          const videoResponse = await fetchWithRetry(url, {
+          const videoResponse = await http1Fetch(url, {
             signal: abortController.signal,
             headers: { 
               'Range': `bytes=0-${prerollSize - 1}`,
               'Accept': 'video/*',
-              'Connection': 'keep-alive',
-              // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
-              ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
-            }
-          }, {
+            },
             maxRetries: 3,
-            baseDelay: 1500,
-            maxDelay: 8000,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            retryDelay: 1500
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -545,13 +528,11 @@ class MediaPreloadQueue {
         }
 
         case TaskType.VIDEO_FULL: {
-          const videoResponse = await fetchWithRetry(url, {
+          const videoResponse = await http1Fetch(url, {
             signal: abortController.signal,
-            headers: { 'Accept': 'video/*' }
-          }, {
+            headers: { 'Accept': 'video/*' },
             maxRetries: 2,
-            baseDelay: 1000,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            retryDelay: 1000
           });
           if (!videoResponse.ok) throw new Error(`HTTP ${videoResponse.status}`);
           const buf = await videoResponse.arrayBuffer();
@@ -561,16 +542,14 @@ class MediaPreloadQueue {
         }
 
         case TaskType.AUDIO_META: {
-          const audioResponse = await fetchWithRetry(url, {
+          const audioResponse = await http1Fetch(url, {
             signal: abortController.signal,
             headers: { 
               'Range': 'bytes=0-524288', 
               'Accept': 'audio/*'
-            }
-          }, {
+            },
             maxRetries: 2,
-            baseDelay: 500,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            retryDelay: 500
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -580,13 +559,11 @@ class MediaPreloadQueue {
         }
 
         case TaskType.AUDIO_FULL: {
-          const audioResponse = await fetchWithRetry(url, {
+          const audioResponse = await http1Fetch(url, {
             signal: abortController.signal,
-            headers: { 'Accept': 'audio/*' }
-          }, {
+            headers: { 'Accept': 'audio/*' },
             maxRetries: 2,
-            baseDelay: 1000,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            retryDelay: 1000
           });
           if (!audioResponse.ok) throw new Error(`HTTP ${audioResponse.status}`);
           const buf = await audioResponse.arrayBuffer();
@@ -596,13 +573,11 @@ class MediaPreloadQueue {
         }
 
         case TaskType.TEXT_FULL: {
-          const textResponse = await fetchWithRetry(url, { 
+          const textResponse = await http1Fetch(url, { 
             signal: abortController.signal, 
-            headers: { 'Accept': 'application/json, text/*;q=0.9,*/*;q=0.8' } 
-          }, {
+            headers: { 'Accept': 'application/json, text/*;q=0.9,*/*;q=0.8' },
             maxRetries: 2,
-            baseDelay: 500,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+            retryDelay: 500
           });
           if (!textResponse.ok) throw new Error(`HTTP ${textResponse.status}`);
           const text = await textResponse.text();

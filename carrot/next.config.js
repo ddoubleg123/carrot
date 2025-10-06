@@ -16,11 +16,19 @@ const nextConfig = {
       maxFreeSockets: 10,
       timeout: 60000,
       freeSocketTimeout: 30000,
+      // Force HTTP/1.1
+      protocol: 'http:',
+      // Disable HTTP/2 completely
+      http2: false,
+      // Force legacy parser
+      legacy: true,
     },
     // Force legacy HTTP parser
     serverActions: {
       allowedOrigins: ['localhost:3000', 'carrot-app.onrender.com'],
     },
+    // Disable HTTP/2 server push
+    serverComponentsExternalPackages: [],
   },
   // Move serverComponentsExternalPackages to root level
   serverExternalPackages: [],

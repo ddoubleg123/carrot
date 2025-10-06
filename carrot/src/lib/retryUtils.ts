@@ -3,6 +3,7 @@
  */
 
 import { connectionPool } from './connectionPool';
+import { http1Fetch } from './http1Fetch';
 
 export interface RetryOptions {
   maxRetries?: number;
@@ -126,72 +127,12 @@ export async function fetchWithRetry(
   retryOptions: RetryOptions = {}
 ): Promise<Response> {
   return withRetry(async () => {
-    // Use connection pool for better HTTP/1.1 management
-    const controller = connectionPool.createConnection(url);
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased timeout to 45 seconds
-
-    try {
-      // Check if this is a Firebase Storage URL - don't send problematic headers to avoid CORS issues
-      const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
-      
-      // Force HTTP/1.1 with aggressive headers
-      const headers: Record<string, string> = {
-        'Connection': 'keep-alive',
-        'Keep-Alive': 'timeout=5, max=1000',
-        'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        // Force HTTP/1.1
-        'HTTP-Version': '1.1',
-        'X-Forwarded-Proto': 'http',
-        'X-Forwarded-For': '127.0.0.1',
-        // Additional HTTP/1.1 forcing headers
-        'Accept-Encoding': 'gzip, deflate',
-        'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1)',
-        // Merge with existing headers
-        ...(options.headers as Record<string, string>),
-      };
-
-      // Remove ALL problematic headers for Firebase Storage to prevent CORS issues
-      if (isFirebaseStorage) {
-        delete headers['Cache-Control'];
-        delete headers['Pragma'];
-        delete headers['Expires'];
-        delete headers['X-Forwarded-Proto'];
-        delete headers['X-Forwarded-For'];
-        delete headers['HTTP-Version'];
-        delete headers['Upgrade-Insecure-Requests'];
-        delete headers['Keep-Alive'];
-        // Keep only essential headers for Firebase
-        const firebaseHeaders: Record<string, string> = {
-          'Connection': 'keep-alive',
-          'Accept-Encoding': 'gzip, deflate',
-          'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1)',
-          // Merge with existing headers
-          ...(options.headers as Record<string, string>),
-        };
-        Object.assign(headers, firebaseHeaders);
-      }
-
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers,
-        // Force HTTP/1.1 behavior
-        credentials: 'same-origin',
-        mode: 'cors',
-        redirect: 'follow',
-      });
-
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      // Abort the connection on error
-      controller.abort();
-      throw error;
-    }
+    // Use the new HTTP/1.1 forcing fetch
+    return http1Fetch(url, {
+      ...options,
+      maxRetries: retryOptions.maxRetries || 3,
+      retryDelay: retryOptions.baseDelay || 1000,
+    });
   }, retryOptions);
 }
 

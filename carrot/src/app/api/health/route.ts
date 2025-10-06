@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
+import { getHTTP1RetryStats, resetHTTP1RetryCounts } from '@/lib/http1Fetch';
+import { connectionPool } from '@/lib/connectionPool';
 
 export async function GET(request: NextRequest) {
   try {
@@ -97,6 +99,9 @@ export async function GET(request: NextRequest) {
         forceHttp1: process.env.FORCE_HTTP1,
         nodeTlsRejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED,
         nodeHttpParser: process.env.NODE_HTTP_PARSER,
+        // HTTP/1.1 forcing stats
+        http1RetryStats: getHTTP1RetryStats(),
+        connectionPoolStatus: connectionPool.getPoolStatus(),
       }
     }, { 
       status: isHealthy ? 200 : 503,

@@ -4,6 +4,7 @@
 
 import { fetchWithRetry, createResilientFetch, isNetworkProtocolError } from './retryUtils';
 import { NetworkErrorHandler } from './networkErrorHandler';
+import { http1Fetch } from './http1Fetch';
 
 export interface ApiClientOptions {
   baseURL?: string;
@@ -76,12 +77,15 @@ export class ApiClient {
     const fullUrl = this.baseURL ? `${this.baseURL}${url}` : url;
     
     try {
-      const response = await this.resilientFetch(fullUrl, {
+      // Use HTTP/1.1 forcing fetch for all requests
+      const response = await http1Fetch(fullUrl, {
         ...options,
         headers: {
           ...this.headers,
           ...options.headers
-        }
+        },
+        maxRetries: this.retries,
+        retryDelay: 1000
       });
 
       if (!response.ok) {
