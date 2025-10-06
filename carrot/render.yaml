@@ -66,6 +66,12 @@ services:
         value: "1.1"
       - key: DISABLE_HTTP2
         value: "true"
+      - key: FORCE_HTTP1
+        value: "true"
+      - key: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - key: NODE_EXTRA_CA_CERTS
+        value: ""
 
 databases:
   - name: carrot-db

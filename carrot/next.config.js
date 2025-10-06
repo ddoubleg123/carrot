@@ -16,6 +16,8 @@ const nextConfig = {
   // Disable HTTP/2 completely
   experimental: {
     http2: false,
+    // Force HTTP/1.1 for Render deployment
+    serverComponentsExternalPackages: [],
   },
   // Add webpack optimizations for chunk loading
   webpack: (config, { isServer, dev }) => {
@@ -162,6 +164,14 @@ const nextConfig = {
           {
             key: 'HTTP2-Settings',
             value: ''
+          },
+          {
+            key: 'Connection',
+            value: 'close'
+          },
+          {
+            key: 'X-Forwarded-Proto',
+            value: 'http'
           }
         ]
       },
@@ -175,7 +185,7 @@ const nextConfig = {
           },
           {
             key: 'Connection',
-            value: 'keep-alive'
+            value: 'close'
           },
           {
             key: 'Alt-Svc',
@@ -184,6 +194,10 @@ const nextConfig = {
           {
             key: 'Upgrade',
             value: 'HTTP/1.1'
+          },
+          {
+            key: 'X-Forwarded-Proto',
+            value: 'http'
           }
         ]
       }

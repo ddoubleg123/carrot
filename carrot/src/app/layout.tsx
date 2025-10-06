@@ -1,6 +1,8 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
 import type { Metadata } from 'next';
+import ChunkErrorBoundary from '@/components/ChunkErrorBoundary';
+import '@/utils/chunkRetry';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -35,7 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.className} style={{ position: 'relative', minHeight: '100vh' }}>
         {/* Background removed - carrotfield.mp4 no longer exists */}
-        {children}
+        <ChunkErrorBoundary>
+          {children}
+        </ChunkErrorBoundary>
       </body>
     </html>
   );
