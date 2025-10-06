@@ -9,8 +9,9 @@
     "postinstall": "prisma generate",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "deploy-check": "node scripts/deploy-check.js",
-    "build:production": "npm run deploy-check && npm run build"
+        "deploy-check": "node scripts/deploy-check.js",
+        "build:production": "npm run deploy-check && npm run build",
+        "health-check": "curl -f http://localhost:3005/api/health || exit 1"
   },
   "engines": {
     "node": "20.x",

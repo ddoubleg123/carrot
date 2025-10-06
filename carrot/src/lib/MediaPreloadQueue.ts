@@ -1,4 +1,5 @@
 import { fetchWithRetry, isNetworkProtocolError } from './retryUtils';
+import { firebaseApiClient } from './apiClient';
 
 export enum TaskType {
   POSTER = 'POSTER',

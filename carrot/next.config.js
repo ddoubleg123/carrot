@@ -7,44 +7,64 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
-      // Optimize chunk splitting to prevent HTTP/2 issues while maintaining performance
-      webpack: (config, { isServer, dev }) => {
-        if (!isServer && !dev) {
-          // Configure chunk splitting to reduce HTTP/2 issues
-          config.optimization.splitChunks = {
+  // Disable HTTP/2 to prevent protocol errors
+  httpAgentOptions: {
+    keepAlive: true,
+    keepAliveMsecs: 1000,
+    maxSockets: 50,
+    maxFreeSockets: 10,
+    timeout: 60000,
+    freeSocketTimeout: 30000,
+  },
+  // Force HTTP/1.1 for all requests
+  experimental: {
+    httpAgentOptions: {
+      keepAlive: true,
+      keepAliveMsecs: 1000,
+      maxSockets: 50,
+      maxFreeSockets: 10,
+      timeout: 60000,
+      freeSocketTimeout: 30000,
+    },
+  },
+  // Optimize chunk splitting to prevent HTTP/2 issues while maintaining performance
+  webpack: (config, { isServer, dev }) => {
+    if (!isServer && !dev) {
+      // Configure chunk splitting to reduce HTTP/2 issues
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        minSize: 50000,
+        maxSize: 150000,
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: -10,
             chunks: 'all',
-            minSize: 30000,
-            maxSize: 200000,
-            cacheGroups: {
-              default: {
-                minChunks: 2,
-                priority: -20,
-                reuseExistingChunk: true,
-              },
-              vendor: {
-                test: /[\\/]node_modules[\\/]/,
-                name: 'vendors',
-                priority: -10,
-                chunks: 'all',
-                maxSize: 200000,
-              },
-              common: {
-                name: 'common',
-                minChunks: 2,
-                priority: -5,
-                reuseExistingChunk: true,
-                maxSize: 200000,
-              },
-            },
-          };
-          
-          // Keep runtime chunk for better caching
-          config.optimization.runtimeChunk = {
-            name: 'runtime',
-          };
-        }
-        return config;
-      },
+            maxSize: 150000,
+          },
+          common: {
+            name: 'common',
+            minChunks: 2,
+            priority: -5,
+            reuseExistingChunk: true,
+            maxSize: 150000,
+          },
+        },
+      };
+      
+      // Keep runtime chunk for better caching
+      config.optimization.runtimeChunk = {
+        name: 'runtime',
+      };
+    }
+    return config;
+  },
   images: {
     domains: [
       'firebasestorage.googleapis.com',

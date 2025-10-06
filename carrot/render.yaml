@@ -3,8 +3,8 @@ services:
     name: carrot-app
     env: node
     plan: free
-        buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096" npm run build
-        startCommand: npm start
+    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch" npm run build
+    startCommand: NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch" npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -57,8 +57,6 @@ services:
         value: false
       - key: NEXT_BUILD_CACHE
         value: true
-      - key: NODE_OPTIONS
-        value: "--max-old-space-size=4096"
       # Force HTTP/1.1 to prevent HTTP/2 protocol errors
       - key: HTTP_VERSION
         value: "1.1"
@@ -76,6 +74,8 @@ services:
         value: "legacy"
       - key: NODE_NO_WARNINGS
         value: "1"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch"
 
 databases:
   - name: carrot-db
