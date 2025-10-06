@@ -125,9 +125,9 @@ export class NetworkErrorHandler {
   }
 
   private async handleHTTP2Error(networkError: NetworkError): Promise<boolean> {
-    console.log('[NetworkErrorHandler] Applying HTTP/2 error recovery...');
+    console.log('[NetworkErrorHandler] Applying aggressive HTTP/2 error recovery...');
     
-    // Clear any cached connections
+    // Clear any cached connections aggressively
     if (typeof window !== 'undefined' && 'caches' in window) {
       try {
         const cacheNames = await caches.keys();
@@ -138,12 +138,28 @@ export class NetworkErrorHandler {
       }
     }
     
-    // Force a page reload after a delay to allow for connection reset
+    // Clear service worker caches
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          if (registration.active) {
+            registration.active.postMessage({ type: 'CLEAR_CACHE' });
+          }
+        }
+      } catch (error) {
+        console.warn('[NetworkErrorHandler] Failed to clear service worker caches:', error);
+      }
+    }
+    
+    // Force a hard reload with cache bypass immediately
     setTimeout(() => {
       if (typeof window !== 'undefined') {
-        window.location.reload();
+        const url = new URL(window.location.href);
+        url.searchParams.set('_reload', Date.now().toString());
+        window.location.href = url.toString();
       }
-    }, 2000);
+    }, 500); // Faster reload
     
     return true;
   }
@@ -158,33 +174,41 @@ export class NetworkErrorHandler {
   }
 
   private async handleChunkLoadError(networkError: NetworkError): Promise<boolean> {
-    console.log('[NetworkErrorHandler] Applying chunk load error recovery...');
+    console.log('[NetworkErrorHandler] Applying aggressive chunk load error recovery...');
     
-    // Clear specific chunk cache
+    // Clear ALL caches, not just chunks
     if (typeof window !== 'undefined' && 'caches' in window) {
       try {
         const cacheNames = await caches.keys();
-        for (const cacheName of cacheNames) {
-          const cache = await caches.open(cacheName);
-          const keys = await cache.keys();
-          for (const request of keys) {
-            if (request.url.includes('_next/static/chunks/')) {
-              await cache.delete(request);
-              console.log(`[NetworkErrorHandler] Cleared chunk cache: ${request.url}`);
-            }
-          }
-        }
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+        console.log('[NetworkErrorHandler] Cleared all browser caches for chunk error');
       } catch (error) {
-        console.warn('[NetworkErrorHandler] Failed to clear chunk caches:', error);
+        console.warn('[NetworkErrorHandler] Failed to clear caches:', error);
       }
     }
     
-    // Force a hard reload to get fresh chunks
+    // Clear service worker caches
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          if (registration.active) {
+            registration.active.postMessage({ type: 'CLEAR_CACHE' });
+          }
+        }
+      } catch (error) {
+        console.warn('[NetworkErrorHandler] Failed to clear service worker caches:', error);
+      }
+    }
+    
+    // Force a hard reload with cache bypass immediately
     setTimeout(() => {
       if (typeof window !== 'undefined') {
-        window.location.reload();
+        const url = new URL(window.location.href);
+        url.searchParams.set('_reload', Date.now().toString());
+        window.location.href = url.toString();
       }
-    }, 1000);
+    }, 300); // Even faster reload for chunk errors
     
     return true;
   }

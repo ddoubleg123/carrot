@@ -7,7 +7,7 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
-  // Force HTTP/1.1 for all requests
+  // Force HTTP/1.1 for all requests with aggressive settings
   experimental: {
     httpAgentOptions: {
       keepAlive: true,
@@ -17,34 +17,65 @@ const nextConfig = {
       timeout: 60000,
       freeSocketTimeout: 30000,
     },
+    // Disable HTTP/2 features
+    serverComponentsExternalPackages: [],
+    // Force legacy HTTP parser
+    serverActions: {
+      allowedOrigins: ['localhost:3000', 'carrot-app.onrender.com'],
+    },
   },
+  // Disable HTTP/2 and force HTTP/1.1
+  poweredByHeader: false,
+  compress: false, // Disable compression to avoid HTTP/2 issues
   // Optimize chunk splitting to prevent HTTP/2 issues while maintaining performance
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // Configure chunk splitting to reduce HTTP/2 issues
+      // More aggressive chunk splitting to prevent HTTP/2 issues
       config.optimization.splitChunks = {
         chunks: 'all',
-        minSize: 50000,
-        maxSize: 150000,
+        minSize: 30000,
+        maxSize: 100000, // Smaller chunks to reduce HTTP/2 issues
+        maxAsyncRequests: 10,
+        maxInitialRequests: 10,
         cacheGroups: {
           default: {
             minChunks: 2,
             priority: -20,
             reuseExistingChunk: true,
+            maxSize: 100000,
           },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             priority: -10,
             chunks: 'all',
-            maxSize: 150000,
+            maxSize: 100000,
+            enforce: true,
           },
           common: {
             name: 'common',
             minChunks: 2,
             priority: -5,
             reuseExistingChunk: true,
-            maxSize: 150000,
+            maxSize: 100000,
+          },
+          // Separate React chunks to prevent large bundles
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+            name: 'react',
+            priority: 20,
+            chunks: 'all',
+            maxSize: 80000,
+            enforce: true,
+          },
+          // Separate Next.js chunks
+          nextjs: {
+            test: /[\\/]node_modules[\\/](next)[\\/]/,
+            name: 'nextjs',
+            priority: 15,
+            chunks: 'all',
+            maxSize: 80000,
+            enforce: true,
           },
         },
       };
@@ -53,6 +84,10 @@ const nextConfig = {
       config.optimization.runtimeChunk = {
         name: 'runtime',
       };
+      
+      // Add more aggressive optimization
+      config.optimization.usedExports = true;
+      config.optimization.sideEffects = false;
     }
     return config;
   },

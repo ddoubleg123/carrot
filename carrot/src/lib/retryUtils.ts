@@ -2,6 +2,8 @@
  * Retry utility with exponential backoff for handling network errors
  */
 
+import { connectionPool } from './connectionPool';
+
 export interface RetryOptions {
   maxRetries?: number;
   baseDelay?: number;
@@ -11,22 +13,55 @@ export interface RetryOptions {
 }
 
 export const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
-  maxRetries: 3,
-  baseDelay: 1000, // 1 second
-  maxDelay: 10000, // 10 seconds
-  backoffMultiplier: 2,
+  maxRetries: 5, // Increased retries
+  baseDelay: 500, // Faster initial retry
+  maxDelay: 15000, // Increased max delay
+  backoffMultiplier: 1.8, // Gentler backoff
   retryCondition: (error: Error) => {
     const message = error.message.toLowerCase();
+    const name = error.name.toLowerCase();
+    
+    // More comprehensive error detection
     return (
+      // HTTP/2 and protocol errors
       message.includes('err_http2_protocol_error') ||
       message.includes('err_quic_protocol_error') ||
+      message.includes('protocol error') ||
+      message.includes('http2') ||
+      message.includes('quic') ||
+      
+      // Connection errors
       message.includes('econnreset') ||
       message.includes('enotfound') ||
       message.includes('etimedout') ||
+      message.includes('connection closed') ||
+      message.includes('connection reset') ||
+      message.includes('connection refused') ||
+      message.includes('connection aborted') ||
+      
+      // Network errors
       message.includes('network error') ||
       message.includes('fetch failed') ||
-      message.includes('connection closed') ||
-      message.includes('protocol error')
+      message.includes('failed to fetch') ||
+      message.includes('network request failed') ||
+      
+      // Timeout errors
+      message.includes('timeout') ||
+      message.includes('aborted') ||
+      
+      // Generic errors that might be network-related
+      (name === 'typeerror' && message.includes('fetch')) ||
+      (name === 'aborterror') ||
+      (name === 'networkerror') ||
+      
+      // Chunk loading errors
+      message.includes('loading chunk') ||
+      message.includes('chunkloaderror') ||
+      
+      // DNS and resolution errors
+      message.includes('dns') ||
+      message.includes('resolve') ||
+      message.includes('lookup')
     );
   }
 };
@@ -83,7 +118,7 @@ export async function withRetry<T>(
 }
 
 /**
- * Retry fetch requests with exponential backoff
+ * Retry fetch requests with exponential backoff and aggressive HTTP/1.1 forcing
  */
 export async function fetchWithRetry(
   url: string,
@@ -91,32 +126,55 @@ export async function fetchWithRetry(
   retryOptions: RetryOptions = {}
 ): Promise<Response> {
   return withRetry(async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    // Use connection pool for better HTTP/1.1 management
+    const controller = connectionPool.createConnection(url);
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased timeout to 45 seconds
 
     try {
       // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
       const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
       
+      // Force HTTP/1.1 with aggressive headers
+      const headers: Record<string, string> = {
+        ...options.headers,
+        'Connection': 'keep-alive',
+        'Keep-Alive': 'timeout=5, max=1000',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        // Force HTTP/1.1
+        'HTTP-Version': '1.1',
+        'X-Forwarded-Proto': 'http',
+        'X-Forwarded-For': '127.0.0.1',
+        // Additional HTTP/1.1 forcing headers
+        'Accept-Encoding': 'gzip, deflate',
+        'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1)',
+      };
+
+      // Remove problematic headers for Firebase Storage
+      if (isFirebaseStorage) {
+        delete headers['Cache-Control'];
+        delete headers['Pragma'];
+        delete headers['Expires'];
+      }
+
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        // Optimize headers for better HTTP/2 compatibility
-        headers: {
-          ...options.headers,
-          'Connection': 'keep-alive',
-          // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
-          ...(isFirebaseStorage ? {} : {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          })
-        }
+        headers,
+        // Force HTTP/1.1 behavior
+        credentials: 'same-origin',
+        mode: 'cors',
+        redirect: 'follow',
       });
 
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
+      // Abort the connection on error
+      controller.abort();
       throw error;
     }
   }, retryOptions);

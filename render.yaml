@@ -1,36 +1,62 @@
 services:
   - type: web
-    name: carrot-worker
-    env: docker
-    dockerContext: .
-    dockerfilePath: ./Dockerfile
+    name: carrot-app
+    env: node
     plan: free
-    # Add health check and deployment settings
+    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings" npm run build
+    startCommand: NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings" npm start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
+      - key: NEXTAUTH_URL
+        value: https://carrot-app.onrender.com
+      - key: NEXTAUTH_SECRET
+        value: your-secret-key-here
+      - key: DATABASE_URL
+        value: your-database-url-here
+      - key: FIREBASE_PROJECT_ID
+        value: involuted-river-466315-p0
+      - key: FIREBASE_CLIENT_EMAIL
+        value: your-firebase-client-email
+      - key: FIREBASE_PRIVATE_KEY
+        value: your-firebase-private-key
+      - key: FIREBASE_STORAGE_BUCKET
+        value: involuted-river-466315-p0.firebasestorage.app
       - key: REDIS_URL
         value: redis://default:HktqFipUyOSWwBpjDzKRGmaOxUEvJYFx@redis.railway.internal:6379
       - key: INGEST_WORKER_SECRET
         value: dev_ingest_secret
-      - key: PORT
-        value: 10000
-      - key: YT_DLP_PATH
-        value: yt-dlp
-      - key: YT_DLP_COOKIES_FROM_BROWSER
-        value: chrome
-      - key: YT_DLP_COOKIES_FROM_BROWSER_PROFILE
-        value: Default
       - key: INGEST_CALLBACK_URL
         value: https://carrot-app.onrender.com/api/ingest/callback
       - key: INGEST_CALLBACK_SECRET
         value: dev_ingest_secret
       - key: WORKER_PUBLIC_URL
         value: https://carrot-worker.onrender.com
-      # Add HTTP/2 optimization settings
+      # Aggressive HTTP/1.1 forcing to prevent HTTP/2 protocol errors
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=2048 --http-parser=legacy"
+        value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings"
       - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NODE_NO_WARNINGS
+        value: "1"
+      # Force HTTP/1.1 to prevent HTTP/2 protocol errors
+      - key: HTTP_VERSION
+        value: "1.1"
+      - key: DISABLE_HTTP2
+        value: "true"
+      - key: FORCE_HTTP1
+        value: "true"
+      - key: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - key: NODE_EXTRA_CA_CERTS
+        value: ""
+      - key: NODE_TLS_LEGACY_SERVER
+        value: "true"
+      - key: NODE_HTTP_PARSER
+        value: "legacy"
+      - key: NODE_NO_WARNINGS
         value: "1"
