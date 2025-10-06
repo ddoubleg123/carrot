@@ -85,6 +85,20 @@ const NavIcons = {
       </svg>
     </div>
   ),
+  CodeAnalysis: ({ isActive }: { isActive: boolean }) => (
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
+      isActive
+        ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
+        : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
+    }`}>
+      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" strokeWidth="2"/>
+        <path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="2"/>
+        <path d="M9 1v6m6-6v6" stroke="currentColor" strokeWidth="2"/>
+        <path d="M9 17v6m6-6v6" stroke="currentColor" strokeWidth="2"/>
+      </svg>
+    </div>
+  ),
   Settings: ({ isActive }: { isActive: boolean }) => (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
       isActive
@@ -129,6 +143,11 @@ const MENU_ITEMS = [
     href: '/dashboard/funds',
     icon: NavIcons.Funds,
     label: 'Funds',
+  },
+  {
+    href: '/code-analysis',
+    icon: NavIcons.CodeAnalysis,
+    label: 'Code Analysis',
   },
   {
     href: '/settings',
@@ -193,7 +212,8 @@ export default function MinimalNav() {
                             item.href === MENU_ITEMS[2].href ? '224px' :
                             item.href === MENU_ITEMS[3].href ? '276px' :
                             item.href === MENU_ITEMS[4].href ? '328px' :
-                            item.href === MENU_ITEMS[5].href ? '380px' : '432px'}`
+                            item.href === MENU_ITEMS[5].href ? '380px' :
+                            item.href === MENU_ITEMS[6].href ? '432px' : '484px'}`
                     }}
                   >
                     {item.label}
