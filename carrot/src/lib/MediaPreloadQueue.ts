@@ -465,37 +465,45 @@ class MediaPreloadQueue {
       let actualSize = 0;
 
       switch (type) {
-        case TaskType.POSTER:
-        case TaskType.IMAGE: {
-          const imageResponse = await fetchWithRetry(url, { 
-            signal: abortController.signal,
-            headers: { 
-              'Accept': 'image/*',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive'
-            }
-          }, {
-            maxRetries: 3,
-            baseDelay: 1000,
-            maxDelay: 5000,
-            retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
-          });
-          if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
-          const blob = await imageResponse.blob();
-          data = blob;
-          actualSize = blob.size;
-          break;
+    case TaskType.POSTER:
+    case TaskType.IMAGE: {
+      // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
+      const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
+      
+      const imageResponse = await fetchWithRetry(url, { 
+        signal: abortController.signal,
+        headers: { 
+          'Accept': 'image/*',
+          'Connection': 'keep-alive',
+          // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
+          ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
         }
+      }, {
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 5000,
+        retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+      });
+      if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
+      const blob = await imageResponse.blob();
+      data = blob;
+      actualSize = blob.size;
+      break;
+    }
 
         case TaskType.VIDEO_PREROLL_6S: {
+          // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
+          const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
+          
           // First, get the video metadata to calculate 6 seconds worth of data
           const headResponse = await fetchWithRetry(url, {
             method: 'HEAD',
             signal: abortController.signal,
             headers: { 
               'Accept': 'video/*',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive'
+              'Connection': 'keep-alive',
+              // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
+              ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
             }
           }, {
             maxRetries: 3,
@@ -518,8 +526,9 @@ class MediaPreloadQueue {
             headers: { 
               'Range': `bytes=0-${prerollSize - 1}`,
               'Accept': 'video/*',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive'
+              'Connection': 'keep-alive',
+              // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
+              ...(isFirebaseStorage ? {} : { 'Cache-Control': 'no-cache' })
             }
           }, {
             maxRetries: 3,

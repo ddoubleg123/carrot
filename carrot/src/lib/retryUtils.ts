@@ -95,6 +95,9 @@ export async function fetchWithRetry(
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
+      // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
+      const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
+      
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -102,8 +105,11 @@ export async function fetchWithRetry(
         headers: {
           ...options.headers,
           'Connection': 'keep-alive',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          // Only add cache-control headers for non-Firebase Storage URLs to avoid CORS issues
+          ...(isFirebaseStorage ? {} : {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          })
         }
       });
 

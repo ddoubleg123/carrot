@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
 import type { Metadata } from 'next';
+import { ChunkErrorHandler } from '@/lib/chunkErrorHandler';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,6 +18,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Initialize chunk error handler
+  if (typeof window !== 'undefined') {
+    ChunkErrorHandler.getInstance();
+  }
+
   return (
     <html lang="en">
       <head>
