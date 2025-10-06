@@ -6,19 +6,19 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // Enable static export to eliminate chunk loading issues
-  output: 'export',
   // Disable static optimization for better compatibility
   trailingSlash: false,
   // Disable HTTP/2 completely
   experimental: {
     http2: false,
-    // Force HTTP/1.1 for Render deployment
-    serverComponentsExternalPackages: [],
   },
-  // Remove webpack optimizations since we're doing static export
+  // Minimal webpack configuration to avoid chunk loading issues
   webpack: (config, { isServer, dev }) => {
-    // Static export doesn't need complex webpack optimization
+    if (!isServer && !dev) {
+      // Disable chunk splitting entirely to prevent chunk loading errors
+      config.optimization.splitChunks = false;
+      config.optimization.runtimeChunk = false;
+    }
     return config;
   },
   images: {
@@ -58,21 +58,20 @@ const nextConfig = {
       },
     ],
   },
-  // Remove rewrites since static export doesn't support them
-  // async rewrites() {
-  //   return [
-  //     // Proxy all media through Firebase Function
-  //     {
-  //       source: '/media/:path*',
-  //       destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/media/:path*',
-  //     },
-  //     // Proxy worker API through Firebase Function
-  //     {
-  //       source: '/api/worker/:path*',
-  //       destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/:path*',
-  //     },
-  //   ];
-  // },
+  async rewrites() {
+    return [
+      // Proxy all media through Firebase Function
+      {
+        source: '/media/:path*',
+        destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/media/:path*',
+      },
+      // Proxy worker API through Firebase Function
+      {
+        source: '/api/worker/:path*',
+        destination: 'https://us-central1-involuted-river-466315.cloudfunctions.net/fullWorker/:path*',
+      },
+    ];
+  },
   async headers() {
     return [
       {
