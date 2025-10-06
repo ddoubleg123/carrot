@@ -152,14 +152,13 @@ export class NetworkErrorHandler {
       }
     }
     
-    // Force a hard reload with cache bypass immediately
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href);
-        url.searchParams.set('_reload', Date.now().toString());
-        window.location.href = url.toString();
-      }
-    }, 500); // Faster reload
+    // Force a hard reload with cache bypass immediately - no delay for HTTP/2 errors
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('_http2_reload', Date.now().toString());
+      url.searchParams.set('_force_http1', 'true');
+      window.location.href = url.toString();
+    }
     
     return true;
   }
@@ -201,14 +200,13 @@ export class NetworkErrorHandler {
       }
     }
     
-    // Force a hard reload with cache bypass immediately
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href);
-        url.searchParams.set('_reload', Date.now().toString());
-        window.location.href = url.toString();
-      }
-    }, 300); // Even faster reload for chunk errors
+    // Force a hard reload with cache bypass immediately - no delay for chunk errors
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('_chunk_reload', Date.now().toString());
+      url.searchParams.set('_cache_bust', Math.random().toString(36).substring(2));
+      window.location.href = url.toString();
+    }
     
     return true;
   }

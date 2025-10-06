@@ -131,7 +131,7 @@ export async function fetchWithRetry(
     const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased timeout to 45 seconds
 
     try {
-      // Check if this is a Firebase Storage URL - don't send cache-control headers to avoid CORS issues
+      // Check if this is a Firebase Storage URL - don't send problematic headers to avoid CORS issues
       const isFirebaseStorage = url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
       
       // Force HTTP/1.1 with aggressive headers
@@ -153,11 +153,25 @@ export async function fetchWithRetry(
         ...(options.headers as Record<string, string>),
       };
 
-      // Remove problematic headers for Firebase Storage
+      // Remove ALL problematic headers for Firebase Storage to prevent CORS issues
       if (isFirebaseStorage) {
         delete headers['Cache-Control'];
         delete headers['Pragma'];
         delete headers['Expires'];
+        delete headers['X-Forwarded-Proto'];
+        delete headers['X-Forwarded-For'];
+        delete headers['HTTP-Version'];
+        delete headers['Upgrade-Insecure-Requests'];
+        delete headers['Keep-Alive'];
+        // Keep only essential headers for Firebase
+        const firebaseHeaders: Record<string, string> = {
+          'Connection': 'keep-alive',
+          'Accept-Encoding': 'gzip, deflate',
+          'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1)',
+          // Merge with existing headers
+          ...(options.headers as Record<string, string>),
+        };
+        Object.assign(headers, firebaseHeaders);
       }
 
       const response = await fetch(url, {

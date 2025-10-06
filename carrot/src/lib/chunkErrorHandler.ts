@@ -23,33 +23,27 @@ export class ChunkErrorHandler {
     console.warn(`[ChunkErrorHandler] Chunk loading failed:`, error.message, chunkId ? `(chunk: ${chunkId})` : '');
     
     try {
-      // Aggressive cache clearing
+      // Immediate aggressive cache clearing
       await this.clearAllCaches();
       
-      if (this.retryCount >= this.maxRetries) {
-        console.error(`[ChunkErrorHandler] Max retries reached. Forcing hard reload...`);
-        this.retryCount = 0;
-        this.isHandling = false;
-        // Force a hard reload with cache bypass
-        window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + '_t=' + Date.now();
-        return;
-      }
-
-      this.retryCount++;
-      const delay = this.retryDelay * Math.pow(1.5, this.retryCount - 1); // Gentler backoff
+      // For chunk errors, be more aggressive - force immediate reload
+      console.error(`[ChunkErrorHandler] Chunk error detected. Forcing immediate hard reload...`);
+      this.retryCount = 0;
+      this.isHandling = false;
       
-      console.log(`[ChunkErrorHandler] Retrying in ${delay}ms (attempt ${this.retryCount}/${this.maxRetries})`);
+      // Force a hard reload with cache bypass immediately
+      const url = new URL(window.location.href);
+      url.searchParams.set('_chunk_reload', Date.now().toString());
+      url.searchParams.set('_cache_bust', Math.random().toString(36).substring(2));
+      window.location.href = url.toString();
       
-      setTimeout(() => {
-        this.isHandling = false;
-        // Try to reload the page
-        window.location.reload();
-      }, delay);
     } catch (clearError) {
       console.error(`[ChunkErrorHandler] Error clearing caches:`, clearError);
       this.isHandling = false;
       // Force reload even if cache clearing fails
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set('_emergency_reload', Date.now().toString());
+      window.location.href = url.toString();
     }
   }
 

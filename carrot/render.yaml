@@ -3,8 +3,9 @@ services:
     name: carrot-app
     env: node
     plan: free
-    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch" npm run build
-    startCommand: NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch" npm start
+    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings" npm run build
+    startCommand: NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings" npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -75,7 +76,7 @@ services:
       - key: NODE_NO_WARNINGS
         value: "1"
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch"
+        value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings"
 
 databases:
   - name: carrot-db
