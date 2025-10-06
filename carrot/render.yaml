@@ -3,7 +3,7 @@ services:
     name: carrot-app
     env: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && NODE_OPTIONS="--max-old-space-size=4096 --http-parser=legacy" npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -72,6 +72,12 @@ services:
         value: "0"
       - key: NODE_EXTRA_CA_CERTS
         value: ""
+      - key: NODE_TLS_LEGACY_SERVER
+        value: "true"
+      - key: NODE_HTTP_PARSER
+        value: "legacy"
+      - key: NODE_NO_WARNINGS
+        value: "1"
 
 databases:
   - name: carrot-db

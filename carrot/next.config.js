@@ -22,54 +22,30 @@ const nextConfig = {
   // Add webpack optimizations for chunk loading
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // Optimize chunk loading for production
+      // Disable chunk splitting to prevent chunk loading errors
       config.optimization.splitChunks = {
         chunks: 'all',
-        minSize: 20000,
-        maxSize: 244000,
-        maxAsyncRequests: 30,
-        maxInitialRequests: 30,
+        minSize: 0,
+        maxSize: 0,
+        maxAsyncRequests: 1,
+        maxInitialRequests: 1,
         cacheGroups: {
-          default: {
-            minChunks: 2,
-            priority: -20,
-            reuseExistingChunk: true,
-          },
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            priority: -10,
-            chunks: 'all',
-            enforce: true,
-            maxSize: 244000,
-          },
-          common: {
-            name: 'common',
-            minChunks: 2,
-            priority: -5,
-            reuseExistingChunk: true,
-            enforce: true,
-            maxSize: 244000,
-          },
-          // Separate React chunks
-          react: {
-            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-            name: 'react',
-            priority: 20,
-            chunks: 'all',
-            enforce: true,
-          },
+          default: false,
+          vendors: false,
+          common: false,
+          react: false,
         },
       };
       
-      // Add chunk loading optimization
-      config.optimization.runtimeChunk = {
-        name: 'runtime',
-      };
+      // Disable runtime chunk to prevent additional chunk loading
+      config.optimization.runtimeChunk = false;
       
-      // Add chunk loading error handling
-      config.optimization.chunkIds = 'deterministic';
-      config.optimization.moduleIds = 'deterministic';
+      // Use simpler chunk IDs
+      config.optimization.chunkIds = 'named';
+      config.optimization.moduleIds = 'named';
+      
+      // Disable code splitting for better reliability
+      config.optimization.concatenateModules = true;
     }
     return config;
   },

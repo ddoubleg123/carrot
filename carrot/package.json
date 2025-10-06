@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "cross-env PORT=3005 next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-10000}",
+    "start": "node server.js",
     "postinstall": "prisma generate",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
