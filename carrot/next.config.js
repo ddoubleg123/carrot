@@ -7,15 +7,6 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
-  // Disable HTTP/2 to prevent protocol errors
-  httpAgentOptions: {
-    keepAlive: true,
-    keepAliveMsecs: 1000,
-    maxSockets: 50,
-    maxFreeSockets: 10,
-    timeout: 60000,
-    freeSocketTimeout: 30000,
-  },
   // Force HTTP/1.1 for all requests
   experimental: {
     httpAgentOptions: {

@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 export async function GET(request: NextRequest) {
   try {
     const startTime = Date.now();
-    const headersList = headers();
+    const headersList = await headers();
     
     // Basic health information
     const healthInfo = {
