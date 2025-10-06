@@ -50,34 +50,15 @@ services:
         value: dev_ingest_secret
       - key: WORKER_PUBLIC_URL
         value: https://carrot-worker.onrender.com
-      # HTTP/2 disabled via Alt-Svc header in next.config.js
       # Optimize for production
       - key: NEXT_TELEMETRY_DISABLED
         value: 1
       - key: ANALYZE
         value: false
-      # Additional optimizations for chunk loading
       - key: NEXT_BUILD_CACHE
         value: true
       - key: NODE_OPTIONS
         value: "--max-old-space-size=4096"
-      # Force HTTP/1.1 and disable HTTP/2
-      - key: HTTP_VERSION
-        value: "1.1"
-      - key: DISABLE_HTTP2
-        value: "true"
-      - key: FORCE_HTTP1
-        value: "true"
-      - key: NODE_TLS_REJECT_UNAUTHORIZED
-        value: "0"
-      - key: NODE_EXTRA_CA_CERTS
-        value: ""
-      - key: NODE_TLS_LEGACY_SERVER
-        value: "true"
-      - key: NODE_HTTP_PARSER
-        value: "legacy"
-      - key: NODE_NO_WARNINGS
-        value: "1"
 
 databases:
   - name: carrot-db

@@ -6,18 +6,29 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
-  // Disable static optimization for better compatibility
   trailingSlash: false,
-  // Disable HTTP/2 completely
-  experimental: {
-    http2: false,
-  },
-  // Minimal webpack configuration to avoid chunk loading issues
+  // Optimize webpack for better chunk loading
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // Disable chunk splitting entirely to prevent chunk loading errors
-      config.optimization.splitChunks = false;
-      config.optimization.runtimeChunk = false;
+      // Configure chunk splitting to be more conservative
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          default: {
+            minChunks: 1,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: -10,
+            chunks: 'all',
+          },
+        },
+      };
+      // Use single runtime chunk
+      config.optimization.runtimeChunk = 'single';
     }
     return config;
   },
@@ -91,15 +102,10 @@ const nextConfig = {
               "frame-ancestors 'self'"
             ].join('; ')
           },
-              // Add headers to help with static file serving
-              {
-                key: 'Connection',
-                value: 'keep-alive'
-              },
-              {
-                key: 'Cache-Control',
-                value: 'public, max-age=31536000, immutable'
-              }
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          }
         ]
       }
     ];
