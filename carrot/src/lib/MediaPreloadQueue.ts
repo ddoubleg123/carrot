@@ -91,21 +91,21 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 1,       // ULTRA conservative: only 1 poster at a time
-    [TaskType.VIDEO_PREROLL_6S]: 1, // Only 1 concurrent video request to prevent HTTP 499
-    [TaskType.VIDEO_FULL]: 1,   // Keep at 1 for full video downloads
-    [TaskType.IMAGE]: 1,        // ULTRA conservative: only 1 image at a time
-    [TaskType.AUDIO_META]: 1,   // Keep at 1
-    [TaskType.TEXT_FULL]: 1,    // ULTRA conservative: only 1 text at a time
-    [TaskType.AUDIO_FULL]: 1,   // Keep at 1
+    [TaskType.POSTER]: 1,       // Only 1 poster at a time
+    [TaskType.VIDEO_PREROLL_6S]: 1, // Only 1 video at a time
+    [TaskType.VIDEO_FULL]: 1,   // Only 1 full video download at a time
+    [TaskType.IMAGE]: 1,        // Only 1 image at a time
+    [TaskType.AUDIO_META]: 1,   // Only 1 audio at a time
+    [TaskType.TEXT_FULL]: 1,    // Only 1 text at a time
+    [TaskType.AUDIO_FULL]: 1,   // Only 1 audio download at a time
   };
 
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 1,        // ULTRA conservative: only 1 poster at a time
-    maxConcurrentVideos: 1,         // Only 1 concurrent video to prevent HTTP 499 cancellations
-    maxSequentialGap: 1,            // ULTRA STRICT: only preload the NEXT post to prevent browser overload
-    posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
-    videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
+    maxConcurrentPosters: 1,        // Only 1 poster at a time
+    maxConcurrentVideos: 1,         // Only 1 video to prevent HTTP 499 cancellations
+    maxSequentialGap: 0,            // SIMPLIFIED: only load current post, no ahead loading
+    posterBlocksProgression: true,  // Block video until poster loads (strict sequential)
+    videoBlocksProgression: true    // Strict sequential: one thing at a time
   };
   
   private readonly ESTIMATED_SIZES = {
@@ -466,17 +466,38 @@ class MediaPreloadQueue {
       return false;
     }
 
-    // STRICT sequential gating - use exact maxSequentialGap, no doubling
-    const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
-    const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap; // Use exact gap, don't double it!
-    if (task.feedIndex > currentIndex + maxGap) {
-      console.log('[MediaPreloadQueue] Task blocked by sequential gap', { 
-        taskId: task.id, 
-        feedIndex: task.feedIndex, 
-        currentIndex, 
-        maxGap 
-      });
-      return false;
+    // SIMPLIFIED: Strict sequential loading - only load posts in exact order
+    // For videos/posters, use the last completed video index as the baseline
+    // This ensures we load post 0, then post 1, then post 2, etc. in strict order
+    if (task.type === TaskType.POSTER || task.type === TaskType.VIDEO_PREROLL_6S || task.type === TaskType.VIDEO_FULL) {
+      // Only allow loading if this is the NEXT video in sequence
+      const expectedNextIndex = Math.max(0, this.lastCompletedVideoIndex + 1);
+      
+      // For poster tasks, check if the video for this post is already loaded
+      // If so, allow the poster (for display purposes)
+      if (task.type === TaskType.POSTER) {
+        const videoTaskId = `${TaskType.VIDEO_PREROLL_6S}:${task.postId}`;
+        const videoCompleted = this.completedTasks.has(videoTaskId);
+        if (videoCompleted) {
+          // Video is done, allow poster to load for display
+          return true;
+        }
+        // Otherwise, only allow if this is the next expected index
+        if (task.feedIndex > expectedNextIndex) {
+          return false;
+        }
+      } else {
+        // For video tasks, strictly enforce sequential order
+        if (task.feedIndex > expectedNextIndex) {
+          console.log('[MediaPreloadQueue] Video task blocked - not next in sequence', { 
+            taskId: task.id, 
+            feedIndex: task.feedIndex, 
+            expectedNextIndex,
+            lastCompletedVideoIndex: this.lastCompletedVideoIndex
+          });
+          return false;
+        }
+      }
     }
 
     const activeCount = this.activeTasks.get(task.type)?.size || 0;
@@ -519,13 +540,9 @@ class MediaPreloadQueue {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
     }
 
-    // Add a VERY long delay for video requests to prevent overwhelming the browser
-    if (type === TaskType.VIDEO_PREROLL_6S || type === TaskType.VIDEO_FULL) {
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 1000)); // 1-2 second random delay
-    }
-    
-    // Add delay for ALL requests to prevent connection overload
-    await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 300)); // 300-500ms delay for all requests
+    // SIMPLIFIED: With strict sequential loading, we don't need aggressive delays
+    // Just a small delay to prevent rapid-fire requests
+    await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between sequential requests
 
     try {
       let data: Blob | ArrayBuffer | string;
