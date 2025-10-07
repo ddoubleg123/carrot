@@ -4,6 +4,8 @@
  * to prevent HTTP/2 protocol errors on Render.com
  */
 
+import { connectionPool } from './connectionPool';
+
 interface HTTP1FetchOptions extends RequestInit {
   forceHTTP1?: boolean;
   maxRetries?: number;
