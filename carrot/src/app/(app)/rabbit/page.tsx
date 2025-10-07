@@ -575,6 +575,12 @@ export default function RabbitPage() {
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   // New: simple tabs under chat box
   const [selectedTab, setSelectedTab] = useState<'agents' | 'tab2' | 'tab3'>('agents');
+  
+  // Rate limiting for AI chat requests
+  const [lastRequestTime, setLastRequestTime] = useState(0);
+  const [requestCount, setRequestCount] = useState(0);
+  const RATE_LIMIT_WINDOW = 60000; // 1 minute
+  const MAX_REQUESTS_PER_WINDOW = 5; // Max 5 requests per minute
 
   // Enhanced auto-join agents using smart matching
   const autoJoinAgents = (query: string) => {
@@ -721,6 +727,22 @@ export default function RabbitPage() {
 
   // Helper function to get response from a single agent
   async function getAgentResponse(respondingAgent: any, userMsg: string, thread: Thread) {
+    // Rate limiting check
+    const now = Date.now();
+    if (now - lastRequestTime > RATE_LIMIT_WINDOW) {
+      // Reset counter if window has passed
+      setRequestCount(0);
+      setLastRequestTime(now);
+    }
+    
+    if (requestCount >= MAX_REQUESTS_PER_WINDOW) {
+      console.warn('[Rabbit] Rate limit exceeded, skipping request');
+      return;
+    }
+    
+    setRequestCount(prev => prev + 1);
+    setLastRequestTime(now);
+    
     try {
       // Get information about other active agents for context
       const otherActiveAgents = activeAgents

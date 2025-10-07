@@ -558,20 +558,20 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     return () => { clearTimeout(t); window.removeEventListener('resize', attach); window.removeEventListener('scroll', onScroll); detach(); demoteTimers.forEach(id => clearTimeout(id)); demoteTimers.clear(); };
   }, []);
 
-  // Poll background trim jobs and update posts when they complete (with simple backoff)
+  // Poll background trim jobs and update posts when they complete (with conservative backoff)
   useEffect(() => {
     let cancelled = false;
-    let delayMs = 3000;
+    let delayMs = 30000; // Start with 30 seconds instead of 3
 
     const tick = async () => {
       if (cancelled) return;
       const current = commitmentsRef.current as any[];
       const jobs = current.filter((c) => c && (c as any).trimJobId);
       if (jobs.length === 0) {
-        // Back off when there are no jobs (max 15s)
-        delayMs = Math.min(delayMs + 2000, 15000);
+        // Back off when there are no jobs (max 2 minutes)
+        delayMs = Math.min(delayMs + 10000, 120000);
       } else {
-        delayMs = 3000; // active jobs: poll faster
+        delayMs = 30000; // active jobs: poll every 30 seconds (was 3s!)
         for (const c of jobs) {
           const jobId = (c as any).trimJobId as string;
           if (!jobId) continue;
