@@ -101,11 +101,11 @@ class MediaPreloadQueue {
   };
 
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 1,        // Only 1 poster at a time
-    maxConcurrentVideos: 1,         // Only 1 video to prevent HTTP 499 cancellations
-    maxSequentialGap: 0,            // SIMPLIFIED: only load current post, no ahead loading
-    posterBlocksProgression: true,  // Block video until poster loads (strict sequential)
-    videoBlocksProgression: true    // Strict sequential: one thing at a time
+    maxConcurrentPosters: 2,        // Allow 2 posters to load concurrently
+    maxConcurrentVideos: 2,         // Allow 2 videos to load concurrently
+    maxSequentialGap: 5,            // FIXED: Preload up to 5 posts ahead for buffer
+    posterBlocksProgression: false,  // Don't block - allow videos to load even if poster fails
+    videoBlocksProgression: false    // Don't block - allow next posts even if video fails
   };
   
   private readonly ESTIMATED_SIZES = {
@@ -466,37 +466,22 @@ class MediaPreloadQueue {
       return false;
     }
 
-    // SIMPLIFIED: Strict sequential loading - only load posts in exact order
-    // For videos/posters, use the last completed video index as the baseline
-    // This ensures we load post 0, then post 1, then post 2, etc. in strict order
+    // FIXED: Allow posts within maxSequentialGap ahead of last completed index
+    // This creates a buffer and prevents single point of failure
     if (task.type === TaskType.POSTER || task.type === TaskType.VIDEO_PREROLL_6S || task.type === TaskType.VIDEO_FULL) {
-      // Only allow loading if this is the NEXT video in sequence
-      const expectedNextIndex = Math.max(0, this.lastCompletedVideoIndex + 1);
+      const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
+      const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap;
       
-      // For poster tasks, check if the video for this post is already loaded
-      // If so, allow the poster (for display purposes)
-      if (task.type === TaskType.POSTER) {
-        const videoTaskId = `${TaskType.VIDEO_PREROLL_6S}:${task.postId}`;
-        const videoCompleted = this.completedTasks.has(videoTaskId);
-        if (videoCompleted) {
-          // Video is done, allow poster to load for display
-          return true;
-        }
-        // Otherwise, only allow if this is the next expected index
-        if (task.feedIndex > expectedNextIndex) {
-          return false;
-        }
-      } else {
-        // For video tasks, strictly enforce sequential order
-        if (task.feedIndex > expectedNextIndex) {
-          console.log('[MediaPreloadQueue] Video task blocked - not next in sequence', { 
-            taskId: task.id, 
-            feedIndex: task.feedIndex, 
-            expectedNextIndex,
-            lastCompletedVideoIndex: this.lastCompletedVideoIndex
-          });
-          return false;
-        }
+      // Allow tasks within the sequential gap window
+      if (task.feedIndex > currentIndex + maxGap) {
+        console.log('[MediaPreloadQueue] Task blocked by sequential gap', { 
+          taskId: task.id, 
+          feedIndex: task.feedIndex, 
+          currentIndex, 
+          maxGap,
+          allowed: currentIndex + maxGap
+        });
+        return false;
       }
     }
 

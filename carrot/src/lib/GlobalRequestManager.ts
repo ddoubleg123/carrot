@@ -32,11 +32,11 @@ class GlobalRequestManager {
   private pendingRequestsByUrl = new Map<string, QueuedRequest[]>(); // Track duplicate requests
   private isProcessing = false;
   
-  // EXTREMELY conservative limits to prevent browser connection overload
-  private readonly MAX_CONCURRENT_REQUESTS = 2; // Only 2 concurrent requests (was 3)
-  private readonly MAX_REQUESTS_PER_SECOND = 2; // Only 2 requests per second (was 5)
+  // Conservative but functional limits to prevent browser connection overload
+  private readonly MAX_CONCURRENT_REQUESTS = 4; // 4 concurrent requests (balanced)
+  private readonly MAX_REQUESTS_PER_SECOND = 6; // 6 requests per second (balanced)
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
-  private readonly MIN_REQUEST_DELAY = 500; // Minimum 500ms between requests (was 100ms)
+  private readonly MIN_REQUEST_DELAY = 200; // Minimum 200ms between requests (reduced from 500ms)
   
   private lastRequestTime = 0;
   private requestCount = 0;
