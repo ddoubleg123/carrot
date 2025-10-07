@@ -29,12 +29,14 @@ class GlobalRequestManager {
 
   private requestQueue: QueuedRequest[] = [];
   private activeRequests = new Set<string>();
+  private pendingRequestsByUrl = new Map<string, QueuedRequest[]>(); // Track duplicate requests
   private isProcessing = false;
   
-  // Conservative limits to prevent browser connection overload
-  private readonly MAX_CONCURRENT_REQUESTS = 3; // Very conservative
-  private readonly MAX_REQUESTS_PER_SECOND = 5; // Rate limiting
+  // EXTREMELY conservative limits to prevent browser connection overload
+  private readonly MAX_CONCURRENT_REQUESTS = 2; // Only 2 concurrent requests (was 3)
+  private readonly MAX_REQUESTS_PER_SECOND = 2; // Only 2 requests per second (was 5)
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
+  private readonly MIN_REQUEST_DELAY = 500; // Minimum 500ms between requests (was 100ms)
   
   private lastRequestTime = 0;
   private requestCount = 0;
@@ -46,10 +48,35 @@ class GlobalRequestManager {
   }
 
   /**
-   * Make a throttled request
+   * Make a throttled request with deduplication
    */
   async request(url: string, options: RequestInit = {}, priority: number = 0): Promise<Response> {
     return new Promise((resolve, reject) => {
+      // Check if there's already a pending request for this exact URL
+      const pendingForUrl = this.pendingRequestsByUrl.get(url);
+      
+      if (pendingForUrl && pendingForUrl.length > 0) {
+        // Deduplicate: attach to existing request
+        console.log('[GlobalRequestManager] Deduplicating request for URL', { 
+          url: url.substring(0, 100) + '...',
+          existingPendingRequests: pendingForUrl.length
+        });
+        
+        const existingRequest = pendingForUrl[0];
+        pendingForUrl.push({
+          id: this.generateRequestId(),
+          url,
+          options,
+          resolve,
+          reject,
+          priority,
+          timestamp: Date.now(),
+          retries: 0,
+          maxRetries: 3
+        });
+        return;
+      }
+      
       const requestId = this.generateRequestId();
       
       const queuedRequest: QueuedRequest = {
@@ -63,6 +90,9 @@ class GlobalRequestManager {
         retries: 0,
         maxRetries: 3
       };
+      
+      // Track this request as pending for this URL
+      this.pendingRequestsByUrl.set(url, [queuedRequest]);
       
       this.requestQueue.push(queuedRequest);
       this.requestQueue.sort((a, b) => a.priority - b.priority); // Lower priority number = higher priority
@@ -107,8 +137,8 @@ class GlobalRequestManager {
         // Add delay between requests to prevent overwhelming browser
         if (this.lastRequestTime > 0) {
           const timeSinceLastRequest = now - this.lastRequestTime;
-          if (timeSinceLastRequest < 100) { // Minimum 100ms between requests
-            await new Promise(resolve => setTimeout(resolve, 100 - timeSinceLastRequest));
+          if (timeSinceLastRequest < this.MIN_REQUEST_DELAY) {
+            await new Promise(resolve => setTimeout(resolve, this.MIN_REQUEST_DELAY - timeSinceLastRequest));
           }
         }
         
@@ -122,18 +152,22 @@ class GlobalRequestManager {
   }
 
   /**
-   * Execute a single request
+   * Execute a single request and resolve all deduplicated requests
    */
   private async executeRequest(request: QueuedRequest): Promise<void> {
     const { id, url, options, resolve, reject, retries, maxRetries } = request;
     
     this.activeRequests.add(id);
     
+    // Get all deduplicated requests for this URL
+    const allRequestsForUrl = this.pendingRequestsByUrl.get(url) || [request];
+    
     console.log('[GlobalRequestManager] Executing request', { 
       requestId: id, 
       url: url.substring(0, 100) + '...',
       retries,
-      activeRequests: this.activeRequests.size 
+      activeRequests: this.activeRequests.size,
+      deduplicatedRequests: allRequestsForUrl.length
     });
     
     try {
@@ -151,12 +185,20 @@ class GlobalRequestManager {
       clearTimeout(timeoutId);
       
       if (response.ok) {
-        resolve(response);
-        console.log('[GlobalRequestManager] Request successful', { 
+        // Resolve all deduplicated requests with a cloned response
+        console.log('[GlobalRequestManager] Request successful, resolving deduplicated requests', { 
           requestId: id, 
           status: response.status,
-          url: url.substring(0, 100) + '...'
+          url: url.substring(0, 100) + '...',
+          deduplicatedCount: allRequestsForUrl.length
         });
+        
+        // Clone response for all but the last request
+        for (let i = 0; i < allRequestsForUrl.length - 1; i++) {
+          allRequestsForUrl[i].resolve(response.clone());
+        }
+        // Use original response for the last request
+        allRequestsForUrl[allRequestsForUrl.length - 1].resolve(response);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -175,7 +217,8 @@ class GlobalRequestManager {
         isNetworkError,
         retries,
         maxRetries,
-        url: url.substring(0, 100) + '...'
+        url: url.substring(0, 100) + '...',
+        deduplicatedCount: allRequestsForUrl.length
       });
       
       // Retry logic for network errors
@@ -186,6 +229,7 @@ class GlobalRequestManager {
           delay: Math.min(1000 * Math.pow(2, retries), 5000) // Exponential backoff, max 5s
         });
         
+        // Keep the deduplicated requests tracked for the retry
         // Add to queue for retry with exponential backoff
         setTimeout(() => {
           const retryRequest: QueuedRequest = {
@@ -199,8 +243,11 @@ class GlobalRequestManager {
         return; // Don't reject yet, we're retrying
       }
       
-      reject(errorObj);
+      // Reject all deduplicated requests
+      allRequestsForUrl.forEach(req => req.reject(errorObj));
     } finally {
+      // Clean up tracking for this URL
+      this.pendingRequestsByUrl.delete(url);
       this.activeRequests.delete(id);
       this.processQueue(); // Process next request
     }

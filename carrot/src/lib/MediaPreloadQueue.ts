@@ -91,19 +91,19 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 2,       // Further reduced to prevent browser connection limits
+    [TaskType.POSTER]: 1,       // ULTRA conservative: only 1 poster at a time
     [TaskType.VIDEO_PREROLL_6S]: 1, // Only 1 concurrent video request to prevent HTTP 499
     [TaskType.VIDEO_FULL]: 1,   // Keep at 1 for full video downloads
-    [TaskType.IMAGE]: 2,        // Further reduced
-    [TaskType.AUDIO_META]: 1,   // Further reduced
-    [TaskType.TEXT_FULL]: 2,    // Further reduced
-    [TaskType.AUDIO_FULL]: 1,   // Further reduced
+    [TaskType.IMAGE]: 1,        // ULTRA conservative: only 1 image at a time
+    [TaskType.AUDIO_META]: 1,   // Keep at 1
+    [TaskType.TEXT_FULL]: 1,    // ULTRA conservative: only 1 text at a time
+    [TaskType.AUDIO_FULL]: 1,   // Keep at 1
   };
-  
+
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 2,        // Further reduced to prevent browser limits
+    maxConcurrentPosters: 1,        // ULTRA conservative: only 1 poster at a time
     maxConcurrentVideos: 1,         // Only 1 concurrent video to prevent HTTP 499 cancellations
-    maxSequentialGap: 5,            // Much more conservative preloading
+    maxSequentialGap: 3,            // EXTREMELY conservative: only preload next 3 posts
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
     videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
@@ -519,10 +519,13 @@ class MediaPreloadQueue {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
     }
 
-    // Add a longer delay for video requests to prevent overwhelming the browser
+    // Add a VERY long delay for video requests to prevent overwhelming the browser
     if (type === TaskType.VIDEO_PREROLL_6S || type === TaskType.VIDEO_FULL) {
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 500)); // 500-1000ms random delay
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 1000)); // 1-2 second random delay
     }
+    
+    // Add delay for ALL requests to prevent connection overload
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 300)); // 300-500ms delay for all requests
 
     try {
       let data: Blob | ArrayBuffer | string;
