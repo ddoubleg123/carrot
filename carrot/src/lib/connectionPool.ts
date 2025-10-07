@@ -76,6 +76,10 @@ export class ConnectionPool {
     });
     return stats;
   }
+
+  getPoolStatus(): Record<string, number> {
+    return this.getConnectionStats();
+  }
 }
 
 // Global connection pool instance
