@@ -88,21 +88,6 @@ const nextConfig = {
       // Add more aggressive optimization
       config.optimization.usedExports = true;
       config.optimization.sideEffects = false;
-      
-      // Add CSS handling improvements
-      config.module.rules.push({
-        test: /\.css$/,
-        use: [
-          'style-loader',
-          {
-            loader: 'css-loader',
-            options: {
-              modules: false,
-              importLoaders: 1,
-            },
-          },
-        ],
-      });
     }
     return config;
   },
