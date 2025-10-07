@@ -58,6 +58,8 @@ class HTTP1FetchManager {
       'X-HTTP-Version': '1.1',
       'X-Protocol': 'HTTP/1.1',
       'X-Force-HTTP1': 'true',
+      'X-Disable-HTTP2': 'true',
+      'X-Legacy-HTTP': 'true',
     };
 
     // Merge with original headers
@@ -233,6 +235,9 @@ class HTTP1FetchManager {
         keepalive: true,
         referrer: 'no-referrer',
         referrerPolicy: 'no-referrer',
+        // Additional options to force HTTP/1.1
+        integrity: undefined, // Disable integrity checks that might force HTTP/2
+        priority: 'low', // Lower priority to avoid HTTP/2 optimizations
       });
 
       clearTimeout(timeoutId);
@@ -282,6 +287,9 @@ class HTTP1FetchManager {
               'X-Retry-Attempt': (currentRetries + 1).toString(),
               'X-Force-HTTP1-Retry': 'true',
               'X-Disable-HTTP2': 'true',
+              'X-HTTP1-Only': 'true',
+              'X-Legacy-Protocol': 'true',
+              'X-No-HTTP2': 'true',
             }
           };
           return this.fetch(url, enhancedOptions);

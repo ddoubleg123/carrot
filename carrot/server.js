@@ -25,6 +25,14 @@ app.prepare().then(() => {
       
       // Explicitly disable HTTP/2
       res.setHeader('HTTP-Version', '1.1');
+      res.setHeader('X-HTTP-Version', '1.1');
+      res.setHeader('X-Protocol', 'HTTP/1.1');
+      res.setHeader('X-Force-HTTP1', 'true');
+      res.setHeader('X-Disable-HTTP2', 'true');
+      
+      // Disable HTTP/2 features
+      res.setHeader('Alt-Svc', '');
+      res.setHeader('HTTP2-Settings', '');
       
       // Parse URL
       const parsedUrl = parse(req.url, true);

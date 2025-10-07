@@ -35,6 +35,7 @@ export class ChunkErrorHandler {
     // Detect if this is a CSS chunk error
     const isCSSChunkError = error.message.includes('.css') || 
                            error.message.includes('Invalid or unexpected token') ||
+                           error.message.includes('SyntaxError') ||
                            chunkId?.includes('.css');
     
     console.warn(`[ChunkErrorHandler] Chunk loading failed:`, error.message, chunkId ? `(chunk: ${chunkId})` : '', isCSSChunkError ? '(CSS chunk)' : '');
@@ -64,6 +65,19 @@ export class ChunkErrorHandler {
               style.remove();
             }
           });
+          
+          // Clear any CSS-in-JS styles that might be cached
+          const styleSheets = document.styleSheets;
+          for (let i = styleSheets.length - 1; i >= 0; i--) {
+            try {
+              const sheet = styleSheets[i];
+              if (sheet.ownerNode && sheet.ownerNode.parentNode) {
+                sheet.ownerNode.parentNode.removeChild(sheet.ownerNode);
+              }
+            } catch (e) {
+              // Ignore cross-origin stylesheet errors
+            }
+          }
         }
       }
       
@@ -141,16 +155,28 @@ export class ChunkErrorHandler {
 // Global error handler for unhandled chunk loading errors
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
-    if (event.error && event.error.message && event.error.message.includes('Loading chunk')) {
-      const chunkErrorHandler = ChunkErrorHandler.getInstance();
-      chunkErrorHandler.handleChunkError(event.error);
+    if (event.error && event.error.message) {
+      const message = event.error.message;
+      if (message.includes('Loading chunk') || 
+          message.includes('Invalid or unexpected token') ||
+          message.includes('SyntaxError') ||
+          message.includes('.css')) {
+        const chunkErrorHandler = ChunkErrorHandler.getInstance();
+        chunkErrorHandler.handleChunkError(event.error);
+      }
     }
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (event.reason && event.reason.message && event.reason.message.includes('Loading chunk')) {
-      const chunkErrorHandler = ChunkErrorHandler.getInstance();
-      chunkErrorHandler.handleChunkError(event.reason);
+    if (event.reason && event.reason.message) {
+      const message = event.reason.message;
+      if (message.includes('Loading chunk') || 
+          message.includes('Invalid or unexpected token') ||
+          message.includes('SyntaxError') ||
+          message.includes('.css')) {
+        const chunkErrorHandler = ChunkErrorHandler.getInstance();
+        chunkErrorHandler.handleChunkError(event.reason);
+      }
     }
   });
 }
