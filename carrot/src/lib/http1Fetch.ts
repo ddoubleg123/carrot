@@ -5,7 +5,6 @@
  */
 
 import { connectionPool } from './connectionPool';
-import { globalRequestManager } from './GlobalRequestManager';
 
 interface HTTP1FetchOptions extends RequestInit {
   forceHTTP1?: boolean;
@@ -197,7 +196,7 @@ class HTTP1FetchManager {
   }
 
   /**
-   * Main fetch method with HTTP/1.1 forcing and global request throttling
+   * Main fetch method with HTTP/1.1 forcing (no global throttling - removed for simplicity)
    */
   async fetch(url: string, options: HTTP1FetchOptions = {}): Promise<Response> {
     const {
@@ -217,17 +216,9 @@ class HTTP1FetchManager {
       ? this.createFirebaseHeaders(fetchOptions.headers)
       : this.createHTTP1Headers(fetchOptions.headers);
 
-    // Determine priority based on request type
-    let priority = 0; // Default priority
-    if (validatedUrl.includes('/api/auth/session')) {
-      priority = -1; // Higher priority for auth requests
-    } else if (validatedUrl.includes('/api/video')) {
-      priority = 1; // Lower priority for video requests
-    }
-
     try {
-      // Use global request manager for throttling
-      const response = await globalRequestManager.request(validatedUrl, {
+      // Use native fetch with HTTP/1.1 forcing - no global throttling
+      const response = await fetch(validatedUrl, {
         ...fetchOptions,
         headers,
         // Force HTTP/1.1 behavior
@@ -243,7 +234,7 @@ class HTTP1FetchManager {
         // Additional options to force HTTP/1.1
         integrity: undefined, // Disable integrity checks that might force HTTP/2
         priority: 'low', // Lower priority to avoid HTTP/2 optimizations
-      }, priority);
+      });
 
       // Reset retry count on success
       this.retryCounts.delete(urlKey);

@@ -91,21 +91,21 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 1,       // Only 1 poster at a time
-    [TaskType.VIDEO_PREROLL_6S]: 1, // Only 1 video at a time
-    [TaskType.VIDEO_FULL]: 1,   // Only 1 full video download at a time
-    [TaskType.IMAGE]: 1,        // Only 1 image at a time
-    [TaskType.AUDIO_META]: 1,   // Only 1 audio at a time
-    [TaskType.TEXT_FULL]: 1,    // Only 1 text at a time
-    [TaskType.AUDIO_FULL]: 1,   // Only 1 audio download at a time
+    [TaskType.POSTER]: 4,              // Increase from 1 to 4 - allow multiple posters
+    [TaskType.VIDEO_PREROLL_6S]: 3,    // Increase from 1 to 3 - allow multiple videos
+    [TaskType.VIDEO_FULL]: 2,          // Increase from 1 to 2 - allow full video downloads
+    [TaskType.IMAGE]: 4,               // Increase from 1 to 4 - allow multiple images
+    [TaskType.AUDIO_META]: 2,          // Increase from 1 to 2 - allow multiple audio
+    [TaskType.TEXT_FULL]: 3,           // Increase from 1 to 3 - allow multiple text
+    [TaskType.AUDIO_FULL]: 2,          // Increase from 1 to 2 - allow audio downloads
   };
 
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 2,        // Allow 2 posters to load concurrently
-    maxConcurrentVideos: 2,         // Allow 2 videos to load concurrently
-    maxSequentialGap: 5,            // FIXED: Preload up to 5 posts ahead for buffer
-    posterBlocksProgression: false,  // Don't block - allow videos to load even if poster fails
-    videoBlocksProgression: false    // Don't block - allow next posts even if video fails
+    maxConcurrentPosters: 4,           // Increase from 2 to 4 - more concurrent posters
+    maxConcurrentVideos: 3,            // Increase from 2 to 3 - more concurrent videos
+    maxSequentialGap: 10,              // Increase from 5 to 10 - larger buffer for smoother loading
+    posterBlocksProgression: false,    // Keep disabled - don't block on poster failures
+    videoBlocksProgression: false      // Keep disabled - don't block on video failures
   };
   
   private readonly ESTIMATED_SIZES = {
@@ -466,8 +466,17 @@ class MediaPreloadQueue {
       return false;
     }
 
-    // FIXED: Allow posts within maxSequentialGap ahead of last completed index
-    // This creates a buffer and prevents single point of failure
+    // CRITICAL FIX: VISIBLE posts ALWAYS bypass sequential restrictions
+    // User experience is paramount - visible content must load immediately
+    if (task.priority === Priority.VISIBLE) {
+      console.log('[MediaPreloadQueue] VISIBLE priority - bypassing sequential restrictions', { 
+        taskId: task.id, 
+        feedIndex: task.feedIndex 
+      });
+      return true; // Skip all sequential checks for visible posts
+    }
+
+    // For off-screen preloading, apply sequential gap restrictions
     if (task.type === TaskType.POSTER || task.type === TaskType.VIDEO_PREROLL_6S || task.type === TaskType.VIDEO_FULL) {
       const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
       const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap;
@@ -525,9 +534,8 @@ class MediaPreloadQueue {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
     }
 
-    // SIMPLIFIED: With strict sequential loading, we don't need aggressive delays
-    // Just a small delay to prevent rapid-fire requests
-    await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between sequential requests
+    // NO ARTIFICIAL DELAYS - let the GlobalRequestManager handle throttling
+    // Removed 100ms delay that was slowing down all media loading
 
     try {
       let data: Blob | ArrayBuffer | string;
