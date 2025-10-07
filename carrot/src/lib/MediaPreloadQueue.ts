@@ -82,6 +82,7 @@ class MediaPreloadQueue {
   private completedTasks = new Map<string, TaskResult>();
   private globalBudgetUsed = 0; 
   private isProcessing = false;
+  private retryQueue = new Map<string, { task: MediaTask; retryCount: number; nextRetryAt: number }>();
   
   private lastCompletedPosterIndex = -1; 
   private lastCompletedVideoIndex = -1;  
@@ -90,19 +91,19 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 8,       // Increased from 6 to 8
-    [TaskType.VIDEO_PREROLL_6S]: 4, // Increased from 2 to 4 for faster video loading
-    [TaskType.VIDEO_FULL]: 2,   // Increased from 1 to 2 for better performance
-    [TaskType.IMAGE]: 6,        // Increased from 4 to 6
-    [TaskType.AUDIO_META]: 4,   // Increased from 3 to 4
-    [TaskType.TEXT_FULL]: 6,    // Increased from 4 to 6
-    [TaskType.AUDIO_FULL]: 3,   // Increased from 2 to 3
+    [TaskType.POSTER]: 4,       // Reduced from 8 to 4 to prevent browser connection limits
+    [TaskType.VIDEO_PREROLL_6S]: 2, // Reduced from 4 to 2 to prevent HTTP 499 cancellations
+    [TaskType.VIDEO_FULL]: 1,   // Reduced from 2 to 1 to prevent connection overload
+    [TaskType.IMAGE]: 4,        // Reduced from 6 to 4
+    [TaskType.AUDIO_META]: 2,   // Reduced from 4 to 2
+    [TaskType.TEXT_FULL]: 4,    // Reduced from 6 to 4
+    [TaskType.AUDIO_FULL]: 2,   // Reduced from 3 to 2
   };
   
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 8,        // Increased from 6 to 8
-    maxConcurrentVideos: 4,         // Increased from 2 to 4 for faster video loading
-    maxSequentialGap: 15,           // Increased from 10 to 15 for better preloading
+    maxConcurrentPosters: 4,        // Reduced from 8 to 4 to prevent browser limits
+    maxConcurrentVideos: 2,         // Reduced from 4 to 2 to prevent HTTP 499 cancellations
+    maxSequentialGap: 10,           // Reduced from 15 to 10 for more conservative preloading
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
     videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
@@ -378,11 +379,15 @@ class MediaPreloadQueue {
       memoryUsage: {
         estimatedMB: this.globalBudgetUsed / (1024 * 1024),
         budgetMB: this.GLOBAL_BUDGET_MB
-      }
+      },
+      retryQueue: this.retryQueue.size
     };
   }
 
   private processQueue(): void {
+    // First, process retry queue
+    this.processRetryQueue();
+    
     // Start tasks that can be started
     for (const task of this.tasks.values()) {
       const activeSet = this.activeTasks.get(task.type);
@@ -408,6 +413,52 @@ class MediaPreloadQueue {
       // Start the task
       this.executeTask(task);
     }
+  }
+
+  private processRetryQueue(): void {
+    const now = Date.now();
+    const readyRetries = Array.from(this.retryQueue.entries()).filter(([_, retry]) => retry.nextRetryAt <= now);
+    
+    for (const [taskId, retry] of readyRetries) {
+      this.retryQueue.delete(taskId);
+      
+      // Create a new task with a new abort controller
+      const newTask: MediaTask = {
+        ...retry.task,
+        abortController: new AbortController(),
+        createdAt: now
+      };
+      
+      this.tasks.set(taskId, newTask);
+      console.log('[MediaPreloadQueue] Retrying task', { taskId, retryCount: retry.retryCount });
+    }
+  }
+
+  private scheduleRetry(task: MediaTask, maxRetries: number): void {
+    const existingRetry = this.retryQueue.get(task.id);
+    const retryCount = existingRetry ? existingRetry.retryCount + 1 : 1;
+    
+    if (retryCount > maxRetries) {
+      console.log('[MediaPreloadQueue] Max retries exceeded, giving up', { taskId: task.id, retryCount });
+      return;
+    }
+    
+    // Exponential backoff: 1s, 2s, 4s, 8s...
+    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 8000);
+    const nextRetryAt = Date.now() + delay;
+    
+    this.retryQueue.set(task.id, {
+      task,
+      retryCount,
+      nextRetryAt
+    });
+    
+    console.log('[MediaPreloadQueue] Scheduled retry', { 
+      taskId: task.id, 
+      retryCount, 
+      delay, 
+      nextRetryAt: new Date(nextRetryAt).toISOString() 
+    });
   }
 
   private canStartTask(task: MediaTask): boolean {
@@ -466,6 +517,11 @@ class MediaPreloadQueue {
     // Validate URL before proceeding
     if (!url || typeof url !== 'string') {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
+    }
+
+    // Add a small delay for video requests to prevent overwhelming the browser
+    if (type === TaskType.VIDEO_PREROLL_6S || type === TaskType.VIDEO_FULL) {
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 100)); // 100-300ms random delay
     }
 
     try {
@@ -622,6 +678,8 @@ class MediaPreloadQueue {
     } catch (error) {
       const errorObj = error as Error;
       const isNetworkError = isNetworkProtocolError(errorObj);
+      const isAborted = errorObj.name === 'AbortError' || errorObj.message.includes('aborted');
+      const isClientCanceled = errorObj.message.includes('499') || errorObj.message.includes('client canceled');
       
       const result: TaskResult = {
         id: taskId,
@@ -637,14 +695,33 @@ class MediaPreloadQueue {
       
       this.handleTaskCompletion(taskId, result);
       
-      console.warn('[MediaPreloadQueue] Task failed', { 
-        taskId, 
-        feedIndex: task.feedIndex,
-        error: errorObj.message,
-        isNetworkError,
-        isBlocking: task.isBlocking,
-        url: url.substring(0, 100) + (url.length > 100 ? '...' : '')
-      });
+      // Log different error types with appropriate severity
+      if (isAborted || isClientCanceled) {
+        console.log('[MediaPreloadQueue] Task canceled (likely due to browser limits)', { 
+          taskId, 
+          feedIndex: task.feedIndex,
+          error: errorObj.message,
+          isAborted,
+          isClientCanceled,
+          type,
+          url: url.substring(0, 100) + (url.length > 100 ? '...' : '')
+        });
+        
+        // For client-canceled errors, retry with exponential backoff
+        if (isClientCanceled && type === TaskType.VIDEO_PREROLL_6S) {
+          this.scheduleRetry(task, 3); // Max 3 retries for video preroll
+        }
+      } else {
+        console.warn('[MediaPreloadQueue] Task failed', { 
+          taskId, 
+          feedIndex: task.feedIndex,
+          error: errorObj.message,
+          isNetworkError,
+          isBlocking: task.isBlocking,
+          type,
+          url: url.substring(0, 100) + (url.length > 100 ? '...' : '')
+        });
+      }
 
     } finally {
       this.activeTasks.get(type)?.delete(taskId);
@@ -770,6 +847,12 @@ class MediaPreloadQueue {
         this.completedTasks.delete(taskId);
       }
     }
+  }
+
+  clearAllRetryCounts(): void {
+    // Clear retry queue
+    this.retryQueue.clear();
+    console.log('[MediaPreloadQueue] Retry queue cleared');
   }
 
 }
