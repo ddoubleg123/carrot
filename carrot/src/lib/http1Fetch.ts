@@ -91,25 +91,48 @@ class HTTP1FetchManager {
    * Create Firebase-safe headers (remove problematic ones)
    */
   private createFirebaseHeaders(originalHeaders?: HeadersInit): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Connection': 'keep-alive',
-      'Accept-Encoding': 'gzip, deflate',
-      'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1-Only; CarrotApp/1.0)',
-    };
+    // Start with minimal safe headers for Firebase
+    const headers: Record<string, string> = {};
+    
+    // List of headers that are SAFE for Firebase Storage
+    const allowedHeaders = new Set([
+      'accept',
+      'accept-language',
+      'content-type',
+      'origin',
+      'referer',
+      'user-agent',
+    ]);
 
-    // Merge with original headers
+    // Merge with original headers, but only if they're in the allowed list
     if (originalHeaders) {
       if (originalHeaders instanceof Headers) {
         originalHeaders.forEach((value, key) => {
-          headers[key] = value;
+          const lowerKey = key.toLowerCase();
+          if (allowedHeaders.has(lowerKey)) {
+            headers[key] = value;
+          }
         });
       } else if (Array.isArray(originalHeaders)) {
         originalHeaders.forEach(([key, value]) => {
-          headers[key] = value;
+          const lowerKey = key.toLowerCase();
+          if (allowedHeaders.has(lowerKey)) {
+            headers[key] = value;
+          }
         });
       } else {
-        Object.assign(headers, originalHeaders);
+        Object.entries(originalHeaders).forEach(([key, value]) => {
+          const lowerKey = key.toLowerCase();
+          if (allowedHeaders.has(lowerKey)) {
+            headers[key] = value;
+          }
+        });
       }
+    }
+
+    // Set a standard user agent if not provided
+    if (!headers['user-agent'] && !headers['User-Agent']) {
+      headers['User-Agent'] = 'Mozilla/5.0 (compatible; CarrotApp/1.0)';
     }
 
     return headers;

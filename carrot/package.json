@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env PORT=3005 next dev",
+    "dev": "cross-env PORT=3005 node server.js",
     "build": "next build",
-    "start": "next start -p ${PORT:-10000}",
+    "start": "NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
     "lint": "next lint",
     "type-check": "tsc --noEmit",

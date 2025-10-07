@@ -25,30 +25,18 @@ const nextConfig = {
       config.optimization.splitChunks = {
         chunks: 'all',
         minSize: 20000,
-        maxSize: 200000, // Larger chunks to reduce fragmentation
-        maxAsyncRequests: 8, // Reduced to prevent too many concurrent requests
-        maxInitialRequests: 6, // Reduced to prevent too many concurrent requests
+        maxSize: 244000, // Even larger chunks to reduce fragmentation
+        maxAsyncRequests: 5, // Further reduced to prevent too many concurrent requests
+        maxInitialRequests: 4, // Further reduced to prevent too many concurrent requests
         cacheGroups: {
-          default: {
-            minChunks: 2,
-            priority: -20,
-            reuseExistingChunk: true,
-            maxSize: 200000,
-          },
+          default: false, // Disable default cache group
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             priority: -10,
             chunks: 'all',
-            maxSize: 200000,
+            maxSize: 244000,
             enforce: true,
-          },
-          common: {
-            name: 'common',
-            minChunks: 2,
-            priority: -5,
-            reuseExistingChunk: true,
-            maxSize: 200000,
           },
           // Separate React chunks to prevent large bundles
           react: {
@@ -56,7 +44,7 @@ const nextConfig = {
             name: 'react',
             priority: 20,
             chunks: 'all',
-            maxSize: 150000,
+            maxSize: 200000,
             enforce: true,
           },
           // Separate Next.js chunks
@@ -65,17 +53,17 @@ const nextConfig = {
             name: 'nextjs',
             priority: 15,
             chunks: 'all',
-            maxSize: 150000,
+            maxSize: 200000,
             enforce: true,
           },
-          // CSS chunks - keep them together to prevent loading issues
+          // CRITICAL: Bundle ALL CSS into a single chunk to prevent loading issues
           styles: {
             test: /\.(css|scss|sass)$/,
             name: 'styles',
-            priority: 25,
+            priority: 30,
             chunks: 'all',
             enforce: true,
-            maxSize: 500000, // Allow larger CSS chunks
+            // No maxSize limit for CSS - bundle it all together
           },
         },
       };
