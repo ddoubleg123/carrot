@@ -103,7 +103,7 @@ class MediaPreloadQueue {
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
     maxConcurrentPosters: 1,        // ULTRA conservative: only 1 poster at a time
     maxConcurrentVideos: 1,         // Only 1 concurrent video to prevent HTTP 499 cancellations
-    maxSequentialGap: 3,            // EXTREMELY conservative: only preload next 3 posts
+    maxSequentialGap: 1,            // ULTRA STRICT: only preload the NEXT post to prevent browser overload
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
     videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
@@ -466,9 +466,9 @@ class MediaPreloadQueue {
       return false;
     }
 
-    // More lenient sequential gating - only block if way too far ahead
+    // STRICT sequential gating - use exact maxSequentialGap, no doubling
     const currentIndex = Math.max(this.lastCompletedPosterIndex, this.lastCompletedVideoIndex);
-    const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap * 2; // Double the gap for better preloading
+    const maxGap = this.SEQUENTIAL_CONFIG.maxSequentialGap; // Use exact gap, don't double it!
     if (task.feedIndex > currentIndex + maxGap) {
       console.log('[MediaPreloadQueue] Task blocked by sequential gap', { 
         taskId: task.id, 
