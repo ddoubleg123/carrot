@@ -21,26 +21,26 @@ const nextConfig = {
   // Optimize chunk splitting to prevent HTTP/2 issues while maintaining performance
   webpack: (config, { isServer, dev }) => {
     if (!isServer && !dev) {
-      // More aggressive chunk splitting to prevent HTTP/2 issues
+      // More conservative chunk splitting to prevent CSS loading issues
       config.optimization.splitChunks = {
         chunks: 'all',
-        minSize: 30000,
-        maxSize: 100000, // Smaller chunks to reduce HTTP/2 issues
-        maxAsyncRequests: 10,
-        maxInitialRequests: 10,
+        minSize: 20000,
+        maxSize: 200000, // Larger chunks to reduce fragmentation
+        maxAsyncRequests: 8, // Reduced to prevent too many concurrent requests
+        maxInitialRequests: 6, // Reduced to prevent too many concurrent requests
         cacheGroups: {
           default: {
             minChunks: 2,
             priority: -20,
             reuseExistingChunk: true,
-            maxSize: 100000,
+            maxSize: 200000,
           },
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             priority: -10,
             chunks: 'all',
-            maxSize: 100000,
+            maxSize: 200000,
             enforce: true,
           },
           common: {
@@ -48,7 +48,7 @@ const nextConfig = {
             minChunks: 2,
             priority: -5,
             reuseExistingChunk: true,
-            maxSize: 100000,
+            maxSize: 200000,
           },
           // Separate React chunks to prevent large bundles
           react: {
@@ -56,7 +56,7 @@ const nextConfig = {
             name: 'react',
             priority: 20,
             chunks: 'all',
-            maxSize: 80000,
+            maxSize: 150000,
             enforce: true,
           },
           // Separate Next.js chunks
@@ -65,8 +65,17 @@ const nextConfig = {
             name: 'nextjs',
             priority: 15,
             chunks: 'all',
-            maxSize: 80000,
+            maxSize: 150000,
             enforce: true,
+          },
+          // CSS chunks - keep them together to prevent loading issues
+          styles: {
+            test: /\.(css|scss|sass)$/,
+            name: 'styles',
+            priority: 25,
+            chunks: 'all',
+            enforce: true,
+            maxSize: 500000, // Allow larger CSS chunks
           },
         },
       };
@@ -79,6 +88,21 @@ const nextConfig = {
       // Add more aggressive optimization
       config.optimization.usedExports = true;
       config.optimization.sideEffects = false;
+      
+      // Add CSS handling improvements
+      config.module.rules.push({
+        test: /\.css$/,
+        use: [
+          'style-loader',
+          {
+            loader: 'css-loader',
+            options: {
+              modules: false,
+              importLoaders: 1,
+            },
+          },
+        ],
+      });
     }
     return config;
   },

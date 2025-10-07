@@ -31,11 +31,41 @@ export class ChunkErrorHandler {
 
     this.isHandling = true;
     this.lastErrorTime = now;
-    console.warn(`[ChunkErrorHandler] Chunk loading failed:`, error.message, chunkId ? `(chunk: ${chunkId})` : '');
+    
+    // Detect if this is a CSS chunk error
+    const isCSSChunkError = error.message.includes('.css') || 
+                           error.message.includes('Invalid or unexpected token') ||
+                           chunkId?.includes('.css');
+    
+    console.warn(`[ChunkErrorHandler] Chunk loading failed:`, error.message, chunkId ? `(chunk: ${chunkId})` : '', isCSSChunkError ? '(CSS chunk)' : '');
     
     try {
       // Immediate aggressive cache clearing
       await this.clearAllCaches();
+      
+      // For CSS chunk errors, be even more aggressive
+      if (isCSSChunkError) {
+        console.error(`[ChunkErrorHandler] CSS chunk error detected. Forcing immediate hard reload with style cache clearing...`);
+        
+        // Clear all style-related caches
+        if (typeof window !== 'undefined') {
+          // Remove all stylesheets from the page
+          const stylesheets = document.querySelectorAll('link[rel="stylesheet"]');
+          stylesheets.forEach(link => {
+            if (link instanceof HTMLLinkElement) {
+              link.remove();
+            }
+          });
+          
+          // Clear any inline styles that might be cached
+          const styleElements = document.querySelectorAll('style');
+          styleElements.forEach(style => {
+            if (style instanceof HTMLStyleElement && style.dataset.cached) {
+              style.remove();
+            }
+          });
+        }
+      }
       
       // For chunk errors, be more aggressive - force immediate reload
       console.error(`[ChunkErrorHandler] Chunk error detected. Forcing immediate hard reload...`);
@@ -48,6 +78,9 @@ export class ChunkErrorHandler {
       url.searchParams.set('_cache_bust', Math.random().toString(36).substring(2));
       url.searchParams.set('_force_http1', 'true');
       url.searchParams.set('_disable_http2', 'true');
+      if (isCSSChunkError) {
+        url.searchParams.set('_css_reload', 'true');
+      }
       window.location.href = url.toString();
       
     } catch (clearError) {

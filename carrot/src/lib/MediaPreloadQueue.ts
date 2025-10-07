@@ -459,8 +459,14 @@ class MediaPreloadQueue {
       priority: task.priority,
       feedIndex: task.feedIndex,
       isBlocking: task.isBlocking,
-      budgetUsed: Math.round(this.globalBudgetUsed / 1024 / 1024 * 10) / 10 
+      budgetUsed: Math.round(this.globalBudgetUsed / 1024 / 1024 * 10) / 10,
+      url: url.substring(0, 100) + (url.length > 100 ? '...' : '') // Log truncated URL for debugging
     });
+
+    // Validate URL before proceeding
+    if (!url || typeof url !== 'string') {
+      throw new Error(`Invalid URL for task ${taskId}: ${url}`);
+    }
 
     try {
       let data: Blob | ArrayBuffer | string;

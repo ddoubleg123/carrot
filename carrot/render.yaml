@@ -77,6 +77,21 @@ services:
         value: "1"
       - key: NODE_OPTIONS
         value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings"
+      # Additional HTTP/1.1 forcing
+      - key: HTTP2_DISABLED
+        value: "true"
+      - key: FORCE_HTTP1_ONLY
+        value: "true"
+      - key: DISABLE_HTTP2_PROTOCOL
+        value: "true"
+      - key: NODE_HTTP2_DISABLED
+        value: "true"
+      - key: TLS_LEGACY_MODE
+        value: "true"
+      - key: HTTP_KEEPALIVE
+        value: "true"
+      - key: HTTP_CONNECTION_POOLING
+        value: "true"
 
 databases:
   - name: carrot-db

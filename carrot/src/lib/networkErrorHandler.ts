@@ -3,11 +3,14 @@
  */
 
 export interface NetworkError {
-  type: 'HTTP2_PROTOCOL_ERROR' | 'CONNECTION_CLOSED' | 'CHUNK_LOAD_ERROR' | 'CORS_ERROR' | 'UNKNOWN';
+  type: 'HTTP2_PROTOCOL_ERROR' | 'CONNECTION_CLOSED' | 'CHUNK_LOAD_ERROR' | 'CORS_ERROR' | 'VIDEO_ERROR' | 'UNKNOWN';
   message: string;
   originalError: Error;
   url?: string;
   retryable: boolean;
+  timestamp: string;
+  userAgent?: string;
+  context?: Record<string, any>;
 }
 
 export class NetworkErrorHandler {
@@ -27,55 +30,109 @@ export class NetworkErrorHandler {
   /**
    * Analyze an error and determine its type and retryability
    */
-  public analyzeError(error: Error, url?: string): NetworkError {
+  public analyzeError(error: Error, url?: string, context?: Record<string, any>): NetworkError {
     const message = error.message.toLowerCase();
+    const timestamp = new Date().toISOString();
+    const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined;
     
-    if (message.includes('err_http2_protocol_error') || message.includes('http2 protocol error')) {
+    if (message.includes('err_http2_protocol_error') || message.includes('http2 protocol error') || message.includes('http/2')) {
       return {
         type: 'HTTP2_PROTOCOL_ERROR',
-        message: 'HTTP/2 protocol error detected',
+        message: 'HTTP/2 protocol error detected - forcing HTTP/1.1 retry',
         originalError: error,
         url,
-        retryable: true
+        retryable: true,
+        timestamp,
+        userAgent,
+        context: {
+          ...context,
+          errorCode: 'HTTP2_PROTOCOL_ERROR',
+          suggestedAction: 'Force HTTP/1.1 and retry'
+        }
       };
     }
     
-    if (message.includes('err_connection_closed') || message.includes('connection closed')) {
+    if (message.includes('err_connection_closed') || message.includes('connection closed') || message.includes('connection reset')) {
       return {
         type: 'CONNECTION_CLOSED',
-        message: 'Connection closed unexpectedly',
+        message: 'Connection closed unexpectedly - network instability detected',
         originalError: error,
         url,
-        retryable: true
+        retryable: true,
+        timestamp,
+        userAgent,
+        context: {
+          ...context,
+          errorCode: 'CONNECTION_CLOSED',
+          suggestedAction: 'Retry with connection pool recovery'
+        }
       };
     }
     
-    if (message.includes('chunkloaderror') || message.includes('loading chunk')) {
+    if (message.includes('chunkloaderror') || message.includes('loading chunk') || message.includes('invalid or unexpected token')) {
       return {
         type: 'CHUNK_LOAD_ERROR',
-        message: 'JavaScript chunk loading failed',
+        message: 'JavaScript chunk loading failed - asset corruption or network issue',
         originalError: error,
         url,
-        retryable: true
+        retryable: true,
+        timestamp,
+        userAgent,
+        context: {
+          ...context,
+          errorCode: 'CHUNK_LOAD_ERROR',
+          suggestedAction: 'Clear cache and retry'
+        }
       };
     }
     
     if (message.includes('cors') || message.includes('access-control')) {
       return {
         type: 'CORS_ERROR',
-        message: 'CORS policy violation',
+        message: 'CORS policy violation - cross-origin request blocked',
         originalError: error,
         url,
-        retryable: false
+        retryable: false,
+        timestamp,
+        userAgent,
+        context: {
+          ...context,
+          errorCode: 'CORS_ERROR',
+          suggestedAction: 'Check CORS configuration'
+        }
+      };
+    }
+    
+    if (message.includes('media_element_error') || message.includes('notsupportederror') || message.includes('video error')) {
+      return {
+        type: 'VIDEO_ERROR',
+        message: 'Video playback error - format or codec issue',
+        originalError: error,
+        url,
+        retryable: true,
+        timestamp,
+        userAgent,
+        context: {
+          ...context,
+          errorCode: 'VIDEO_ERROR',
+          suggestedAction: 'Check video format and codec support'
+        }
       };
     }
     
     return {
       type: 'UNKNOWN',
-      message: 'Unknown network error',
+      message: 'Unknown network error - requires investigation',
       originalError: error,
       url,
-      retryable: true
+      retryable: true,
+      timestamp,
+      userAgent,
+      context: {
+        ...context,
+        errorCode: 'UNKNOWN',
+        suggestedAction: 'Manual investigation required'
+      }
     };
   }
 
@@ -86,12 +143,21 @@ export class NetworkErrorHandler {
     const errorKey = networkError.url || networkError.type;
     const currentRetries = this.retryCounts.get(errorKey) || 0;
     
+    // Enhanced logging with detailed error information
     console.warn(`[NetworkErrorHandler] Handling ${networkError.type}:`, {
       message: networkError.message,
       url: networkError.url,
       retryable: networkError.retryable,
       currentRetries,
-      maxRetries: this.maxRetries
+      maxRetries: this.maxRetries,
+      timestamp: networkError.timestamp,
+      userAgent: networkError.userAgent,
+      context: networkError.context,
+      originalError: {
+        name: networkError.originalError.name,
+        message: networkError.originalError.message,
+        stack: networkError.originalError.stack?.split('\n').slice(0, 5) // First 5 lines of stack
+      }
     });
 
     if (!networkError.retryable) {

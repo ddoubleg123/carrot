@@ -188,6 +188,22 @@ class FeedMediaManager {
     }
   }
 
+  private validateUrl(url: string, context: string): string | null {
+    if (!url || typeof url !== 'string') {
+      console.warn(`[FeedMediaManager] Invalid URL in ${context}:`, url);
+      return null;
+    }
+    
+    try {
+      // Test URL construction
+      new URL(url.startsWith('/') ? `https://example.com${url}` : url);
+      return url;
+    } catch (error) {
+      console.warn(`[FeedMediaManager] Invalid URL format in ${context}:`, url, error);
+      return null;
+    }
+  }
+
   private queuePostTasks(post: PostAsset, priority: Priority): void {
     switch (post.type) {
       case 'video':
@@ -198,29 +214,39 @@ class FeedMediaManager {
         let posterUrl: string | null = null;
         if (post.thumbnailUrl) {
           if (post.thumbnailUrl.startsWith('/api/img')) {
-            posterUrl = post.thumbnailUrl;
+            posterUrl = this.validateUrl(post.thumbnailUrl, 'thumbnailUrl (api/img)');
           } else {
             // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
             const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.thumbnailUrl);
-            posterUrl = `/api/img?url=${isAlreadyEncoded ? post.thumbnailUrl : encodeURIComponent(post.thumbnailUrl)}`;
+            const encodedUrl = isAlreadyEncoded ? post.thumbnailUrl : encodeURIComponent(post.thumbnailUrl);
+            posterUrl = this.validateUrl(`/api/img?url=${encodedUrl}`, 'thumbnailUrl (encoded)');
           }
         } else if (post.bucket && post.path) {
-          posterUrl = `/api/img?bucket=${encodeURIComponent(post.bucket)}&path=${encodeURIComponent(post.path)}/thumb.jpg&generatePoster=1`;
+          const bucketPath = encodeURIComponent(post.bucket);
+          const pathEncoded = encodeURIComponent(post.path);
+          posterUrl = this.validateUrl(`/api/img?bucket=${bucketPath}&path=${pathEncoded}/thumb.jpg&generatePoster=1`, 'bucket/path poster');
         } else if (post.videoUrl) {
-          posterUrl = `/api/img?generatePoster=1&videoUrl=${encodeURIComponent(post.videoUrl)}`;
+          const encodedVideoUrl = encodeURIComponent(post.videoUrl);
+          posterUrl = this.validateUrl(`/api/img?generatePoster=1&videoUrl=${encodedVideoUrl}`, 'videoUrl poster');
         }
         
         if (posterUrl) {
           this.preloadQueue.enqueue(post.id, TaskType.POSTER, priority, post.feedIndex, posterUrl, post.bucket, post.path);
         }
 
-        const videoUrl = (post.bucket && post.path)
-          ? `/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4`
-          : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : (() => {
-              // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
-              const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
-              return `/api/video?url=${isAlreadyEncoded ? post.videoUrl : encodeURIComponent(post.videoUrl)}`;
-            })()) : null);
+        let videoUrl: string | null = null;
+        if (post.bucket && post.path) {
+          videoUrl = this.validateUrl(`/api/video?bucket=${post.bucket}&path=${post.path}/video.mp4`, 'bucket/path video');
+        } else if (post.videoUrl) {
+          if (post.videoUrl.startsWith('/api/video')) {
+            videoUrl = this.validateUrl(post.videoUrl, 'videoUrl (api/video)');
+          } else {
+            // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+            const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);
+            const encodedUrl = isAlreadyEncoded ? post.videoUrl : encodeURIComponent(post.videoUrl);
+            videoUrl = this.validateUrl(`/api/video?url=${encodedUrl}`, 'videoUrl (encoded)');
+          }
+        }
         
         if (videoUrl) {
           // Current post (VISIBLE) gets full video download, others get 6-second preroll
@@ -231,7 +257,7 @@ class FeedMediaManager {
           });
           this.preloadQueue.enqueue(post.id, videoTaskType, priority, post.feedIndex, videoUrl, post.bucket, post.path);
         } else {
-          console.warn(`[FeedMediaManager] No video URL for post ${post.id} (index ${post.feedIndex})`, {
+          console.warn(`[FeedMediaManager] No valid video URL for post ${post.id} (index ${post.feedIndex})`, {
             hasVideoUrl: !!post.videoUrl,
             hasBucket: !!post.bucket,
             hasPath: !!post.path,
@@ -241,11 +267,21 @@ class FeedMediaManager {
         break;
 
       case 'image':
-        const imageUrl = post.thumbnailUrl || 
-          (post.bucket && post.path ? `/api/img?bucket=${post.bucket}&path=${post.path}` : null);
+        let imageUrl: string | null = null;
+        if (post.thumbnailUrl) {
+          imageUrl = this.validateUrl(post.thumbnailUrl, 'image thumbnailUrl');
+        } else if (post.bucket && post.path) {
+          imageUrl = this.validateUrl(`/api/img?bucket=${post.bucket}&path=${post.path}`, 'image bucket/path');
+        }
         
         if (imageUrl) {
           this.preloadQueue.enqueue(post.id, TaskType.IMAGE, priority, post.feedIndex, imageUrl, post.bucket, post.path);
+        } else {
+          console.warn(`[FeedMediaManager] No valid image URL for post ${post.id} (index ${post.feedIndex})`, {
+            hasThumbnailUrl: !!post.thumbnailUrl,
+            hasBucket: !!post.bucket,
+            hasPath: !!post.path
+          });
         }
         break;
 
@@ -254,12 +290,25 @@ class FeedMediaManager {
         // Audio file is downloaded on-demand when user clicks play
         // Prefer explicit URL if provided; otherwise construct /api/audio from bucket/path
         {
-          const audioUrl = (post.videoUrl && post.videoUrl.includes('/audio')) ? post.videoUrl :
-            (post.bucket && post.path ? `/api/audio?bucket=${post.bucket}&path=${post.path}/audio.mp3` : (post.videoUrl || null));
+          let audioUrl: string | null = null;
+          if (post.videoUrl && post.videoUrl.includes('/audio')) {
+            audioUrl = this.validateUrl(post.videoUrl, 'audio videoUrl');
+          } else if (post.bucket && post.path) {
+            audioUrl = this.validateUrl(`/api/audio?bucket=${post.bucket}&path=${post.path}/audio.mp3`, 'audio bucket/path');
+          } else if (post.videoUrl) {
+            audioUrl = this.validateUrl(post.videoUrl, 'audio fallback videoUrl');
+          }
+          
           if (audioUrl) {
             // Always use AUDIO_META - just download the shell/gradient, not the actual audio
             console.log(`[FeedMediaManager] Queuing audio shell for post ${post.id} (index ${post.feedIndex}): AUDIO_META with priority ${priority}`);
             this.preloadQueue.enqueue(post.id, TaskType.AUDIO_META, priority, post.feedIndex, audioUrl, post.bucket, post.path);
+          } else {
+            console.warn(`[FeedMediaManager] No valid audio URL for post ${post.id} (index ${post.feedIndex})`, {
+              hasVideoUrl: !!post.videoUrl,
+              hasBucket: !!post.bucket,
+              hasPath: !!post.path
+            });
           }
         }
         break;
@@ -267,8 +316,22 @@ class FeedMediaManager {
       case 'text':
         // Load the full text content (shell + gradients, etc.)
         {
-          const textUrl = (post.bucket && post.path) ? `/api/text?bucket=${post.bucket}&path=${post.path}/content.json` : `/api/text?id=${encodeURIComponent(post.id)}`;
-          this.preloadQueue.enqueue(post.id, TaskType.TEXT_FULL, priority, post.feedIndex, textUrl, post.bucket, post.path);
+          let textUrl: string | null = null;
+          if (post.bucket && post.path) {
+            textUrl = this.validateUrl(`/api/text?bucket=${post.bucket}&path=${post.path}/content.json`, 'text bucket/path');
+          } else {
+            textUrl = this.validateUrl(`/api/text?id=${encodeURIComponent(post.id)}`, 'text id');
+          }
+          
+          if (textUrl) {
+            this.preloadQueue.enqueue(post.id, TaskType.TEXT_FULL, priority, post.feedIndex, textUrl, post.bucket, post.path);
+          } else {
+            console.warn(`[FeedMediaManager] No valid text URL for post ${post.id} (index ${post.feedIndex})`, {
+              hasBucket: !!post.bucket,
+              hasPath: !!post.path,
+              postId: post.id
+            });
+          }
         }
         break;
     }

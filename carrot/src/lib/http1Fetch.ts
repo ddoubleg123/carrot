@@ -28,7 +28,7 @@ class HTTP1FetchManager {
    */
   private createHTTP1Headers(originalHeaders?: HeadersInit): Record<string, string> {
     const headers: Record<string, string> = {
-      // Force HTTP/1.1
+      // Force HTTP/1.1 with more aggressive settings
       'Connection': 'keep-alive',
       'Keep-Alive': 'timeout=5, max=1000',
       'HTTP-Version': '1.1',
@@ -37,10 +37,12 @@ class HTTP1FetchManager {
       'X-Forwarded-Host': 'carrot-app.onrender.com',
       'X-Real-IP': '127.0.0.1',
       
-      // Disable HTTP/2 features
+      // Disable HTTP/2 features more aggressively
       'Accept-Encoding': 'gzip, deflate', // No brotli to avoid HTTP/2
       'TE': '', // Disable transfer encoding
       'Upgrade': '', // Disable protocol upgrades
+      'HTTP2-Settings': '', // Explicitly disable HTTP/2
+      'Alt-Svc': '', // Disable alternative services
       
       // Cache control
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -49,6 +51,11 @@ class HTTP1FetchManager {
       
       // User agent that prefers HTTP/1.1
       'User-Agent': 'Mozilla/5.0 (compatible; HTTP/1.1-Only; CarrotApp/1.0)',
+      
+      // Additional HTTP/1.1 forcing headers
+      'X-HTTP-Version': '1.1',
+      'X-Protocol': 'HTTP/1.1',
+      'X-Force-HTTP1': 'true',
     };
 
     // Merge with original headers
@@ -129,8 +136,36 @@ class HTTP1FetchManager {
       message.includes('timeout') ||
       message.includes('aborted') ||
       message.includes('loading chunk') ||
-      message.includes('chunkloaderror')
+      message.includes('chunkloaderror') ||
+      message.includes('protocol error') ||
+      message.includes('http2') ||
+      message.includes('http/2') ||
+      message.includes('invalid or unexpected token') ||
+      message.includes('syntax error')
     );
+  }
+
+  /**
+   * Validate and normalize URL
+   */
+  private validateUrl(url: string): string {
+    if (!url || typeof url !== 'string') {
+      throw new Error(`Invalid URL: ${url}`);
+    }
+
+    // Handle relative URLs by making them absolute
+    if (url.startsWith('/')) {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://carrot-app.onrender.com';
+      url = baseUrl + url;
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+      return url;
+    } catch (error) {
+      throw new Error(`Invalid URL format: ${url} - ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -144,11 +179,13 @@ class HTTP1FetchManager {
       ...fetchOptions
     } = options;
 
-    const urlKey = new URL(url).origin;
+    // Validate and normalize URL
+    const validatedUrl = this.validateUrl(url);
+    const urlKey = new URL(validatedUrl).origin;
     const currentRetries = this.retryCounts.get(urlKey) || 0;
 
     // Create appropriate headers based on URL
-    const headers = this.isFirebaseStorage(url) 
+    const headers = this.isFirebaseStorage(validatedUrl) 
       ? this.createFirebaseHeaders(fetchOptions.headers)
       : this.createHTTP1Headers(fetchOptions.headers);
 
@@ -157,7 +194,7 @@ class HTTP1FetchManager {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
-      const response = await fetch(url, {
+      const response = await fetch(validatedUrl, {
         ...fetchOptions,
         headers,
         signal: controller.signal,
@@ -167,6 +204,10 @@ class HTTP1FetchManager {
         redirect: 'follow',
         // Disable HTTP/2 features
         cache: 'no-store',
+        // Additional HTTP/1.1 forcing options
+        keepalive: true,
+        referrer: 'no-referrer',
+        referrerPolicy: 'no-referrer',
       });
 
       clearTimeout(timeoutId);
@@ -189,11 +230,38 @@ class HTTP1FetchManager {
       if (currentRetries < maxRetries && this.isRetryableError(err)) {
         this.retryCounts.set(urlKey, currentRetries + 1);
         
-        // Exponential backoff with jitter
-        const delay = retryDelay * Math.pow(2, currentRetries) + Math.random() * 1000;
-        console.log(`[HTTP1Fetch] Retrying in ${Math.round(delay)}ms...`);
+        // Handle connection failures through connection pool
+        const connectionHandled = await connectionPool.handleConnectionFailure(validatedUrl, err);
+        
+        // For HTTP/2 errors, use more aggressive retry strategy
+        const isHTTP2Error = err.message.toLowerCase().includes('http2') || 
+                            err.message.toLowerCase().includes('protocol error');
+        const isConnectionError = err.message.toLowerCase().includes('connection closed') ||
+                                 err.message.toLowerCase().includes('connection reset');
+        
+        const baseDelay = isHTTP2Error ? retryDelay * 2 : (isConnectionError ? retryDelay * 1.5 : retryDelay);
+        const delay = baseDelay * Math.pow(2, currentRetries) + Math.random() * 1000;
+        
+        console.log(`[HTTP1Fetch] Retrying in ${Math.round(delay)}ms...`, 
+          isHTTP2Error ? '(HTTP/2 error - using aggressive retry)' : 
+          isConnectionError ? '(Connection error - using connection pool recovery)' : '');
         
         await this.sleep(delay);
+        
+        // For HTTP/2 errors, add even more aggressive headers on retry
+        if (isHTTP2Error) {
+          const enhancedOptions = {
+            ...options,
+            headers: {
+              ...options.headers,
+              'X-Retry-Attempt': (currentRetries + 1).toString(),
+              'X-Force-HTTP1-Retry': 'true',
+              'X-Disable-HTTP2': 'true',
+            }
+          };
+          return this.fetch(url, enhancedOptions);
+        }
+        
         return this.fetch(url, options);
       }
 

@@ -341,16 +341,54 @@ export default function NeverBlackVideo({
   };
 
   const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    const error = new Error(`Video load failed: ${e.currentTarget.error?.message || 'Unknown error'}`);
-    console.error('[NeverBlackVideo] Video error', { postId, src: videoUrl, error });
+    const videoElement = e.currentTarget;
+    const mediaError = videoElement.error;
     
-    // Track video error
-    metricsRef.current.recordError('VideoError', error.message, postId, videoUrl || undefined);
+    // Create detailed error information
+    const errorDetails = {
+      code: mediaError?.code || 'UNKNOWN',
+      message: mediaError?.message || 'Unknown video error',
+      networkState: videoElement.networkState,
+      readyState: videoElement.readyState,
+      src: videoUrl,
+      postId: postId,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Map error codes to human-readable messages
+    const errorMessages: Record<number, string> = {
+      1: 'MEDIA_ERR_ABORTED - Video loading was aborted',
+      2: 'MEDIA_ERR_NETWORK - Network error occurred while loading video',
+      3: 'MEDIA_ERR_DECODE - Video decoding error',
+      4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported or source not found'
+    };
+    
+    const errorMessage = errorMessages[mediaError?.code || 0] || `Video error: ${errorDetails.message}`;
+    const error = new Error(errorMessage);
+    
+    console.error('[NeverBlackVideo] Video error', errorDetails);
+    
+    // Track video error with detailed information
+    metricsRef.current.recordError('VideoError', errorMessage, postId, videoUrl || undefined);
     
     // End TTFF tracking with error
     if (ttffStarted) {
-      metricsRef.current.endTTFF(postId, false, error.message);
+      metricsRef.current.endTTFF(postId, false, errorMessage);
       setTtffStarted(false);
+    }
+    
+    // For format errors, try to provide more helpful information
+    if (mediaError?.code === 4) {
+      console.warn('[NeverBlackVideo] Video format not supported. This might be due to:', {
+        url: videoUrl,
+        possibleCauses: [
+          'Video format not supported by browser',
+          'Video file is corrupted',
+          'Network issues preventing proper video loading',
+          'CORS issues with video source',
+          'Video codec not supported'
+        ]
+      });
     }
     
     onError?.(error);
@@ -401,6 +439,7 @@ export default function NeverBlackVideo({
         controls={controls}
         autoPlay={autoPlay}
         preload="metadata"
+        crossOrigin="anonymous"
         onLoadedMetadata={handleVideoLoadedMetadata}
         onPlay={handleVideoPlay}
         onPause={handleVideoPause}
