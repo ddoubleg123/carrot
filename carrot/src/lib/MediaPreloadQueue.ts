@@ -91,19 +91,19 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 4,       // Reduced from 8 to 4 to prevent browser connection limits
-    [TaskType.VIDEO_PREROLL_6S]: 2, // Reduced from 4 to 2 to prevent HTTP 499 cancellations
-    [TaskType.VIDEO_FULL]: 1,   // Reduced from 2 to 1 to prevent connection overload
-    [TaskType.IMAGE]: 4,        // Reduced from 6 to 4
-    [TaskType.AUDIO_META]: 2,   // Reduced from 4 to 2
-    [TaskType.TEXT_FULL]: 4,    // Reduced from 6 to 4
-    [TaskType.AUDIO_FULL]: 2,   // Reduced from 3 to 2
+    [TaskType.POSTER]: 2,       // Further reduced to prevent browser connection limits
+    [TaskType.VIDEO_PREROLL_6S]: 1, // Only 1 concurrent video request to prevent HTTP 499
+    [TaskType.VIDEO_FULL]: 1,   // Keep at 1 for full video downloads
+    [TaskType.IMAGE]: 2,        // Further reduced
+    [TaskType.AUDIO_META]: 1,   // Further reduced
+    [TaskType.TEXT_FULL]: 2,    // Further reduced
+    [TaskType.AUDIO_FULL]: 1,   // Further reduced
   };
   
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
-    maxConcurrentPosters: 4,        // Reduced from 8 to 4 to prevent browser limits
-    maxConcurrentVideos: 2,         // Reduced from 4 to 2 to prevent HTTP 499 cancellations
-    maxSequentialGap: 10,           // Reduced from 15 to 10 for more conservative preloading
+    maxConcurrentPosters: 2,        // Further reduced to prevent browser limits
+    maxConcurrentVideos: 1,         // Only 1 concurrent video to prevent HTTP 499 cancellations
+    maxSequentialGap: 5,            // Much more conservative preloading
     posterBlocksProgression: false,  // Don't block videos waiting for thumbnails
     videoBlocksProgression: false    // Allow parallel 6-second prerolls for better UX
   };
@@ -519,9 +519,9 @@ class MediaPreloadQueue {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
     }
 
-    // Add a small delay for video requests to prevent overwhelming the browser
+    // Add a longer delay for video requests to prevent overwhelming the browser
     if (type === TaskType.VIDEO_PREROLL_6S || type === TaskType.VIDEO_FULL) {
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 100)); // 100-300ms random delay
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 500)); // 500-1000ms random delay
     }
 
     try {

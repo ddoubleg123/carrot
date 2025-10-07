@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getHTTP1RetryStats, resetHTTP1RetryCounts } from '@/lib/http1Fetch';
 import { connectionPool } from '@/lib/connectionPool';
 import { http1Fetch } from '@/lib/http1Fetch';
+import { globalRequestManager } from '@/lib/GlobalRequestManager';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     // Get current retry statistics
     const retryStats = getHTTP1RetryStats();
     const poolStatus = connectionPool.getPoolStatus();
+    const globalRequestStatus = globalRequestManager.getStatus();
     
     // Test various endpoints to check network connectivity
     const connectivityTests = {
@@ -109,6 +111,7 @@ export async function GET(request: NextRequest) {
       testResults,
       retryStats,
       connectionPool: poolStatus,
+      globalRequestManager: globalRequestStatus,
       environment: {
         nodeOptions: process.env.NODE_OPTIONS,
         httpVersion: process.env.HTTP_VERSION,
@@ -174,11 +177,19 @@ export async function POST(request: NextRequest) {
           timestamp: new Date().toISOString()
         });
         
+      case 'clear-request-queue':
+        globalRequestManager.clearQueue();
+        return NextResponse.json({
+          status: 'success',
+          message: 'Global request queue cleared',
+          timestamp: new Date().toISOString()
+        });
+        
       default:
         return NextResponse.json({
           status: 'error',
           message: 'Unknown action',
-          availableActions: ['reset-retry-stats', 'clear-connection-pool']
+          availableActions: ['reset-retry-stats', 'clear-connection-pool', 'clear-request-queue']
         }, { status: 400 });
     }
     

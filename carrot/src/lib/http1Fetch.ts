@@ -5,6 +5,7 @@
  */
 
 import { connectionPool } from './connectionPool';
+import { globalRequestManager } from './GlobalRequestManager';
 
 interface HTTP1FetchOptions extends RequestInit {
   forceHTTP1?: boolean;
@@ -196,7 +197,7 @@ class HTTP1FetchManager {
   }
 
   /**
-   * Main fetch method with HTTP/1.1 forcing
+   * Main fetch method with HTTP/1.1 forcing and global request throttling
    */
   async fetch(url: string, options: HTTP1FetchOptions = {}): Promise<Response> {
     const {
@@ -216,15 +217,19 @@ class HTTP1FetchManager {
       ? this.createFirebaseHeaders(fetchOptions.headers)
       : this.createHTTP1Headers(fetchOptions.headers);
 
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    // Determine priority based on request type
+    let priority = 0; // Default priority
+    if (validatedUrl.includes('/api/auth/session')) {
+      priority = -1; // Higher priority for auth requests
+    } else if (validatedUrl.includes('/api/video')) {
+      priority = 1; // Lower priority for video requests
+    }
 
     try {
-      const response = await fetch(validatedUrl, {
+      // Use global request manager for throttling
+      const response = await globalRequestManager.request(validatedUrl, {
         ...fetchOptions,
         headers,
-        signal: controller.signal,
         // Force HTTP/1.1 behavior
         credentials: 'same-origin',
         mode: 'cors',
@@ -238,17 +243,13 @@ class HTTP1FetchManager {
         // Additional options to force HTTP/1.1
         integrity: undefined, // Disable integrity checks that might force HTTP/2
         priority: 'low', // Lower priority to avoid HTTP/2 optimizations
-      });
+      }, priority);
 
-      clearTimeout(timeoutId);
-      
       // Reset retry count on success
       this.retryCounts.delete(urlKey);
       
       return response;
     } catch (error) {
-      clearTimeout(timeoutId);
-      
       const err = error as Error;
       console.warn(`[HTTP1Fetch] Request failed (attempt ${currentRetries + 1}/${maxRetries + 1}):`, {
         url,
