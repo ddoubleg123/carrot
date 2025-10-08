@@ -83,12 +83,19 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       // If already proxied, return as-is
       if (u.startsWith('/api/img')) return u;
       
+      // For data URIs (base64 images), use them directly - no proxy needed
+      if (u.startsWith('data:')) {
+        console.log('[prox] Using direct data URI (no proxy needed)');
+        return u;
+      }
+      
       // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
       if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
         try {
           const urlObj = new URL(u);
           // Check if URL has a valid token - if so, it's already signed and public
           if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+            console.log('[prox] Using direct Firebase URL (has token)');
             return u; // Use directly, no proxy needed
           }
         } catch (e) {

@@ -33,11 +33,19 @@ function SkeletonBlock({ height = 240 }: { height?: number }) {
 async function getCommitments(): Promise<CommitmentCardProps[]> {
   const prox = (u?: string | null) => {
     if (!u) return null;
+    
+    // For data URIs (base64 images), use them directly - no proxy needed
+    if (u.startsWith('data:')) {
+      console.log('[prox SSR] Using direct data URI (no proxy needed)');
+      return u;
+    }
+    
     // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
     if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
       try {
         const urlObj = new URL(u);
         if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+          console.log('[prox SSR] Using direct Firebase URL (has token)');
           return u; // Use directly
         }
       } catch (e) {
