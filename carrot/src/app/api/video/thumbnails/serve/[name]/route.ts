@@ -34,9 +34,10 @@ async function tryCleanupOldThumbs() {
   } catch {}
 }
 
-export async function GET(_req: Request, { params }: { params: { name: string } }) {
+export async function GET(_req: Request, { params }: { params: Record<string, string | string[]> }) {
   try {
-    const name = (params?.name || '').toString().replace(/[^0-9_]/g, '');
+    const raw = params?.name;
+    const name = (Array.isArray(raw) ? raw[0] : raw || '').toString().replace(/[^0-9_]/g, '');
     if (!name) {
       return NextResponse.json({ error: 'missing name' }, { status: 400 });
     }
@@ -62,7 +63,7 @@ export async function GET(_req: Request, { params }: { params: { name: string } 
   }
 }
 
-export async function HEAD(req: Request, ctx: { params: { name: string } }) {
+export async function HEAD(req: Request, ctx: { params: Record<string, string | string[]> }) {
   const res = await GET(req, ctx);
   return new NextResponse(null, { status: res.status, headers: res.headers });
 }
