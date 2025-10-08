@@ -96,7 +96,9 @@ try {
   console.log('[firebase.ts] storage instance:', storage);
 } catch (error) {
   console.error('Firebase initialization error', error);
-  throw error; // Re-throw to prevent silent failures
+  // Don't throw - allow the app to continue with undefined Firebase
+  // Components should check if firebase is initialized before using
+  console.warn('[firebase.ts] Firebase will be unavailable for this request');
 }
 
 export { firebaseApp, auth, db, storage, googleProvider };
