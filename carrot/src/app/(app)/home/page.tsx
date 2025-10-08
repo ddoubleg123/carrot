@@ -13,7 +13,6 @@ import { Inter } from 'next/font/google';
 import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
 export const dynamic = 'force-dynamic';
 export const revalidate = 60; // Revalidate every minute
-export const runtime = 'nodejs';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -29,62 +28,28 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 
 export default async function HomePage() {
   try {
-    // Resolve session
-    let session: any = null;
-    try {
-      const mod: any = await import('../../../auth');
-      const authFn: any = typeof mod?.auth === 'function' ? mod.auth : (typeof mod?.default?.auth === 'function' ? mod.default.auth : null);
-      if (authFn) {
-        session = await authFn();
-      }
-    } catch {}
-    if (!session?.user) {
-      const h = await nextHeaders();
-      const cookieHeader = h.get('cookie') || '';
-      try {
-        const sres = await fetch(`/api/auth/session`, { headers: { 'cookie': cookieHeader }, cache: 'no-store' });
-        if (sres.ok) session = await sres.json().catch(() => null);
-      } catch {}
-    }
-
-    // If no session cookie at all, render login prompt instead of redirecting
-    if (!session?.user) {
-      const c = await nextCookies();
-      const hasCookie = Boolean(
-        c.get('next-auth.session-token')?.value ||
-        c.get('__Secure-next-auth.session-token')?.value ||
-        c.get('authjs.session-token')?.value ||
-        c.get('__Secure-authjs.session-token')?.value
-      );
-      if (!hasCookie) {
-        return (
-          <div className="min-h-screen flex items-center justify-center p-10">
-            <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
-              <h1 className="text-xl font-semibold">Sign in to view your home feed</h1>
-              <a href="/login" className="inline-block px-4 py-2 rounded bg-black text-white">Go to Login</a>
-            </div>
+    // Gate by cookie presence only (avoid SSR auth imports/fetches)
+    const c = await nextCookies();
+    const hasCookie = Boolean(
+      c.get('next-auth.session-token')?.value ||
+      c.get('__Secure-next-auth.session-token')?.value ||
+      c.get('authjs.session-token')?.value ||
+      c.get('__Secure-authjs.session-token')?.value
+    );
+    if (!hasCookie) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-10">
+          <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
+            <h1 className="text-xl font-semibold">Sign in to view your home feed</h1>
+            <a href="/login" className="inline-block px-4 py-2 rounded bg-black text-white">Go to Login</a>
           </div>
-        );
-      }
+        </div>
+      );
     }
 
-    // Load data
+    // Load data (currently simplified to empty)
     const commitments = await getCommitments();
-    let serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined;
-    try {
-      const h2 = await nextHeaders();
-      const cookieHeader2 = h2.get('cookie') || '';
-      const base3 = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
-      const resp = await fetch(`${base3}/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
-      if (resp.ok) {
-        const j = await resp.json();
-        serverPrefs = {
-          reducedMotion: Boolean(j?.reducedMotion),
-          captionsDefault: j?.captionsDefault === true || j?.captionsDefault === 'on',
-          autoplay: typeof j?.autoplay === 'boolean' ? j.autoplay : undefined,
-        };
-      }
-    } catch {}
+    const serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined = undefined;
 
     return (
       <Suspense fallback={
