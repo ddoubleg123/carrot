@@ -13,6 +13,7 @@ import { Inter } from 'next/font/google';
 import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
 export const dynamic = 'force-dynamic';
 export const revalidate = 60; // Revalidate every minute
+export const runtime = 'nodejs';
 
 const inter = Inter({ subsets: ['latin'] });
 
