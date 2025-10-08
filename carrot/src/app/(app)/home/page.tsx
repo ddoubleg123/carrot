@@ -162,6 +162,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   } catch (e) {
     console.error('Error fetching posts for /home:', e);
     return [];
+  }
 // Add caching for home page
 export const revalidate = 60; // Revalidate every minute
 
@@ -212,7 +213,7 @@ export default async function HomePage() {
     try {
       const h2 = await nextHeaders();
       const cookieHeader2 = h2.get('cookie') || '';
-      const base3 = process.env.NEXTAUTH_URL || 'https://carrot-app.on.render.com';
+      const base3 = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
       const resp = await fetch(`${base3}/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
       if (resp.ok) {
         const j = await resp.json();
