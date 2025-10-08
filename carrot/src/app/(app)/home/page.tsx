@@ -27,32 +27,14 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 }
 
 export default async function HomePage() {
-  try {
-    // Gate by cookie presence only (avoid SSR auth imports/fetches)
-    // In Next.js 15+, cookies() is called synchronously but accessed asynchronously
-    const cookieStore = await nextCookies();
-    const hasCookie = Boolean(
-      cookieStore.get('next-auth.session-token')?.value ||
-      cookieStore.get('__Secure-next-auth.session-token')?.value ||
-      cookieStore.get('authjs.session-token')?.value ||
-      cookieStore.get('__Secure-authjs.session-token')?.value
-    );
-    if (!hasCookie) {
-      return (
-        <div className="min-h-screen flex items-center justify-center p-10">
-          <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
-            <h1 className="text-xl font-semibold">Sign in to view your home feed</h1>
-            <a href="/login" className="inline-block px-4 py-2 rounded bg-black text-white">Go to Login</a>
-          </div>
-        </div>
-      );
-    }
+  // Simplified version to debug 500 error
+  // Remove try-catch temporarily to see actual error
+  
+  // Load data (currently simplified to empty)
+  const commitments = await getCommitments();
+  const serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined = undefined;
 
-    // Load data (currently simplified to empty)
-    const commitments = await getCommitments();
-    const serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined = undefined;
-
-    return (
+  return (
       <Suspense fallback={
         <div className="flex justify-center items-center min-h-screen">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -92,18 +74,4 @@ export default async function HomePage() {
         </div>
       </Suspense>
     );
-  } catch (e: any) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-10">
-        <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
-          <h1 className="text-xl font-semibold">Home failed to load</h1>
-          <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto max-h-48">{e?.message || String(e)}</pre>
-          <div className="flex gap-2 justify-center">
-            <a href="/home" className="inline-block px-4 py-2 rounded bg-black text-white">Retry</a>
-            <a href="/login" className="inline-block px-4 py-2 rounded border">Login</a>
-          </div>
-        </div>
-      </div>
-    );
-  }
 }
