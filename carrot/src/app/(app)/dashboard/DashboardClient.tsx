@@ -82,7 +82,21 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       if (!u) return null;
       // If already proxied, return as-is
       if (u.startsWith('/api/img')) return u;
-      // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
+      
+      // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
+      if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+        try {
+          const urlObj = new URL(u);
+          // Check if URL has a valid token - if so, it's already signed and public
+          if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+            return u; // Use directly, no proxy needed
+          }
+        } catch (e) {
+          console.warn('[prox] Failed to parse URL:', u);
+        }
+      }
+      
+      // For URLs without tokens or other sources, proxy them
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
       return `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
     };
@@ -91,21 +105,26 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       // If already proxied, return as-is
       if (u.startsWith('/api/video')) return u;
       
-      // For Firebase Storage URLs, always proxy them
-      if (u.includes('firebasestorage.googleapis.com')) {
-        // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
-        const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
-        if (isAlreadyEncoded) {
-          // URL is already encoded, pass it directly to avoid double-encoding
-          return `/api/video?url=${u}`;
-        } else {
-          // URL is not encoded, encode it once
-          return `/api/video?url=${encodeURIComponent(u)}`;
+      // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
+      // Firebase URLs with ?alt=media&token=... are already public and don't need proxying
+      if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+        try {
+          const urlObj = new URL(u);
+          // Check if URL has a valid token parameter - if so, it's already signed and public
+          if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+            console.log('[proxVideo] Using direct Firebase URL (has token):', u.substring(0, 100));
+            return u; // Use directly, no proxy needed
+          }
+        } catch (e) {
+          console.warn('[proxVideo] Failed to parse URL:', u);
         }
+        // No token found, proxy it
+        console.log('[proxVideo] Proxying Firebase URL (no token)');
       }
       
-      // For other URLs, proxy them as well
-      return `/api/video?url=${encodeURIComponent(u)}`;
+      // For URLs without tokens or other sources, proxy them
+      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
+      return `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
     };
     const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
