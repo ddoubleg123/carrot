@@ -534,7 +534,7 @@ class MediaPreloadQueue {
       throw new Error(`Invalid URL for task ${taskId}: ${url}`);
     }
 
-    // NO ARTIFICIAL DELAYS - let the GlobalRequestManager handle throttling
+    // NO ARTIFICIAL DELAYS - let browser and http1Fetch handle request pacing naturally
     // Removed 100ms delay that was slowing down all media loading
 
     try {
