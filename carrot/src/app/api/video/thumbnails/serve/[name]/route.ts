@@ -60,7 +60,8 @@ export async function GET(_req: Request) {
     headers.set('cache-control', 'public, max-age=86400, immutable');
     headers.set('access-control-allow-origin', '*');
 
-    return new NextResponse(buf, { status: 200, headers });
+    const body = new Uint8Array(buf);
+    return new NextResponse(body, { status: 200, headers });
   } catch (e: any) {
     return NextResponse.json({ error: 'serve failed', details: e?.message || String(e) }, { status: 500 });
   }
