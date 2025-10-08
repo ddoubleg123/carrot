@@ -1,5 +1,4 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
-import '../../../lib/firebase';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
 import { redirect } from 'next/navigation';
