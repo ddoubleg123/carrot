@@ -31,8 +31,37 @@ function SkeletonBlock({ height = 240 }: { height?: number }) {
 
 // Server-side data fetching from database
 async function getCommitments(): Promise<CommitmentCardProps[]> {
-  const prox = (u?: string | null) => (u ? `/api/img?url=${encodeURIComponent(u)}` : null);
-  const proxVideo = (u?: string | null) => (u ? `/api/video?url=${encodeURIComponent(u)}` : null);
+  const prox = (u?: string | null) => {
+    if (!u) return null;
+    // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
+    if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+      try {
+        const urlObj = new URL(u);
+        if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+          return u; // Use directly
+        }
+      } catch (e) {
+        console.warn('[prox] Failed to parse URL:', u);
+      }
+    }
+    return `/api/img?url=${encodeURIComponent(u)}`;
+  };
+  const proxVideo = (u?: string | null) => {
+    if (!u) return null;
+    // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
+    if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+      try {
+        const urlObj = new URL(u);
+        if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
+          console.log('[proxVideo SSR] Using direct Firebase URL (has token)');
+          return u; // Use directly
+        }
+      } catch (e) {
+        console.warn('[proxVideo SSR] Failed to parse URL:', u);
+      }
+    }
+    return `/api/video?url=${encodeURIComponent(u)}`;
+  };
   const proxArr = (arr?: string[] | string | null) => {
     if (!arr) return [] as string[];
     if (Array.isArray(arr)) return arr.map((u) => prox(u)!).filter(Boolean) as string[];
