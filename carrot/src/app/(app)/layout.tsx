@@ -3,7 +3,6 @@ import { headers as nextHeaders } from 'next/headers';
 import ClientSessionProvider from './dashboard/components/ClientSessionProvider';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Try NextAuth auth() first (dynamic import to avoid RSC init issues)
