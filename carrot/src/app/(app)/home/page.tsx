@@ -29,12 +29,13 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
 export default async function HomePage() {
   try {
     // Gate by cookie presence only (avoid SSR auth imports/fetches)
-    const c = await nextCookies();
+    // In Next.js 15+, cookies() is called synchronously but accessed asynchronously
+    const cookieStore = await nextCookies();
     const hasCookie = Boolean(
-      c.get('next-auth.session-token')?.value ||
-      c.get('__Secure-next-auth.session-token')?.value ||
-      c.get('authjs.session-token')?.value ||
-      c.get('__Secure-authjs.session-token')?.value
+      cookieStore.get('next-auth.session-token')?.value ||
+      cookieStore.get('__Secure-next-auth.session-token')?.value ||
+      cookieStore.get('authjs.session-token')?.value ||
+      cookieStore.get('__Secure-authjs.session-token')?.value
     );
     if (!hasCookie) {
       return (
