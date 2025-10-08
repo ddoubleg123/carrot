@@ -34,11 +34,8 @@ async function tryCleanupOldThumbs() {
   } catch {}
 }
 
-export async function GET(_req: Request, ctx: { params: { name: string } } | { params: Promise<{ name: string }> }) {
+export async function GET(_req: Request, { params }: { params: { name: string } }) {
   try {
-    // Support both direct and Promise-based params, matching other routes in this codebase
-    const rawParams = (ctx as any)?.params;
-    const params = typeof rawParams?.then === 'function' ? await rawParams : rawParams;
     const name = (params?.name || '').toString().replace(/[^0-9_]/g, '');
     if (!name) {
       return NextResponse.json({ error: 'missing name' }, { status: 400 });
@@ -65,8 +62,8 @@ export async function GET(_req: Request, ctx: { params: { name: string } } | { p
   }
 }
 
-export async function HEAD(req: Request, ctx: any) {
-  const res = await GET(req, ctx as any);
+export async function HEAD(req: Request, ctx: { params: { name: string } }) {
+  const res = await GET(req, ctx);
   return new NextResponse(null, { status: res.status, headers: res.headers });
 }
 
