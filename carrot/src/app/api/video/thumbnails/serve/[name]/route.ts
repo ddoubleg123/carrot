@@ -34,10 +34,13 @@ async function tryCleanupOldThumbs() {
   } catch {}
 }
 
-export async function GET(_req: Request, { params }: { params: Record<string, string | string[]> }) {
+export async function GET(_req: Request) {
   try {
-    const raw = params?.name;
-    const name = (Array.isArray(raw) ? raw[0] : raw || '').toString().replace(/[^0-9_]/g, '');
+    // Extract dynamic [name] from URL path: /api/video/thumbnails/serve/<name>
+    const { pathname } = new URL(_req.url);
+    const match = pathname.match(/\/api\/video\/thumbnails\/serve\/([^/?#]+)/);
+    const raw = match ? match[1] : '';
+    const name = decodeURIComponent(raw).toString().replace(/[^0-9_]/g, '');
     if (!name) {
       return NextResponse.json({ error: 'missing name' }, { status: 400 });
     }
@@ -63,8 +66,8 @@ export async function GET(_req: Request, { params }: { params: Record<string, st
   }
 }
 
-export async function HEAD(req: Request, ctx: { params: Record<string, string | string[]> }) {
-  const res = await GET(req, ctx);
+export async function HEAD(req: Request) {
+  const res = await GET(req);
   return new NextResponse(null, { status: res.status, headers: res.headers });
 }
 
