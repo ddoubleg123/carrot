@@ -22,8 +22,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session?.user) {
     const hdrs = await nextHeaders();
     const cookieHeader = hdrs.get('cookie') || '';
+    const host = hdrs.get('host') || 'carrot-app.onrender.com';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const baseUrl = `${protocol}://${host}`;
+    
     try {
-      const res = await fetch(`/api/auth/session`, {
+      const res = await fetch(`${baseUrl}/api/auth/session`, {
         headers: { 'cookie': cookieHeader },
         cache: 'no-store',
       });
@@ -33,7 +37,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       if (res.ok) {
         session = await res.json().catch(() => null);
       }
-    } catch {}
+    } catch (err) {
+      // Silently fail - just continue without session
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[layout] Failed to fetch session:', err);
+      }
+    }
   }
 
   // Only handle onboarding redirect here if we do have a user
