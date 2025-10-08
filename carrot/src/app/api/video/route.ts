@@ -369,6 +369,11 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       if (v) headers.set(h, v);
     }
 
+    // Ensure a safe default content-type for video if upstream omitted it
+    if (!headers.has('content-type')) {
+      headers.set('content-type', 'video/mp4');
+    }
+
     // Optional redirect for signed or token URLs to avoid any proxy byte-mismatch (feature flagged)
     try {
       const ALLOW_REDIRECT = String(process.env.VIDEO_PROXY_ALLOW_REDIRECT || '0').toLowerCase() === '1';
@@ -389,7 +394,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Cache-Control, If-None-Match, If-Modified-Since, Connection');
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Cache-Control, Accept-Ranges');
-    headers.set('Connection', 'keep-alive');
+    // Do not set a Connection header in HTTP/2; intermediaries may reject it
     // Short negative caching to prevent request storms on missing/forbidden objects
     if (status === 404 || status === 410 || status === 403) {
       headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');

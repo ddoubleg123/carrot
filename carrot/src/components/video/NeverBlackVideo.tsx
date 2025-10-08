@@ -47,11 +47,14 @@ export default function NeverBlackVideo({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [posterLoaded, setPosterLoaded] = useState(false);
   const [posterError, setPosterError] = useState(false);
+  const [clientPosterUrl, setClientPosterUrl] = useState<string | null>(null);
   const [fallbackAttempt, setFallbackAttempt] = useState(0); // Track fallback attempts
   const [videoReady, setVideoReady] = useState(false); // metadata available
   const [firstFrameReady, setFirstFrameReady] = useState(false); // can paint frame
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttffStarted, setTtffStarted] = useState(false);
+  const [compatSupported, setCompatSupported] = useState<boolean | null>(null);
+  const [compatMessage, setCompatMessage] = useState<string | null>(null);
   
   // Metrics tracking
   const metricsRef = useRef(MediaMetrics.instance);
@@ -107,6 +110,7 @@ export default function NeverBlackVideo({
   const primaryPosterUrl = getPosterUrl();
   const fallbackPosterUrl = getFallbackPosterUrl();
   const currentPosterUrl = fallbackAttempt === 0 ? primaryPosterUrl : fallbackPosterUrl;
+  const effectivePosterUrl = clientPosterUrl || currentPosterUrl || undefined;
   
   // Resolve video URL via proxy or preloaded data
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -139,6 +143,28 @@ export default function NeverBlackVideo({
       // Fallback to normal URL resolution
       if (bucket && path) {
         setVideoUrl(`/api/video?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`);
+        // Probe codec support asynchronously (non-blocking)
+        try {
+          const test = document.createElement('video') as HTMLVideoElement;
+          const canMp4 = test.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+          if (canMp4 === 'probably') {
+            setCompatSupported(true);
+          } else if (canMp4 === '') {
+            fetch(`/api/video/probe?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path + '/video.mp4')}`, { cache: 'no-store' })
+              .then(r => r.json().catch(() => ({})))
+              .then((j) => {
+                if (j && j.ok && typeof j.supported === 'boolean') {
+                  setCompatSupported(j.supported);
+                  if (!j.supported) setCompatMessage('Transcoding in progress for playback compatibility');
+                } else {
+                  setCompatSupported(null);
+                }
+              })
+              .catch(() => setCompatSupported(null));
+          } else {
+            setCompatSupported(null);
+          }
+        } catch { setCompatSupported(null); }
         return;
       }
       if (!src) {
@@ -153,6 +179,28 @@ export default function NeverBlackVideo({
         const u = new URL(src, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
         if (u.pathname.startsWith('/api/video')) {
           setVideoUrl(u.toString());
+          // Fire a probe for already-proxied URLs
+          try {
+            const test = document.createElement('video') as HTMLVideoElement;
+            const canMp4 = test.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+            if (canMp4 === 'probably') {
+              setCompatSupported(true);
+            } else if (canMp4 === '') {
+              fetch(`/api/video/probe?url=${encodeURIComponent(u.toString())}`, { cache: 'no-store' })
+                .then(r => r.json().catch(() => ({})))
+                .then((j) => {
+                  if (j && j.ok && typeof j.supported === 'boolean') {
+                    setCompatSupported(j.supported);
+                    if (!j.supported) setCompatMessage('Transcoding in progress for playback compatibility');
+                  } else {
+                    setCompatSupported(null);
+                  }
+                })
+                .catch(() => setCompatSupported(null));
+            } else {
+              setCompatSupported(null);
+            }
+          } catch { setCompatSupported(null); }
           return;
         }
         
@@ -163,6 +211,29 @@ export default function NeverBlackVideo({
           // URL is not encoded, encode it once
           setVideoUrl(`/api/video?url=${encodeURIComponent(src)}`);
         }
+        // Probe via server since direct URL may be various codecs
+        try {
+          const test = document.createElement('video') as HTMLVideoElement;
+          const canMp4 = test.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+          if (canMp4 === 'probably') {
+            setCompatSupported(true);
+          } else if (canMp4 === '') {
+            const toProbe = `/api/video?url=${encodeURIComponent(isAlreadyEncoded ? src : encodeURIComponent(src))}`;
+            fetch(`/api/video/probe?url=${encodeURIComponent(toProbe)}`, { cache: 'no-store' })
+              .then(r => r.json().catch(() => ({})))
+              .then((j) => {
+                if (j && j.ok && typeof j.supported === 'boolean') {
+                  setCompatSupported(j.supported);
+                  if (!j.supported) setCompatMessage('Transcoding in progress for playback compatibility');
+                } else {
+                  setCompatSupported(null);
+                }
+              })
+              .catch(() => setCompatSupported(null));
+          } else {
+            setCompatSupported(null);
+          }
+        } catch { setCompatSupported(null); }
       } catch {
         if (isAlreadyEncoded) {
           // URL is already encoded, pass it directly to avoid double-encoding
@@ -250,8 +321,32 @@ export default function NeverBlackVideo({
       return;
     }
     
-    // All poster attempts failed - will show placeholder
+    // All poster attempts failed - will show placeholder and attempt client-side generation without blocking
     setPosterError(true);
+    try {
+      // If we already have a generated poster, don't redo
+      if (!clientPosterUrl) {
+        // If metadata is ready, try immediate capture; otherwise wait for canplay
+        const v = videoRef.current;
+        if (v && (v.readyState ?? 0) >= 2) {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, v.videoWidth || 640);
+            canvas.height = Math.max(1, v.videoHeight || 360);
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+              if (dataUrl && dataUrl.startsWith('data:image/')) {
+                setClientPosterUrl(dataUrl);
+                setPosterLoaded(true);
+                setPosterError(false);
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
     
     // Track poster load failure
     metricsRef.current.endPosterLoad(postId, false, false, `Poster load failed after ${fallbackAttempt + 1} attempts`);
@@ -338,6 +433,25 @@ export default function NeverBlackVideo({
       metricsRef.current.endTTFF(postId, true);
       setTtffStarted(false);
     }
+    // If we don't have a working poster, generate a client-side one opportunistically
+    try {
+      if (!posterLoaded && !clientPosterUrl && videoRef.current) {
+        const v = videoRef.current;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, v.videoWidth || 640);
+        canvas.height = Math.max(1, v.videoHeight || 360);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          if (dataUrl && dataUrl.startsWith('data:image/')) {
+            setClientPosterUrl(dataUrl);
+            setPosterLoaded(true);
+            setPosterError(false);
+          }
+        }
+      }
+    } catch {}
   };
 
   const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
@@ -403,9 +517,9 @@ export default function NeverBlackVideo({
 
   // PHASE A.1: Display Logic - NEVER show black screens
   // Keep poster/placeholder visible until the first frame is ready to paint
-  const showPoster = (!firstFrameReady) && posterLoaded && !posterError;
-  const showPlaceholder = (!firstFrameReady) && (!currentPosterUrl || posterError);
-  const showLoading = (!firstFrameReady) && !posterLoaded && !posterError && currentPosterUrl;
+  const showPoster = (!firstFrameReady) && (posterLoaded || !!clientPosterUrl) && !posterError;
+  const showPlaceholder = (!firstFrameReady) && (!effectivePosterUrl || posterError);
+  const showLoading = (!firstFrameReady) && !posterLoaded && !posterError && !!currentPosterUrl;
 
   // Sticky frame: show last captured frame when paused and we have video metadata
   const cachedState = stateCacheRef.current.get(postId);
@@ -433,11 +547,11 @@ export default function NeverBlackVideo({
         ref={setVideoRef}
         className="w-full h-full object-cover"
         src={videoUrl || undefined}
-        poster={currentPosterUrl || undefined} // Always provide poster if available
+        poster={effectivePosterUrl} // Always provide poster if available (client or server)
         muted={muted}
         playsInline={playsInline}
         controls={controls}
-        autoPlay={autoPlay}
+        autoPlay={compatSupported === false ? false : autoPlay}
         preload="metadata"
         crossOrigin="anonymous"
         onLoadedMetadata={handleVideoLoadedMetadata}
@@ -492,17 +606,25 @@ export default function NeverBlackVideo({
       {showPoster && !showFrozenFrame && (
         <div className="absolute inset-0">
           <div className="absolute inset-0 pointer-events-none">
-            <Image
-              src={currentPosterUrl!}
-              alt="Video thumbnail"
-              fill
-              className="object-cover"
-              onLoad={handlePosterLoad}
-              onError={handlePosterError}
-              priority={isPosterPreloaded}
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              unoptimized
-            />
+            {clientPosterUrl ? (
+              <img
+                src={clientPosterUrl}
+                alt="Video thumbnail"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Image
+                src={currentPosterUrl!}
+                alt="Video thumbnail"
+                fill
+                className="object-cover"
+                onLoad={handlePosterLoad}
+                onError={handlePosterError}
+                priority={isPosterPreloaded}
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                unoptimized
+              />
+            )}
           </div>
           {/* Clickable play overlay */}
           <button
@@ -574,6 +696,14 @@ export default function NeverBlackVideo({
           <div>Play:{isPlaying ? '▶' : '❚❚'} Ready:{(videoRef.current?.readyState ?? 0)} First:{firstFrameReady ? '✓' : '○'}</div>
           <div>Src:{(videoUrl || '').slice(0, 32)}...</div>
           <div>Poster:{(currentPosterUrl || '').slice(0, 32)}...</div>
+          <div>Compat:{compatSupported === null ? 'unk' : compatSupported ? 'ok' : 'no'}</div>
+        </div>
+      )}
+
+      {/* Codec gating banner */}
+      {compatSupported === false && (
+        <div className="absolute bottom-2 left-2 right-2 mx-2 px-3 py-2 text-xs rounded bg-yellow-500/90 text-black shadow">
+          {compatMessage || 'Transcoding for compatibility. Video will play when ready.'}
         </div>
       )}
 

@@ -28,6 +28,8 @@ export default function SimpleVideo({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [compatSupported, setCompatSupported] = useState<boolean | null>(null);
+  const [compatMessage, setCompatMessage] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [networkRetryCount, setNetworkRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -324,6 +326,36 @@ export default function SimpleVideo({
     });
     
       setVideoSrc(proxyUrl);
+      // Proactively check codec support without blocking playback
+      try {
+        const test = document.createElement('video');
+        const canMp4 = test.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+        if (canMp4 === 'probably') {
+          setCompatSupported(true);
+        } else if (canMp4 === '') {
+          // Unsure: ask server to probe when we have a concrete URL
+          const toProbe = proxyUrl.startsWith('/api/video') ? proxyUrl : `/api/video?url=${encodeURIComponent(proxyUrl)}`;
+          fetch(`/api/video/probe?url=${encodeURIComponent(toProbe)}`, { cache: 'no-store' })
+            .then(r => r.json().catch(() => ({})))
+            .then((j) => {
+              if (j && j.ok && typeof j.supported === 'boolean') {
+                setCompatSupported(j.supported);
+                if (!j.supported) {
+                  setCompatMessage('Transcoding in progress for playback compatibility');
+                }
+              } else {
+                setCompatSupported(null);
+              }
+            })
+            .catch(() => setCompatSupported(null));
+        } else {
+          // maybe: allow but keep an eye
+          setCompatSupported(null);
+        }
+      } catch {
+        setCompatSupported(null);
+      }
+
       // Show video immediately when source is set - don't wait for events
       setIsLoading(false);
     }; // Close processNormalUrl function
