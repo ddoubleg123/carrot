@@ -1,7 +1,6 @@
 import FirebaseClientInit from '../dashboard/components/FirebaseClientInit';
 import { Suspense } from 'react';
 import type { CommitmentCardProps } from '../dashboard/components/CommitmentCard';
-import { redirect } from 'next/navigation';
 import DashboardClient from '../dashboard/DashboardClient';
 import PostModalController from '../../../components/post-modal/PostModalController';
 import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
@@ -163,110 +162,120 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   } catch (e) {
     console.error('Error fetching posts for /home:', e);
     return [];
-  }
-}
-
 // Add caching for home page
 export const revalidate = 60; // Revalidate every minute
 
 export default async function HomePage() {
-  // First try auth() via dynamic import
-  let session: any = null;
   try {
-    const mod: any = await import('../../../auth');
-    const authFn: any = typeof mod?.auth === 'function' ? mod.auth : (typeof mod?.default?.auth === 'function' ? mod.default.auth : null);
-    if (authFn) {
-      session = await authFn();
-      if (process.env.NODE_ENV !== 'production') {
-        try { console.log('[home] auth() result user?', !!session?.user); } catch {}
-      }
-    }
-  } catch {}
-  // Fallback to session endpoint with forwarded cookies
-  if (!session?.user) {
-    const h = await nextHeaders();
-    const cookieHeader = h.get('cookie') || '';
+    // Resolve session
+    let session: any = null;
     try {
-      const sres = await fetch(`/api/auth/session`, { headers: { 'cookie': cookieHeader }, cache: 'no-store' });
-      if (sres.ok) session = await sres.json().catch(() => null);
-      if (process.env.NODE_ENV !== 'production') {
-        try { console.log('[home] session fetch status', sres.status); } catch {}
+      const mod: any = await import('../../../auth');
+      const authFn: any = typeof mod?.auth === 'function' ? mod.auth : (typeof mod?.default?.auth === 'function' ? mod.default.auth : null);
+      if (authFn) {
+        session = await authFn();
       }
     } catch {}
-  }
-  // As a final guard, check for presence of NextAuth session cookie to avoid false negatives
-  if (!session?.user) {
-    const c = await nextCookies();
-    const hasCookie = Boolean(
-      c.get('next-auth.session-token')?.value ||
-      c.get('__Secure-next-auth.session-token')?.value ||
-      c.get('authjs.session-token')?.value ||
-      c.get('__Secure-authjs.session-token')?.value
-    );
-    if (process.env.NODE_ENV !== 'production') {
-      try { console.log('[home] cookie presence', hasCookie); } catch {}
+    if (!session?.user) {
+      const h = await nextHeaders();
+      const cookieHeader = h.get('cookie') || '';
+      try {
+        const sres = await fetch(`/api/auth/session`, { headers: { 'cookie': cookieHeader }, cache: 'no-store' });
+        if (sres.ok) session = await sres.json().catch(() => null);
+      } catch {}
     }
-    if (!hasCookie) {
-      redirect('/login');
-    }
-  }
 
-  const commitments = await getCommitments();
-  // Fetch server-backed playback prefs using the same session cookie
-  let serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined;
-  try {
-    const h2 = await nextHeaders();
-    const cookieHeader2 = h2.get('cookie') || '';
-    const base3 = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com';
-    const resp = await fetch(`${base3}/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
-    if (resp.ok) {
-      const j = await resp.json();
-      serverPrefs = {
-        reducedMotion: Boolean(j?.reducedMotion),
-        captionsDefault: j?.captionsDefault === true || j?.captionsDefault === 'on',
-        autoplay: typeof j?.autoplay === 'boolean' ? j.autoplay : undefined,
-      };
-    }
-  } catch {}
-
-  return (
-    <Suspense fallback={
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    }>
-      <div className={`min-h-screen flex ${inter.className}`}>
-        {/* Left nav */}
-        <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
-          <MinimalNav />
-        </aside>
-
-        {/* Main content area */}
-        <main className="flex-1 min-w-0 flex">
-          {/* Feed column */}
-          <div className="w-full min-w-[320px] max-w-[720px] px-6" style={{ marginTop: -20, paddingTop: 0 }}>
-            <FirebaseClientInit />
-            <ClientSessionProvider>
-              <DashboardClient initialCommitments={commitments} isModalComposer={true} serverPrefs={serverPrefs} />
-              {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
-              <PostModalController />
-            </ClientSessionProvider>
-          </div>
-
-          {/* Right rail (hidden on small screens) */}
-          <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-            <div className="space-y-6">
-              <Widgets />
-              <FeedDebugger />
-              <VideoLoadingDiagnostics 
-                videoUrl={commitments.find(p => p.videoUrl)?.videoUrl || ''} 
-                postId={commitments.find(p => p.videoUrl)?.id || ''} 
-              />
-              <NetworkPerformanceMonitor />
+    // If no session cookie at all, render login prompt instead of redirecting
+    if (!session?.user) {
+      const c = await nextCookies();
+      const hasCookie = Boolean(
+        c.get('next-auth.session-token')?.value ||
+        c.get('__Secure-next-auth.session-token')?.value ||
+        c.get('authjs.session-token')?.value ||
+        c.get('__Secure-authjs.session-token')?.value
+      );
+      if (!hasCookie) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-10">
+            <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
+              <h1 className="text-xl font-semibold">Sign in to view your home feed</h1>
+              <a href="/login" className="inline-block px-4 py-2 rounded bg-black text-white">Go to Login</a>
             </div>
+          </div>
+        );
+      }
+    }
+
+    // Load data
+    const commitments = await getCommitments();
+    let serverPrefs: { reducedMotion: boolean; captionsDefault: boolean; autoplay?: boolean } | undefined;
+    try {
+      const h2 = await nextHeaders();
+      const cookieHeader2 = h2.get('cookie') || '';
+      const base3 = process.env.NEXTAUTH_URL || 'https://carrot-app.on.render.com';
+      const resp = await fetch(`${base3}/api/user/prefs`, { headers: { Cookie: cookieHeader2 }, cache: 'no-store' });
+      if (resp.ok) {
+        const j = await resp.json();
+        serverPrefs = {
+          reducedMotion: Boolean(j?.reducedMotion),
+          captionsDefault: j?.captionsDefault === true || j?.captionsDefault === 'on',
+          autoplay: typeof j?.autoplay === 'boolean' ? j.autoplay : undefined,
+        };
+      }
+    } catch {}
+
+    return (
+      <Suspense fallback={
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      }>
+        <div className={`min-h-screen flex ${inter.className}`}>
+          {/* Left nav */}
+          <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+            <MinimalNav />
           </aside>
-        </main>
+
+          {/* Main content area */}
+          <main className="flex-1 min-w-0 flex">
+            {/* Feed column */}
+            <div className="w-full min-w-[320px] max-w-[720px] px-6" style={{ marginTop: -20, paddingTop: 0 }}>
+              <FirebaseClientInit />
+              <ClientSessionProvider>
+                <DashboardClient initialCommitments={commitments} isModalComposer={true} serverPrefs={serverPrefs} />
+                {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
+                <PostModalController />
+              </ClientSessionProvider>
+            </div>
+
+            {/* Right rail (hidden on small screens) */}
+            <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
+              <div className="space-y-6">
+                <Widgets />
+                <FeedDebugger />
+                <VideoLoadingDiagnostics
+                  videoUrl={commitments.find((p: any) => p.videoUrl)?.videoUrl || ''}
+                  postId={commitments.find((p: any) => p.videoUrl)?.id || ''}
+                />
+                <NetworkPerformanceMonitor />
+              </div>
+            </aside>
+          </main>
+        </div>
+      </Suspense>
+    );
+  } catch (e: any) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-10">
+        <div className="bg-white rounded-xl shadow p-8 text-center space-y-4">
+          <h1 className="text-xl font-semibold">Home failed to load</h1>
+          <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto max-h-48">{e?.message || String(e)}</pre>
+          <div className="flex gap-2 justify-center">
+            <a href="/home" className="inline-block px-4 py-2 rounded bg-black text-white">Retry</a>
+            <a href="/login" className="inline-block px-4 py-2 rounded border">Login</a>
+          </div>
+        </div>
       </div>
-    </Suspense>
-  );
+    );
+  }
 }
