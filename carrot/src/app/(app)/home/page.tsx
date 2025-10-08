@@ -11,9 +11,9 @@ import VideoLoadingDiagnostics from '../../../components/debug/VideoLoadingDiagn
 import NetworkPerformanceMonitor from '../../../components/debug/NetworkPerformanceMonitor';
 import { Inter } from 'next/font/google';
 import { headers as nextHeaders, cookies as nextCookies } from 'next/headers';
-import '../../../lib/debugTools';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const revalidate = 60; // Revalidate every minute
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -163,8 +163,6 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     console.error('Error fetching posts for /home:', e);
     return [];
   }
-// Add caching for home page
-export const revalidate = 60; // Revalidate every minute
 
 export default async function HomePage() {
   try {
