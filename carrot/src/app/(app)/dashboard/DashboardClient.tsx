@@ -114,9 +114,24 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     };
     const proxVideo = (u?: string | null) => {
       if (!u) return null;
+      
+      // VALIDATION: Check for valid video formats
+      const VALID_VIDEO_FORMATS = /\.(mp4|webm|mov|m4v|avi|mkv|ogg|ogv)(\?|$)/i;
+      const VALID_VIDEO_MIME_TYPES = /^(video\/|application\/x-mpegURL|application\/vnd\.apple\.mpegurl)/i;
+      
       // If already proxied, return as-is
       if (u.startsWith('/api/video')) {
         console.log('[proxVideo] URL already proxied, returning as-is:', u.substring(0, 100));
+        return u;
+      }
+      
+      // Check if it's a data URI with video MIME type
+      if (u.startsWith('data:')) {
+        if (!VALID_VIDEO_MIME_TYPES.test(u)) {
+          console.warn('[proxVideo] ⚠️ Invalid data URI - not a video MIME type:', u.substring(0, 100));
+          return null;
+        }
+        console.log('[proxVideo] ✓ Valid video data URI, using directly');
         return u;
       }
       
@@ -135,6 +150,21 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         }
         // No token found, proxy it
         console.log('[proxVideo] Proxying Firebase URL (no token):', u.substring(0, 100));
+      }
+      
+      // Validate video format for direct URLs
+      if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('/')) {
+        console.warn('[proxVideo] ⚠️ Invalid URL format:', u.substring(0, 100));
+        return null;
+      }
+      
+      // Check for valid video extension
+      if (!VALID_VIDEO_FORMATS.test(u) && !u.includes('firebasestorage')) {
+        console.warn('[proxVideo] ⚠️ Invalid video format - no valid extension found:', {
+          url: u.substring(0, 100),
+          hint: 'Expected: .mp4, .webm, .mov, .m4v, .avi, .mkv, .ogg, .ogv'
+        });
+        return null;
       }
       
       // For URLs without tokens or other sources, proxy them

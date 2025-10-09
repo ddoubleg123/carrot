@@ -777,12 +777,55 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               </button>
               {/* Video rendered by player; original parent is captured dynamically when opening lightbox */}
               {(() => {
+                // VALIDATION: Check for valid video URL before rendering player
+                const VALID_VIDEO_FORMATS = /\.(mp4|webm|mov|m4v|avi|mkv|ogg|ogv)(\?|$)/i;
+                const VALID_VIDEO_MIME_TYPES = /^(video\/|application\/x-mpegURL|application\/vnd\.apple\.mpegurl)/i;
+                
+                if (!videoUrl) {
+                  console.warn('[CommitmentCard] No videoUrl provided for post', { postId: id });
+                  return (
+                    <div className="flex items-center justify-center bg-gray-100 rounded-xl p-8">
+                      <p className="text-gray-500 text-sm">Video unavailable</p>
+                    </div>
+                  );
+                }
+                
+                // Check if it's a valid format
+                const isProxied = videoUrl.startsWith('/api/video');
+                const isDataUri = videoUrl.startsWith('data:');
+                const hasValidExtension = VALID_VIDEO_FORMATS.test(videoUrl);
+                const hasValidMimeType = isDataUri && VALID_VIDEO_MIME_TYPES.test(videoUrl);
+                const isFirebase = videoUrl.includes('firebasestorage');
+                
+                if (!isProxied && !hasValidExtension && !hasValidMimeType && !isFirebase) {
+                  console.warn('[CommitmentCard] ⚠️ Invalid video format detected, skipping render:', { 
+                    postId: id, 
+                    videoUrl: videoUrl.substring(0, 100),
+                    isProxied,
+                    isDataUri,
+                    hasValidExtension,
+                    hasValidMimeType,
+                    isFirebase
+                  });
+                  return (
+                    <div className="flex items-center justify-center bg-gray-100 rounded-xl p-8">
+                      <div className="text-center">
+                        <p className="text-gray-500 text-sm mb-1">Invalid video format</p>
+                        <p className="text-gray-400 text-xs">Source: {videoUrl.substring(0, 50)}...</p>
+                      </div>
+                    </div>
+                  );
+                }
+                
                 // Simplified: Only use VideoPlayer (SimpleVideo) for all videos
                 // HLS and Cloudflare video players disabled to reduce complexity and improve performance
-                console.log('[CommitmentCard] Using VideoPlayer (SimpleVideo) for all videos:', {
+                console.log('[CommitmentCard] ✓ Valid video URL, rendering VideoPlayer (SimpleVideo):', {
                   postId: id,
                   hasVideoUrl: !!videoUrl,
-                  videoUrl: videoUrl?.slice(0, 100)
+                  videoUrl: videoUrl?.slice(0, 100),
+                  isProxied,
+                  isFirebase,
+                  hasValidExtension
                 });
                 
                 return (

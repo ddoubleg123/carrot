@@ -25,6 +25,57 @@ export default function SimpleVideo({
   postId,
   onVideoRef,
 }: SimpleVideoProps) {
+  // VALIDATION: Check for valid video formats before attempting to render
+  const VALID_VIDEO_FORMATS = /\.(mp4|webm|mov|m4v|avi|mkv|ogg|ogv)(\?|$)/i;
+  const VALID_VIDEO_MIME_TYPES = /^(video\/|application\/x-mpegURL|application\/vnd\.apple\.mpegurl)/i;
+  
+  // Validate src format
+  if (!src) {
+    console.warn('[SimpleVideo] Missing video src', { postId });
+    return (
+      <div className={`${className} flex items-center justify-center bg-gray-100 rounded-xl p-8`}>
+        <p className="text-gray-500 text-sm">Video unavailable</p>
+      </div>
+    );
+  }
+  
+  // Check if src is a data URI with video MIME type
+  const isDataUri = src.startsWith('data:');
+  if (isDataUri) {
+    if (!VALID_VIDEO_MIME_TYPES.test(src)) {
+      console.warn('[SimpleVideo] Invalid data URI - not a video MIME type', { 
+        src: src.substring(0, 100), 
+        postId 
+      });
+      return (
+        <div className={`${className} flex items-center justify-center bg-gray-100 rounded-xl p-8`}>
+          <p className="text-gray-500 text-sm">Invalid video format</p>
+        </div>
+      );
+    }
+  }
+  // Check if src is a proxied URL (these are already validated on the server)
+  else if (src.startsWith('/api/video')) {
+    // Proxied URLs are allowed - validation happens server-side
+    console.log('[SimpleVideo] Using proxied video URL', { src: src.substring(0, 100), postId });
+  }
+  // Check if src is a direct URL with a valid video extension
+  else if (!VALID_VIDEO_FORMATS.test(src)) {
+    console.warn('[SimpleVideo] Invalid video src - not a supported video format', { 
+      src: src.substring(0, 100), 
+      postId,
+      hint: 'Expected formats: .mp4, .webm, .mov, .m4v, .avi, .mkv, .ogg, .ogv'
+    });
+    return (
+      <div className={`${className} flex items-center justify-center bg-gray-100 rounded-xl p-8`}>
+        <div className="text-center">
+          <p className="text-gray-500 text-sm mb-1">Invalid video format</p>
+          <p className="text-gray-400 text-xs">Expected: .mp4, .webm, .mov, etc.</p>
+        </div>
+      </div>
+    );
+  }
+  
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
