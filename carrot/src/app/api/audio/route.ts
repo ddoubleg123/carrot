@@ -46,16 +46,37 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       target.searchParams.set('alt', 'media');
     }
 
-    const upstream = await fetchWithRetry(target.toString(), {
-      method: 'GET',
-      headers: fwdHeaders,
-      redirect: 'follow',
-      // No need for cache: let Firebase and browser handle caching
-    }, {
-      maxRetries: 2,
-      baseDelay: 1000,
-      retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+    // CRITICAL FIX: Use native fetch with proper stream handling instead of retry wrapper
+    // The retry wrapper was causing 502 errors due to stream interruptions
+    console.log('[api/audio] Fetching audio', {
+      url: target.toString().substring(0, 100) + '...',
+      hasRange: !!fwdHeaders['Range'],
+      range: fwdHeaders['Range']
     });
+    
+    const upstream = await fetch(target.toString(), {
+      method: 'GET',
+      headers: {
+        ...fwdHeaders,
+        'Accept': 'audio/*',
+        'User-Agent': 'Mozilla/5.0 (compatible; AudioProxy/1.0)',
+      },
+      redirect: 'follow',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(60000), // 60 second timeout for large audio files
+    });
+    
+    console.log('[api/audio] Fetch response', {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      contentLength: upstream.headers.get('content-length'),
+      contentType: upstream.headers.get('content-type'),
+      url: target.toString().substring(0, 100) + '...'
+    });
+    
+    if (!upstream.ok) {
+      throw new Error(`HTTP ${upstream.status}: ${upstream.statusText}`);
+    }
 
     const status = upstream.status;
     const headers = new Headers();

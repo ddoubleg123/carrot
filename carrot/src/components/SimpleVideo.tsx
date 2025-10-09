@@ -674,17 +674,53 @@ export default function SimpleVideo({
     }
   };
 
-  if (hasError) {
-    return (
-      <div className={`bg-gray-50 flex items-center justify-center ${className}`} style={{ minHeight: '200px' }}>
-        <div className="text-center p-4">
-          <div className="text-gray-400 mb-2">📹</div>
-          <div className="text-sm text-gray-500">Video temporarily unavailable</div>
-          <div className="text-xs text-gray-400 mt-1">Content may be processing</div>
-        </div>
-      </div>
-    );
-  }
+      if (hasError) {
+        // CRITICAL FIX: Add fallback to direct Firebase URL if proxied version fails
+        const handleRetry = () => {
+          console.log('[SimpleVideo] User requested retry', { postId });
+          setHasError(false);
+          setIsLoading(true);
+          setRetryCount(0);
+          setNetworkRetryCount(0);
+          
+          // If using proxy and it failed, try direct Firebase URL
+          if (src && src.startsWith('/api/video')) {
+            try {
+              const urlParams = new URLSearchParams(src.split('?')[1]);
+              const originalUrl = urlParams.get('url');
+              if (originalUrl && (originalUrl.includes('firebasestorage.googleapis.com') || originalUrl.includes('firebasestorage.app'))) {
+                console.log('[SimpleVideo] Fallback to direct Firebase URL', { originalUrl: originalUrl.substring(0, 100) });
+                const decodedUrl = decodeURIComponent(originalUrl);
+                setVideoSrc(decodedUrl);
+                return;
+              }
+            } catch (e) {
+              console.warn('[SimpleVideo] Failed to extract direct URL:', e);
+            }
+          }
+          
+          // Otherwise, just retry with the same URL
+          if (videoRef.current) {
+            videoRef.current.load();
+          }
+        };
+        
+        return (
+          <div className={`bg-gray-50 flex items-center justify-center ${className}`} style={{ minHeight: '200px' }}>
+            <div className="text-center p-4">
+              <div className="text-gray-400 mb-2">📹</div>
+              <div className="text-sm text-gray-500">Video temporarily unavailable</div>
+              <div className="text-xs text-gray-400 mt-1">Content may be processing</div>
+              <button
+                onClick={handleRetry}
+                className="mt-3 px-4 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        );
+      }
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>

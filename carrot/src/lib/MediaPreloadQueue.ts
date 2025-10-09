@@ -91,13 +91,13 @@ class MediaPreloadQueue {
   private readonly GLOBAL_BUDGET_MB = 16; // Increased from 8MB to 16MB for better video preloading
   
   private readonly CONCURRENCY_LIMITS: ConcurrencyLimits = {
-    [TaskType.POSTER]: 4,              // Increase from 1 to 4 - allow multiple posters
-    [TaskType.VIDEO_PREROLL_6S]: 3,    // Increase from 1 to 3 - allow multiple videos
-    [TaskType.VIDEO_FULL]: 2,          // Increase from 1 to 2 - allow full video downloads
-    [TaskType.IMAGE]: 4,               // Increase from 1 to 4 - allow multiple images
-    [TaskType.AUDIO_META]: 2,          // Increase from 1 to 2 - allow multiple audio
-    [TaskType.TEXT_FULL]: 3,           // Increase from 1 to 3 - allow multiple text
-    [TaskType.AUDIO_FULL]: 2,          // Increase from 1 to 2 - allow audio downloads
+    [TaskType.POSTER]: 4,              // Allow multiple posters
+    [TaskType.VIDEO_PREROLL_6S]: 2,    // REDUCED: Only 2 concurrent preroll downloads to prevent overload
+    [TaskType.VIDEO_FULL]: 1,          // CRITICAL: Only 1 full video download at a time to prevent 499 errors
+    [TaskType.IMAGE]: 4,               // Allow multiple images
+    [TaskType.AUDIO_META]: 2,          // Allow multiple audio
+    [TaskType.TEXT_FULL]: 3,           // Allow multiple text
+    [TaskType.AUDIO_FULL]: 1,          // REDUCED: Only 1 audio download at a time
   };
 
   private readonly SEQUENTIAL_CONFIG: SequentialConfig = {
@@ -439,12 +439,31 @@ class MediaPreloadQueue {
     const retryCount = existingRetry ? existingRetry.retryCount + 1 : 1;
     
     if (retryCount > maxRetries) {
-      console.log('[MediaPreloadQueue] Max retries exceeded, giving up', { taskId: task.id, retryCount });
+      console.error('[MediaPreloadQueue] ❌ Task FAILED after max retries', { 
+        taskId: task.id, 
+        retryCount,
+        postId: task.postId,
+        type: task.type,
+        feedIndex: task.feedIndex,
+        url: task.url?.substring(0, 100) + '...'
+      });
+      
+      // Mark task as failed in completed tasks so UI can show fallback
+      this.completedTasks.set(task.id, {
+        postId: task.postId,
+        type: task.type,
+        success: false,
+        error: new Error(`Failed after ${retryCount} retries`),
+        duration: Date.now() - task.createdAt,
+        completedAt: Date.now()
+      });
       return;
     }
     
-    // Exponential backoff: 1s, 2s, 4s, 8s...
-    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 8000);
+    // Exponential backoff with jitter: 1s, 2s, 4s, 8s...
+    const baseDelay = 1000 * Math.pow(2, retryCount - 1);
+    const jitter = Math.random() * 500; // Add up to 500ms jitter
+    const delay = Math.min(baseDelay + jitter, 10000); // Max 10s delay
     const nextRetryAt = Date.now() + delay;
     
     this.retryQueue.set(task.id, {
@@ -453,11 +472,14 @@ class MediaPreloadQueue {
       nextRetryAt
     });
     
-    console.log('[MediaPreloadQueue] Scheduled retry', { 
+    console.warn('[MediaPreloadQueue] 🔄 Scheduled retry', { 
       taskId: task.id, 
-      retryCount, 
-      delay, 
-      nextRetryAt: new Date(nextRetryAt).toISOString() 
+      retryCount,
+      maxRetries,
+      delay: Math.round(delay),
+      postId: task.postId,
+      type: task.type,
+      url: task.url?.substring(0, 100) + '...'
     });
   }
 
