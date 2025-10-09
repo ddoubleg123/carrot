@@ -157,7 +157,7 @@ function PostActionBar(props: PostActionBarProps) {
           aria-label="Translate"
           title="Translate"
         >
-          <Languages size={18} />
+          <Languages size={22} />
         </button>
       </div>
     </div>
