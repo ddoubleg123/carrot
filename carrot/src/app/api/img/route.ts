@@ -179,16 +179,80 @@ function clampQuality(q?: number) {
 }
 
 async function fetchUpstream(req: Request, target: URL) {
-  const upstream = await fetch(target.toString(), {
-    headers: {
-      ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
-      ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
-      accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
-    },
-    cache: 'no-store',
-    redirect: 'follow',
-  })
-  return upstream
+  // CRITICAL FIX: Implement retry logic with exponential backoff for network errors
+  let lastError: Error | null = null;
+  const maxRetries = 2; // Fewer retries for images since they're less critical than videos
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[api/img] Fetch attempt ${attempt}/${maxRetries}`, {
+        url: target.toString().substring(0, 100) + '...'
+      });
+      
+      const upstream = await fetch(target.toString(), {
+        headers: {
+          ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
+          ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
+          accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
+          // CRITICAL FIX: Force HTTP/1.1 to avoid HTTP/2 protocol errors
+          'Connection': 'close',
+        },
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(attempt === 1 ? 15000 : 30000), // Shorter timeout for first attempt
+      });
+      
+      console.log(`[api/img] Fetch response (attempt ${attempt})`, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        contentType: upstream.headers.get('content-type'),
+        url: target.toString().substring(0, 100) + '...'
+      });
+      
+      // CRITICAL FIX: Handle specific error status codes
+      if (upstream.status >= 500) {
+        throw new Error(`Server error ${upstream.status}: ${upstream.statusText}`);
+      }
+      
+      if (upstream.status === 403) {
+        console.warn('[api/img] Access forbidden - URL may be expired or invalid', {
+          url: target.toString().substring(0, 100) + '...',
+          attempt
+        });
+        throw new Error('Access forbidden - URL may be expired');
+      }
+      
+      return upstream;
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // CRITICAL FIX: Check if this is a retryable error
+      const isRetryableError = 
+        lastError.message.includes('ERR_CONNECTION_CLOSED') ||
+        lastError.message.includes('ERR_HTTP_PROTOCOL_ERROR') ||
+        lastError.message.includes('fetch failed') ||
+        lastError.message.includes('NetworkError') ||
+        lastError.message.includes('timeout');
+      
+      console.error(`[api/img] Fetch failed (attempt ${attempt}/${maxRetries})`, {
+        error: lastError.message,
+        isRetryable: isRetryableError,
+        url: target.toString().substring(0, 100) + '...'
+      });
+      
+      if (attempt === maxRetries || !isRetryableError) {
+        throw lastError;
+      }
+      
+      // Exponential backoff: 500ms, 1s
+      const delay = Math.min(500 * Math.pow(2, attempt - 1), 1000);
+      console.log(`[api/img] Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError || new Error('All fetch attempts failed');
 }
 
 async function passthrough(upstream: Response) {

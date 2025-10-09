@@ -422,6 +422,40 @@ class MediaPreloadQueue {
     for (const [taskId, retry] of readyRetries) {
       this.retryQueue.delete(taskId);
       
+      // CRITICAL FIX: Check if task still exists and hasn't been cancelled
+      const existingTask = this.tasks.get(taskId);
+      if (!existingTask) {
+        console.warn('[MediaPreloadQueue] ⚠️ Retry cancelled - original task no longer exists', { 
+          taskId, 
+          retryCount: retry.retryCount,
+          postId: retry.task.postId,
+          type: retry.task.type
+        });
+        continue;
+      }
+      
+      // CRITICAL FIX: Check if task was aborted or completed
+      if (existingTask.abortController.signal.aborted) {
+        console.warn('[MediaPreloadQueue] ⚠️ Retry cancelled - task was aborted', { 
+          taskId, 
+          retryCount: retry.retryCount,
+          postId: retry.task.postId,
+          type: retry.task.type
+        });
+        continue;
+      }
+      
+      // Check if task was already completed
+      if (this.completedTasks.has(taskId)) {
+        console.warn('[MediaPreloadQueue] ⚠️ Retry cancelled - task already completed', { 
+          taskId, 
+          retryCount: retry.retryCount,
+          postId: retry.task.postId,
+          type: retry.task.type
+        });
+        continue;
+      }
+      
       // Create a new task with a new abort controller
       const newTask: MediaTask = {
         ...retry.task,
@@ -430,13 +464,41 @@ class MediaPreloadQueue {
       };
       
       this.tasks.set(taskId, newTask);
-      console.log('[MediaPreloadQueue] Retrying task', { taskId, retryCount: retry.retryCount });
+      console.log('[MediaPreloadQueue] 🔄 Retrying task', { 
+        taskId, 
+        retryCount: retry.retryCount,
+        postId: retry.task.postId,
+        type: retry.task.type
+      });
     }
   }
 
   private scheduleRetry(task: MediaTask, maxRetries: number): void {
     const existingRetry = this.retryQueue.get(task.id);
     const retryCount = existingRetry ? existingRetry.retryCount + 1 : 1;
+    
+    // CRITICAL FIX: Check if task still exists before scheduling retry
+    const currentTask = this.tasks.get(task.id);
+    if (!currentTask) {
+      console.warn('[MediaPreloadQueue] ⚠️ Cannot schedule retry - original task no longer exists', {
+        taskId: task.id,
+        postId: task.postId,
+        type: task.type,
+        retryCount
+      });
+      return;
+    }
+    
+    // CRITICAL FIX: Check if task was aborted
+    if (currentTask.abortController.signal.aborted) {
+      console.warn('[MediaPreloadQueue] ⚠️ Cannot schedule retry - task was aborted', {
+        taskId: task.id,
+        postId: task.postId,
+        type: task.type,
+        retryCount
+      });
+      return;
+    }
     
     if (retryCount > maxRetries) {
       console.error('[MediaPreloadQueue] ❌ Task FAILED after max retries', { 
@@ -458,6 +520,13 @@ class MediaPreloadQueue {
         duration: Date.now() - task.createdAt,
         completedAt: Date.now()
       });
+      
+      // CRITICAL FIX: Remove from active tasks and clean up
+      this.tasks.delete(task.id);
+      const activeSet = this.activeTasks.get(task.type);
+      if (activeSet) {
+        activeSet.delete(task.id);
+      }
       return;
     }
     
@@ -883,6 +952,44 @@ class MediaPreloadQueue {
         this.completedTasks.delete(taskId);
       }
     }
+  }
+
+  // CRITICAL FIX: Add proper task cleanup to prevent zombie tasks
+  cancelTask(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (task) {
+      task.abortController.abort();
+      this.tasks.delete(taskId);
+      
+      const activeSet = this.activeTasks.get(task.type);
+      if (activeSet) {
+        activeSet.delete(taskId);
+      }
+      
+      // CRITICAL FIX: Remove from retry queue to prevent zombie retries
+      this.retryQueue.delete(taskId);
+      
+      console.log('[MediaPreloadQueue] Cancelled task', { taskId, type: task.type });
+    }
+  }
+
+  // CRITICAL FIX: Cancel all tasks for a specific post to prevent zombie tasks
+  cancelPostTasks(postId: string): void {
+    const tasksToCancel: string[] = [];
+    
+    // Find all tasks for this post
+    for (const [taskId, task] of this.tasks) {
+      if (task.postId === postId) {
+        tasksToCancel.push(taskId);
+      }
+    }
+    
+    // Cancel all tasks for this post
+    for (const taskId of tasksToCancel) {
+      this.cancelTask(taskId);
+    }
+    
+    console.log('[MediaPreloadQueue] Cancelled all tasks for post', { postId, taskCount: tasksToCancel.length });
   }
 
   clearAllRetryCounts(): void {

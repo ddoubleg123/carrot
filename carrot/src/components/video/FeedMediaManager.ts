@@ -249,13 +249,23 @@ class FeedMediaManager {
         }
         
         if (videoUrl) {
-          // Current post (VISIBLE) gets full video download, others get 6-second preroll
-          const videoTaskType = priority === Priority.VISIBLE ? TaskType.VIDEO_FULL : TaskType.VIDEO_PREROLL_6S;
-          console.log(`[FeedMediaManager] Queuing video for post ${post.id} (index ${post.feedIndex}): ${videoTaskType} with priority ${priority}`, {
-            videoUrl: videoUrl.substring(0, 100) + '...',
-            posterUrl: posterUrl?.substring(0, 100) + '...'
-          });
-          this.preloadQueue.enqueue(post.id, videoTaskType, priority, post.feedIndex, videoUrl, post.bucket, post.path);
+          // CRITICAL FIX: Optimize video loading - only load visible videos immediately
+          // Only load full video for VISIBLE posts, defer others until they become visible
+          if (priority === Priority.VISIBLE) {
+            console.log(`[FeedMediaManager] Queuing FULL video for VISIBLE post ${post.id} (index ${post.feedIndex})`, {
+              videoUrl: videoUrl.substring(0, 100) + '...',
+              posterUrl: posterUrl?.substring(0, 100) + '...'
+            });
+            this.preloadQueue.enqueue(post.id, TaskType.VIDEO_FULL, priority, post.feedIndex, videoUrl, post.bucket, post.path);
+          } else {
+            // CRITICAL FIX: For non-visible posts, only queue poster - defer video until visible
+            console.log(`[FeedMediaManager] Deferring video for post ${post.id} (index ${post.feedIndex}) - only loading poster`, {
+              videoUrl: videoUrl.substring(0, 100) + '...',
+              posterUrl: posterUrl?.substring(0, 100) + '...',
+              priority
+            });
+            // Don't queue video yet - will be queued when post becomes visible
+          }
         } else {
           console.warn(`[FeedMediaManager] No valid video URL for post ${post.id} (index ${post.feedIndex})`, {
             hasVideoUrl: !!post.videoUrl,

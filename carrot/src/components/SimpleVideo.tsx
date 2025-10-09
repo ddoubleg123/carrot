@@ -85,12 +85,17 @@ export default function SimpleVideo({
   const [networkRetryCount, setNetworkRetryCount] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [canPlay, setCanPlay] = useState(false);
+  const [autoRetryAttempted, setAutoRetryAttempted] = useState(false);
+  const [isStuck, setIsStuck] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const playTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const blobCleanupRef = useRef<(() => void) | null>(null);
   const mountIdRef = useRef<string>(`mount-${postId}-${Date.now()}`);
   const lastProcessedSrcRef = useRef<string | null>(null); // CRITICAL: Track last processed src to prevent re-processing
+  const playAttemptsRef = useRef<number>(0); // Track play attempts to prevent loops
+  const lastPlayTimeRef = useRef<number>(0); // Track last play attempt time
 
   // CRITICAL: Lifecycle logging to debug glitching/remounting issues
   useEffect(() => {
@@ -123,49 +128,66 @@ export default function SimpleVideo({
           const handle = {
             id: postId,
             el: containerRef.current,
-            play: async () => {
-              try {
-                const video = videoRef.current;
-                if (!video) return;
-                
-                console.log('[SimpleVideo] FeedMediaManager requested play', { 
-                  postId, 
-                  readyState: video.readyState,
-                  paused: video.paused,
-                  src: video.src?.substring(0, 100)
-                });
-                
-                // CRITICAL FIX: Wait for video to be ready before playing
-                // readyState >= 2 means we have current frame data (HAVE_CURRENT_DATA or higher)
-                if (video.readyState >= 2) {
-                  await video.play();
-                  console.log('[SimpleVideo] Play started (ready)', { postId, readyState: video.readyState });
-                } else {
-                  // Wait for canplay event, then play
-                  console.log('[SimpleVideo] Waiting for canplay before playing', { postId, readyState: video.readyState });
-                  const playWhenReady = async () => {
-                    try {
+                play: async () => {
+                  try {
+                    const video = videoRef.current;
+                    if (!video) return;
+                    
+                    // CRITICAL FIX: Prevent rapid play attempts that cause flickering
+                    const now = Date.now();
+                    if (now - lastPlayTimeRef.current < 1000) {
+                      console.log('[SimpleVideo] Skipping play - too soon after last attempt', { 
+                        postId, 
+                        timeSinceLastPlay: now - lastPlayTimeRef.current
+                      });
+                      return;
+                    }
+                    lastPlayTimeRef.current = now;
+                    
+                    console.log('[SimpleVideo] FeedMediaManager requested play', { 
+                      postId, 
+                      readyState: video.readyState,
+                      paused: video.paused,
+                      src: video.src?.substring(0, 100),
+                      playAttempts: playAttemptsRef.current
+                    });
+                    
+                    // CRITICAL FIX: Only play if readyState >= 3 (HAVE_FUTURE_DATA)
+                    // This ensures enough data is buffered to prevent flickering
+                    if (video.readyState >= 3) {
+                      playAttemptsRef.current++;
                       await video.play();
-                      console.log('[SimpleVideo] Play started (after canplay)', { postId });
-                    } catch (playError) {
-                      console.warn('[SimpleVideo] Play after canplay failed:', playError);
+                      console.log('[SimpleVideo] Play started (ready)', { postId, readyState: video.readyState });
+                    } else {
+                      // Wait for canplaythrough event (readyState >= 3)
+                      console.log('[SimpleVideo] Waiting for canplaythrough before playing', { postId, readyState: video.readyState });
+                      const playWhenReady = async () => {
+                        try {
+                          if (video.readyState >= 3) {
+                            playAttemptsRef.current++;
+                            await video.play();
+                            console.log('[SimpleVideo] Play started (after canplaythrough)', { postId, readyState: video.readyState });
+                          }
+                        } catch (playError) {
+                          console.warn('[SimpleVideo] Play after canplaythrough failed:', playError);
+                        }
+                        video.removeEventListener('canplaythrough', playWhenReady);
+                      };
+                      video.addEventListener('canplaythrough', playWhenReady, { once: true });
+                      
+                      // Fallback timeout: try to play after 3 seconds if still not ready
+                      setTimeout(() => {
+                        video.removeEventListener('canplaythrough', playWhenReady);
+                        if (video.paused && video.readyState >= 2) {
+                          playAttemptsRef.current++;
+                          video.play().catch(e => console.warn('[SimpleVideo] Fallback play failed:', e));
+                        }
+                      }, 3000);
                     }
-                    video.removeEventListener('canplay', playWhenReady);
-                  };
-                  video.addEventListener('canplay', playWhenReady, { once: true });
-                  
-                  // Fallback timeout: try to play after 2 seconds regardless
-                  setTimeout(() => {
-                    video.removeEventListener('canplay', playWhenReady);
-                    if (video.paused) {
-                      video.play().catch(e => console.warn('[SimpleVideo] Fallback play failed:', e));
-                    }
-                  }, 2000);
-                }
-              } catch (e) {
-                console.warn('[SimpleVideo] Play failed:', e);
-              }
-            },
+                  } catch (e) {
+                    console.warn('[SimpleVideo] Play failed:', e);
+                  }
+                },
             pause: () => {
               try {
                 const video = videoRef.current;
@@ -659,44 +681,56 @@ export default function SimpleVideo({
       }
     }
     
-    // CRITICAL: Set a 10 second timeout to detect stuck videos
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-    }
-    loadingTimeoutRef.current = setTimeout(() => {
-      const duration = Date.now() - startTime;
-      const video = videoRef.current;
-      
-      // Check if video is truly stuck or just slow
-      if (video && video.readyState < 2 && video.networkState !== 3) {
-        console.error(`[SimpleVideo] ⏱️  LOAD TIMEOUT - Video stuck`, { 
-          postId,
-          duration: `${duration}ms`,
-          readyState: video.readyState,
-          networkState: video.networkState,
-          src: videoSrc?.substring(0, 100)
-        });
-        
-        // Try retry if we haven't exhausted retries
-        if (retryCount < 2) {
-          console.warn(`[SimpleVideo] 🔄 Retrying stuck video (attempt ${retryCount + 1}/2)`);
-          setRetryCount(prev => prev + 1);
-          video.load(); // Force reload
-        } else {
-          // Give up and show error
-          console.error(`[SimpleVideo] ❌ Video load failed after ${retryCount + 1} attempts`);
-          setHasError(true);
-          setIsLoading(false);
+        // CRITICAL: Set a 8 second timeout to detect stuck videos
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
         }
-      } else {
-        // Video is loading, just slow - show it anyway
-        console.warn('[SimpleVideo] Video slow but loading, showing anyway', { 
-          duration: `${duration}ms`,
-          readyState: video?.readyState
-        });
-        setIsLoading(false);
-      }
-    }, 10000); // 10 second timeout to detect stuck videos
+        loadingTimeoutRef.current = setTimeout(() => {
+          const duration = Date.now() - startTime;
+          const video = videoRef.current;
+          
+          // Check if video is truly stuck or just slow
+          if (video && video.readyState < 2 && video.networkState !== 3) {
+            console.error(`[SimpleVideo] ⏱️  LOAD TIMEOUT - Video stuck`, { 
+              postId,
+              duration: `${duration}ms`,
+              readyState: video.readyState,
+              networkState: video.networkState,
+              src: videoSrc?.substring(0, 100)
+            });
+            
+            setIsStuck(true);
+            
+            // Auto-retry stuck videos once
+            if (!autoRetryAttempted) {
+              console.warn(`[SimpleVideo] 🔄 Auto-retrying stuck video`);
+              setAutoRetryAttempted(true);
+              setRetryCount(prev => prev + 1);
+              video.load(); // Force reload
+              
+              // Give it another 5 seconds
+              setTimeout(() => {
+                if (video.readyState < 2) {
+                  console.error(`[SimpleVideo] ❌ Video still stuck after retry`);
+                  setHasError(true);
+                  setIsLoading(false);
+                }
+              }, 5000);
+            } else {
+              // Give up and show error
+              console.error(`[SimpleVideo] ❌ Video load failed after retry`);
+              setHasError(true);
+              setIsLoading(false);
+            }
+          } else {
+            // Video is loading, just slow - show it anyway
+            console.warn('[SimpleVideo] Video slow but loading, showing anyway', { 
+              duration: `${duration}ms`,
+              readyState: video?.readyState
+            });
+            setIsLoading(false);
+          }
+        }, 8000); // 8 second timeout to detect stuck videos
   };
 
   const handleLoadedData = () => {
@@ -718,7 +752,8 @@ export default function SimpleVideo({
           networkState: video.networkState,
           readyState: video.readyState,
           src: video.src,
-          retryCount
+          retryCount,
+          autoRetryAttempted
         });
         
         // Check if this is a network protocol error
@@ -726,18 +761,20 @@ export default function SimpleVideo({
                               video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
                               video.src.includes('firebasestorage.googleapis.com');
         
-        // CRITICAL FIX: Reduced retries to prevent loops and add fallback
-        const maxRetries = isNetworkError ? 1 : 0; // Reduced from 3 to 1
+        // CRITICAL FIX: Auto-retry once before showing manual retry button
+        const maxAutoRetries = 1;
         const currentRetryCount = isNetworkError ? networkRetryCount : retryCount;
         
-        if (currentRetryCount < maxRetries) {
-          console.log('[SimpleVideo] Retrying video load...', { 
+        if (!autoRetryAttempted && currentRetryCount < maxAutoRetries) {
+          console.log('[SimpleVideo] Auto-retrying video load...', { 
             retryCount: currentRetryCount + 1, 
-            maxRetries,
+            maxRetries: maxAutoRetries,
             errorCode: video.error?.code,
             isNetworkError,
             src: video.src 
           });
+          
+          setAutoRetryAttempted(true);
           
           if (isNetworkError) {
             setNetworkRetryCount(prev => prev + 1);
@@ -748,8 +785,8 @@ export default function SimpleVideo({
           setIsLoading(true);
           setHasError(false);
           
-          // Shorter delay to prevent long waits
-          const delay = Math.min(1000 * Math.pow(1.5, currentRetryCount), 3000);
+          // Auto-retry with exponential backoff
+          const delay = Math.min(1000 * Math.pow(2, currentRetryCount), 4000);
           setTimeout(() => {
             if (videoRef.current) {
               videoRef.current.load();
@@ -758,11 +795,12 @@ export default function SimpleVideo({
           return;
         }
         
-        // CRITICAL FIX: Show fallback UI instead of infinite retries
-        console.warn('[SimpleVideo] Video failed after retries, showing fallback', {
+        // Show manual retry UI after auto-retry fails
+        console.warn('[SimpleVideo] Video failed after auto-retry, showing manual retry', {
           postId,
           src: video.src?.substring(0, 100),
-          errorCode: video.error?.code
+          errorCode: video.error?.code,
+          autoRetryAttempted
         });
         
         setHasError(true);
@@ -807,15 +845,19 @@ export default function SimpleVideo({
   };
 
       if (hasError) {
-        // CRITICAL FIX: Add fallback to direct Firebase URL if proxied version fails
+        // CRITICAL FIX: Enhanced retry with multiple fallback strategies
         const handleRetry = () => {
           console.log('[SimpleVideo] User requested retry', { postId });
           setHasError(false);
           setIsLoading(true);
+          setAutoRetryAttempted(false);
+          setIsStuck(false);
           setRetryCount(0);
           setNetworkRetryCount(0);
+          playAttemptsRef.current = 0;
+          lastPlayTimeRef.current = 0;
           
-          // If using proxy and it failed, try direct Firebase URL
+          // Strategy 1: If using proxy and it failed, try direct Firebase URL
           if (src && src.startsWith('/api/video')) {
             try {
               const urlParams = new URLSearchParams(src.split('?')[1]);
@@ -823,7 +865,14 @@ export default function SimpleVideo({
               if (originalUrl && (originalUrl.includes('firebasestorage.googleapis.com') || originalUrl.includes('firebasestorage.app'))) {
                 console.log('[SimpleVideo] Fallback to direct Firebase URL', { originalUrl: originalUrl.substring(0, 100) });
                 const decodedUrl = decodeURIComponent(originalUrl);
-                setVideoSrc(decodedUrl);
+                // Add alt=media if missing
+                if (!decodedUrl.includes('alt=media')) {
+                  const urlObj = new URL(decodedUrl);
+                  urlObj.searchParams.set('alt', 'media');
+                  setVideoSrc(urlObj.toString());
+                } else {
+                  setVideoSrc(decodedUrl);
+                }
                 return;
               }
             } catch (e) {
@@ -831,7 +880,7 @@ export default function SimpleVideo({
             }
           }
           
-          // Otherwise, just retry with the same URL
+          // Strategy 2: Retry with fresh load
           if (videoRef.current) {
             videoRef.current.load();
           }
@@ -839,17 +888,19 @@ export default function SimpleVideo({
         
         return (
           <div className={`bg-gray-50 flex items-center justify-center ${className}`} style={{ minHeight: '200px' }}>
-            <div className="text-center p-4">
-              <div className="text-gray-400 mb-2">📹</div>
-              <div className="text-sm text-gray-500">Video temporarily unavailable</div>
-              <div className="text-xs text-gray-400 mt-1">Content may be processing</div>
-              <button
-                onClick={handleRetry}
-                className="mt-3 px-4 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              >
-                Retry
-              </button>
+          <div className="text-center p-4">
+            <div className="text-gray-400 mb-2">📹</div>
+            <div className="text-sm text-gray-500">Video temporarily unavailable</div>
+            <div className="text-xs text-gray-400 mt-1">
+              {isStuck ? 'Loading timeout - try again' : 'Content may be processing'}
             </div>
+            <button
+              onClick={handleRetry}
+              className="mt-3 px-4 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              {autoRetryAttempted ? 'Try Again' : 'Retry'}
+            </button>
+          </div>
           </div>
         );
       }

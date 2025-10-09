@@ -345,37 +345,86 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         range: fwdHeaders['Range']
       });
       
-      try {
-        const response = await fetch(k, {
-          method: 'GET',
-          headers: {
-            ...fwdHeaders,
-            // Minimal headers to avoid CORS issues
-            'Accept': 'video/*',
-            'User-Agent': 'Mozilla/5.0 (compatible; VideoProxy/1.0)',
-          },
-          redirect: 'follow',
-          cache: 'no-store',
-          signal: AbortSignal.timeout(60000), // Increased to 60 seconds for large videos
-        });
-        
-        console.log('[api/video] Fetch response', {
-          status: response.status,
-          statusText: response.statusText,
-          contentLength: response.headers.get('content-length'),
-          contentType: response.headers.get('content-type'),
-          acceptRanges: response.headers.get('accept-ranges'),
-          url: k.substring(0, 100) + '...'
-        });
-        
-        return response;
-      } catch (error) {
-        console.error('[api/video] Fetch failed', {
-          error: error instanceof Error ? error.message : String(error),
-          url: k.substring(0, 100) + '...'
-        });
-        throw error;
+      // CRITICAL FIX: Implement retry logic with exponential backoff for network errors
+      let lastError: Error | null = null;
+      const maxRetries = 3;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[api/video] Fetch attempt ${attempt}/${maxRetries}`, {
+            url: k.substring(0, 100) + '...',
+            hasRange: !!fwdHeaders['Range'],
+            range: fwdHeaders['Range']
+          });
+          
+          const response = await fetch(k, {
+            method: 'GET',
+            headers: {
+              ...fwdHeaders,
+              // Minimal headers to avoid CORS issues
+              'Accept': 'video/*',
+              'User-Agent': 'Mozilla/5.0 (compatible; VideoProxy/1.0)',
+              // CRITICAL FIX: Force HTTP/1.1 to avoid HTTP/2 protocol errors
+              'Connection': 'close',
+            },
+            redirect: 'follow',
+            cache: 'no-store',
+            signal: AbortSignal.timeout(attempt === 1 ? 30000 : 60000), // Shorter timeout for first attempt
+          });
+          
+          console.log(`[api/video] Fetch response (attempt ${attempt})`, {
+            status: response.status,
+            statusText: response.statusText,
+            contentLength: response.headers.get('content-length'),
+            contentType: response.headers.get('content-type'),
+            acceptRanges: response.headers.get('accept-ranges'),
+            url: k.substring(0, 100) + '...'
+          });
+          
+          // CRITICAL FIX: Handle specific error status codes
+          if (response.status >= 500) {
+            throw new Error(`Server error ${response.status}: ${response.statusText}`);
+          }
+          
+          if (response.status === 403) {
+            console.warn('[api/video] Access forbidden - URL may be expired or invalid', {
+              url: k.substring(0, 100) + '...',
+              attempt
+            });
+            throw new Error('Access forbidden - URL may be expired');
+          }
+          
+          return response;
+          
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          
+          // CRITICAL FIX: Check if this is a retryable error
+          const isRetryableError = 
+            lastError.message.includes('ERR_CONNECTION_CLOSED') ||
+            lastError.message.includes('ERR_HTTP_PROTOCOL_ERROR') ||
+            lastError.message.includes('fetch failed') ||
+            lastError.message.includes('NetworkError') ||
+            lastError.message.includes('timeout');
+          
+          console.error(`[api/video] Fetch failed (attempt ${attempt}/${maxRetries})`, {
+            error: lastError.message,
+            isRetryable: isRetryableError,
+            url: k.substring(0, 100) + '...'
+          });
+          
+          if (attempt === maxRetries || !isRetryableError) {
+            throw lastError;
+          }
+          
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+          console.log(`[api/video] Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
+      
+      throw lastError || new Error('All fetch attempts failed');
     });
 
     const status = upstream.status;
