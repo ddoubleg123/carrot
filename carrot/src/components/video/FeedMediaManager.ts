@@ -602,7 +602,10 @@ class FeedMediaManager {
           setTimeout(() => {
             video.removeEventListener('canplay', playWhenReady);
             if (video.paused) {
-              next.play().catch(e => console.warn('[FeedMediaManager] Fallback play failed:', e));
+              const playPromise = next.play();
+              if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(e => console.warn('[FeedMediaManager] Fallback play failed:', e));
+              }
             }
           }, 3000);
         }
