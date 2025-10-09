@@ -368,7 +368,7 @@ class FeedMediaManager {
     const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
     const viewportTop = currentScrollY;
     const viewportBottom = currentScrollY + this._screenHeight;
-    const teardownDistance = this._screenHeight * SCREEN_TEARDOWN_DISTANCE;
+    const teardownDistance = this._screenHeight * SCREEN_TEARDOWN_DISTANCE * 2; // CRITICAL: Doubled distance to prevent premature cleanup
 
     this._allHandles.forEach(handle => {
       const position = handle.getScreenPosition?.();
@@ -388,13 +388,20 @@ class FeedMediaManager {
         const isActive = this._active === handle;
         const isWarm = this._warm === handle;
         
+        // CRITICAL FIX: Never release active or warm videos to prevent playback interruption
         if (!isActive && !isWarm) {
-          console.log('[FeedMediaManager] Releasing distant video', { 
+          console.log('[FeedMediaManager] Releasing distant video (far from viewport)', { 
             id: handle.id, 
             minDistance: Math.round(minDistance),
             teardownDistance: Math.round(teardownDistance)
           });
           this.setIdle(handle);
+        } else {
+          console.log('[FeedMediaManager] Skipping release for active/warm video', {
+            id: handle.id,
+            isActive,
+            isWarm
+          });
         }
       }
     });
