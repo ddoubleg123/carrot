@@ -336,18 +336,37 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       });
     } catch {}
     
-    // Add timeout and better error handling for the fetch with retry logic
+    // CRITICAL FIX: Add HTTP/1.1 forcing and better error handling
     const upstream = await fetchDedupe(k, () => fetchWithRetry(k, {
       method: 'GET',
-      headers: fwdHeaders,
+      headers: {
+        ...fwdHeaders,
+        // Force HTTP/1.1 to avoid HTTP/2 protocol errors
+        'Connection': 'close',
+        'Upgrade-Insecure-Requests': '1',
+        // Add user agent to help with some servers
+        'User-Agent': 'Mozilla/5.0 (compatible; VideoProxy/1.0)',
+      },
       redirect: 'follow',
       cache: 'no-store',
-      signal: AbortSignal.timeout(15000), // 15 second timeout
+      signal: AbortSignal.timeout(30000), // Increased timeout to 30 seconds
     }, {
-      maxRetries: 2,
-      baseDelay: 1000,
+      maxRetries: 1, // Reduced retries to prevent loops
+      baseDelay: 2000, // Increased delay
       maxDelay: 5000,
-      retryCondition: (error) => error instanceof Error ? isNetworkProtocolError(error) : false
+      retryCondition: (error) => {
+        // Only retry on specific network errors, not all errors
+        if (error instanceof Error) {
+          const message = error.message.toLowerCase();
+          return (
+            message.includes('err_http2_protocol_error') ||
+            message.includes('err_quic_protocol_error') ||
+            message.includes('connection closed') ||
+            message.includes('connection reset')
+          );
+        }
+        return false;
+      }
     }).catch(error => {
       console.error('[api/video] Fetch error:', error);
       throw new Error(`Failed to fetch video: ${error.message}`);

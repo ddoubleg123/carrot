@@ -584,58 +584,65 @@ export default function SimpleVideo({
     }
   };
 
-  const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    const video = e.currentTarget;
-    console.error('[SimpleVideo] Video error:', {
-      error: video.error,
-      code: video.error?.code,
-      message: video.error?.message,
-      networkState: video.networkState,
-      readyState: video.readyState,
-      src: video.src,
-      retryCount
-    });
-    
-    // Check if this is a network protocol error
-    const isNetworkError = video.error?.code === MediaError.MEDIA_ERR_NETWORK ||
-                          video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
-                          video.src.includes('firebasestorage.googleapis.com');
-    
-    // Retry for network errors with exponential backoff
-    const maxRetries = isNetworkError ? 3 : 1;
-    const currentRetryCount = isNetworkError ? networkRetryCount : retryCount;
-    
-    if (currentRetryCount < maxRetries) {
-      console.log('[SimpleVideo] Retrying video load...', { 
-        retryCount: currentRetryCount + 1, 
-        maxRetries,
-        errorCode: video.error?.code,
-        isNetworkError,
-        src: video.src 
-      });
-      
-      if (isNetworkError) {
-        setNetworkRetryCount(prev => prev + 1);
-      } else {
-        setRetryCount(prev => prev + 1);
-      }
-      
-      setIsLoading(true);
-      setHasError(false);
-      
-      // Exponential backoff for retries
-      const delay = Math.min(1000 * Math.pow(2, currentRetryCount), 8000);
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.load();
+      const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+        const video = e.currentTarget;
+        console.error('[SimpleVideo] Video error:', {
+          error: video.error,
+          code: video.error?.code,
+          message: video.error?.message,
+          networkState: video.networkState,
+          readyState: video.readyState,
+          src: video.src,
+          retryCount
+        });
+        
+        // Check if this is a network protocol error
+        const isNetworkError = video.error?.code === MediaError.MEDIA_ERR_NETWORK ||
+                              video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+                              video.src.includes('firebasestorage.googleapis.com');
+        
+        // CRITICAL FIX: Reduced retries to prevent loops and add fallback
+        const maxRetries = isNetworkError ? 1 : 0; // Reduced from 3 to 1
+        const currentRetryCount = isNetworkError ? networkRetryCount : retryCount;
+        
+        if (currentRetryCount < maxRetries) {
+          console.log('[SimpleVideo] Retrying video load...', { 
+            retryCount: currentRetryCount + 1, 
+            maxRetries,
+            errorCode: video.error?.code,
+            isNetworkError,
+            src: video.src 
+          });
+          
+          if (isNetworkError) {
+            setNetworkRetryCount(prev => prev + 1);
+          } else {
+            setRetryCount(prev => prev + 1);
+          }
+          
+          setIsLoading(true);
+          setHasError(false);
+          
+          // Shorter delay to prevent long waits
+          const delay = Math.min(1000 * Math.pow(1.5, currentRetryCount), 3000);
+          setTimeout(() => {
+            if (videoRef.current) {
+              videoRef.current.load();
+            }
+          }, delay);
+          return;
         }
-      }, delay);
-      return;
-    }
-    
-    setHasError(true);
-    setIsLoading(false);
-  };
+        
+        // CRITICAL FIX: Show fallback UI instead of infinite retries
+        console.warn('[SimpleVideo] Video failed after retries, showing fallback', {
+          postId,
+          src: video.src?.substring(0, 100),
+          errorCode: video.error?.code
+        });
+        
+        setHasError(true);
+        setIsLoading(false);
+      };
 
   const handleCanPlay = () => {
     const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());

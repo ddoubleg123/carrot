@@ -119,7 +119,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       const VALID_VIDEO_FORMATS = /\.(mp4|webm|mov|m4v|avi|mkv|ogg|ogv)(\?|$)/i;
       const VALID_VIDEO_MIME_TYPES = /^(video\/|application\/x-mpegURL|application\/vnd\.apple\.mpegurl)/i;
       
-      // If already proxied, return as-is
+      // CRITICAL FIX: If already proxied, return as-is (prevent double-proxying)
       if (u.startsWith('/api/video')) {
         console.log('[proxVideo] URL already proxied, returning as-is:', u.substring(0, 100));
         return u;
@@ -135,21 +135,29 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return u;
       }
       
-      // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
-      // Firebase URLs with ?alt=media&token=... are already public and don't need proxying
+      // CRITICAL FIX: For Firebase Storage URLs, prefer direct usage to avoid proxy issues
       if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
         try {
           const urlObj = new URL(u);
           // Check if URL has a valid token parameter - if so, it's already signed and public
-          if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
-            console.log('[proxVideo] ✓ DIRECT FIREBASE URL (has token):', u.substring(0, 100));
+          if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature') || urlObj.searchParams.has('alt')) {
+            console.log('[proxVideo] ✓ DIRECT FIREBASE URL (has token/alt):', u.substring(0, 100));
             return u; // Use directly, no proxy needed
           }
+          
+          // For unsigned Firebase URLs, add alt=media and use directly
+          if (!urlObj.searchParams.has('alt')) {
+            urlObj.searchParams.set('alt', 'media');
+            const directUrl = urlObj.toString();
+            console.log('[proxVideo] ✓ DIRECT FIREBASE URL (added alt=media):', directUrl.substring(0, 100));
+            return directUrl;
+          }
         } catch (e) {
-          console.warn('[proxVideo] Failed to parse URL:', u);
+          console.warn('[proxVideo] Failed to parse Firebase URL:', u);
         }
-        // No token found, proxy it
-        console.log('[proxVideo] Proxying Firebase URL (no token):', u.substring(0, 100));
+        
+        // Fallback: proxy it if we can't parse it
+        console.log('[proxVideo] Proxying Firebase URL (fallback):', u.substring(0, 100));
       }
       
       // Validate video format for direct URLs
@@ -167,9 +175,8 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         return null;
       }
       
-      // For URLs without tokens or other sources, proxy them
-      const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
-      const proxied = `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      // CRITICAL FIX: Use simple proxy without complex encoding
+      const proxied = `/api/video?url=${encodeURIComponent(u)}`;
       console.log('[proxVideo] Proxying URL:', { original: u.substring(0, 80), proxied: proxied.substring(0, 100) });
       return proxied;
     };

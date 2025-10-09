@@ -770,9 +770,11 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   );
                 }
                 
-                // Simplified: Only use VideoPlayer (SimpleVideo) for all videos
-                // HLS and Cloudflare video players disabled to reduce complexity and improve performance
-                console.log('[CommitmentCard] ✓ Valid video URL, rendering VideoPlayer (SimpleVideo):', {
+                // CRITICAL FIX: Only render ONE video player per post
+                // Use React.memo to prevent unnecessary re-renders
+                const MemoizedVideoPlayer = React.memo(VideoPlayer);
+                
+                console.log('[CommitmentCard] ✓ Valid video URL, rendering SINGLE VideoPlayer (SimpleVideo):', {
                   postId: id,
                   hasVideoUrl: !!videoUrl,
                   videoUrl: videoUrl?.slice(0, 100),
@@ -782,7 +784,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 });
                 
                 return (
-                  <VideoPlayer
+                  <MemoizedVideoPlayer
                     videoUrl={videoUrl || ""}
                     thumbnailUrl={thumbnailUrl || undefined}
                     postId={id}
