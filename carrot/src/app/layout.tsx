@@ -26,6 +26,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
         <link rel="apple-touch-icon" href="/favicon.png" />
+        {/* Chunk retry logic - must load early */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.__CHUNK_RETRY_COUNT__ = new Map();
+          window.__RETRY_CHUNK__ = function(chunkId) {
+            var retryCount = window.__CHUNK_RETRY_COUNT__.get(chunkId) || 0;
+            var maxRetries = 3;
+            console.log('[ChunkRetry] Retry attempt ' + (retryCount + 1) + '/' + maxRetries + ' for chunk ' + chunkId);
+            if (retryCount < maxRetries) {
+              window.__CHUNK_RETRY_COUNT__.set(chunkId, retryCount + 1);
+              setTimeout(function() { window.location.reload(); }, 1000);
+            }
+          };
+          window.addEventListener('error', function(e) {
+            var msg = e.message || '';
+            if (msg.includes('ChunkLoadError') || msg.includes('Loading chunk')) {
+              var match = msg.match(/chunk[s]?\\s+(\\d+)/i);
+              var chunkId = match ? match[1] : 'unknown';
+              window.__RETRY_CHUNK__(chunkId);
+              e.preventDefault();
+            }
+          }, true);
+        ` }} />
         {/* Performance hints: preconnect/dns-prefetch to common media/font domains */}
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://fonts.gstatic.com" />

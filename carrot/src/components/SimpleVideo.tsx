@@ -602,7 +602,12 @@ export default function SimpleVideo({
 
   const handleLoadStart = () => {
     const startTime = Date.now();
-    console.log('[SimpleVideo] Load started', { src: videoSrc, startTime });
+    console.log(`[SimpleVideo] 📥 LOAD START`, { 
+      postId,
+      mountId: mountIdRef.current,
+      src: videoSrc?.substring(0, 100),
+      startTime 
+    });
     setHasError(false);
     
     // For Firebase Storage URLs, implement proper range request for first 6 seconds
@@ -634,15 +639,44 @@ export default function SimpleVideo({
       }
     }
     
-    // Set a longer timeout for large videos, but still reasonable
+    // CRITICAL: Set a 10 second timeout to detect stuck videos
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
     loadingTimeoutRef.current = setTimeout(() => {
       const duration = Date.now() - startTime;
-      console.warn('[SimpleVideo] Loading timeout - forcing video to show', { duration: `${duration}ms` });
-      setIsLoading(false);
-    }, 5000); // 5 second timeout for large videos
+      const video = videoRef.current;
+      
+      // Check if video is truly stuck or just slow
+      if (video && video.readyState < 2 && video.networkState !== 3) {
+        console.error(`[SimpleVideo] ⏱️  LOAD TIMEOUT - Video stuck`, { 
+          postId,
+          duration: `${duration}ms`,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          src: videoSrc?.substring(0, 100)
+        });
+        
+        // Try retry if we haven't exhausted retries
+        if (retryCount < 2) {
+          console.warn(`[SimpleVideo] 🔄 Retrying stuck video (attempt ${retryCount + 1}/2)`);
+          setRetryCount(prev => prev + 1);
+          video.load(); // Force reload
+        } else {
+          // Give up and show error
+          console.error(`[SimpleVideo] ❌ Video load failed after ${retryCount + 1} attempts`);
+          setHasError(true);
+          setIsLoading(false);
+        }
+      } else {
+        // Video is loading, just slow - show it anyway
+        console.warn('[SimpleVideo] Video slow but loading, showing anyway', { 
+          duration: `${duration}ms`,
+          readyState: video?.readyState
+        });
+        setIsLoading(false);
+      }
+    }, 10000); // 10 second timeout to detect stuck videos
   };
 
   const handleLoadedData = () => {
