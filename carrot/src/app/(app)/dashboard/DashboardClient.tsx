@@ -833,12 +833,14 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
             isBlobVideoUrl: commitment.videoUrl?.includes('blob:')
           });
           
-          // Merge mapped server fields to normalize proxies, then layer preserved fields
+          // CRITICAL FIX: Merge carefully to prevent unnecessary re-renders
           const merged: any = { ...commitment, ...mappedFromServer, ...preservedMediaData };
+          
           // Preserve homeCountry from optimistic if server doesn't provide it
           if (!mappedFromServer.homeCountry && (commitment as any).homeCountry) {
             merged.homeCountry = (commitment as any).homeCountry;
           }
+          
           // Preserve gradient fields from optimistic if server omitted them
           const gf = ['gradientFromColor','gradientToColor','gradientViaColor','gradientDirection'] as const;
           for (const key of gf) {
@@ -846,6 +848,19 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               if ((commitment as any)[key] != null) merged[key] = (commitment as any)[key];
             }
           }
+          
+          // CRITICAL: Check if videoUrl actually changed - if not, keep the exact same reference
+          if (merged.videoUrl === commitment.videoUrl) {
+            console.log('🎬 VideoUrl unchanged, preserving reference to prevent remount', { postId: tempId });
+            merged.videoUrl = commitment.videoUrl; // Use exact same reference
+          } else if (merged.videoUrl) {
+            console.log('🎬 VideoUrl CHANGED, video will remount', { 
+              tempId,
+              oldUrl: commitment.videoUrl?.substring(0, 50),
+              newUrl: merged.videoUrl?.substring(0, 50)
+            });
+          }
+          
           return merged as any;
         }
         return commitment;
