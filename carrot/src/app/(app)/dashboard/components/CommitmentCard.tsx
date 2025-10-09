@@ -439,7 +439,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative">
                 {author?.avatar ? (
                   <Image
-                    src={author.avatar.startsWith('http') ? `/api/img?url=${encodeURIComponent(author.avatar)}` : author.avatar}
+                    src={author.avatar}
                     alt={author?.username && String(author.username).trim() ? `${String(author.username)}'s avatar` : 'User avatar'}
                     fill
                     sizes="40px"
@@ -632,7 +632,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             <div className="w-full rounded-xl overflow-hidden relative" style={{ aspectRatio: '16 / 9' }}>
               <Image
-                src={`/api/img?url=${encodeURIComponent(gifUrl)}`}
+                src={gifUrl}
                 alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
                 fill
                 sizes="(max-width: 768px) 100vw, 700px"
@@ -654,7 +654,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
                   <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
                     <Image
-                      src={imageUrls[0].startsWith('/api/img') ? imageUrls[0] : `/api/img?url=${encodeURIComponent(imageUrls[0])}`}
+                      src={imageUrls[0]}
                       alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
                       fill
                       sizes="(max-width: 768px) 100vw, 700px"
@@ -670,7 +670,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   {imageUrls.slice(0, 4).map((u, i) => (
                     <div key={i} className="relative w-full h-48 rounded-lg overflow-hidden">
                       <Image
-                        src={u.startsWith('/api/img') ? u : `/api/img?url=${encodeURIComponent(u)}`}
+                        src={u}
                         alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
                         fill
                         sizes="(max-width: 768px) 50vw, 33vw"
