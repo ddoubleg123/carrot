@@ -83,10 +83,31 @@ export default function SimpleVideo({
   const [compatMessage, setCompatMessage] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [networkRetryCount, setNetworkRetryCount] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [canPlay, setCanPlay] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const blobCleanupRef = useRef<(() => void) | null>(null);
+  const mountIdRef = useRef<string>(`mount-${postId}-${Date.now()}`);
+
+  // CRITICAL: Lifecycle logging to debug glitching/remounting issues
+  useEffect(() => {
+    console.log(`[SimpleVideo] 🟢 MOUNTED`, {
+      postId,
+      mountId: mountIdRef.current,
+      src: src?.substring(0, 100),
+      timestamp: Date.now()
+    });
+    
+    return () => {
+      console.log(`[SimpleVideo] 🔴 UNMOUNTED`, {
+        postId,
+        mountId: mountIdRef.current,
+        timestamp: Date.now()
+      });
+    };
+  }, [postId, src]);
 
   // FeedMediaManager integration for single-video playback
   useEffect(() => {
@@ -222,12 +243,20 @@ export default function SimpleVideo({
     }
   }, [onVideoRef]);
 
-  // Handle video play events to set as active in FeedMediaManager
+  // CRITICAL: Track play/pause state to prevent conflicts
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !postId) return;
 
     const handlePlay = async () => {
+      setIsPlaying(true);
+      console.log(`[SimpleVideo] ▶️  PLAY event`, {
+        postId,
+        mountId: mountIdRef.current,
+        currentTime: video.currentTime,
+        readyState: video.readyState
+      });
+      
       try {
         const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
         const handle = FeedMediaManager.inst.getHandleByElement(containerRef.current!);
@@ -240,7 +269,34 @@ export default function SimpleVideo({
       }
     };
 
+    const handlePause = () => {
+      setIsPlaying(false);
+      console.log(`[SimpleVideo] ⏸️  PAUSE event`, {
+        postId,
+        mountId: mountIdRef.current,
+        currentTime: video.currentTime
+      });
+    };
+
+    const handleSeeking = () => {
+      console.log(`[SimpleVideo] ⏩ SEEKING`, {
+        postId,
+        currentTime: video.currentTime,
+        duration: video.duration
+      });
+    };
+
+    const handleSeeked = () => {
+      console.log(`[SimpleVideo] ✓ SEEKED`, {
+        postId,
+        currentTime: video.currentTime
+      });
+    };
+
     video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeking', handleSeeking);
+    video.addEventListener('seeked', handleSeeked);
 
     // Add intersection observer to handle visibility and promote to full download when visible
     const io = new IntersectionObserver(async (entries) => {
@@ -278,6 +334,9 @@ export default function SimpleVideo({
 
     return () => {
       video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeking', handleSeeking);
+      video.removeEventListener('seeked', handleSeeked);
       io.disconnect();
     };
   }, [postId]);
@@ -323,8 +382,20 @@ export default function SimpleVideo({
     };
   }, [postId]);
 
+  // CRITICAL: Detect src changes and log them to debug "restarts after 1 second" bug
+  useEffect(() => {
+    console.log(`[SimpleVideo] 🔄 SRC CHANGED`, {
+      postId,
+      mountId: mountIdRef.current,
+      newSrc: src?.substring(0, 100),
+      previousVideoSrc: videoSrc?.substring(0, 100),
+      timestamp: Date.now()
+    });
+  }, [src, postId, videoSrc]);
+
   useEffect(() => {
     if (!src) {
+      console.warn(`[SimpleVideo] ⚠️  No src provided`, { postId, mountId: mountIdRef.current });
       setHasError(true);
       setIsLoading(false);
       return;
@@ -646,7 +717,14 @@ export default function SimpleVideo({
 
   const handleCanPlay = () => {
     const duration = Date.now() - (videoRef.current?.getAttribute('data-start-time') ? parseInt(videoRef.current.getAttribute('data-start-time')!) : Date.now());
-    console.log('[SimpleVideo] Can play', { duration: `${duration}ms` });
+    console.log(`[SimpleVideo] ✅ CAN PLAY`, {
+      postId,
+      mountId: mountIdRef.current,
+      duration: `${duration}ms`,
+      readyState: videoRef.current?.readyState,
+      networkState: videoRef.current?.networkState
+    });
+    setCanPlay(true);
     setIsLoading(false);
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);

@@ -120,6 +120,16 @@ const VideoPlayer = dynamic(() => import('./VideoPlayer'), {
   loading: () => <MediaSkeleton />,
 });
 
+// CRITICAL FIX: Create memoized player OUTSIDE component to prevent remounts
+const MemoizedVideoPlayer = React.memo(VideoPlayer, (prevProps, nextProps) => {
+  // Only re-render if critical props change
+  return (
+    prevProps.videoUrl === nextProps.videoUrl &&
+    prevProps.postId === nextProps.postId &&
+    prevProps.uploadStatus === nextProps.uploadStatus
+  );
+});
+
 function isDomEventKey(k: string) {
   return /^on[A-Z]/.test(k);
 }
@@ -770,21 +780,20 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   );
                 }
                 
-                // CRITICAL FIX: Only render ONE video player per post
-                // Use React.memo to prevent unnecessary re-renders
-                const MemoizedVideoPlayer = React.memo(VideoPlayer);
-                
+                // CRITICAL FIX: Memoized player defined outside component prevents remounts
                 console.log('[CommitmentCard] ✓ Valid video URL, rendering SINGLE VideoPlayer (SimpleVideo):', {
                   postId: id,
                   hasVideoUrl: !!videoUrl,
                   videoUrl: videoUrl?.slice(0, 100),
                   isProxied,
                   isFirebase,
-                  hasValidExtension
+                  hasValidExtension,
+                  renderTimestamp: Date.now()
                 });
                 
                 return (
                   <MemoizedVideoPlayer
+                    key={`video-${id}`}
                     videoUrl={videoUrl || ""}
                     thumbnailUrl={thumbnailUrl || undefined}
                     postId={id}
