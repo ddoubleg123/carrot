@@ -448,11 +448,21 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     loading="lazy"
                     unoptimized
                     style={{ objectFit: 'cover' }}
-                    onError={(e) => {
-                      console.log('[CommitmentCard] Avatar load error:', {
+                    onLoad={() => {
+                      console.log('[CommitmentCard] ✓ Avatar loaded successfully:', {
                         postId: id,
-                        avatar: author.avatar,
-                        error: e
+                        avatarUrl: author.avatar?.substring(0, 100),
+                        isDataUri: author.avatar?.startsWith('data:'),
+                        isFirebase: author.avatar?.includes('firebasestorage')
+                      });
+                    }}
+                    onError={(e) => {
+                      console.error('[CommitmentCard] ✗ Avatar load ERROR:', {
+                        postId: id,
+                        avatarUrl: author.avatar?.substring(0, 100),
+                        isDataUri: author.avatar?.startsWith('data:'),
+                        isProxied: author.avatar?.startsWith('/api/img'),
+                        error: e.type
                       });
                       // Fallback to placeholder on error
                       e.currentTarget.src = '/avatar-placeholder.svg';
@@ -641,6 +651,23 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 loading="lazy"
                 unoptimized
                 style={{ objectFit: 'cover' }}
+                onLoad={() => {
+                  console.log('[CommitmentCard] ✓ GIF loaded:', {
+                    postId: id,
+                    gifUrl: gifUrl.substring(0, 100),
+                    isDataUri: gifUrl.startsWith('data:'),
+                    isFirebase: gifUrl.includes('firebasestorage')
+                  });
+                }}
+                onError={(e) => {
+                  console.error('[CommitmentCard] ✗ GIF load ERROR:', {
+                    postId: id,
+                    gifUrl: gifUrl.substring(0, 100),
+                    isDataUri: gifUrl.startsWith('data:'),
+                    isProxied: gifUrl.startsWith('/api/img'),
+                    error: e.type
+                  });
+                }}
               />
             </div>
           </div>
@@ -651,21 +678,38 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               className="rounded-xl p-2"
               style={hasGradient ? { background: gradientCss } : undefined}
             >
-              {imageUrls.length === 1 ? (
-                <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
-                  <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
-                    <Image
-                      src={imageUrls[0]}
-                      alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 700px"
-                      priority={false}
-                      loading="lazy"
-                      unoptimized
-                      style={{ objectFit: 'cover' }}
-                    />
-                  </div>
-                </div>
+            {imageUrls.length === 1 ? (
+            <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
+              <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
+                <Image
+                  src={imageUrls[0]}
+                  alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 700px"
+                  priority={false}
+                  loading="lazy"
+                  unoptimized
+                  style={{ objectFit: 'cover' }}
+                  onLoad={() => {
+                    console.log('[CommitmentCard] ✓ Single image loaded:', {
+                      postId: id,
+                      imageUrl: imageUrls[0].substring(0, 100),
+                      isDataUri: imageUrls[0].startsWith('data:'),
+                      isFirebase: imageUrls[0].includes('firebasestorage')
+                    });
+                  }}
+                  onError={(e) => {
+                    console.error('[CommitmentCard] ✗ Single image load ERROR:', {
+                      postId: id,
+                      imageUrl: imageUrls[0].substring(0, 100),
+                      isDataUri: imageUrls[0].startsWith('data:'),
+                      isProxied: imageUrls[0].startsWith('/api/img'),
+                      error: e.type
+                    });
+                  }}
+                />
+              </div>
+            </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
@@ -679,6 +723,23 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                         loading="lazy"
                         unoptimized
                         style={{ objectFit: 'cover' }}
+                        onLoad={() => {
+                          console.log(`[CommitmentCard] ✓ Multi-image ${i + 1} loaded:`, {
+                            postId: id,
+                            imageUrl: u.substring(0, 100),
+                            isDataUri: u.startsWith('data:'),
+                            isFirebase: u.includes('firebasestorage')
+                          });
+                        }}
+                        onError={(e) => {
+                          console.error(`[CommitmentCard] ✗ Multi-image ${i + 1} load ERROR:`, {
+                            postId: id,
+                            imageUrl: u.substring(0, 100),
+                            isDataUri: u.startsWith('data:'),
+                            isProxied: u.startsWith('/api/img'),
+                            error: e.type
+                          });
+                        }}
                       />
                     </div>
                   ))}

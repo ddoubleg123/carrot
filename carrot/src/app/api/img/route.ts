@@ -235,6 +235,18 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
   const generatePoster = sp.get('generatePoster')
   const videoUrl = sp.get('videoUrl')
 
+  // CRITICAL FIX: Reject data URIs immediately - they should never be proxied
+  if (rawUrl && rawUrl.startsWith('data:')) {
+    console.warn('[Image Proxy] BLOCKED data URI - should be used directly in browser:', rawUrl.substring(0, 100));
+    return new NextResponse('Data URIs cannot be proxied - use them directly in the browser', { 
+      status: 400,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-Proxy-Error': 'data-uri-blocked'
+      }
+    });
+  }
+
   // Prevent multiple-wrapping: if rawUrl already points to /api/img, try to unwrap multiple times
   if (rawUrl) {
     try {

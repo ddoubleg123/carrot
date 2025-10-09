@@ -81,11 +81,14 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     const prox = (u?: string | null) => {
       if (!u) return null;
       // If already proxied, return as-is
-      if (u.startsWith('/api/img')) return u;
+      if (u.startsWith('/api/img')) {
+        console.log('[prox] URL already proxied, returning as-is:', u.substring(0, 100));
+        return u;
+      }
       
       // For data URIs (base64 images), use them directly - no proxy needed
       if (u.startsWith('data:')) {
-        console.log('[prox] Using direct data URI (no proxy needed)');
+        console.log('[prox] ✓ DIRECT DATA URI (no proxy):', u.substring(0, 80));
         return u;
       }
       
@@ -95,7 +98,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           const urlObj = new URL(u);
           // Check if URL has a valid token - if so, it's already signed and public
           if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
-            console.log('[prox] Using direct Firebase URL (has token)');
+            console.log('[prox] ✓ DIRECT FIREBASE URL (has token):', u.substring(0, 100));
             return u; // Use directly, no proxy needed
           }
         } catch (e) {
@@ -105,12 +108,17 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       
       // For URLs without tokens or other sources, proxy them
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
-      return `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      const proxied = `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      console.log('[prox] Proxying URL:', { original: u.substring(0, 80), proxied: proxied.substring(0, 100) });
+      return proxied;
     };
     const proxVideo = (u?: string | null) => {
       if (!u) return null;
       // If already proxied, return as-is
-      if (u.startsWith('/api/video')) return u;
+      if (u.startsWith('/api/video')) {
+        console.log('[proxVideo] URL already proxied, returning as-is:', u.substring(0, 100));
+        return u;
+      }
       
       // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
       // Firebase URLs with ?alt=media&token=... are already public and don't need proxying
@@ -119,19 +127,21 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           const urlObj = new URL(u);
           // Check if URL has a valid token parameter - if so, it's already signed and public
           if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
-            console.log('[proxVideo] Using direct Firebase URL (has token):', u.substring(0, 100));
+            console.log('[proxVideo] ✓ DIRECT FIREBASE URL (has token):', u.substring(0, 100));
             return u; // Use directly, no proxy needed
           }
         } catch (e) {
           console.warn('[proxVideo] Failed to parse URL:', u);
         }
         // No token found, proxy it
-        console.log('[proxVideo] Proxying Firebase URL (no token)');
+        console.log('[proxVideo] Proxying Firebase URL (no token):', u.substring(0, 100));
       }
       
       // For URLs without tokens or other sources, proxy them
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
-      return `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      const proxied = `/api/video?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;
+      console.log('[proxVideo] Proxying URL:', { original: u.substring(0, 80), proxied: proxied.substring(0, 100) });
+      return proxied;
     };
     const proxPath = (p?: string | null) => (p ? `/api/img?path=${encodeURIComponent(p)}` : null);
     const imageUrls = (() => {
