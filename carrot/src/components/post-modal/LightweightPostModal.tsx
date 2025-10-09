@@ -59,26 +59,79 @@ export default function LightweightPostModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
-  // Optimized video element handling
+  // Store original parent for restoration
+  const originalParentRef = useRef<HTMLElement | null>(null);
+
+  // Optimized video element handling - CRITICAL FIX: Save state before moving
   useEffect(() => {
     if (isOpen && isVideo && videoElement && videoContainerRef.current) {
       // Use requestIdleCallback for non-blocking DOM manipulation
       const handleVideoMove = () => {
         if (videoContainerRef.current && videoElement) {
+          // CRITICAL FIX: Save original parent before moving
+          if (!originalParentRef.current && videoElement.parentElement) {
+            originalParentRef.current = videoElement.parentElement;
+            console.log('[LightweightPostModal] Saved original parent:', {
+              postId: post.id,
+              parentTag: originalParentRef.current.tagName,
+              parentClass: originalParentRef.current.className
+            });
+          }
+          
+          // CRITICAL FIX: Save video state BEFORE moving the element
+          const currentTime = videoElement.currentTime;
+          const isPaused = videoElement.paused;
+          const volume = videoElement.volume;
+          const playbackRate = videoElement.playbackRate;
+          const wasMuted = videoElement.muted;
+          
+          console.log('[LightweightPostModal] Saving video state before move:', {
+            postId: post.id,
+            currentTime,
+            isPaused,
+            volume,
+            playbackRate,
+            wasMuted
+          });
+          
+          // Store state in dataset for restoration
+          videoElement.dataset.originalTime = String(currentTime);
+          videoElement.dataset.originalPaused = String(isPaused);
+          videoElement.dataset.originalVolume = String(volume);
+          videoElement.dataset.originalPlaybackRate = String(playbackRate);
+          videoElement.dataset.originalMuted = String(wasMuted);
+          
+          // Move the video element to modal
           videoContainerRef.current.appendChild(videoElement);
           
-          // Restore video state
-          const originalTime = parseFloat(videoElement.dataset.originalTime || '0');
-          const originalPaused = videoElement.dataset.originalPaused === 'true';
-          const originalVolume = parseFloat(videoElement.dataset.originalVolume || '1');
-          const originalPlaybackRate = parseFloat(videoElement.dataset.originalPlaybackRate || '1');
+          // Restore video state immediately after move
+          videoElement.currentTime = currentTime;
+          videoElement.volume = volume;
+          videoElement.playbackRate = playbackRate;
+          videoElement.muted = wasMuted;
           
-          videoElement.currentTime = originalTime;
-          videoElement.volume = originalVolume;
-          videoElement.playbackRate = originalPlaybackRate;
+          console.log('[LightweightPostModal] Video moved to modal, state restored:', {
+            postId: post.id,
+            currentTime: videoElement.currentTime,
+            isPaused: videoElement.paused
+          });
           
-          if (!originalPaused) {
-            videoElement.play().catch(console.error);
+          // Resume playback if it wasn't paused
+          if (!isPaused) {
+            // Wait for video to be ready before playing
+            if (videoElement.readyState >= 2) {
+              videoElement.play().catch(e => {
+                console.warn('[LightweightPostModal] Play failed after move:', e);
+              });
+            } else {
+              const playWhenReady = () => {
+                videoElement.play().catch(e => {
+                  console.warn('[LightweightPostModal] Play failed after canplay:', e);
+                });
+                videoElement.removeEventListener('canplay', playWhenReady);
+              };
+              videoElement.addEventListener('canplay', playWhenReady, { once: true });
+            }
           }
         }
       };
@@ -89,7 +142,7 @@ export default function LightweightPostModal({
         requestAnimationFrame(handleVideoMove);
       }
     }
-  }, [isOpen, isVideo, videoElement]);
+  }, [isOpen, isVideo, videoElement, post.id]);
 
   // Handle ESC key and cleanup
   useEffect(() => {
@@ -108,12 +161,54 @@ export default function LightweightPostModal({
       document.removeEventListener('keydown', handleEscKey);
       document.body.style.overflow = 'unset';
       
-      // Optimized cleanup
-      if (!isOpen && videoElement && videoContainerRef.current) {
+      // CRITICAL FIX: Restore video element to original parent when closing
+      if (!isOpen && videoElement) {
         const handleCleanup = () => {
+          // Save current state before restoring
+          const currentTime = videoElement.currentTime;
+          const isPaused = videoElement.paused;
+          const volume = videoElement.volume;
+          const playbackRate = videoElement.playbackRate;
+          const wasMuted = videoElement.muted;
+          
+          console.log('[LightweightPostModal] Restoring video to original parent:', {
+            postId: post.id,
+            currentTime,
+            isPaused,
+            hasOriginalParent: !!originalParentRef.current
+          });
+          
+          // Remove from modal container
           if (videoContainerRef.current && videoContainerRef.current.contains(videoElement)) {
             videoContainerRef.current.removeChild(videoElement);
           }
+          
+          // Restore to original parent if we have it
+          if (originalParentRef.current && !originalParentRef.current.contains(videoElement)) {
+            originalParentRef.current.appendChild(videoElement);
+            
+            // Restore video state after moving back
+            videoElement.currentTime = currentTime;
+            videoElement.volume = volume;
+            videoElement.playbackRate = playbackRate;
+            videoElement.muted = wasMuted;
+            
+            console.log('[LightweightPostModal] Video restored to feed, state preserved:', {
+              postId: post.id,
+              currentTime: videoElement.currentTime,
+              isPaused: videoElement.paused
+            });
+            
+            // Resume playback if it wasn't paused
+            if (!isPaused && videoElement.readyState >= 2) {
+              videoElement.play().catch(e => {
+                console.warn('[LightweightPostModal] Play failed after restore:', e);
+              });
+            }
+          }
+          
+          // Clear the original parent ref for next modal open
+          originalParentRef.current = null;
         };
 
         if ('requestIdleCallback' in window) {
@@ -123,7 +218,7 @@ export default function LightweightPostModal({
         }
       }
     };
-  }, [isOpen, onClose, videoElement]);
+  }, [isOpen, onClose, videoElement, post.id]);
 
   // Optimized close handler
   const handleClose = useCallback(() => {

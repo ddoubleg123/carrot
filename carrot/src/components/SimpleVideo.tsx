@@ -103,7 +103,36 @@ export default function SimpleVideo({
             el: containerRef.current,
             play: async () => {
               try {
-                await videoRef.current?.play();
+                const video = videoRef.current;
+                if (!video) return;
+                
+                // CRITICAL FIX: Wait for video to be ready before playing
+                // readyState >= 2 means we have current frame data (HAVE_CURRENT_DATA or higher)
+                if (video.readyState >= 2) {
+                  await video.play();
+                  console.log('[SimpleVideo] Play started (ready)', { postId, readyState: video.readyState });
+                } else {
+                  // Wait for canplay event, then play
+                  console.log('[SimpleVideo] Waiting for canplay before playing', { postId, readyState: video.readyState });
+                  const playWhenReady = async () => {
+                    try {
+                      await video.play();
+                      console.log('[SimpleVideo] Play started (after canplay)', { postId });
+                    } catch (playError) {
+                      console.warn('[SimpleVideo] Play after canplay failed:', playError);
+                    }
+                    video.removeEventListener('canplay', playWhenReady);
+                  };
+                  video.addEventListener('canplay', playWhenReady, { once: true });
+                  
+                  // Fallback timeout: try to play after 2 seconds regardless
+                  setTimeout(() => {
+                    video.removeEventListener('canplay', playWhenReady);
+                    if (video.paused) {
+                      video.play().catch(e => console.warn('[SimpleVideo] Fallback play failed:', e));
+                    }
+                  }, 2000);
+                }
               } catch (e) {
                 console.warn('[SimpleVideo] Play failed:', e);
               }

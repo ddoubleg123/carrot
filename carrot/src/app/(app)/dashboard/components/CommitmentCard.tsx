@@ -3,6 +3,7 @@
 import React, { useMemo, useState, forwardRef, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import ImageWithFallback from "../../../../components/ImageWithFallback";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
 import AudioPlayerCard from "../../../../components/AudioPlayerCard";
 import AudioHero from "../../../../components/audio/AudioHero";
@@ -642,7 +643,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {!hasVideoMedia && gifUrl ? (
           <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
             <div className="w-full rounded-xl overflow-hidden relative" style={{ aspectRatio: '16 / 9' }}>
-              <Image
+              <ImageWithFallback
                 src={gifUrl}
                 alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
                 fill
@@ -651,23 +652,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 loading="lazy"
                 unoptimized
                 style={{ objectFit: 'cover' }}
-                onLoad={() => {
-                  console.log('[CommitmentCard] ✓ GIF loaded:', {
-                    postId: id,
-                    gifUrl: gifUrl.substring(0, 100),
-                    isDataUri: gifUrl.startsWith('data:'),
-                    isFirebase: gifUrl.includes('firebasestorage')
-                  });
-                }}
-                onError={(e) => {
-                  console.error('[CommitmentCard] ✗ GIF load ERROR:', {
-                    postId: id,
-                    gifUrl: gifUrl.substring(0, 100),
-                    isDataUri: gifUrl.startsWith('data:'),
-                    isProxied: gifUrl.startsWith('/api/img'),
-                    error: e.type
-                  });
-                }}
+                maxRetries={3}
               />
             </div>
           </div>
@@ -681,7 +666,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             {imageUrls.length === 1 ? (
             <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
               <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
-                <Image
+                <ImageWithFallback
                   src={imageUrls[0]}
                   alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
                   fill
@@ -690,23 +675,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   loading="lazy"
                   unoptimized
                   style={{ objectFit: 'cover' }}
-                  onLoad={() => {
-                    console.log('[CommitmentCard] ✓ Single image loaded:', {
-                      postId: id,
-                      imageUrl: imageUrls[0].substring(0, 100),
-                      isDataUri: imageUrls[0].startsWith('data:'),
-                      isFirebase: imageUrls[0].includes('firebasestorage')
-                    });
-                  }}
-                  onError={(e) => {
-                    console.error('[CommitmentCard] ✗ Single image load ERROR:', {
-                      postId: id,
-                      imageUrl: imageUrls[0].substring(0, 100),
-                      isDataUri: imageUrls[0].startsWith('data:'),
-                      isProxied: imageUrls[0].startsWith('/api/img'),
-                      error: e.type
-                    });
-                  }}
+                  maxRetries={3}
                 />
               </div>
             </div>
@@ -714,7 +683,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
                   {imageUrls.slice(0, 4).map((u, i) => (
                     <div key={i} className="relative w-full h-48 rounded-lg overflow-hidden">
-                      <Image
+                      <ImageWithFallback
                         src={u}
                         alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
                         fill
@@ -723,23 +692,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                         loading="lazy"
                         unoptimized
                         style={{ objectFit: 'cover' }}
-                        onLoad={() => {
-                          console.log(`[CommitmentCard] ✓ Multi-image ${i + 1} loaded:`, {
-                            postId: id,
-                            imageUrl: u.substring(0, 100),
-                            isDataUri: u.startsWith('data:'),
-                            isFirebase: u.includes('firebasestorage')
-                          });
-                        }}
-                        onError={(e) => {
-                          console.error(`[CommitmentCard] ✗ Multi-image ${i + 1} load ERROR:`, {
-                            postId: id,
-                            imageUrl: u.substring(0, 100),
-                            isDataUri: u.startsWith('data:'),
-                            isProxied: u.startsWith('/api/img'),
-                            error: e.type
-                          });
-                        }}
+                        maxRetries={3}
                       />
                     </div>
                   ))}
