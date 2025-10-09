@@ -450,6 +450,7 @@ class MediaPreloadQueue {
       
       // Mark task as failed in completed tasks so UI can show fallback
       this.completedTasks.set(task.id, {
+        id: task.id,
         postId: task.postId,
         type: task.type,
         success: false,
