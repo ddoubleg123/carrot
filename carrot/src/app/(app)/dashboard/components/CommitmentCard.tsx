@@ -103,15 +103,16 @@ function MediaSkeleton() {
   );
 }
 
-const CFVideoPlayer = dynamic(() => import('../../../../components/CFVideoPlayer'), {
-  ssr: false,
-  loading: () => <MediaSkeleton />,
-});
+// Disabled: Only using VideoPlayer (SimpleVideo) for all videos to improve performance
+// const CFVideoPlayer = dynamic(() => import('../../../../components/CFVideoPlayer'), {
+//   ssr: false,
+//   loading: () => <MediaSkeleton />,
+// });
 
-const HlsFeedPlayer = dynamic(() => import('../../../../components/video/HlsFeedPlayer'), {
-  ssr: false,
-  loading: () => <MediaSkeleton />,
-});
+// const HlsFeedPlayer = dynamic(() => import('../../../../components/video/HlsFeedPlayer'), {
+//   ssr: false,
+//   loading: () => <MediaSkeleton />,
+// });
 
 const VideoPlayer = dynamic(() => import('./VideoPlayer'), {
   ssr: false,
@@ -715,69 +716,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               </button>
               {/* Video rendered by player; original parent is captured dynamically when opening lightbox */}
               {(() => {
-                const useHls = process.env.NEXT_PUBLIC_FEED_HLS === '1' && !!cfPlaybackUrlHls;
-                // While trimming is processing, prefer the original direct videoUrl for optimistic playback
-                const processing = (props as any)?.status === 'processing' || props.uploadStatus === 'processing';
-                
-                // Add debugging for video component selection
-                console.log('[CommitmentCard] Video component selection:', {
+                // Simplified: Only use VideoPlayer (SimpleVideo) for all videos
+                // HLS and Cloudflare video players disabled to reduce complexity and improve performance
+                console.log('[CommitmentCard] Using VideoPlayer (SimpleVideo) for all videos:', {
                   postId: id,
                   hasVideoUrl: !!videoUrl,
-                  hasCfPlaybackUrlHls: !!cfPlaybackUrlHls,
-                  hasCfUid: !!cfUid,
-                  useHls,
-                  processing,
                   videoUrl: videoUrl?.slice(0, 100)
                 });
                 
-                if (processing && videoUrl) {
-                  console.log('[CommitmentCard] Using VideoPlayer for processing video');
-                  return (
-                    <VideoPlayer
-                      videoUrl={videoUrl || ""}
-                      thumbnailUrl={thumbnailUrl || undefined}
-                      postId={id}
-                      initialTranscription={audioTranscription || undefined}
-                      transcriptionStatus={transcriptionStatus || undefined}
-                      uploadStatus={uploadStatus || null}
-                      uploadProgress={uploadProgress || 0}
-                      onVideoRef={attachVideoRef}
-                      disableNativeControls={false}
-                    />
-                  );
-                }
-                if (useHls) {
-                  console.log('[CommitmentCard] Using HlsFeedPlayer for HLS video');
-                  return (
-                    <HlsFeedPlayer
-                      assetId={id}
-                      hlsMasterUrl={cfPlaybackUrlHls || undefined}
-                      posterUrl={thumbnailUrl || undefined}
-                      captionVttUrl={captionVttUrl || undefined}
-                      onVideoRef={attachVideoRef}
-                      onFullscreen={() => openPostModal(id, 'comments')}
-                      autoPlay
-                      muted
-                      className="rounded-xl overflow-hidden"
-                    />
-                  );
-                }
-                if (cfUid || cfPlaybackUrlHls) {
-                  console.log('[CommitmentCard] Using CFVideoPlayer for Cloudflare video');
-                  return (
-                    <CFVideoPlayer
-                      uid={cfUid || undefined}
-                      playbackUrlHls={cfPlaybackUrlHls || undefined}
-                      poster={thumbnailUrl || undefined}
-                      autoPlay
-                      muted
-                      loop
-                      controls
-                      trackSrc={captionVttUrl || undefined}
-                    />
-                  );
-                }
-                console.log('[CommitmentCard] Using VideoPlayer as default fallback');
                 return (
                   <VideoPlayer
                     videoUrl={videoUrl || ""}
