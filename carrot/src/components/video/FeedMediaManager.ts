@@ -427,6 +427,38 @@ class FeedMediaManager {
   }
 
   registerHandle(el: Element, handle: VideoHandle) {
+    // CRITICAL FIX: Prevent duplicate handles for the same post ID
+    const existingHandle = Array.from(this._allHandles).find(h => h.id === handle.id);
+    if (existingHandle) {
+      console.warn('[FeedMediaManager] Duplicate handle detected, removing old one', { 
+        id: handle.id, 
+        oldElement: existingHandle.el?.tagName,
+        newElement: el.tagName
+      });
+      
+      // Remove the old handle completely
+      this._allHandles.delete(existingHandle);
+      if (existingHandle.el) {
+        this._handles.delete(existingHandle.el);
+        this._states.delete(existingHandle);
+        this._paused.delete(existingHandle);
+        this._visibility.delete(existingHandle);
+        this._releaseTimers.delete(existingHandle);
+        
+        // If it was the active or warm handle, clear it
+        if (this._active === existingHandle) this._active = undefined;
+        if (this._warm === existingHandle) this._warm = undefined;
+        if (this._manualActive === existingHandle) this._manualActive = undefined;
+        
+        // Clean up intersection observer
+        const oldIO = this._io.get(existingHandle.el);
+        if (oldIO) {
+          oldIO.disconnect();
+          this._io.delete(existingHandle.el);
+        }
+      }
+    }
+    
     handle.el = el;
     this._handles.set(el, handle);
     this._allHandles.add(handle);
@@ -533,7 +565,53 @@ class FeedMediaManager {
       // Promote this video to full download since it's now active
       this.promoteActiveVideoToFull(next);
       
-      try { void next.play(); } catch {}
+      // CRITICAL FIX: Check video readyState before calling play()
+      const video = next.el?.querySelector('video') as HTMLVideoElement;
+      if (video) {
+        if (video.readyState >= 2) {
+          // Video is ready to play
+          try { 
+            void next.play(); 
+            console.log('[FeedMediaManager] Play started immediately (ready)', { 
+              id: next.id, 
+              readyState: video.readyState 
+            });
+          } catch (e) {
+            console.warn('[FeedMediaManager] Play failed immediately:', e);
+          }
+        } else {
+          // Wait for video to be ready, then play
+          console.log('[FeedMediaManager] Waiting for video ready before play', { 
+            id: next.id, 
+            readyState: video.readyState 
+          });
+          const playWhenReady = async () => {
+            try { 
+              await next.play(); 
+              console.log('[FeedMediaManager] Play started after canplay', { 
+                id: next.id 
+              });
+            } catch (e) {
+              console.warn('[FeedMediaManager] Play failed after canplay:', e);
+            }
+            video.removeEventListener('canplay', playWhenReady);
+          };
+          video.addEventListener('canplay', playWhenReady, { once: true });
+          
+          // Fallback: try to play after 3 seconds regardless
+          setTimeout(() => {
+            video.removeEventListener('canplay', playWhenReady);
+            if (video.paused) {
+              next.play().catch(e => console.warn('[FeedMediaManager] Fallback play failed:', e));
+            }
+          }, 3000);
+        }
+      } else {
+        // No video element found, try play anyway
+        try { void next.play(); } catch (e) {
+          console.warn('[FeedMediaManager] No video element found for handle:', next.id);
+        }
+      }
       
       console.log('[FeedMediaManager] Active set', { 
         id: next.id, 

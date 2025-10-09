@@ -106,6 +106,13 @@ export default function SimpleVideo({
                 const video = videoRef.current;
                 if (!video) return;
                 
+                console.log('[SimpleVideo] FeedMediaManager requested play', { 
+                  postId, 
+                  readyState: video.readyState,
+                  paused: video.paused,
+                  src: video.src?.substring(0, 100)
+                });
+                
                 // CRITICAL FIX: Wait for video to be ready before playing
                 // readyState >= 2 means we have current frame data (HAVE_CURRENT_DATA or higher)
                 if (video.readyState >= 2) {
@@ -139,36 +146,63 @@ export default function SimpleVideo({
             },
             pause: () => {
               try {
-                videoRef.current?.pause();
+                const video = videoRef.current;
+                if (video && !video.paused) {
+                  video.pause();
+                  console.log('[SimpleVideo] Paused by FeedMediaManager', { postId });
+                }
               } catch (e) {
                 console.warn('[SimpleVideo] Pause failed:', e);
               }
             },
             setPaused: () => {
               try {
-                videoRef.current?.pause();
+                const video = videoRef.current;
+                if (video) {
+                  video.pause();
+                  console.log('[SimpleVideo] SetPaused by FeedMediaManager', { postId });
+                }
               } catch (e) {
                 console.warn('[SimpleVideo] SetPaused failed:', e);
               }
             },
             release: () => {
               try {
-                videoRef.current?.pause();
-                if (videoRef.current) {
-                  videoRef.current.removeAttribute('src');
-                  videoRef.current.load();
+                const video = videoRef.current;
+                if (video) {
+                  video.pause();
+                  video.removeAttribute('src');
+                  video.load();
+                  console.log('[SimpleVideo] Released by FeedMediaManager', { postId });
                 }
               } catch (e) {
                 console.warn('[SimpleVideo] Release failed:', e);
               }
+            },
+            getScreenPosition: () => {
+              try {
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (rect) {
+                  return {
+                    top: rect.top,
+                    bottom: rect.bottom,
+                    height: rect.height
+                  };
+                }
+              } catch (e) {
+                console.warn('[SimpleVideo] getScreenPosition failed:', e);
+              }
+              return null;
             }
           };
 
           manager.registerHandle(containerRef.current, handle);
+          console.log('[SimpleVideo] Registered with FeedMediaManager', { postId });
           
           // Cleanup on unmount
           return () => {
             if (containerRef.current) {
+              console.log('[SimpleVideo] Unregistering from FeedMediaManager', { postId });
               manager.unregisterHandle(containerRef.current);
             }
           };
@@ -245,6 +279,47 @@ export default function SimpleVideo({
     return () => {
       video.removeEventListener('play', handlePlay);
       io.disconnect();
+    };
+  }, [postId]);
+
+  // CRITICAL FIX: Comprehensive cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[SimpleVideo] Component unmounting, cleaning up', { postId });
+      
+      // Clean up video element
+      const video = videoRef.current;
+      if (video) {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch (e) {
+          console.warn('[SimpleVideo] Video cleanup failed:', e);
+        }
+      }
+      
+      // Clean up blob URL
+      if (blobCleanupRef.current) {
+        blobCleanupRef.current();
+        blobCleanupRef.current = null;
+      }
+      
+      // Clean up loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+      
+      // Unregister from FeedMediaManager
+      try {
+        if (containerRef.current) {
+          const { default: FeedMediaManager } = require('./video/FeedMediaManager');
+          FeedMediaManager.inst.unregisterHandle(containerRef.current);
+        }
+      } catch (e) {
+        console.warn('[SimpleVideo] FeedMediaManager cleanup failed:', e);
+      }
     };
   }, [postId]);
 
