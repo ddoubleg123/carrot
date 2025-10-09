@@ -90,6 +90,7 @@ export default function SimpleVideo({
   const containerRef = useRef<HTMLDivElement>(null);
   const blobCleanupRef = useRef<(() => void) | null>(null);
   const mountIdRef = useRef<string>(`mount-${postId}-${Date.now()}`);
+  const lastProcessedSrcRef = useRef<string | null>(null); // CRITICAL: Track last processed src to prevent re-processing
 
   // CRITICAL: Lifecycle logging to debug glitching/remounting issues
   useEffect(() => {
@@ -400,6 +401,25 @@ export default function SimpleVideo({
       setIsLoading(false);
       return;
     }
+
+    // CRITICAL FIX: Only process if src actually changed (not just re-rendered)
+    if (lastProcessedSrcRef.current === src) {
+      console.log(`[SimpleVideo] ℹ️  Src unchanged, skipping re-processing`, {
+        postId,
+        mountId: mountIdRef.current,
+        src: src.substring(0, 100)
+      });
+      return;
+    }
+    
+    console.log(`[SimpleVideo] 🆕 Processing NEW src`, {
+      postId,
+      mountId: mountIdRef.current,
+      oldSrc: lastProcessedSrcRef.current?.substring(0, 100),
+      newSrc: src.substring(0, 100)
+    });
+    
+    lastProcessedSrcRef.current = src;
 
     // Check if we have preloaded data for this video first
     const checkPreloadedData = async () => {
