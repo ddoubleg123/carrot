@@ -340,7 +340,7 @@ export default function TestGroupWizardPage() {
                   <div className="space-y-8 px-6 md:px-10">
                     {/* Discovering Content */}
                     <div>
-                      <DiscoveryList patchId={mockPatch.id} />
+                      <DiscoveryList patchHandle={mockPatch.handle} />
                     </div>
                   </div>
                 )}

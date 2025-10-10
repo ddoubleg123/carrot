@@ -8,7 +8,7 @@ import DiscoveryCard from './DiscoveryCard'
 import { useDiscoveredItems } from '../useDiscoveredItems'
 
 interface DiscoveryListProps {
-  patchId: string
+  patchHandle: string
 }
 
 function DiscoveryCardSkeleton() {
@@ -36,12 +36,12 @@ function DiscoveryCardSkeleton() {
   )
 }
 
-export default function DiscoveryList({ patchId }: DiscoveryListProps) {
+export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'image' | 'text'>('all')
   const [sortBy, setSortBy] = useState<'top' | 'new'>('top')
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
 
-  const { items, isLoading, error } = useDiscoveredItems(patchId, {
+  const { items, isLoading, error } = useDiscoveredItems(patchHandle, {
     type: filterType,
     sort: sortBy,
     timeRange,

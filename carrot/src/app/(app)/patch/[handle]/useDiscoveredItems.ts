@@ -87,7 +87,7 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
 }
 
 export function useDiscoveredItems(
-  patchId: string, 
+  patchHandle: string, 
   filters: Filters = {}
 ): UseDiscoveredItemsReturn {
   const [items, setItems] = useState<DiscoveredItem[]>([])
@@ -113,7 +113,7 @@ export function useDiscoveredItems(
         queryParams.append('timeRange', filters.timeRange)
       }
 
-      const response = await fetch(`/api/patch/${patchId}/discover?${queryParams}`)
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${queryParams}`)
       
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.status}`)
@@ -134,7 +134,7 @@ export function useDiscoveredItems(
     } finally {
       setIsLoading(false)
     }
-  }, [patchId, filters])
+  }, [patchHandle, filters])
 
   const refetch = useCallback(() => {
     fetchItems()
