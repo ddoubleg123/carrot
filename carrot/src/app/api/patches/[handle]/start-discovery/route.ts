@@ -8,8 +8,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  console.log('[Start Discovery] POST endpoint called');
   try {
     const session = await auth();
+    console.log('[Start Discovery] Session check:', session ? 'Found' : 'Not found');
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

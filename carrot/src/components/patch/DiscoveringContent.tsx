@@ -96,10 +96,12 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'post'>('all');
 
   const handleStartDiscovery = async () => {
+    console.log('[Discovery] Button clicked - starting discovery for patch:', patchHandle);
     try {
       setIsLoading(true);
       setError(null);
       
+      console.log('[Discovery] Making POST request to start-discovery API...');
       // Call the DeepSeek-powered discovery API
       const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
         method: 'POST',
@@ -131,7 +133,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       }
       
       const data = await response.json();
-      console.log('Discovery started:', data);
+      console.log('[Discovery] API response received:', data);
       
       // Start polling for results
       setIsDiscovering(true);
