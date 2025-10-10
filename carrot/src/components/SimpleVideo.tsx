@@ -97,6 +97,8 @@ export default function SimpleVideo({
   const mountIdRef = useRef<string>(`mount-${postId}-${Date.now()}`);
   const lastProcessedSrcRef = useRef<string | null>(null); // CRITICAL: Track last processed src to prevent re-processing
   const playAttemptsRef = useRef<number>(0); // Track play attempts to prevent loops
+  const currentTimeRef = useRef(0); // CRITICAL: Track currentTime to detect unexpected resets
+  const srcSetTimeRef = useRef(0); // CRITICAL: Track when src was last set to prevent rapid re-processing
   const lastPlayTimeRef = useRef<number>(0); // Track last play attempt time
 
   // CRITICAL: Lifecycle logging to debug glitching/remounting issues
@@ -268,6 +270,26 @@ export default function SimpleVideo({
     }
   }, [onVideoRef]);
 
+  // CRITICAL FIX: Register with GlobalVideoManager on mount
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !postId) return;
+
+    // Register with global video manager
+    import('../lib/GlobalVideoManager').then(({ default: GlobalVideoManager }) => {
+      GlobalVideoManager.register(video, postId);
+      console.log('[SimpleVideo] Registered with GlobalVideoManager', { postId });
+    });
+
+    return () => {
+      // Unregister on unmount
+      import('../lib/GlobalVideoManager').then(({ default: GlobalVideoManager }) => {
+        GlobalVideoManager.unregister(video, postId);
+        console.log('[SimpleVideo] Unregistered from GlobalVideoManager', { postId });
+      });
+    };
+  }, [postId]);
+
   // CRITICAL: Track play/pause state to prevent conflicts
   useEffect(() => {
     const video = videoRef.current;
@@ -279,23 +301,12 @@ export default function SimpleVideo({
             postId,
             mountId: mountIdRef.current,
             currentTime: video.currentTime,
-            readyState: video.readyState
+            readyState: video.readyState,
+            paused: video.paused,
+            muted: video.muted,
+            volume: video.volume,
+            duration: video.duration
           });
-          
-          // CRITICAL FIX: Pause all other videos globally to enforce singleton playback
-          try {
-            const allVideos = document.querySelectorAll('video');
-            allVideos.forEach((vid) => {
-              if (vid !== video && !vid.paused) {
-                vid.pause();
-                console.log('[SimpleVideo] Paused other video (singleton enforcement)', {
-                  pausedVideoSrc: vid.src?.substring(0, 50)
-                });
-              }
-            });
-          } catch (e) {
-            console.warn('[SimpleVideo] Failed to pause other videos:', e);
-          }
           
           try {
             const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
@@ -344,23 +355,37 @@ export default function SimpleVideo({
           // This prevents the "reset after 9 seconds" bug
         };
         
-        // CRITICAL FIX: Handle timeupdate to detect scrubbing loops
-        const lastTimeRef = { value: 0 };
+        // CRITICAL FIX: Handle timeupdate to detect scrubbing loops and unexpected resets
         const handleTimeUpdate = () => {
           const currentTime = video.currentTime;
-          const timeDiff = Math.abs(currentTime - lastTimeRef.value);
+          const timeDiff = Math.abs(currentTime - currentTimeRef.current);
           
-          // Detect unexpected backwards jumps (scrubbing loop)
-          if (timeDiff > 5 && currentTime < lastTimeRef.value) {
-            console.warn(`[SimpleVideo] ⚠️  SCRUBBING LOOP DETECTED`, {
+          // Detect unexpected backwards jumps (scrubbing loop or reset)
+          if (timeDiff > 5 && currentTime < currentTimeRef.current) {
+            console.warn(`[SimpleVideo] ⚠️  SCRUBBING LOOP / RESET DETECTED`, {
               postId,
-              previousTime: lastTimeRef.value,
+              previousTime: currentTimeRef.current,
               currentTime,
-              timeDiff
+              timeDiff,
+              paused: video.paused,
+              readyState: video.readyState,
+              src: video.src?.substring(0, 50)
             });
           }
           
-          lastTimeRef.value = currentTime;
+          // Detect reset to 0 after playing (9-second bug indicator)
+          if (currentTimeRef.current > 5 && currentTime === 0) {
+            console.error(`[SimpleVideo] 🚨 VIDEO RESET TO 0 DETECTED (9-second bug)`, {
+              postId,
+              previousTime: currentTimeRef.current,
+              paused: video.paused,
+              readyState: video.readyState,
+              networkState: video.networkState,
+              src: video.src?.substring(0, 50)
+            });
+          }
+          
+          currentTimeRef.current = currentTime;
         };
 
         video.addEventListener('play', handlePlay);
@@ -427,7 +452,11 @@ export default function SimpleVideo({
         // CRITICAL FIX: Unmute video on first user interaction
         video.muted = false;
         setIsMuted(false);
-        console.log('[SimpleVideo] Video unmuted after user interaction', { postId });
+        console.log('[SimpleVideo] Video unmuted after user interaction', { 
+          postId,
+          volume: video.volume,
+          muted: video.muted
+        });
         
         // CRITICAL FIX: Resume global audio context for browser autoplay policy
         if (typeof window !== 'undefined') {
@@ -471,10 +500,28 @@ export default function SimpleVideo({
           console.warn('[SimpleVideo] Dummy audio failed (expected on some browsers):', e);
         }
         
-        // Try to play if video is ready
+        // CRITICAL FIX: Use GlobalVideoManager to play (prevents play() interrupted errors)
         if (video.paused && video.readyState >= 2) {
-          await video.play();
-          console.log('[SimpleVideo] Started playback after user interaction', { postId });
+          try {
+            const { default: GlobalVideoManager } = await import('../lib/GlobalVideoManager');
+            await GlobalVideoManager.requestPlay(video, postId);
+            console.log('[SimpleVideo] Started playback via GlobalVideoManager', { 
+              postId,
+              paused: video.paused,
+              muted: video.muted,
+              volume: video.volume,
+              currentTime: video.currentTime
+            });
+          } catch (e: any) {
+            console.error('[SimpleVideo] GlobalVideoManager play failed:', e.message);
+            // Fallback to direct play if GlobalVideoManager fails
+            try {
+              await video.play();
+              console.log('[SimpleVideo] Fallback direct play succeeded', { postId });
+            } catch (fallbackError) {
+              console.error('[SimpleVideo] Both play methods failed', { postId, error: fallbackError });
+            }
+          }
         }
       } catch (e) {
         console.warn('[SimpleVideo] User interaction handler error:', e);
@@ -542,24 +589,40 @@ export default function SimpleVideo({
       return;
     }
 
-    // CRITICAL FIX: Only process if src actually changed (not just re-rendered)
-    if (lastProcessedSrcRef.current === src) {
-      console.log(`[SimpleVideo] ℹ️  Src unchanged, skipping re-processing`, {
-        postId,
-        mountId: mountIdRef.current,
-        src: src.substring(0, 100)
-      });
-      return;
-    }
-    
-    console.log(`[SimpleVideo] 🆕 Processing NEW src`, {
-      postId,
-      mountId: mountIdRef.current,
-      oldSrc: lastProcessedSrcRef.current?.substring(0, 100),
-      newSrc: src.substring(0, 100)
-    });
-    
-    lastProcessedSrcRef.current = src;
+        // CRITICAL FIX: Only process if src actually changed AND enough time has passed
+        const now = Date.now();
+        const timeSinceLastSet = now - srcSetTimeRef.current;
+        
+        if (lastProcessedSrcRef.current === src) {
+          // Check if this is a rapid re-process (< 1 second)
+          if (timeSinceLastSet < 1000) {
+            console.log(`[SimpleVideo] ⚠️  Blocking rapid src re-process`, {
+              postId,
+              mountId: mountIdRef.current,
+              timeSinceLastSet,
+              src: src.substring(0, 100)
+            });
+            return;
+          }
+          
+          console.log(`[SimpleVideo] ℹ️  Src unchanged, skipping re-processing`, {
+            postId,
+            mountId: mountIdRef.current,
+            src: src.substring(0, 100)
+          });
+          return;
+        }
+        
+        console.log(`[SimpleVideo] 🆕 Processing NEW src`, {
+          postId,
+          mountId: mountIdRef.current,
+          oldSrc: lastProcessedSrcRef.current?.substring(0, 100),
+          newSrc: src.substring(0, 100),
+          timeSinceLastSet
+        });
+        
+        lastProcessedSrcRef.current = src;
+        srcSetTimeRef.current = now;
 
     // Check if we have preloaded data for this video first
     const checkPreloadedData = async () => {
