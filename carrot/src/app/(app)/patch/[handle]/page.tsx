@@ -113,7 +113,7 @@ export default async function PatchPage({
     }));
 
     // Format events for timeline
-    const formattedEvents = patch.members.map(member => ({
+    const formattedEvents = (patch.members || []).map(member => ({
       id: `member-${member.user.id}`,
       type: 'member_joined',
       timestamp: member.joinedAt,
