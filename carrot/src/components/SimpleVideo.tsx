@@ -273,19 +273,21 @@ export default function SimpleVideo({
   // CRITICAL FIX: Register with GlobalVideoManager on mount
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !postId) return;
+    if (!video) return;
+
+    const id = postId || 'unknown';
 
     // Register with global video manager
     import('../lib/GlobalVideoManager').then(({ default: GlobalVideoManager }) => {
-      GlobalVideoManager.register(video, postId);
-      console.log('[SimpleVideo] Registered with GlobalVideoManager', { postId });
+      GlobalVideoManager.register(video, id);
+      console.log('[SimpleVideo] Registered with GlobalVideoManager', { postId: id });
     });
 
     return () => {
       // Unregister on unmount
       import('../lib/GlobalVideoManager').then(({ default: GlobalVideoManager }) => {
-        GlobalVideoManager.unregister(video, postId);
-        console.log('[SimpleVideo] Unregistered from GlobalVideoManager', { postId });
+        GlobalVideoManager.unregister(video, id);
+        console.log('[SimpleVideo] Unregistered from GlobalVideoManager', { postId: id });
       });
     };
   }, [postId]);
@@ -504,9 +506,9 @@ export default function SimpleVideo({
         if (video.paused && video.readyState >= 2) {
           try {
             const { default: GlobalVideoManager } = await import('../lib/GlobalVideoManager');
-            await GlobalVideoManager.requestPlay(video, postId);
+            await GlobalVideoManager.requestPlay(video, postId || 'unknown');
             console.log('[SimpleVideo] Started playback via GlobalVideoManager', { 
-              postId,
+              postId: postId || 'unknown',
               paused: video.paused,
               muted: video.muted,
               volume: video.volume,
@@ -517,9 +519,9 @@ export default function SimpleVideo({
             // Fallback to direct play if GlobalVideoManager fails
             try {
               await video.play();
-              console.log('[SimpleVideo] Fallback direct play succeeded', { postId });
+              console.log('[SimpleVideo] Fallback direct play succeeded', { postId: postId || 'unknown' });
             } catch (fallbackError) {
-              console.error('[SimpleVideo] Both play methods failed', { postId, error: fallbackError });
+              console.error('[SimpleVideo] Both play methods failed', { postId: postId || 'unknown', error: fallbackError });
             }
           }
         }
