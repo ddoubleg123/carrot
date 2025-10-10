@@ -57,18 +57,20 @@ interface TimelineJSData {
 }
 
 export default function TimelineView({ events, patchId }: TimelineViewProps) {
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>(events);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>(events || []);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [showFilters, setShowFilters] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
 
-  const allTags = Array.from(new Set(events.flatMap(event => event.tags)));
+  // Safely handle events prop being undefined
+  const safeEvents = events || [];
+  const allTags = Array.from(new Set(safeEvents.flatMap(event => event.tags || [])));
 
   // Convert events to TimelineJS format
   const convertToTimelineJS = (events: Event[]): TimelineJSData => {
     return {
-      events: events.map(event => {
+      events: (events || []).map(event => {
         const startDate = new Date(event.dateStart);
         const endDate = event.dateEnd ? new Date(event.dateEnd) : undefined;
         
