@@ -38,6 +38,15 @@ export async function GET(
       })
     ]);
     const t3 = Date.now();
+    
+    console.log('[Discovered Content] Database query results:', {
+      patchId: patch.id,
+      handle,
+      sourcesCount: sources.length,
+      discoveredContentCount: discoveredContentData.length,
+      sources: sources.map(s => ({ id: s.id, title: s.title, url: s.url })),
+      discoveredContent: discoveredContentData.map(d => ({ id: d.id, title: d.title, sourceUrl: d.sourceUrl }))
+    });
 
     // Transform sources to discovered content format
     const sourceItems = sources.map(source => ({
