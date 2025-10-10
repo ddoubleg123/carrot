@@ -120,7 +120,7 @@ export default function TestGroupWizardPage() {
     }
   ]
 
-  const mockBotSubscriptions = []
+  const mockBotSubscriptions: any[] = []
 
   return (
     <div className="min-h-screen bg-white">
