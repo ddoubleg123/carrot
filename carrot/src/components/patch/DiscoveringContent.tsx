@@ -195,14 +195,30 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         
         // Only show error if we don't have any items yet
         if (items.length === 0) {
+          let errorMessage = 'Unknown error';
+          let errorCode = 'UNKNOWN_ERROR';
+          
           if (response.status === 404) {
-            setError('Patch not found. Please refresh the page.');
+            errorMessage = 'Patch not found. Please refresh the page.';
+            errorCode = 'PATCH_NOT_FOUND';
           } else if (response.status === 500) {
-            setError(`Server error: ${errorData.details || errorData.error || 'Unknown error'}`);
+            if (errorData.code === 'MISSING_API_KEY') {
+              errorMessage = 'Discovery service is not configured. Please contact support.';
+              errorCode = 'MISSING_API_KEY';
+            } else if (errorData.code === 'DEEPSEEK_API_ERROR') {
+              errorMessage = `Discovery service error (${errorData.status}). Please try again later.`;
+              errorCode = 'DEEPSEEK_API_ERROR';
+            } else {
+              errorMessage = `Server error: ${errorData.details || errorData.error || 'Unknown error'}`;
+              errorCode = 'SERVER_ERROR';
+            }
           } else {
-            setError(`We couldn't check sources (${response.status}). Retry.`);
+            errorMessage = `We couldn't check sources (${response.status}). Retry.`;
+            errorCode = `HTTP_${response.status}`;
           }
-          telemetry.trackDiscoveryError(patchHandle, `API request failed: ${response.status}`);
+          
+          setError(errorMessage);
+          telemetry.trackDiscoveryError(patchHandle, `${errorCode}: ${errorMessage}`);
         }
       }
     } catch (err) {

@@ -55,9 +55,16 @@ export async function POST(
 
     // Check if DeepSeek API key is configured
     if (!process.env.DEEPSEEK_API_KEY) {
-      console.error('[Start Discovery] DEEPSEEK_API_KEY not configured');
+      console.error('[Start Discovery] DEEPSEEK_API_KEY not configured', {
+        patchId: patch.id,
+        handle,
+        userId: session.user.id,
+        timestamp: new Date().toISOString()
+      });
       return NextResponse.json({ 
-        error: 'Discovery service not configured. Please set DEEPSEEK_API_KEY environment variable.' 
+        error: 'Discovery service not configured. Please set DEEPSEEK_API_KEY environment variable.',
+        code: 'MISSING_API_KEY',
+        patchId: patch.id
       }, { status: 500 });
     }
 
@@ -124,8 +131,20 @@ export async function POST(
     });
 
     if (!deepSeekResponse.ok) {
-      console.error('[Start Discovery] DeepSeek API error:', deepSeekResponse.status, deepSeekResponse.statusText);
-      return NextResponse.json({ error: 'Failed to search for content' }, { status: 500 });
+      console.error('[Start Discovery] DeepSeek API error:', {
+        status: deepSeekResponse.status,
+        statusText: deepSeekResponse.statusText,
+        patchId: patch.id,
+        handle,
+        userId: session.user.id,
+        timestamp: new Date().toISOString()
+      });
+      return NextResponse.json({ 
+        error: 'Failed to search for content',
+        code: 'DEEPSEEK_API_ERROR',
+        status: deepSeekResponse.status,
+        patchId: patch.id
+      }, { status: 500 });
     }
 
     const deepSeekData = await deepSeekResponse.json();
