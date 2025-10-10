@@ -94,7 +94,7 @@ const getFlagEmoji = (code?: string) => {
   return String.fromCodePoint(first) + String.fromCodePoint(second);
 };
 
-export default function FlagChip({ countryCode, label, className }: { countryCode?: string | null; label?: string; className?: string }) {
+export default function FlagChip({ countryCode, label, className, size = 24 }: { countryCode?: string | null; label?: string; className?: string; size?: number }) {
   if (!countryCode) {
     return null;
   }
@@ -120,8 +120,8 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
     >
       {/* Use the working PhoneInput to show the flag */}
       <div style={{ 
-        width: '24px', 
-        height: '24px', 
+        width: `${size}px`, 
+        height: `${size}px`, 
         overflow: 'hidden',
         display: 'inline-block'
       }}>
@@ -134,8 +134,8 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
             outline: 'none',
             boxShadow: 'none',
             background: 'transparent',
-            width: '24px',
-            height: '24px'
+            width: `${size}px`,
+            height: `${size}px`
           }}
           inputStyle={{
             display: 'none'
@@ -147,9 +147,9 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
               boxShadow: 'none',
               background: 'transparent',
               padding: '0',
-              width: '24px',
-              height: '24px',
-              minWidth: '24px'
+              width: `${size}px`,
+              height: `${size}px`,
+              minWidth: `${size}px`
             }
           }}
         />
