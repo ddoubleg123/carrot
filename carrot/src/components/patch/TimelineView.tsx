@@ -92,7 +92,7 @@ export default function TimelineView({ events, patchId }: TimelineViewProps) {
           media: event.media ? {
             url: event.media.url,
             caption: event.media.alt || event.summary,
-            credit: event.sources.map(s => s.title).join(', ') || 'Carrot Patch'
+            credit: (event.sources || []).map(s => s.title).join(', ') || 'Carrot Patch'
           } : undefined,
           group: event.tags[0] || 'General'
         };
@@ -102,12 +102,12 @@ export default function TimelineView({ events, patchId }: TimelineViewProps) {
 
   // Apply filters
   useEffect(() => {
-    let filtered = events;
+    let filtered = safeEvents; // Use safeEvents instead of events
     
     // Filter by tags
     if (selectedTags.length > 0) {
       filtered = filtered.filter(event => 
-        event.tags.some(tag => selectedTags.includes(tag))
+        (event.tags || []).some(tag => selectedTags.includes(tag))
       );
     }
     
@@ -123,7 +123,7 @@ export default function TimelineView({ events, patchId }: TimelineViewProps) {
     }
     
     setFilteredEvents(filtered);
-  }, [events, selectedTags, dateRange]);
+  }, [safeEvents, selectedTags, dateRange]);
 
   // Load and initialize TimelineJS from CDN
   useEffect(() => {

@@ -115,10 +115,12 @@ export default async function PatchPage({
     // Format events for timeline
     const formattedEvents = (patch.members || []).map(member => ({
       id: `member-${member.user.id}`,
-      type: 'member_joined',
-      timestamp: member.joinedAt,
-      user: member.user,
-      description: `${member.user.name} joined the patch`
+      title: `${member.user.name} joined the patch`,
+      dateStart: member.joinedAt.toISOString(),
+      dateEnd: undefined,
+      summary: `${member.user.name} joined the patch on ${member.joinedAt.toLocaleDateString()}`,
+      tags: ['member_joined'],
+      sources: [] // Empty array to prevent undefined errors
     }));
 
     // Determine active tab from URL search params (default to 'overview')
