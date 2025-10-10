@@ -89,6 +89,7 @@ export default function SimpleVideo({
   const [isStuck, setIsStuck] = useState(false);
   const [isMuted, setIsMuted] = useState(muted); // CRITICAL FIX: Track mute state for user interaction
   const [hasUserInteracted, setHasUserInteracted] = useState(false); // CRITICAL FIX: Track user interaction
+  const [errorMessage, setErrorMessage] = useState<string | null>(null); // Track specific error message
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -841,6 +842,7 @@ export default function SimpleVideo({
       currentTime: video?.currentTime
     });
     setHasError(false);
+    setErrorMessage(null);
     
     // For Firebase Storage URLs, implement proper range request for first 6 seconds
     if (videoSrc && videoSrc.includes('firebasestorage.googleapis.com')) {
@@ -946,6 +948,23 @@ export default function SimpleVideo({
           autoRetryAttempted
         });
         
+        // Set specific error message based on error type
+        let specificError = 'Video temporarily unavailable';
+        if (video.error?.code === MediaError.MEDIA_ERR_NETWORK) {
+          specificError = 'Network error - check connection';
+        } else if (video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          specificError = 'Video format not supported';
+        } else if (video.error?.code === MediaError.MEDIA_ERR_DECODE) {
+          specificError = 'Video decode error';
+        } else if (video.error?.code === MediaError.MEDIA_ERR_ABORTED) {
+          specificError = 'Video load aborted';
+        } else if (video.src?.includes('/api/')) {
+          specificError = 'Server error (502) - Render/Firebase issue';
+        } else if (video.src?.includes('firebasestorage.googleapis.com')) {
+          specificError = 'Firebase Storage connection failed';
+        }
+        setErrorMessage(specificError);
+        
         // Check if this is a network protocol error
         const isNetworkError = video.error?.code === MediaError.MEDIA_ERR_NETWORK ||
                               video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
@@ -1042,6 +1061,7 @@ export default function SimpleVideo({
           setIsLoading(true);
           setAutoRetryAttempted(false);
           setIsStuck(false);
+          setErrorMessage(null);
           setRetryCount(0);
           setNetworkRetryCount(0);
           playAttemptsRef.current = 0;
@@ -1080,7 +1100,7 @@ export default function SimpleVideo({
           <div className={`bg-gray-50 flex items-center justify-center ${className}`} style={{ minHeight: '200px' }}>
           <div className="text-center p-4">
             <div className="text-gray-400 mb-2">📹</div>
-            <div className="text-sm text-gray-500">Video temporarily unavailable</div>
+            <div className="text-sm text-gray-500">{errorMessage || 'Video temporarily unavailable'}</div>
             <div className="text-xs text-gray-400 mt-1">
               {isStuck ? 'Loading timeout - try again' : 'Content may be processing'}
             </div>
