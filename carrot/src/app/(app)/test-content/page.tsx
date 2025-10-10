@@ -1,4 +1,5 @@
-import { Suspense } from 'react'
+'use client'
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, BookOpen, Calendar, User, Tag } from 'lucide-react'
@@ -60,13 +61,7 @@ export default function TestContentPage() {
           </p>
         </div>
 
-        <Suspense fallback={
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-          </div>
-        }>
-          <ContentDisplayCard content={testContent} />
-        </Suspense>
+        <ContentDisplayCard content={testContent} />
 
         {/* Debug Information */}
         <Card className="mt-8">
