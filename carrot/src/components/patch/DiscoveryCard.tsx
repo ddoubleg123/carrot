@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ExternalLink, Clock, User, Calendar, MessageCircle, Bookmark, MoreHorizontal, Play, FileText, Image as ImageIcon } from 'lucide-react';
+import { ExternalLink, Clock, User, Calendar, MessageCircle, Bookmark, Play, FileText, Image as ImageIcon, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-// import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DiscoveredItem } from '@/types/discovered-content';
 
 // Design tokens
 const COLORS = {
@@ -17,88 +17,53 @@ const COLORS = {
   surface: '#FFFFFF',
 };
 
-interface EnrichedContent {
-  summary150?: string;
-  keyPoints?: string[];
-  notableQuote?: string;
-  fullText?: string;
-  transcript?: string;
-}
-
-interface MediaAssets {
-  hero?: string;
-  gallery?: string[];
-  videoThumb?: string;
-  pdfPreview?: string;
-}
-
-interface ContentMetadata {
-  author?: string;
-  publishDate?: string;
-  source?: string;
-  readingTime?: number;
-  tags?: string[];
-  entities?: string[];
-  citation?: any;
-}
-
 interface DiscoveryCardProps {
-  id: string;
-  title: string;
-  type: 'article' | 'video' | 'pdf' | 'post';
-  sourceUrl?: string;
-  canonicalUrl?: string;
-  relevanceScore?: number;
-  status: 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review';
-  enrichedContent?: EnrichedContent;
-  mediaAssets?: MediaAssets;
-  metadata?: ContentMetadata;
-  qualityScore?: number;
+  item: DiscoveredItem;
   onAttach?: (type: 'timeline' | 'fact' | 'source') => void;
   onDiscuss?: () => void;
   onSave?: () => void;
 }
 
 export default function DiscoveryCard({
-  id,
-  title,
-  type,
-  sourceUrl,
-  canonicalUrl,
-  relevanceScore,
-  status,
-  enrichedContent,
-  mediaAssets,
-  metadata,
-  qualityScore,
+  item,
   onAttach,
   onDiscuss,
   onSave
 }: DiscoveryCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  
+  const {
+    id,
+    title,
+    type,
+    url,
+    matchPct,
+    status,
+    media,
+    content,
+    meta
+  } = item;
 
-  // Generate fallback cover image
-  const generateFallbackCover = (title: string, type: string) => {
+  // Get hero image with fallback
+  const getHeroImage = () => {
+    if (media.hero) return media.hero;
+    if (media.videoThumb) return media.videoThumb;
+    if (media.pdfPreview) return media.pdfPreview;
+    if (media.gallery?.[0]) return media.gallery[0];
+    
+    // Generate fallback cover image
     const colors = {
       article: COLORS.civicBlue,
       video: COLORS.actionOrange,
       pdf: '#8B5CF6',
-      post: '#10B981'
+      image: '#10B981',
+      text: '#8B5CF6'
     };
     
-    const color = colors[type as keyof typeof colors] || COLORS.slate;
+    const color = colors[type] || COLORS.slate;
     const encodedTitle = encodeURIComponent(title.substring(0, 50));
     
     return `https://ui-avatars.com/api/?name=${encodedTitle}&background=${color.replace('#', '')}&color=fff&size=800&format=png&bold=true`;
-  };
-
-  // Get hero image
-  const getHeroImage = () => {
-    if (mediaAssets?.hero) return mediaAssets.hero;
-    if (mediaAssets?.videoThumb) return mediaAssets.videoThumb;
-    if (mediaAssets?.pdfPreview) return mediaAssets.pdfPreview;
-    if (mediaAssets?.gallery?.[0]) return mediaAssets.gallery[0];
-    return generateFallbackCover(title, type);
   };
 
   // Get type icon
@@ -107,7 +72,9 @@ export default function DiscoveryCard({
       case 'video': return <Play size={16} />;
       case 'pdf': return <FileText size={16} />;
       case 'article': return <FileText size={16} />;
-      default: return <ImageIcon size={16} />;
+      case 'image': return <ImageIcon size={16} />;
+      case 'text': return <FileText size={16} />;
+      default: return <FileText size={16} />;
     }
   };
 
@@ -117,7 +84,9 @@ export default function DiscoveryCard({
       case 'video': return 'Video';
       case 'pdf': return 'PDF';
       case 'article': return 'Article';
-      default: return 'Post';
+      case 'image': return 'Image';
+      case 'text': return 'Text';
+      default: return 'Content';
     }
   };
 
@@ -129,7 +98,7 @@ export default function DiscoveryCard({
       case 'fetching': return 'bg-yellow-100 text-yellow-800';
       case 'queued': return 'bg-gray-100 text-gray-800';
       case 'failed': return 'bg-red-100 text-red-800';
-      case 'requires_review': return 'bg-orange-100 text-orange-800';
+      case 'pending_audit': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -181,23 +150,20 @@ export default function DiscoveryCard({
         </div>
 
         {/* Match Percentage */}
-        {relevanceScore && (
+        {matchPct && (
           <div className="absolute top-3 right-3">
             <Badge className="bg-white/90 text-gray-900 border-0">
-              {relevanceScore}% match
+              {Math.round(matchPct * 100)}% match
             </Badge>
           </div>
         )}
 
-        {/* Status Overlay for non-ready items */}
+        {/* Status Chip - Always show for non-ready items */}
         {status !== 'ready' && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-            <div className="bg-white/90 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${status === 'enriching' ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`} />
-                <span className="text-sm font-medium capitalize">{status.replace('_', ' ')}</span>
-              </div>
-            </div>
+          <div className="absolute bottom-3 left-3">
+            <Badge className={`${getStatusColor()} border-0`}>
+              {status === 'pending_audit' ? 'Pending Review' : status.replace('_', ' ')}
+            </Badge>
           </div>
         )}
       </div>
@@ -209,16 +175,16 @@ export default function DiscoveryCard({
         </h3>
 
         {/* Summary */}
-        {enrichedContent?.summary150 && (
+        {content.summary150 && (
           <p className="text-slate-700 mt-2 line-clamp-3 text-sm leading-relaxed">
-            {enrichedContent.summary150}
+            {content.summary150}
           </p>
         )}
 
         {/* Key Points */}
-        {enrichedContent?.keyPoints && enrichedContent.keyPoints.length > 0 && (
+        {content.keyPoints && content.keyPoints.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {enrichedContent.keyPoints.slice(0, 3).map((point, index) => (
+            {content.keyPoints.slice(0, 5).map((point, index) => (
               <Badge key={index} variant="outline" className="text-xs rounded-full border-gray-200 text-gray-700">
                 {point}
               </Badge>
@@ -227,36 +193,36 @@ export default function DiscoveryCard({
         )}
 
         {/* Notable Quote */}
-        {enrichedContent?.notableQuote && (
+        {content.notableQuote && (
           <blockquote className="mt-3 text-sm italic text-gray-600 border-l-2 border-gray-200 pl-3">
-            "{enrichedContent.notableQuote}"
+            "{content.notableQuote}"
           </blockquote>
         )}
 
         {/* Metadata Row */}
         <div className="mt-4 text-sm text-slate-600 flex items-center gap-3 flex-wrap">
-          {metadata?.source && (
+          {meta.sourceDomain && (
             <div className="flex items-center gap-1.5">
-              <div className="w-4 h-4 bg-gray-200 rounded-sm" />
-              <span className="truncate max-w-[120px]">{metadata.source}</span>
+              <Globe size={14} />
+              <span className="truncate max-w-[120px]">{meta.sourceDomain}</span>
             </div>
           )}
-          {metadata?.author && (
+          {meta.author && (
             <div className="flex items-center gap-1.5">
               <User size={14} />
-              <span className="truncate max-w-[100px]">{metadata.author}</span>
+              <span className="truncate max-w-[100px]">{meta.author}</span>
             </div>
           )}
-          {metadata?.publishDate && (
+          {meta.publishDate && (
             <div className="flex items-center gap-1.5">
               <Calendar size={14} />
-              <span>{formatDate(metadata.publishDate)}</span>
+              <span>{formatDate(meta.publishDate)}</span>
             </div>
           )}
-          {metadata?.readingTime && (
+          {content.readingTimeMin && (
             <div className="flex items-center gap-1.5">
               <Clock size={14} />
-              <span>{formatReadingTime(metadata.readingTime)}</span>
+              <span>{formatReadingTime(content.readingTimeMin)}</span>
             </div>
           )}
         </div>
@@ -268,8 +234,8 @@ export default function DiscoveryCard({
               size="sm"
               variant="outline"
               className="h-8 px-3 text-xs"
-              onClick={() => sourceUrl && window.open(sourceUrl, '_blank')}
-              disabled={!sourceUrl}
+              onClick={() => url && window.open(url, '_blank')}
+              disabled={!url}
             >
               <ExternalLink size={14} className="mr-1.5" />
               Open

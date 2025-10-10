@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, AlertCircle, ExternalLink, Filter, SortAsc } from 'lucide-react';
 import telemetry from '@/lib/telemetry';
 import DiscoveryCard from './DiscoveryCard';
+import { DiscoveredItem } from '@/types/discovered-content';
 
 // Design tokens from Carrot standards
 const TOKENS = {
@@ -45,46 +46,65 @@ const TOKENS = {
   }
 };
 
-interface DiscoveredItem {
-  id: string;
-  type: 'article' | 'video' | 'pdf' | 'post';
-  title: string;
-  content: string;
-  sourceUrl?: string;
-  canonicalUrl?: string;
-  relevanceScore: number;
-  status: 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review';
-  enrichedContent?: {
-    summary150?: string;
-    keyPoints?: string[];
-    notableQuote?: string;
-    fullText?: string;
-    transcript?: string;
-  };
-  mediaAssets?: {
-    hero?: string;
-    gallery?: string[];
-    videoThumb?: string;
-    pdfPreview?: string;
-  };
-  metadata?: {
-    author?: string;
-    publishDate?: string;
-    source?: string;
-    readingTime?: number;
-    tags?: string[];
-    entities?: string[];
-    citation?: any;
-  };
-  qualityScore?: number;
-  freshnessScore?: number;
-  diversityBucket?: string;
-  createdAt: string;
-}
+// Using unified DiscoveredItem type from @/types/discovered-content
 
 interface DiscoveringContentProps {
   patchHandle: string;
 }
+
+// Transform API data to unified DiscoveredItem format
+const transformToDiscoveredItem = (apiItem: any): DiscoveredItem => {
+  // Extract domain from URL for favicon
+  const getDomain = (url?: string) => {
+    if (!url) return 'unknown';
+    try {
+      return new URL(url).hostname.replace('www.', '');
+    } catch {
+      return 'unknown';
+    }
+  };
+
+  return {
+    id: apiItem.id || `item-${Math.random()}`,
+    type: apiItem.type || 'article',
+    title: apiItem.title || 'Untitled',
+    url: apiItem.url || apiItem.sourceUrl || '',
+    matchPct: apiItem.relevanceScore || apiItem.relevance_score || 0.8,
+    status: apiItem.status === 'pending_audit' ? 'pending_audit' : 
+            apiItem.status === 'requires_review' ? 'pending_audit' : 
+            (apiItem.status as any) || 'ready',
+    media: {
+      hero: apiItem.mediaAssets?.hero || 
+            apiItem.enrichedContent?.hero || 
+            `https://ui-avatars.com/api/?name=${encodeURIComponent((apiItem.title || 'Content').substring(0, 30))}&background=FF6A00&color=fff&size=800&format=png&bold=true`,
+      gallery: apiItem.mediaAssets?.gallery || [],
+      videoThumb: apiItem.mediaAssets?.videoThumb,
+      pdfPreview: apiItem.mediaAssets?.pdfPreview
+    },
+    content: {
+      summary150: apiItem.enrichedContent?.summary150 || 
+                  apiItem.description || 
+                  apiItem.content?.substring(0, 150) + '...' || 
+                  'No summary available',
+      keyPoints: apiItem.enrichedContent?.keyPoints || 
+                 apiItem.tags?.slice(0, 5) || 
+                 ['Key information available'],
+      notableQuote: apiItem.enrichedContent?.notableQuote,
+      readingTimeMin: apiItem.metadata?.readingTime || 
+                      apiItem.enrichedContent?.readingTime || 
+                      Math.max(1, Math.floor((apiItem.content?.length || 1000) / 200))
+    },
+    meta: {
+      sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl),
+      author: apiItem.metadata?.author || 
+              apiItem.author || 
+              apiItem.enrichedContent?.author,
+      publishDate: apiItem.metadata?.publishDate || 
+                   apiItem.publishDate || 
+                   apiItem.createdAt
+    }
+  };
+};
 
 export default function DiscoveringContent({ patchHandle }: DiscoveringContentProps) {
   const [items, setItems] = useState<DiscoveredItem[]>([]);
@@ -165,8 +185,9 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         const data = await response.json();
         console.log('[Discovery] API response:', data);
         
-        // Safety check: ensure data.items is an array
-        const newItems = Array.isArray(data?.items) ? data.items : [];
+        // Safety check: ensure data.items is an array and transform to unified format
+        const rawItems = Array.isArray(data?.items) ? data.items : [];
+        const newItems = rawItems.map(transformToDiscoveredItem);
         console.log('[Discovery] Processed items:', newItems.length, 'items');
         
         // Log when new items are found
@@ -271,11 +292,12 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'relevance':
-          return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+          return (b.matchPct || 0) - (a.matchPct || 0);
         case 'newest':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return new Date(b.meta.publishDate || 0).getTime() - new Date(a.meta.publishDate || 0).getTime();
         case 'quality':
-          return (b.qualityScore || 0) - (a.qualityScore || 0);
+          // Use match percentage as quality proxy for now
+          return (b.matchPct || 0) - (a.matchPct || 0);
         default:
           return 0;
       }
@@ -629,17 +651,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           return (
             <DiscoveryCard
               key={item.id || Math.random()}
-              id={item.id}
-              title={item.title || 'Untitled'}
-              type={item.type || 'article'}
-              sourceUrl={item.sourceUrl}
-              canonicalUrl={item.canonicalUrl}
-              relevanceScore={item.relevanceScore}
-              status={item.status || 'queued'}
-              enrichedContent={item.enrichedContent}
-              mediaAssets={item.mediaAssets}
-              metadata={item.metadata}
-              qualityScore={item.qualityScore}
+              item={item}
               onAttach={(type) => handleAttach(item.id, type)}
               onDiscuss={() => handleDiscuss(item.id)}
               onSave={() => handleSave(item.id)}

@@ -3,48 +3,37 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, BookOpen, Calendar, User, Tag } from 'lucide-react'
+import { DiscoveredItem } from '@/types/discovered-content'
 
 // Mock data for "Houston Oilers: The Complete History" based on the console logs
-const testContent = {
+const testContent: DiscoveredItem = {
   id: "test-houston-oilers-complete-history",
   title: "Houston Oilers: The Complete History",
   url: "https://example.com/houston-oilers-complete-history",
   type: "article",
-  description: "A comprehensive look at the Houston Oilers franchise from its founding to present day, covering key players, championships, and memorable moments.",
-  relevanceScore: 0.95,
-  sourceAuthority: "high",
+  matchPct: 0.95,
   status: "pending_audit",
-  createdAt: new Date().toISOString(),
-  // Rich content data that might be available
-  enrichedContent: {
-    summary: "The Houston Oilers were a professional American football team that played in the American Football League (AFL) and later the National Football League (NFL) from 1960 to 1996. The team was known for its high-powered offense and memorable players like Warren Moon and Earl Campbell.",
+  media: {
+    hero: "https://ui-avatars.com/api/?name=Houston%20Oilers&background=FF6A00&color=fff&size=800&format=png&bold=true",
+    gallery: [],
+    videoThumb: undefined,
+    pdfPreview: undefined
+  },
+  content: {
+    summary150: "The Houston Oilers were a professional American football team that played in the American Football League (AFL) and later the National Football League (NFL) from 1960 to 1996. The team was known for its high-powered offense and memorable players like Warren Moon and Earl Campbell.",
     keyPoints: [
       "Founded in 1960 as charter member of AFL",
-      "Won two AFL championships (1960, 1961)",
+      "Won two AFL championships (1960, 1961)", 
       "Notable players: Warren Moon, Earl Campbell, Bruce Matthews",
       "Relocated to Tennessee in 1997, becoming the Titans"
     ],
-    tags: ["nfl history", "houston sports", "warren moon", "earl campbell", "football legacy"]
+    notableQuote: "The Houston Oilers left an indelible mark on professional football history.",
+    readingTimeMin: 10
   },
-  mediaAssets: {
-    images: [
-      {
-        url: "https://example.com/houston-oilers-logo.jpg",
-        alt: "Houston Oilers team logo",
-        type: "logo"
-      },
-      {
-        url: "https://example.com/warren-moon-action.jpg", 
-        alt: "Warren Moon in action",
-        type: "action_shot"
-      }
-    ]
-  },
-  metadata: {
+  meta: {
+    sourceDomain: "example.com",
     author: "NFL Historical Society",
-    publishDate: "2024-01-15",
-    wordCount: 2500,
-    readingTime: "10 minutes"
+    publishDate: "2024-01-15"
   }
 }
 
@@ -81,7 +70,7 @@ export default function TestContentPage() {
   )
 }
 
-function ContentDisplayCard({ content }: { content: any }) {
+function ContentDisplayCard({ content }: { content: DiscoveredItem }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-4">
@@ -92,13 +81,13 @@ function ContentDisplayCard({ content }: { content: any }) {
                 {content.type.toUpperCase()}
               </Badge>
               <Badge variant="secondary" className="text-xs">
-                {(content.relevanceScore * 100).toFixed(0)}% match
+                {Math.round((content.matchPct || 0) * 100)}% match
               </Badge>
               <Badge 
                 variant={content.status === 'pending_audit' ? 'destructive' : 'default'}
                 className="text-xs"
               >
-                {content.status.replace('_', ' ')}
+                {content.status === 'pending_audit' ? 'Pending Review' : content.status.replace('_', ' ')}
               </Badge>
             </div>
             <CardTitle className="text-2xl leading-tight mb-3">
@@ -143,21 +132,21 @@ function ContentDisplayCard({ content }: { content: any }) {
         </div>
 
         {/* Content Summary */}
-        {content.enrichedContent?.summary && (
+        {content.content.summary150 && (
           <div className="space-y-3">
             <h3 className="text-lg font-semibold">Summary</h3>
             <p className="text-gray-700 leading-relaxed">
-              {content.enrichedContent.summary}
+              {content.content.summary150}
             </p>
           </div>
         )}
 
         {/* Key Points */}
-        {content.enrichedContent?.keyPoints && (
+        {content.content.keyPoints && content.content.keyPoints.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-lg font-semibold">Key Points</h3>
             <ul className="space-y-2">
-              {content.enrichedContent.keyPoints.map((point: string, index: number) => (
+              {content.content.keyPoints.map((point: string, index: number) => (
                 <li key={index} className="flex items-start gap-2">
                   <span className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></span>
                   <span className="text-gray-700">{point}</span>
@@ -167,57 +156,51 @@ function ContentDisplayCard({ content }: { content: any }) {
           </div>
         )}
 
-        {/* Tags */}
-        {content.enrichedContent?.tags && (
+        {/* Notable Quote */}
+        {content.content.notableQuote && (
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Tags</h3>
-            <div className="flex flex-wrap gap-2">
-              {content.enrichedContent.tags.map((tag: string) => (
-                <Badge key={tag} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
+            <h3 className="text-lg font-semibold">Notable Quote</h3>
+            <blockquote className="text-gray-700 italic border-l-2 border-orange-500 pl-4">
+              "{content.content.notableQuote}"
+            </blockquote>
           </div>
         )}
 
         {/* Metadata */}
-        {content.metadata && (
-          <div className="border-t pt-4 space-y-3">
-            <h3 className="text-lg font-semibold">Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              {content.metadata.author && (
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">Author:</span>
-                  <span className="font-medium">{content.metadata.author}</span>
-                </div>
-              )}
-              {content.metadata.publishDate && (
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">Published:</span>
-                  <span className="font-medium">
-                    {new Date(content.metadata.publishDate).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              {content.metadata.readingTime && (
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">Reading time:</span>
-                  <span className="font-medium">{content.metadata.readingTime}</span>
-                </div>
-              )}
-              {content.metadata.wordCount && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-600">Words:</span>
-                  <span className="font-medium">{content.metadata.wordCount.toLocaleString()}</span>
-                </div>
-              )}
-            </div>
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-lg font-semibold">Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            {content.meta.author && (
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600">Author:</span>
+                <span className="font-medium">{content.meta.author}</span>
+              </div>
+            )}
+            {content.meta.publishDate && (
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600">Published:</span>
+                <span className="font-medium">
+                  {new Date(content.meta.publishDate).toLocaleDateString()}
+                </span>
+              </div>
+            )}
+            {content.content.readingTimeMin && (
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600">Reading time:</span>
+                <span className="font-medium">{content.content.readingTimeMin} minutes</span>
+              </div>
+            )}
+            {content.meta.sourceDomain && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600">Source:</span>
+                <span className="font-medium">{content.meta.sourceDomain}</span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* URL Information */}
         <div className="border-t pt-4">

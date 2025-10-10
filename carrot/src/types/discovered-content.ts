@@ -1,0 +1,25 @@
+export type DiscoveredItem = {
+  id: string;
+  type: 'article'|'video'|'pdf'|'image'|'text';
+  title: string;
+  url: string; // original
+  matchPct?: number;          // 0..1
+  status: 'queued'|'fetching'|'enriching'|'pending_audit'|'ready'|'failed';
+  media: {
+    hero: string;             // OG image or generated cover
+    gallery?: string[];       // max 4
+    videoThumb?: string;
+    pdfPreview?: string;
+  };
+  content: {
+    summary150: string;       // 120–180 chars
+    keyPoints: string[];      // 3–5 bullets
+    notableQuote?: string;    // optional
+    readingTimeMin?: number;
+  };
+  meta: {
+    sourceDomain: string;     // used with favicon
+    author?: string;
+    publishDate?: string;     // ISO
+  };
+};
