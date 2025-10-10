@@ -458,7 +458,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           margin: 0,
           marginBottom: TOKENS.spacing.lg
         }}>
-          AI is searching for relevant content about this topic...
+          Carrot is searching for relevant content about this group...
         </p>
         <div style={{
           fontSize: TOKENS.typography.caption,
