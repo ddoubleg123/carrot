@@ -48,36 +48,55 @@ import type { FirebaseStorage } from 'firebase/storage';
 let storage: FirebaseStorage;
 let googleProvider: GoogleAuthProvider;
 
-// Initialize Firebase only once
+// CRITICAL FIX: Initialize Firebase only once with singleton pattern
+let _firebaseInitialized = false;
 const initializeFirebase = () => {
+  if (_firebaseInitialized && firebaseApp) {
+    console.log('[firebase.ts] Firebase already initialized, reusing existing instance');
+    return { firebaseApp, auth, db, storage, googleProvider };
+  }
+  
   if (!getApps().length) {
     const app = initializeApp(firebaseConfig);
-    console.log("After Firebase initializeApp");
+    console.log("[firebase.ts] Firebase initialized");
     firebaseApp = app;
     
     // Initialize Firestore with settings that work in both server and client
     db = initializeFirestore(firebaseApp, {
       experimentalForceLongPolling: true
     });
-    console.log("After Firestore initialized");
+    console.log("[firebase.ts] Firestore initialized");
     
     // Initialize other services
     auth = getAuth(firebaseApp);
     const bucket = resolvedBucket;
-    // Force the SDK to use the configured bucket (avoids stale defaults)
-    storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
-    console.log('[firebase.ts] getStorage bucket:', bucket);
+    
+    // CRITICAL FIX: Cache storage reference to avoid excessive getStorage() calls
+    if (!storage) {
+      storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
+      console.log('[firebase.ts] Storage initialized with bucket:', bucket);
+    } else {
+      console.log('[firebase.ts] Reusing cached storage reference');
+    }
     googleProvider = new GoogleAuthProvider();
+    _firebaseInitialized = true;
   } else {
     firebaseApp = getApp();
-    console.log("After getApp");
+    console.log("[firebase.ts] Using existing Firebase app");
     db = getFirestore(firebaseApp);
     auth = getAuth(firebaseApp);
     const bucket = resolvedBucket;
-    storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
-    console.log('[firebase.ts] getStorage bucket (existing app):', bucket);
+    
+    // CRITICAL FIX: Reuse cached storage reference
+    if (!storage) {
+      storage = bucket ? getStorage(firebaseApp, `gs://${bucket}`) : getStorage(firebaseApp);
+      console.log('[firebase.ts] Storage initialized for existing app with bucket:', bucket);
+    } else {
+      console.log('[firebase.ts] Reusing cached storage reference');
+    }
+    
     googleProvider = new GoogleAuthProvider();
-    console.log("After getFirestore/getAuth/getStorage/GoogleAuthProvider");
+    _firebaseInitialized = true;
   }
   
   return { firebaseApp, auth, db, storage, googleProvider };

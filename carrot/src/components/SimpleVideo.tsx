@@ -273,26 +273,41 @@ export default function SimpleVideo({
     const video = videoRef.current;
     if (!video || !postId) return;
 
-    const handlePlay = async () => {
-      setIsPlaying(true);
-      console.log(`[SimpleVideo] ▶️  PLAY event`, {
-        postId,
-        mountId: mountIdRef.current,
-        currentTime: video.currentTime,
-        readyState: video.readyState
-      });
-      
-      try {
-        const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
-        const handle = FeedMediaManager.inst.getHandleByElement(containerRef.current!);
-        if (handle) {
-          FeedMediaManager.inst.setActive(handle);
-          console.log('[SimpleVideo] Set as active video', { postId });
-        }
-      } catch (e) {
-        console.warn('[SimpleVideo] Failed to set as active', e);
-      }
-    };
+        const handlePlay = async () => {
+          setIsPlaying(true);
+          console.log(`[SimpleVideo] ▶️  PLAY event`, {
+            postId,
+            mountId: mountIdRef.current,
+            currentTime: video.currentTime,
+            readyState: video.readyState
+          });
+          
+          // CRITICAL FIX: Pause all other videos globally to enforce singleton playback
+          try {
+            const allVideos = document.querySelectorAll('video');
+            allVideos.forEach((vid) => {
+              if (vid !== video && !vid.paused) {
+                vid.pause();
+                console.log('[SimpleVideo] Paused other video (singleton enforcement)', {
+                  pausedVideoSrc: vid.src?.substring(0, 50)
+                });
+              }
+            });
+          } catch (e) {
+            console.warn('[SimpleVideo] Failed to pause other videos:', e);
+          }
+          
+          try {
+            const { default: FeedMediaManager } = await import('./video/FeedMediaManager');
+            const handle = FeedMediaManager.inst.getHandleByElement(containerRef.current!);
+            if (handle) {
+              FeedMediaManager.inst.setActive(handle);
+              console.log('[SimpleVideo] Set as active video', { postId });
+            }
+          } catch (e) {
+            console.warn('[SimpleVideo] Failed to set as active', e);
+          }
+        };
 
     const handlePause = () => {
       setIsPlaying(false);
@@ -414,21 +429,46 @@ export default function SimpleVideo({
         setIsMuted(false);
         console.log('[SimpleVideo] Video unmuted after user interaction', { postId });
         
-        // CRITICAL FIX: Resume audio context if it exists
-        if (typeof window !== 'undefined' && (window as any).AudioContext) {
-          const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-          if (AudioContext) {
-            try {
-              const audioCtx = new AudioContext();
-              if (audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-                console.log('[SimpleVideo] Audio context resumed', { postId });
+        // CRITICAL FIX: Resume global audio context for browser autoplay policy
+        if (typeof window !== 'undefined') {
+          // Store global audio context to avoid recreating
+          if (!(window as any).__CARROT_AUDIO_CONTEXT__) {
+            const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+            if (AudioContext) {
+              try {
+                (window as any).__CARROT_AUDIO_CONTEXT__ = new AudioContext();
+                console.log('[SimpleVideo] Created global audio context', { postId });
+              } catch (e) {
+                console.warn('[SimpleVideo] Failed to create audio context:', e);
               }
-              audioCtx.close();
+            }
+          }
+          
+          // Resume suspended audio context
+          const audioCtx = (window as any).__CARROT_AUDIO_CONTEXT__;
+          if (audioCtx && audioCtx.state === 'suspended') {
+            try {
+              await audioCtx.resume();
+              console.log('[SimpleVideo] Audio context resumed', { 
+                postId, 
+                state: audioCtx.state 
+              });
             } catch (e) {
               console.warn('[SimpleVideo] Failed to resume audio context:', e);
             }
           }
+        }
+        
+        // CRITICAL FIX: Use dummy audio element to unlock autoplay on iOS/Safari
+        try {
+          const dummyAudio = new Audio();
+          dummyAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==';
+          await dummyAudio.play();
+          dummyAudio.pause();
+          dummyAudio.remove();
+          console.log('[SimpleVideo] Dummy audio played to unlock autoplay', { postId });
+        } catch (e) {
+          console.warn('[SimpleVideo] Dummy audio failed (expected on some browsers):', e);
         }
         
         // Try to play if video is ready
@@ -722,11 +762,18 @@ export default function SimpleVideo({
 
   const handleLoadStart = () => {
     const startTime = Date.now();
+    const video = videoRef.current;
     console.log(`[SimpleVideo] 📥 LOAD START`, { 
       postId,
       mountId: mountIdRef.current,
       src: videoSrc?.substring(0, 100),
-      startTime 
+      startTime,
+      // CRITICAL: Log video state for debugging "first video not playing"
+      readyState: video?.readyState,
+      networkState: video?.networkState,
+      paused: video?.paused,
+      duration: video?.duration,
+      currentTime: video?.currentTime
     });
     setHasError(false);
     
@@ -1012,9 +1059,10 @@ export default function SimpleVideo({
           onClick={handleUserInteraction}
           onTouchStart={handleUserInteraction}
           className="w-full h-full object-contain bg-black cursor-pointer"
-          preload="auto"
+          preload="metadata"
           crossOrigin="anonymous"
           data-start-time={Date.now()}
+          data-post-id={postId}
         />
       )}
     </div>
