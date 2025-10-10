@@ -276,20 +276,34 @@ class MediaPreloadQueue {
     // Cancel any existing full video task for this post
     this.cancel(taskId);
     
-    // Find the original video task to get feedIndex
+    // CRITICAL FIX: Find any existing task for this post to get feedIndex
+    // Since we're not creating VIDEO_PREROLL_6S tasks anymore, look for any task type
     const originalTask = Array.from(this.tasks.values()).find(
-      task => task.postId === postId && task.type === TaskType.VIDEO_PREROLL_6S
+      task => task.postId === postId
     );
     
-    if (!originalTask) {
-      console.warn('[MediaPreloadQueue] Cannot promote to full video - no original task found', { postId });
-      return taskId;
+    // CRITICAL FIX: If no original task found, try to find from completed tasks
+    let feedIndex = 0;
+    if (originalTask) {
+      feedIndex = originalTask.feedIndex;
+    } else {
+      // Look in completed tasks to get feedIndex
+      const completedTask = Array.from(this.completedTasks.values()).find(
+        result => result.postId === postId
+      );
+      if (completedTask) {
+        // We need to reconstruct feedIndex - use a reasonable default for visible posts
+        feedIndex = 0; // Visible posts typically have index 0
+      } else {
+        console.warn('[MediaPreloadQueue] Cannot promote to full video - no task found for post', { postId });
+        return taskId;
+      }
     }
     
     // Enqueue full video download with highest priority
-    this.enqueue(postId, TaskType.VIDEO_FULL, Priority.VISIBLE, originalTask.feedIndex, url, bucket, path);
+    this.enqueue(postId, TaskType.VIDEO_FULL, Priority.VISIBLE, feedIndex, url, bucket, path);
     
-    console.log('[MediaPreloadQueue] Promoted video to full download', { postId, taskId });
+    console.log('[MediaPreloadQueue] Promoted video to full download', { postId, taskId, feedIndex });
     return taskId;
   }
 

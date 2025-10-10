@@ -43,6 +43,7 @@ const ComposerModalDynamic = dynamic(() => import('../../../components/ComposerM
 export default function DashboardClient({ initialCommitments, isModalComposer = false, serverPrefs }: DashboardClientProps) {
   useSyncFirebaseAuth();
   const [commitments, setCommitments] = useState<DashboardCommitmentCardProps[]>(initialCommitments);
+  const [visiblePostCount, setVisiblePostCount] = useState(5); // CRITICAL FIX: Only render first 5 posts initially
   const [isModalOpen, setIsModalOpen] = useModalState(false);
   const { data: session } = useSession();
   const router = useRouter();
@@ -71,6 +72,29 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }
     })();
   }, []);
+
+  // CRITICAL FIX: Implement lazy loading with intersection observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const postIndex = parseInt(entry.target.getAttribute('data-post-index') || '0');
+            if (postIndex >= visiblePostCount - 2) { // Load more when reaching 2 posts from the end
+              setVisiblePostCount(prev => Math.min(prev + 3, commitments.length)); // Load 3 more posts
+            }
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: '200px' }
+    );
+
+    // Observe all posts
+    const postElements = document.querySelectorAll('[data-post-index]');
+    postElements.forEach(el => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [visiblePostCount, commitments.length]);
 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
@@ -928,15 +952,16 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         <div className="px-4">
           {/* Professional compact spacing for social media feed */}
           <div className="space-y-3 mt-6">
-            {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).map((commitment) => (
-              <CommitmentCard
-                key={commitment.id}
-                {...commitment}
-                currentUserId={(session?.user as any)?.id}
-                onVote={(vote) => handleVote(commitment.id, vote as VoteType)}
-                onDelete={handleDeletePost}
+            {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).slice(0, visiblePostCount).map((commitment, index) => (
+              <div key={commitment.id} data-post-index={index}>
+                <CommitmentCard
+                  {...commitment}
+                  currentUserId={(session?.user as any)?.id}
+                  onVote={(vote) => handleVote(commitment.id, vote as VoteType)}
+                  onDelete={handleDeletePost}
                 onBlock={handleBlockPost}
-              />
+                />
+              </div>
             ))}
           </div>
         </div>

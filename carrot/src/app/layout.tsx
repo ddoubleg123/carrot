@@ -35,7 +35,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             console.log('[ChunkRetry] Retry attempt ' + (retryCount + 1) + '/' + maxRetries + ' for chunk ' + chunkId);
             if (retryCount < maxRetries) {
               window.__CHUNK_RETRY_COUNT__.set(chunkId, retryCount + 1);
-              setTimeout(function() { window.location.reload(); }, 1000);
+              // CRITICAL FIX: Use exponential backoff for chunk retries
+              var delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+              setTimeout(function() { 
+                console.log('[ChunkRetry] Reloading page after ' + delay + 'ms delay');
+                window.location.reload(); 
+              }, delay);
+            } else {
+              console.error('[ChunkRetry] Max retries exceeded for chunk ' + chunkId);
+              // Show user-friendly error message
+              document.body.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui;"><div style="text-align: center;"><h2>Loading Error</h2><p>Please refresh the page or try again later.</p><button onclick="window.location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Refresh Page</button></div></div>';
             }
           };
           window.addEventListener('error', function(e) {
@@ -43,10 +52,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             if (msg.includes('ChunkLoadError') || msg.includes('Loading chunk')) {
               var match = msg.match(/chunk[s]?\\s+(\\d+)/i);
               var chunkId = match ? match[1] : 'unknown';
+              console.error('[ChunkRetry] Detected chunk load error:', chunkId, msg);
               window.__RETRY_CHUNK__(chunkId);
               e.preventDefault();
             }
           }, true);
+          // CRITICAL FIX: Also handle unhandled promise rejections for chunk loading
+          window.addEventListener('unhandledrejection', function(e) {
+            var msg = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+            if (msg.includes('ChunkLoadError') || msg.includes('Loading chunk')) {
+              var match = msg.match(/chunk[s]?\\s+(\\d+)/i);
+              var chunkId = match ? match[1] : 'unknown';
+              console.error('[ChunkRetry] Detected chunk load error in promise rejection:', chunkId, msg);
+              window.__RETRY_CHUNK__(chunkId);
+              e.preventDefault();
+            }
+          });
         ` }} />
         {/* Performance hints: preconnect/dns-prefetch to common media/font domains */}
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
