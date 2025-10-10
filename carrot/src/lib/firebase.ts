@@ -26,11 +26,11 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Resolve/normalize the storage bucket to the preferred suffix at runtime
+// CRITICAL FIX: Use correct Firebase storage bucket domain (.appspot.com not .firebasestorage.app)
 const resolvedBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET &&
-  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.includes('.firebasestorage.app'))
+  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.includes('.appspot.com'))
   ? process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!
-  : `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebasestorage.app`;
+  : `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com`;
 
 // Ensure the config uses the resolved bucket
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

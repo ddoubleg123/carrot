@@ -64,7 +64,7 @@ export async function testFirebaseStorage() {
   console.log('\n🔥 Testing Firebase Storage with HTTP/1.1 forcing...');
   
   // Test with a simple Firebase Storage URL
-  const firebaseUrl = 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/test%2Ftest.txt?alt=media';
+  const firebaseUrl = 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.appspot.com/o/test%2Ftest.txt?alt=media';
   
   try {
     const response = await http1Fetch(firebaseUrl, {

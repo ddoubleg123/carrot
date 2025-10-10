@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     
     // Test Firebase Storage
     try {
-      const firebaseUrl = 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.firebasestorage.app/o/test%2Ftest.txt?alt=media';
+      const firebaseUrl = 'https://firebasestorage.googleapis.com/v0/b/involuted-river-466315-p0.appspot.com/o/test%2Ftest.txt?alt=media';
       const firebaseResponse = await http1Fetch(firebaseUrl, {
         method: 'HEAD',
         maxRetries: 1,

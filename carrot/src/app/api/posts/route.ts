@@ -77,10 +77,10 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         path = decodeURIComponent(m1[2]);
         originalPath = m1[2];
       }
-      // <sub>.firebasestorage.app/o/<ENCODED_PATH>
+      // <sub>.appspot.com/o/<ENCODED_PATH>
       if (!path) {
         const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
-        if (host.endsWith('.firebasestorage.app') && m4) {
+        if (host.endsWith('.appspot.com') && m4) {
           path = decodeURIComponent(m4[1]);
           originalPath = m4[1];
         }
@@ -106,7 +106,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             if (token) durable.searchParams.set('token', token);
             normalized = durable.toString();
           }
-        } else if (host.endsWith('.firebasestorage.app') && path) {
+        } else if (host.endsWith('.appspot.com') && path) {
           const enc = (originalPath && originalPath !== path) ? originalPath : encodeURIComponent(path);
           const token = sp.get('token');
           const durable = new URL(`https://${host}/o/${enc}?alt=media`);
@@ -175,7 +175,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         const url = new URL(u);
         const host = url.hostname;
         const sp = url.searchParams;
-        const isStorage = host.includes('firebasestorage.googleapis.com') || host.includes('storage.googleapis.com') || host.endsWith('.firebasestorage.app');
+        const isStorage = host.includes('firebasestorage.googleapis.com') || host.includes('storage.googleapis.com') || host.endsWith('.appspot.com');
         // If it's not a Google storage URL, leave as-is
         if (!isStorage) return u;
         // Try to extract bucket and path
@@ -187,8 +187,8 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
         const m1 = url.pathname.match(/\/v0\/b\/([^/]+)\/o\/(.+)$/);
         if (host === 'firebasestorage.googleapis.com' && m1) {
           bucket = decodeURIComponent(m1[1]);
-          // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
-          if (bucket.endsWith('.firebasestorage.app')) {
+          // Keep .appspot.com bucket names as-is for modern Firebase projects
+          if (bucket.endsWith('.appspot.com')) {
             console.log('[posts] Keeping Firebase bucket name:', bucket);
           }
           path = decodeURIComponent(m1[2]);
@@ -203,10 +203,10 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
             originalPath = m2[2];
           }
         }
-        // <sub>.firebasestorage.app/o/<ENCODED_PATH>
+        // <sub>.appspot.com/o/<ENCODED_PATH>
         if (!bucket || !path) {
           const m4 = url.pathname.match(/^\/o\/([^?]+)$/);
-          if (host.endsWith('.firebasestorage.app') && m4) {
+          if (host.endsWith('.appspot.com') && m4) {
             path = decodeURIComponent(m4[1]);
             originalPath = m4[1];
             // Infer bucket from GoogleAccessId if present

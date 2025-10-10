@@ -86,7 +86,7 @@ class HTTP1FetchManager {
   private isFirebaseStorage(url: string): boolean {
     return url.includes('firebasestorage.googleapis.com') || 
            url.includes('storage.googleapis.com') ||
-           url.includes('.firebasestorage.app');
+           url.includes('.appspot.com');
   }
 
   /**

@@ -862,7 +862,7 @@ export default function SimpleVideo({
             try {
               const urlParams = new URLSearchParams(src.split('?')[1]);
               const originalUrl = urlParams.get('url');
-              if (originalUrl && (originalUrl.includes('firebasestorage.googleapis.com') || originalUrl.includes('firebasestorage.app'))) {
+              if (originalUrl && (originalUrl.includes('firebasestorage.googleapis.com') || originalUrl.includes('.appspot.com'))) {
                 console.log('[SimpleVideo] Fallback to direct Firebase URL', { originalUrl: originalUrl.substring(0, 100) });
                 const decodedUrl = decodeURIComponent(originalUrl);
                 // Add alt=media if missing

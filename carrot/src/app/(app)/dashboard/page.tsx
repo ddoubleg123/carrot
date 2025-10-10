@@ -41,7 +41,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     }
     
     // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
-    if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+    if (u.includes('firebasestorage.googleapis.com') || u.includes('.appspot.com')) {
       try {
         const urlObj = new URL(u);
         if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {
@@ -57,7 +57,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   const proxVideo = (u?: string | null) => {
     if (!u) return null;
     // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
-    if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+    if (u.includes('firebasestorage.googleapis.com') || u.includes('.appspot.com')) {
       try {
         const urlObj = new URL(u);
         if (urlObj.searchParams.has('token') || urlObj.searchParams.has('X-Goog-Signature')) {

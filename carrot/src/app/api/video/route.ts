@@ -31,13 +31,13 @@ const ALLOWED_HOSTS = new Set([
   'firebasestorage.googleapis.com',
   'storage.googleapis.com',
   'commondatastorage.googleapis.com',
-  'firebasestorage.app', // generic, also allow subdomains via endsWith
+  'appspot.com', // generic, also allow subdomains via endsWith
 ]);
 
 function isAllowedUrl(u: URL) {
   if (ALLOWED_HOSTS.has(u.hostname)) return true;
-  // Allow any subdomain of firebasestorage.app
-  if (u.hostname.endsWith('.firebasestorage.app')) return true;
+  // Allow any subdomain of appspot.com
+  if (u.hostname.endsWith('.appspot.com')) return true;
   return false;
 }
 
@@ -238,10 +238,9 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
             
             // If we extracted bucket and path, use Admin SDK to stream directly
             if (bucket && objectPath) {
-              // For modern Firebase projects, keep .firebasestorage.app bucket names as-is
-              // Only convert legacy .appspot.com buckets if needed
-              if (bucket.endsWith('.firebasestorage.app')) {
-                // Keep the .firebasestorage.app bucket name - don't convert to .appspot.com
+              // For modern Firebase projects, use .appspot.com bucket names
+              if (bucket.endsWith('.appspot.com')) {
+                // Keep the .appspot.com bucket name
                 console.log('[api/video] Using Firebase bucket:', bucket);
               }
               
@@ -264,11 +263,11 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
 
     // Normalize Firebase v0 path: ensure bucket host and /o/<object> are normalized (only for unsigned URLs)
     if (target.hostname === 'firebasestorage.googleapis.com') {
-        // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
+        // Keep .appspot.com bucket names as-is for modern Firebase projects
         try {
           const b = target.searchParams.get('b');
-          if (b && b.endsWith('.firebasestorage.app')) {
-            // Don't convert .firebasestorage.app to .appspot.com - keep as-is
+          if (b && b.endsWith('.appspot.com')) {
+            // Keep .appspot.com bucket name as-is
             console.log('[api/video] Keeping Firebase bucket name:', b);
           }
         } catch {}
@@ -283,8 +282,8 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
           if (m) {
             let bucket = decodeURIComponent(m[1]);
             const objectPart = m[2];
-            if (bucket.endsWith('.firebasestorage.app')) {
-              // Keep .firebasestorage.app bucket names as-is for modern Firebase projects
+            if (bucket.endsWith('.appspot.com')) {
+              // Keep .appspot.com bucket names as-is for modern Firebase projects
               console.log('[api/video] Keeping Firebase bucket in path:', bucket);
             }
           }

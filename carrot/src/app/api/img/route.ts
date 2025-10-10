@@ -48,7 +48,7 @@ const ALLOW_HOSTS = new Set([
 
 function hostAllowed(u: URL) {
   if (ALLOW_HOSTS.has(u.hostname)) return true
-  if (u.hostname.endsWith('.firebasestorage.app')) return true
+  if (u.hostname.endsWith('.appspot.com')) return true
   // Allow localhost in development
   if (process.env.NODE_ENV === 'development' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true
   return false
@@ -69,19 +69,19 @@ function tryExtractBucketAndPath(raw: string): { bucket?: string; path?: string;
     if (host === 'storage.googleapis.com' && m2) {
       return { bucket: decodeURIComponent(m2[1]), path: decodeURIComponent(m2[2]), kind: 'gcs' }
     }
-    // App subdomain: <sub>.firebasestorage.app/o/<ENCODED_PATH>
+    // App subdomain: <sub>.appspot.com/o/<ENCODED_PATH>
     const m3 = u.pathname.match(/^\/o\/([^?]+)$/)
-    if (host.endsWith('.firebasestorage.app') && m3) {
+    if (host.endsWith('.appspot.com') && m3) {
       // Best-effort: infer bucket from PUBLIC_BASE fallback if configured
       const baseM = PUBLIC_BASE.match(/\/v0\/b\/([^/]+)\/o\//)
       const fallbackBucket = baseM ? baseM[1] : undefined
       return { bucket: fallbackBucket, path: decodeURIComponent(m3[1]), kind: 'firebase' }
     }
-    // Firebase Storage subdomain: <bucket>.firebasestorage.app/<path>
+    // Firebase Storage subdomain: <bucket>.appspot.com/<path>
     const m4 = u.pathname.match(/^\/(.+)$/)
-    if (host.endsWith('.firebasestorage.app') && m4) {
+    if (host.endsWith('.appspot.com') && m4) {
       // Extract bucket from hostname
-      const bucket = host.replace('.firebasestorage.app', '')
+      const bucket = host.replace('.appspot.com', '')
       return { bucket, path: decodeURIComponent(m4[1]), kind: 'firebase' }
     }
   } catch {}
@@ -509,7 +509,7 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     const errorBody = await upstream.text();
     
     // Handle Firebase Storage authentication errors (403 Forbidden)
-    if (upstream.status === 403 && (target?.hostname === 'firebasestorage.googleapis.com' || target?.hostname?.endsWith('.firebasestorage.app'))) {
+    if (upstream.status === 403 && (target?.hostname === 'firebasestorage.googleapis.com' || target?.hostname?.endsWith('.appspot.com'))) {
       console.warn('[Image Proxy] Firebase Storage 403 error - credentials may be missing or expired');
       
       // Return a placeholder image instead of 403 error

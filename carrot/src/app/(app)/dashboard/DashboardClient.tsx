@@ -93,7 +93,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }
       
       // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
-      if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+      if (u.includes('firebasestorage.googleapis.com') || u.includes('.appspot.com')) {
         try {
           const urlObj = new URL(u);
           // Check if URL has a valid token - if so, it's already signed and public
@@ -142,7 +142,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       }
       
       // CRITICAL FIX: For Firebase Storage URLs, prefer direct usage to avoid proxy issues
-      if (u.includes('firebasestorage.googleapis.com') || u.includes('firebasestorage.app')) {
+      if (u.includes('firebasestorage.googleapis.com') || u.includes('.appspot.com')) {
         try {
           const urlObj = new URL(u);
           // Check if URL has a valid token parameter - if so, it's already signed and public
