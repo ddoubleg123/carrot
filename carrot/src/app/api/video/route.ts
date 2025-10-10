@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const admin = require('firebase-admin');
 import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
+import RenderColdStartHandler from '@/lib/RenderColdStartHandler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -992,6 +992,90 @@ class MediaPreloadQueue {
     console.log('[MediaPreloadQueue] Cancelled all tasks for post', { postId, taskCount: tasksToCancel.length });
   }
 
+  // CRITICAL FIX: Persist task state to prevent loss during component remounts
+  persistTaskState(postId: string): void {
+    const postTasks = Array.from(this.tasks.values()).filter(task => task.postId === postId);
+    const postCompleted = Array.from(this.completedTasks.values()).filter(result => result.postId === postId);
+    
+    // Store in sessionStorage for persistence across remounts
+    if (typeof window !== 'undefined') {
+      try {
+        const stateKey = `mpq_state_${postId}`;
+        const state = {
+          tasks: postTasks.map(task => ({
+            id: task.id,
+            type: task.type,
+            priority: task.priority,
+            feedIndex: task.feedIndex,
+            url: task.url,
+            bucket: task.bucket,
+            path: task.path,
+            createdAt: task.createdAt,
+            isBlocking: task.isBlocking,
+            dependsOn: task.dependsOn
+          })),
+          completed: postCompleted.map(result => ({
+            id: result.id,
+            type: result.type,
+            success: result.success,
+            size: result.size,
+            duration: result.duration,
+            completedAt: result.completedAt
+          })),
+          timestamp: Date.now()
+        };
+        sessionStorage.setItem(stateKey, JSON.stringify(state));
+        console.log('[MediaPreloadQueue] Persisted task state for post', { postId, taskCount: postTasks.length });
+      } catch (e) {
+        console.warn('[MediaPreloadQueue] Failed to persist task state:', e);
+      }
+    }
+  }
+
+  // CRITICAL FIX: Restore task state after component remount
+  restoreTaskState(postId: string): void {
+    if (typeof window !== 'undefined') {
+      try {
+        const stateKey = `mpq_state_${postId}`;
+        const stateStr = sessionStorage.getItem(stateKey);
+        if (!stateStr) return;
+        
+        const state = JSON.parse(stateStr);
+        const now = Date.now();
+        
+        // Only restore if state is recent (within 5 minutes)
+        if (now - state.timestamp > 300000) {
+          sessionStorage.removeItem(stateKey);
+          return;
+        }
+        
+        // Restore completed tasks
+        for (const completed of state.completed) {
+          this.completedTasks.set(completed.id, {
+            id: completed.id,
+            postId,
+            type: completed.type,
+            success: completed.success,
+            size: completed.size,
+            duration: completed.duration,
+            completedAt: completed.completedAt
+          });
+        }
+        
+        console.log('[MediaPreloadQueue] Restored task state for post', { 
+          postId, 
+          taskCount: state.tasks.length,
+          completedCount: state.completed.length 
+        });
+        
+        // Clean up old state
+        sessionStorage.removeItem(stateKey);
+      } catch (e) {
+        console.warn('[MediaPreloadQueue] Failed to restore task state:', e);
+      }
+    }
+  }
+
   clearAllRetryCounts(): void {
     // Clear retry queue
     this.retryQueue.clear();

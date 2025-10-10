@@ -215,6 +215,9 @@ class FeedMediaManager {
         if (post.thumbnailUrl) {
           if (post.thumbnailUrl.startsWith('/api/img')) {
             posterUrl = this.validateUrl(post.thumbnailUrl, 'thumbnailUrl (api/img)');
+          } else if (post.thumbnailUrl.startsWith('data:')) {
+            // CRITICAL FIX: Use data URIs directly - never proxy them
+            posterUrl = post.thumbnailUrl;
           } else {
             // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
             const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.thumbnailUrl);
@@ -240,6 +243,9 @@ class FeedMediaManager {
         } else if (post.videoUrl) {
           if (post.videoUrl.startsWith('/api/video')) {
             videoUrl = this.validateUrl(post.videoUrl, 'videoUrl (api/video)');
+          } else if (post.videoUrl.startsWith('data:')) {
+            // CRITICAL FIX: Use data URIs directly - never proxy them
+            videoUrl = post.videoUrl;
           } else {
             // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
             const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.videoUrl);

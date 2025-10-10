@@ -106,6 +106,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         }
       }
       
+      // CRITICAL FIX: Never proxy data URIs - they should be used directly
+      if (u.startsWith('data:')) {
+        console.log('[prox] Using data URI directly (should not be proxied):', u.substring(0, 100));
+        return u;
+      }
+      
       // For URLs without tokens or other sources, proxy them
       const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(u);
       const proxied = `/api/img?url=${isAlreadyEncoded ? u : encodeURIComponent(u)}`;

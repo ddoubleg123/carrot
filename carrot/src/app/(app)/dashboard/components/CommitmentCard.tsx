@@ -15,6 +15,7 @@ import FlagChip from "../../../../components/flags/FlagChip";
 import { useModalRoute } from "../../../../hooks/useModalRoute";
 import PostActionBar from "../../../../components/post/PostActionBar";
 import ShareSheet from "../../../../components/share/ShareSheet";
+import VideoErrorBoundary from "../../../../components/VideoErrorBoundary";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -792,18 +793,20 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 });
                 
                 return (
-                  <MemoizedVideoPlayer
-                    key={`video-${id}`}
-                    videoUrl={videoUrl || ""}
-                    thumbnailUrl={thumbnailUrl || undefined}
-                    postId={id}
-                    initialTranscription={audioTranscription || undefined}
-                    transcriptionStatus={transcriptionStatus || undefined}
-                    uploadStatus={uploadStatus || null}
-                    uploadProgress={uploadProgress || 0}
-                    onVideoRef={attachVideoRef}
-                    disableNativeControls={false}
-                  />
+                  <VideoErrorBoundary postId={id}>
+                    <MemoizedVideoPlayer
+                      key={`video-${id}`}
+                      videoUrl={videoUrl || ""}
+                      thumbnailUrl={thumbnailUrl || undefined}
+                      postId={id}
+                      initialTranscription={audioTranscription || undefined}
+                      transcriptionStatus={transcriptionStatus || undefined}
+                      uploadStatus={uploadStatus || null}
+                      uploadProgress={uploadProgress || 0}
+                      onVideoRef={attachVideoRef}
+                      disableNativeControls={false}
+                    />
+                  </VideoErrorBoundary>
                 );
               })()}
             </div>
