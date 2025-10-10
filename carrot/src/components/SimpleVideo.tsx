@@ -87,6 +87,8 @@ export default function SimpleVideo({
   const [canPlay, setCanPlay] = useState(false);
   const [autoRetryAttempted, setAutoRetryAttempted] = useState(false);
   const [isStuck, setIsStuck] = useState(false);
+  const [isMuted, setIsMuted] = useState(muted); // CRITICAL FIX: Track mute state for user interaction
+  const [hasUserInteracted, setHasUserInteracted] = useState(false); // CRITICAL FIX: Track user interaction
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -309,17 +311,49 @@ export default function SimpleVideo({
       });
     };
 
-    const handleSeeked = () => {
-      console.log(`[SimpleVideo] ✓ SEEKED`, {
-        postId,
-        currentTime: video.currentTime
-      });
-    };
+        const handleSeeked = () => {
+          console.log(`[SimpleVideo] ✓ SEEKED`, {
+            postId,
+            currentTime: video.currentTime
+          });
+        };
+        
+        // CRITICAL FIX: Handle ended event to prevent 9-second glitch
+        const handleEnded = () => {
+          console.log(`[SimpleVideo] ✓ ENDED`, {
+            postId,
+            duration: video.duration,
+            currentTime: video.currentTime
+          });
+          // DON'T reset currentTime to 0 - let video stay at end
+          // This prevents the "reset after 9 seconds" bug
+        };
+        
+        // CRITICAL FIX: Handle timeupdate to detect scrubbing loops
+        const lastTimeRef = { value: 0 };
+        const handleTimeUpdate = () => {
+          const currentTime = video.currentTime;
+          const timeDiff = Math.abs(currentTime - lastTimeRef.value);
+          
+          // Detect unexpected backwards jumps (scrubbing loop)
+          if (timeDiff > 5 && currentTime < lastTimeRef.value) {
+            console.warn(`[SimpleVideo] ⚠️  SCRUBBING LOOP DETECTED`, {
+              postId,
+              previousTime: lastTimeRef.value,
+              currentTime,
+              timeDiff
+            });
+          }
+          
+          lastTimeRef.value = currentTime;
+        };
 
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('seeking', handleSeeking);
-    video.addEventListener('seeked', handleSeeked);
+        video.addEventListener('play', handlePlay);
+        video.addEventListener('pause', handlePause);
+        video.addEventListener('seeking', handleSeeking);
+        video.addEventListener('seeked', handleSeeked);
+        video.addEventListener('ended', handleEnded);
+        video.addEventListener('timeupdate', handleTimeUpdate);
 
     // Add intersection observer to handle visibility and promote to full download when visible
     const io = new IntersectionObserver(async (entries) => {
@@ -360,9 +394,53 @@ export default function SimpleVideo({
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('seeking', handleSeeking);
       video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
       io.disconnect();
     };
   }, [postId]);
+
+  // CRITICAL FIX: Handle user interaction to unmute and resume audio context
+  const handleUserInteraction = useCallback(async () => {
+    if (hasUserInteracted) return;
+    
+    setHasUserInteracted(true);
+    const video = videoRef.current;
+    
+    if (video) {
+      try {
+        // CRITICAL FIX: Unmute video on first user interaction
+        video.muted = false;
+        setIsMuted(false);
+        console.log('[SimpleVideo] Video unmuted after user interaction', { postId });
+        
+        // CRITICAL FIX: Resume audio context if it exists
+        if (typeof window !== 'undefined' && (window as any).AudioContext) {
+          const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (AudioContext) {
+            try {
+              const audioCtx = new AudioContext();
+              if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+                console.log('[SimpleVideo] Audio context resumed', { postId });
+              }
+              audioCtx.close();
+            } catch (e) {
+              console.warn('[SimpleVideo] Failed to resume audio context:', e);
+            }
+          }
+        }
+        
+        // Try to play if video is ready
+        if (video.paused && video.readyState >= 2) {
+          await video.play();
+          console.log('[SimpleVideo] Started playback after user interaction', { postId });
+        }
+      } catch (e) {
+        console.warn('[SimpleVideo] User interaction handler error:', e);
+      }
+    }
+  }, [hasUserInteracted, postId]);
 
   // CRITICAL FIX: Comprehensive cleanup on unmount
   useEffect(() => {
@@ -923,7 +1001,7 @@ export default function SimpleVideo({
           poster={poster}
           controls={controls}
           autoPlay={autoPlay}
-          muted={muted}
+          muted={isMuted}
           playsInline={playsInline}
           onLoadStart={handleLoadStart}
           onLoadedData={handleLoadedData}
@@ -931,7 +1009,9 @@ export default function SimpleVideo({
           onError={handleError}
           onCanPlay={handleCanPlay}
           onCanPlayThrough={handleCanPlayThrough}
-          className="w-full h-full object-contain bg-black"
+          onClick={handleUserInteraction}
+          onTouchStart={handleUserInteraction}
+          className="w-full h-full object-contain bg-black cursor-pointer"
           preload="auto"
           crossOrigin="anonymous"
           data-start-time={Date.now()}

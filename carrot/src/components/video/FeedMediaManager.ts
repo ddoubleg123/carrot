@@ -563,19 +563,23 @@ class FeedMediaManager {
       }
     }
 
-    // CRITICAL: Ensure only one video plays at a time
-    if (this._active && this._active !== next) {
-      try { 
-        this._active.pause(); 
-        if (this._active.setPaused) this._active.setPaused();
-        
-        this.storeVideoState(this._active);
-        
-        this._states.set(this._active, TileState.Paused);
-        this._paused.add(this._active);
-        
-        console.log('[FeedMediaManager] Paused previous active video', { id: this._active.id });
-      } catch {}
+    // CRITICAL FIX: Ensure ONLY ONE video plays at a time - pause ALL others
+    for (const handle of this._allHandles) {
+      if (handle !== next) {
+        try { 
+          handle.pause(); 
+          if (handle.setPaused) handle.setPaused();
+          
+          this.storeVideoState(handle);
+          
+          this._states.set(handle, TileState.Paused);
+          this._paused.add(handle);
+          
+          console.log('[FeedMediaManager] Paused video (singleton enforcement)', { id: handle.id });
+        } catch (e) {
+          console.warn('[FeedMediaManager] Failed to pause video', { id: handle.id, error: e });
+        }
+      }
     }
     
     this._active = next;
