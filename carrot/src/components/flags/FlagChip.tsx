@@ -120,8 +120,8 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
     >
       {/* Use the working PhoneInput to show the flag */}
       <div style={{ 
-        width: '16px', 
-        height: '16px', 
+        width: '24px', 
+        height: '24px', 
         overflow: 'hidden',
         display: 'inline-block'
       }}>
@@ -134,8 +134,8 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
             outline: 'none',
             boxShadow: 'none',
             background: 'transparent',
-            width: '16px',
-            height: '16px'
+            width: '24px',
+            height: '24px'
           }}
           inputStyle={{
             display: 'none'
@@ -147,9 +147,9 @@ export default function FlagChip({ countryCode, label, className }: { countryCod
               boxShadow: 'none',
               background: 'transparent',
               padding: '0',
-              width: '16px',
-              height: '16px',
-              minWidth: '16px'
+              width: '24px',
+              height: '24px',
+              minWidth: '24px'
             }
           }}
         />
