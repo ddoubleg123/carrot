@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         
         // Update the source with media assets
         const updatedCiteMeta = {
-          ...source.citeMeta,
+          ...(source.citeMeta as any),
           mediaAssets: {
             hero: heroResult.hero,
             blurDataURL: heroResult.blurDataURL,
