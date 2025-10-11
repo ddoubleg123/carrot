@@ -10,6 +10,7 @@ import GeneratedCover from './GeneratedCover'
 
 interface DiscoveryCardProps {
   item: DiscoveredItem
+  onHeroClick?: (item: DiscoveredItem) => void
 }
 
 const TYPE_LABELS = {
@@ -45,7 +46,7 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-export default function DiscoveryCard({ item }: DiscoveryCardProps) {
+export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const hero = useMemo(() => pickHero(item), [item.id, item.media])
   const dominantColor = useMemo(() => getDominantColor(item), [item.media?.dominant])
@@ -75,9 +76,11 @@ export default function DiscoveryCard({ item }: DiscoveryCardProps) {
   return (
     <div className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
       {/* Hero Section */}
-      <div 
-        className="relative aspect-[16/9] overflow-hidden rounded-xl"
+      <button
+        className="relative aspect-[16/9] overflow-hidden rounded-xl w-full block focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2"
         style={{ backgroundColor: dominantColor }}
+        onClick={() => onHeroClick?.(item)}
+        aria-label="Open content preview"
       >
         {hero ? (
           <img 
@@ -119,7 +122,7 @@ export default function DiscoveryCard({ item }: DiscoveryCardProps) {
             {statusLabel(item.status)}
           </span>
         )}
-      </div>
+      </button>
       
       {/* Title */}
       <h3 className="text-base md:text-lg font-semibold leading-6 mt-3 line-clamp-2 text-slate-900">

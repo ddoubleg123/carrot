@@ -3,9 +3,12 @@
 import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Filter, SortAsc, Search, RefreshCw } from 'lucide-react'
+import { Filter, SortAsc, Search } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
+import DiscoveryHeader from './DiscoveryHeader'
+import ContentModal from './ContentModal'
 import { useDiscoveredItems } from '../useDiscoveredItems'
+import { DiscoveredItem } from '@/types/discovered-content'
 
 interface DiscoveryListProps {
   patchHandle: string
@@ -40,6 +43,8 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'image' | 'text'>('all')
   const [sortBy, setSortBy] = useState<'top' | 'new'>('top')
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
+  const [selectedItem, setSelectedItem] = useState<DiscoveredItem | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Memoize filters to prevent unnecessary re-fetches
   const filters = React.useMemo(() => ({
@@ -50,6 +55,16 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }), [filterType, sortBy, timeRange])
 
   const { items, isLoading, error, refetch } = useDiscoveredItems(patchHandle, filters)
+
+  const handleHeroClick = (item: DiscoveredItem) => {
+    setSelectedItem(item)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedItem(null)
+  }
 
   // Deduplicate items by canonicalUrl before rendering
   const deduplicatedItems = React.useMemo(() => {
@@ -93,42 +108,9 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-[#0B0B0F]">Discovering content</h2>
-          <Badge variant="secondary" className="bg-[#FF6A00] text-white">
-            <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse" />
-            LIVE
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="h-8"
-          >
-            <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleStartDiscovery}
-            className="h-8 bg-[#FF6A00] hover:bg-[#E55A00]"
-          >
-            Start Content Discovery
-          </Button>
-        </div>
-      </div>
-
-      {/* Subtext */}
-      <p className="text-slate-600 text-sm">
-        We're actively finding posts, videos, and resources that match this group. New items will appear here.
-      </p>
+    <div className="border-t border-[#E6E8EC] pt-4">
+      {/* Discovery Header */}
+      <DiscoveryHeader patchHandle={patchHandle} onRefresh={refetch} />
 
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
@@ -233,11 +215,19 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           {deduplicatedItems.map((item) => (
             <DiscoveryCard 
               key={item.canonicalUrl || item.id} 
-              item={item} 
+              item={item}
+              onHeroClick={handleHeroClick}
             />
           ))}
         </div>
       )}
+
+      {/* Content Modal */}
+      <ContentModal
+        item={selectedItem}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   )
 }

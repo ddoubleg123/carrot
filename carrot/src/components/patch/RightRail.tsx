@@ -121,106 +121,124 @@ export default function RightRail({
         <div className="space-y-6">
           {/* Followers Section */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Followers
-              </h3>
-              <Badge variant="secondary" className="bg-[#FF6A00]/10 text-[#FF6A00]">
-                {followerCount}
-              </Badge>
+            <div className="grid grid-cols-[24px_1fr] items-start gap-x-3 mb-4">
+              <div className="flex items-center justify-center">
+                <Users className="w-5 h-5 text-slate-600" />
+              </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800">
+                  Followers
+                </h3>
+                <Badge variant="secondary" className="bg-[#FF6A00]/10 text-[#FF6A00]">
+                  {followerCount}
+                </Badge>
+              </div>
             </div>
             
-            {followers.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex -space-x-2">
-                  {followers.slice(0, 5).map((follower) => {
-                    // Use database profilePhoto first, fallback to Google Auth image
-                    const avatarSrc = follower.user.profilePhoto || follower.user.image || '';
-                    return (
-                      <Avatar key={follower.id} className="w-8 h-8 border-2 border-white">
-                        <AvatarImage src={avatarSrc} />
-                        <AvatarFallback className="text-xs">
-                          {follower.user.name?.charAt(0) || follower.user.username?.charAt(0) || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                    );
-                  })}
-                  {followers.length > 5 && (
-                    <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
-                      <span className="text-xs text-gray-600">+{followers.length - 5}</span>
+            <div className="grid grid-cols-[24px_1fr] items-start gap-x-3">
+              <div></div>
+              <div>
+                {followers.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex -space-x-2">
+                      {followers.slice(0, 5).map((follower) => {
+                        // Use database profilePhoto first, fallback to Google Auth image
+                        const avatarSrc = follower.user.profilePhoto || follower.user.image || '';
+                        return (
+                          <Avatar key={follower.id} className="w-8 h-8 border-2 border-white">
+                            <AvatarImage src={avatarSrc} />
+                            <AvatarFallback className="text-xs">
+                              {follower.user.name?.charAt(0) || follower.user.username?.charAt(0) || '?'}
+                            </AvatarFallback>
+                          </Avatar>
+                        );
+                      })}
+                      {followers.length > 5 && (
+                        <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
+                          <span className="text-xs text-gray-600">+{followers.length - 5}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <p className="text-sm text-[#60646C]">
-                  {followers.length} people following {patch.name}
-                </p>
+                    <p className="text-sm text-slate-600">
+                      {followers.length} people following {patch.name}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-slate-600">No followers yet</p>
+                    <p className="text-xs text-slate-600 mt-1">Be the first to follow this patch</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-4">
-                <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-[#60646C]">No followers yet</p>
-                <p className="text-xs text-[#60646C] mt-1">Be the first to follow this patch</p>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* AI Agents Section */}
           <div className="border-t border-[#E6E8EC] pt-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-[#0B0B0F] flex items-center gap-2">
-                <Bot className="w-5 h-5" />
-                AI Agents
-              </h3>
+            <div className="grid grid-cols-[24px_1fr] items-start gap-x-3 mb-4">
+              <div className="flex items-center justify-center">
+                <Bot className="w-5 h-5 text-slate-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-2">
+                  AI Agents
+                </h3>
+              </div>
             </div>
             
-            {connectedAgents.length > 0 ? (
-              <div className="space-y-3">
-                {connectedAgents.map((agent) => {
-                  const Icon = getAgentIcon(agent.type);
-                  const colorClass = getAgentColor(agent.type);
-                  return (
-                    <div key={agent.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full ${colorClass} flex items-center justify-center`}>
-                          <Icon className="w-4 h-4 text-white" />
+            <div className="grid grid-cols-[24px_1fr] items-start gap-x-3">
+              <div></div>
+              <div>
+                {connectedAgents.length > 0 ? (
+                  <div className="space-y-3">
+                    {connectedAgents.map((agent) => {
+                      const Icon = getAgentIcon(agent.type);
+                      const colorClass = getAgentColor(agent.type);
+                      return (
+                        <div key={agent.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full ${colorClass} flex items-center justify-center`}>
+                              <Icon className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-900">
+                                {agent.name}
+                              </p>
+                              <p className="text-xs text-slate-600 flex items-center gap-1">
+                                <Activity className="w-3 h-3" />
+                                Last indexed {formatLastIndexed(agent.lastIndexed)}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {agent.status === 'active' ? 'Active' : 'Inactive'}
+                          </Badge>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-[#0B0B0F]">
-                            {agent.name}
-                          </p>
-                          <p className="text-xs text-[#60646C] flex items-center gap-1">
-                            <Activity className="w-3 h-3" />
-                            Last indexed {formatLastIndexed(agent.lastIndexed)}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {agent.status === 'active' ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Bot className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-slate-600">No agents connected</p>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      Connect AI agents<br />
+                      to monitor this patch
+                    </p>
+                    <Button
+                      onClick={handleConnectAgent}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Connect an Agent
+                    </Button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-4">
-                <Bot className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-[#60646C]">No agents connected</p>
-                <p className="text-xs text-[#60646C] mt-1 leading-relaxed">
-                  Connect AI agents<br />
-                  to monitor this patch
-                </p>
-                <Button
-                  onClick={handleConnectAgent}
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Connect an Agent
-                </Button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -235,19 +253,29 @@ export default function RightRail({
       {/* Update Cadence Info (Optional) */}
       {connectedAgents.length > 0 && (
         <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full max-w-sm overflow-hidden">
-          <h3 className="text-lg font-semibold text-[#0B0B0F] mb-3">Update Cadence</h3>
-          <div className="space-y-2 text-sm text-[#60646C]">
-            <div className="flex justify-between">
-              <span>Indexing frequency:</span>
-              <span className="font-medium">Every 6 hours</span>
+          <div className="grid grid-cols-[24px_1fr] items-start gap-x-3 mb-3">
+            <div className="flex items-center justify-center">
+              <Activity className="w-5 h-5 text-slate-600" />
             </div>
-            <div className="flex justify-between">
-              <span>Last full sync:</span>
-              <span className="font-medium">{formatLastIndexed(connectedAgents[0]?.lastIndexed)}</span>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">Update Cadence</h3>
             </div>
-            <div className="flex justify-between">
-              <span>Next scheduled:</span>
-              <span className="font-medium">In 2 hours</span>
+          </div>
+          <div className="grid grid-cols-[24px_1fr] items-start gap-x-3">
+            <div></div>
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex justify-between">
+                <span>Indexing frequency:</span>
+                <span className="font-medium">Every 6 hours</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Last full sync:</span>
+                <span className="font-medium">{formatLastIndexed(connectedAgents[0]?.lastIndexed)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Next scheduled:</span>
+                <span className="font-medium">In 2 hours</span>
+              </div>
             </div>
           </div>
         </div>
