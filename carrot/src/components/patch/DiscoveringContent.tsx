@@ -181,7 +181,14 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const loadDiscoveredContent = async () => {
     try {
       console.log('[Discovery] Loading discovered content for patch:', patchHandle);
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
+      // Add cache-busting parameter to force fresh data
+      const cacheBuster = `t=${Date.now()}`;
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${cacheBuster}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       console.log('[Discovery] API response status:', response.status);
       if (response.ok) {
         const data = await response.json();

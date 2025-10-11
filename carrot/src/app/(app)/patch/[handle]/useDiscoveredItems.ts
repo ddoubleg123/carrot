@@ -116,7 +116,14 @@ export function useDiscoveredItems(
       }
 
       console.log('[useDiscoveredItems] Fetching for patch:', patchHandle, 'with filters:', filters)
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${queryParams}`)
+      // Add cache-busting parameter to force fresh data
+      queryParams.append('t', Date.now().toString())
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${queryParams}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       console.log('[useDiscoveredItems] API response status:', response.status)
       
       if (!response.ok) {
