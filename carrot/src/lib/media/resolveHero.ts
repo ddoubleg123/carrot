@@ -83,10 +83,19 @@ export async function resolveHero(input: HeroInput): Promise<HeroOutput> {
     }
   }
 
-  // Tier 4: Programmatic generation (last resort)
+  // Tier 4: Programmatic generation (last resort - CANNOT FAIL)
   try {
     console.log('[resolveHero] Tier 4: Generating programmatic cover')
-    const domain = input.url ? new URL(input.url).hostname : 'carrot.app'
+    
+    let domain = 'carrot.app'
+    try {
+      if (input.url) {
+        domain = new URL(input.url).hostname
+      }
+    } catch {
+      console.warn('[resolveHero] Invalid URL, using default domain')
+    }
+    
     const generatedCover = await generateProgrammaticCover({
       domain,
       type: input.type,
@@ -99,7 +108,21 @@ export async function resolveHero(input: HeroInput): Promise<HeroOutput> {
       license: 'generated' as HeroLicense
     }
   } catch (error) {
-    console.error('[resolveHero] All tiers failed:', error)
-    throw new Error('Failed to resolve hero image')
+    console.error('[resolveHero] Tier 4 failed (should be impossible):', error)
+    
+    // ULTIMATE FALLBACK: Return a minimal valid response
+    // This should NEVER happen, but guarantees 100% execution
+    return {
+      hero: `data:image/svg+xml,${encodeURIComponent(`
+        <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="#667eea"/>
+          <text x="640" y="360" text-anchor="middle" font-size="24" fill="white" font-family="system-ui">
+            Content
+          </text>
+        </svg>
+      `)}`,
+      source: 'generated' as HeroSource,
+      license: 'generated' as HeroLicense
+    }
   }
 }

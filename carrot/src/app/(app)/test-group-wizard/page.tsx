@@ -44,10 +44,11 @@ export default function TestGroupWizardPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [groupName, setGroupName] = useState('Houston Oilers')
-  const [groupDescription, setGroupDescription] = useState('A community for Houston Oilers fans to discuss team history, players, and memorable moments.')
+  const [groupName, setGroupName] = useState('')
+  const [groupDescription, setGroupDescription] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [createdPatch, setCreatedPatch] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
 
   const handleContinue = async () => {
@@ -65,21 +66,90 @@ export default function TestGroupWizardPage() {
         setTimeout(() => setSaveStatus('idle'), 2000)
       }, 1500)
     } else if (currentStep === 3) {
-      // Create group
+      // Actually create the group and start discovery
+      await createGroupAndStartDiscovery()
+    } else {
+      setCurrentStep(currentStep + 1)
+    }
+  }
+
+  const createGroupAndStartDiscovery = async () => {
+    setIsSaving(true)
+    setSaveStatus('saving')
+    
+    try {
       console.log('Creating group with:', {
         name: groupName,
         description: groupDescription,
         tags: selectedTags,
         categories: selectedCategories
       })
-      // In real app, would redirect to the created group page
-    } else {
-      setCurrentStep(currentStep + 1)
+
+      // Step 1: Create the patch/group
+      const patchResponse = await fetch('/api/patches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: groupName,
+          description: groupDescription,
+          tags: selectedTags,
+          categories: selectedCategories
+        })
+      })
+
+      if (!patchResponse.ok) {
+        throw new Error(`Failed to create patch: ${patchResponse.status}`)
+      }
+
+      const patch = await patchResponse.json()
+      console.log('Created patch:', patch)
+      setCreatedPatch(patch)
+
+      // Step 2: Start content discovery
+      const discoveryResponse = await fetch(`/api/patches/${patch.handle}/start-discovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start_deepseek_search'
+        })
+      })
+
+      if (!discoveryResponse.ok) {
+        console.warn('Discovery start failed:', discoveryResponse.status)
+        // Continue anyway - discovery might start later
+      } else {
+        const discoveryResult = await discoveryResponse.json()
+        console.log('Started discovery:', discoveryResult)
+      }
+
+      setSaveStatus('saved')
+      setIsSaving(false)
+      
+      // Auto-redirect to the created group after a short delay
+      setTimeout(() => {
+        window.location.href = `/patch/${patch.handle}`
+      }, 2000)
+
+    } catch (error) {
+      console.error('Error creating group:', error)
+      setSaveStatus('error')
+      setIsSaving(false)
     }
   }
 
   const handleBack = () => {
     setCurrentStep(currentStep - 1)
+  }
+
+  const resetWizard = () => {
+    setCurrentStep(1)
+    setSelectedTags([])
+    setSelectedCategories([])
+    setGroupName('')
+    setGroupDescription('')
+    setSaveStatus('idle')
+    setIsSaving(false)
+    setCreatedPatch(null)
   }
 
   const toggleTag = (tag: string) => {
@@ -124,13 +194,22 @@ export default function TestGroupWizardPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Test Group Page Structure
-        </h1>
-        <p className="text-gray-600">
-          Testing the proper group page layout with production-quality discovery cards
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Test Group Page Structure
+          </h1>
+          <p className="text-gray-600">
+            Testing the proper group page layout with production-quality discovery cards
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={resetWizard}
+          disabled={isSaving}
+        >
+          Reset Wizard
+        </Button>
       </div>
 
       {/* Wizard Shell */}
