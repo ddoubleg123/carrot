@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { resolveHero } from '@/lib/media/resolveHero'
 
 const prisma = new PrismaClient()
@@ -15,9 +15,9 @@ export async function POST(req: Request) {
     const sources = await prisma.source.findMany({
       where: {
         OR: [
-          { citeMeta: { path: ['mediaAssets'], equals: null } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], equals: null } },
-          { citeMeta: { path: ['mediaAssets', 'source'], equals: null } }
+          { citeMeta: { path: ['mediaAssets'], equals: Prisma.JsonNull } },
+          { citeMeta: { path: ['mediaAssets', 'hero'], equals: Prisma.JsonNull } },
+          { citeMeta: { path: ['mediaAssets', 'source'], equals: Prisma.JsonNull } }
         ]
       },
       select: {
@@ -150,9 +150,9 @@ export async function GET() {
     const sourcesNeedingHero = await prisma.source.count({
       where: {
         OR: [
-          { citeMeta: { path: ['mediaAssets'], equals: null } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], equals: null } },
-          { citeMeta: { path: ['mediaAssets', 'source'], equals: null } }
+          { citeMeta: { path: ['mediaAssets'], equals: Prisma.JsonNull } },
+          { citeMeta: { path: ['mediaAssets', 'hero'], equals: Prisma.JsonNull } },
+          { citeMeta: { path: ['mediaAssets', 'source'], equals: Prisma.JsonNull } }
         ]
       }
     })
@@ -160,8 +160,8 @@ export async function GET() {
     const sourcesWithHero = await prisma.source.count({
       where: {
         AND: [
-          { citeMeta: { path: ['mediaAssets'], not: null } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], not: null } }
+          { citeMeta: { path: ['mediaAssets'], not: Prisma.JsonNull } },
+          { citeMeta: { path: ['mediaAssets', 'hero'], not: Prisma.JsonNull } }
         ]
       }
     })
