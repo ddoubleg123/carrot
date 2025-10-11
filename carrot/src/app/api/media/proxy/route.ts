@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     } catch (fetchError) {
       clearTimeout(timeoutId)
-      if (fetchError.name === 'AbortError') {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         return NextResponse.json({ error: 'Request timeout' }, { status: 408 })
       }
       throw fetchError
