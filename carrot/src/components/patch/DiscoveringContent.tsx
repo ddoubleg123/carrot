@@ -180,10 +180,12 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
 
   const loadDiscoveredContent = async () => {
     try {
+      console.log('[Discovery] Loading discovered content for patch:', patchHandle);
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
+      console.log('[Discovery] API response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('[Discovery] API response:', data);
+        console.log('[Discovery] API response data:', data);
         
         // Safety check: ensure data.items is an array and transform to unified format
         const rawItems = Array.isArray(data?.items) ? data.items : [];
