@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         console.log(`🎯 Processing source: ${source.title} (${source.url})`)
         
         // Determine content type from citeMeta
-        const type = source.citeMeta?.type || 'article'
+        const type = (source.citeMeta as any)?.type || 'article'
         
         // Resolve hero image using the 4-tier pipeline
         const heroResult = await resolveHero({
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         
         // Update the source's citeMeta with media assets
         const updatedCiteMeta = {
-          ...source.citeMeta,
+          ...(source.citeMeta as any),
           mediaAssets: {
             hero: heroResult.hero,
             blurDataURL: heroResult.blurDataURL,

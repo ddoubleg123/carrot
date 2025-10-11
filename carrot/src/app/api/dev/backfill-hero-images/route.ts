@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         console.log(`🎯 Processing: ${source.title} (${source.url})`)
         
         // Determine content type
-        const type = source.citeMeta?.type || 'article'
+        const type = (source.citeMeta as any)?.type || 'article'
         
         // Resolve hero image using the 4-tier pipeline
         const heroResult = await resolveHero({
