@@ -58,15 +58,35 @@ async function optimizeImage(src: string): Promise<string> {
  */
 async function generateBlurPlaceholder(src: string): Promise<string | undefined> {
   try {
-    // For data URLs, we can process them directly
+    const sharp = await import('sharp').then(m => m.default)
+    
+    let imageBuffer: Buffer
+    
+    // Handle data URLs
     if (src.startsWith('data:')) {
-      return await processDataUrlBlur(src)
+      const base64Data = src.split(',')[1]
+      if (!base64Data) return undefined
+      imageBuffer = Buffer.from(base64Data, 'base64')
+    } 
+    // Handle remote URLs
+    else {
+      const response = await fetch(src, { 
+        signal: AbortSignal.timeout(10000) 
+      })
+      if (!response.ok) return undefined
+      imageBuffer = Buffer.from(await response.arrayBuffer())
     }
     
-    // For remote URLs, we'd need to fetch and process
-    // For now, return undefined - can be implemented with sharp
-    console.log('[generateBlurPlaceholder] Remote URL blur not implemented yet')
-    return undefined
+    // Generate tiny blurred version
+    const blurredBuffer = await sharp(imageBuffer)
+      .resize(8, 8, { fit: 'cover' })
+      .blur(2)
+      .jpeg({ quality: 50 })
+      .toBuffer()
+    
+    const blurBase64 = blurredBuffer.toString('base64')
+    return `data:image/jpeg;base64,${blurBase64}`
+    
   } catch (error) {
     console.warn('[generateBlurPlaceholder] Error:', error)
     return undefined
@@ -74,46 +94,46 @@ async function generateBlurPlaceholder(src: string): Promise<string | undefined>
 }
 
 /**
- * Extract dominant color
+ * Extract dominant color using sharp
  */
 async function extractDominantColor(src: string): Promise<string | undefined> {
   try {
-    // For now, return a default color
-    // In production, this would use color-thief or fast-average-color
-    const defaultColors = {
-      'og': '#667eea',
-      'oembed': '#f093fb', 
-      'inline': '#4facfe',
-      'video': '#f5576c',
-      'pdf': '#43e97b',
-      'image': '#38f9d7',
-      'generated': '#fa709a'
+    const sharp = await import('sharp').then(m => m.default)
+    
+    let imageBuffer: Buffer
+    
+    // Handle data URLs
+    if (src.startsWith('data:')) {
+      const base64Data = src.split(',')[1]
+      if (!base64Data) return undefined
+      imageBuffer = Buffer.from(base64Data, 'base64')
+    } 
+    // Handle remote URLs
+    else {
+      const response = await fetch(src, { 
+        signal: AbortSignal.timeout(10000) 
+      })
+      if (!response.ok) return undefined
+      imageBuffer = Buffer.from(await response.arrayBuffer())
     }
     
-    return defaultColors['generated'] // Default for now
+    // Extract dominant color by getting average color from small resize
+    const { data } = await sharp(imageBuffer)
+      .resize(1, 1, { fit: 'cover' })
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    
+    // Convert RGB to hex
+    const r = data[0]
+    const g = data[1]
+    const b = data[2]
+    const hex = `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`
+    
+    return hex
+    
   } catch (error) {
     console.warn('[extractDominantColor] Error:', error)
-    return undefined
-  }
-}
-
-/**
- * Process data URL to generate blur placeholder
- */
-async function processDataUrlBlur(dataUrl: string): Promise<string | undefined> {
-  try {
-    // Extract base64 data
-    const base64Data = dataUrl.split(',')[1]
-    if (!base64Data) return undefined
-    
-    // Convert to buffer
-    const buffer = Buffer.from(base64Data, 'base64')
-    
-    // For now, return a simple blurred version
-    // In production, this would use sharp to resize and blur
-    return dataUrl // Simplified for now
-  } catch (error) {
-    console.warn('[processDataUrlBlur] Error:', error)
-    return undefined
+    // Return a nice default based on common patterns
+    return '#667eea'
   }
 }
