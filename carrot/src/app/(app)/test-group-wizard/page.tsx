@@ -15,7 +15,7 @@ import {
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
-import DiscoveryList from '@/app/(app)/patch/[handle]/components/DiscoveryList'
+import DiscoveringContent from '@/components/patch/DiscoveringContent'
 
 // Available tags and categories
 const AVAILABLE_TAGS = [
@@ -540,7 +540,7 @@ export default function TestGroupWizardPage() {
                     <div className="space-y-8 px-6 md:px-10">
                       {/* Discovering Content */}
                       <div>
-                        <DiscoveryList patchHandle={createdPatch.handle} />
+                        <DiscoveringContent patchHandle={createdPatch.handle} />
                       </div>
                     </div>
                   )}
