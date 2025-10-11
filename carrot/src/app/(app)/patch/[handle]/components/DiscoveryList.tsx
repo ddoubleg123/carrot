@@ -115,7 +115,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             Refresh
           </Button>
           <Button
-            variant="default"
+            variant="primary"
             size="sm"
             onClick={handleStartDiscovery}
             className="h-8 bg-[#FF6A00] hover:bg-[#E55A00]"

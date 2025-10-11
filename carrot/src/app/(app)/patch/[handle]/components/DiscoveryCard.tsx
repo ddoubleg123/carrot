@@ -196,7 +196,7 @@ export default function DiscoveryCard({ item }: DiscoveryCardProps) {
       {/* Actions */}
       <div className="mt-4 flex items-center gap-2">
         <Button 
-          variant="default" 
+          variant="primary" 
           size="sm" 
           className="h-8 px-3 bg-[#FF6A00] hover:bg-[#E55A00] text-white focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
           onClick={() => window.open(item.url, '_blank')}
