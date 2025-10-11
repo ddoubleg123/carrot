@@ -11,14 +11,13 @@ export async function POST(req: Request) {
   try {
     console.log('🚀 Starting hero image backfill for SOURCES...')
     
-    // Get all sources that don't have mediaAssets in citeMeta
+    // Get recent sources that likely need hero enrichment
     const sources = await prisma.source.findMany({
       where: {
-        OR: [
-          { citeMeta: { path: ['mediaAssets'], equals: Prisma.JsonNull } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], equals: Prisma.JsonNull } },
-          { citeMeta: { path: ['mediaAssets', 'source'], equals: Prisma.JsonNull } }
-        ]
+        // Get sources created in the last 30 days
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        }
       },
       select: {
         id: true,
@@ -149,21 +148,29 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     // Get count of sources that need hero images
-    const totalSources = await prisma.source.count()
+    const totalSources = await prisma.source.count({
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        }
+      }
+    })
     const sourcesNeedingHero = await prisma.source.count({
       where: {
-        OR: [
-          { citeMeta: { path: ['mediaAssets'], equals: Prisma.JsonNull } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], equals: Prisma.JsonNull } },
-          { citeMeta: { path: ['mediaAssets', 'source'], equals: Prisma.JsonNull } }
-        ]
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        }
       }
     })
     
     const sourcesWithHero = await prisma.source.count({
       where: {
         AND: [
-          { citeMeta: { path: ['mediaAssets'], not: Prisma.JsonNull } },
+          {
+            createdAt: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            }
+          },
           { citeMeta: { path: ['mediaAssets', 'hero'], not: Prisma.JsonNull } }
         ]
       }
