@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resolveHero } from '@/lib/media/resolveHero'
 import { MediaAssets } from '@/lib/media/hero-types'
+import { Prisma } from '@prisma/client'
 
 /**
  * Batch enrichment API for backfilling existing content
@@ -20,9 +21,9 @@ export async function POST(request: NextRequest) {
       ...(patchId && { patchId }),
       status,
       OR: [
-        { mediaAssets: { equals: null } },
-        { mediaAssets: { path: ['hero'], equals: null } },
-        { mediaAssets: { path: ['source'], equals: null } }
+        { mediaAssets: { equals: Prisma.JsonNull } },
+        { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
+        { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
       ]
     }
 
@@ -149,9 +150,9 @@ export async function GET(request: NextRequest) {
         where: {
           ...(patchId && { patchId }),
           OR: [
-            { mediaAssets: { equals: null } },
-            { mediaAssets: { path: ['hero'], equals: null } },
-            { mediaAssets: { path: ['source'], equals: null } }
+            { mediaAssets: { equals: Prisma.JsonNull } },
+            { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
+            { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
           ]
         }
       })
