@@ -760,7 +760,7 @@ model DiscoveredContent {
   
   // Enriched content data
   enrichedContent Json?    @map("enriched_content") // { summary150, keyPoints[], notableQuote, fullText?, transcript? }
-  mediaAssets     Json?    @map("media_assets")     // { hero, gallery[], videoThumb?, pdfPreview? }
+  mediaAssets     Json?    @map("media_assets")     // { hero:string, blurDataURL:string, dominant:string, source:'og'|'oembed'|'inline'|'video'|'pdf'|'image'|'generated', license:'source'|'generated', gallery[], videoThumb?, pdfPreview? }
   metadata        Json?    @map("metadata")         // { author, publishDate, source, readingTime, tags[], entities[], citation }
   qualityScore    Float?   @map("quality_score")    // 0-1 quality rating
   freshnessScore  Float?   @map("freshness_score")  // 0-1 freshness rating

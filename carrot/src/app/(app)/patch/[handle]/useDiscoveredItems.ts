@@ -58,7 +58,9 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
       gallery: apiItem.mediaAssets?.gallery || [],
       videoThumb: apiItem.mediaAssets?.videoThumb,
       pdfPreview: apiItem.mediaAssets?.pdfPreview,
-      dominant: apiItem.mediaAssets?.dominant || '#0A5AFF'
+      dominant: apiItem.mediaAssets?.dominant || '#0A5AFF',
+      // Pass through the full mediaAssets for server-processed hero data
+      mediaAssets: apiItem.mediaAssets
     },
     content: {
       summary150: apiItem.enrichedContent?.summary150 || 

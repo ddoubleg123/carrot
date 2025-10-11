@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ExternalLink, Bookmark, Link2, MessageCircle, Calendar, Clock, Globe } from 'lucide-react'
 import { DiscoveredItem } from '@/types/discovered-content'
 import { pickHero } from '@/lib/media/hero'
+import { MediaAssets } from '@/lib/media/hero-types'
 import GeneratedCover from './GeneratedCover'
 
 // Placeholder for when no hero image is available
@@ -57,34 +58,37 @@ function formatDate(dateString?: string): string | null {
 function DiscoveryCard({ item, onAttach, onDiscuss, onSave }: DiscoveryCardProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   
-  // Stable hero source - memoized to prevent re-computation
-  const heroSrc = useMemo(() => pickHero(item), [item.id, item.media])
+  // Extract hero data from server-processed mediaAssets
+  const mediaAssets = item.media?.mediaAssets as MediaAssets | undefined
+  const heroSrc = mediaAssets?.hero
+  const blurDataURL = mediaAssets?.blurDataURL
+  const dominant = mediaAssets?.dominant
+  const source = mediaAssets?.source
 
   return (
     <div className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
       {/* Hero Section - Fixed aspect to prevent layout shift */}
       <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-[#F3F4F6]">
         {/* Always render img element to prevent remounting */}
-        <img
-          src={heroSrc ?? PLACEHOLDER}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-200"
-          style={{ opacity: heroSrc ? 0 : 1 }}
-          onLoad={(e) => {
-            if (heroSrc) {
-              (e.currentTarget as HTMLImageElement).style.opacity = '1'
-            }
-          }}
-        />
-        
-        {/* Generated cover behind the image */}
-        {!heroSrc && (
+        {heroSrc ? (
+          <img
+            src={heroSrc}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover transition-opacity duration-200"
+            style={{
+              backgroundImage: blurDataURL ? `url(${blurDataURL})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          />
+        ) : (
+          /* Generated cover when no hero image available */
           <GeneratedCover 
             domain={item.meta.sourceDomain} 
             type={item.type} 
-            dominant={item.media?.dominant} 
+            dominant={dominant} 
           />
         )}
         
