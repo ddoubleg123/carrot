@@ -155,10 +155,11 @@ export default function TestGroupWizardPage() {
 
       const patch = await patchResponse.json()
       console.log('Created patch:', patch)
-      setCreatedPatch(patch)
+      console.log('Patch handle:', patch.patch?.handle)
+      setCreatedPatch(patch.patch) // Set the actual patch object, not the wrapper
 
       // Step 2: Start content discovery
-      const discoveryResponse = await fetch(`/api/patches/${patch.handle}/start-discovery`, {
+      const discoveryResponse = await fetch(`/api/patches/${patch.patch.handle}/start-discovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
