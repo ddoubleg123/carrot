@@ -115,14 +115,18 @@ export function useDiscoveredItems(
         queryParams.append('timeRange', filters.timeRange)
       }
 
+      console.log('[useDiscoveredItems] Fetching for patch:', patchHandle, 'with filters:', filters)
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${queryParams}`)
+      console.log('[useDiscoveredItems] API response status:', response.status)
       
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('[useDiscoveredItems] API response data:', data)
       const rawItems = Array.isArray(data?.items) ? data.items : []
+      console.log('[useDiscoveredItems] Raw items count:', rawItems.length)
       
       // Map and deduplicate
       const mappedItems = rawItems.map(mapToDiscoveredItem)
