@@ -44,7 +44,15 @@ async function getFaviconUrl(domain: string): Promise<string | null> {
     
     for (const url of faviconUrls) {
       try {
-        const response = await fetch(url, { method: 'HEAD', timeout: 3000 })
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+        
+        const response = await fetch(url, { 
+          method: 'HEAD', 
+          signal: controller.signal 
+        })
+        
+        clearTimeout(timeoutId)
         if (response.ok) return url
       } catch {
         continue
