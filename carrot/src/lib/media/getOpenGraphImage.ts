@@ -26,11 +26,10 @@ export async function getOpenGraphImage(url: string): Promise<OpenGraphResult | 
       return null
     }
 
-    // Priority order: og:image → twitter:image → og:image:secure_url
+    // Priority order: og:image → twitter:image
     const candidates = [
       result.ogImage?.[0]?.url,
-      result.twitterImage?.[0]?.url,
-      result.ogImage?.[0]?.secureUrl
+      result.twitterImage?.[0]?.url
     ].filter(Boolean) as string[]
 
     for (const imageUrl of candidates) {
