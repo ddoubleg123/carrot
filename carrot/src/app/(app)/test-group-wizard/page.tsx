@@ -50,6 +50,58 @@ export default function TestGroupWizardPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [createdPatch, setCreatedPatch] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
+  const [isLoadingAI, setIsLoadingAI] = useState(false)
+  const [availableTags, setAvailableTags] = useState<string[]>(AVAILABLE_TAGS)
+  const [availableCategories, setAvailableCategories] = useState<string[]>(AVAILABLE_CATEGORIES)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  // Load AI-generated tags and categories when moving to step 2
+  useEffect(() => {
+    if (currentStep === 2 && groupName.trim()) {
+      const generateMetadata = async () => {
+        setIsLoadingAI(true)
+        setAiError(null)
+
+        try {
+          const response = await fetch('/api/ai/generate-group-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              groupName: groupName,
+              description: groupDescription
+            }),
+          })
+
+          if (!response.ok) {
+            throw new Error('Failed to generate AI metadata')
+          }
+
+          const result = await response.json()
+          
+          if (result.success && result.metadata) {
+            setAvailableTags(result.metadata.tags || AVAILABLE_TAGS)
+            setAvailableCategories(result.metadata.categories || AVAILABLE_CATEGORIES)
+            console.log('[Test Wizard] AI generated metadata:', result.metadata)
+          } else {
+            throw new Error(result.error || 'Invalid AI response')
+          }
+        } catch (error) {
+          console.error('Failed to generate AI metadata:', error)
+          setAiError(error instanceof Error ? error.message : 'Failed to generate suggestions')
+          
+          // Keep fallback tags
+          setAvailableTags(AVAILABLE_TAGS)
+          setAvailableCategories(AVAILABLE_CATEGORIES)
+        } finally {
+          setIsLoadingAI(false)
+        }
+      }
+
+      generateMetadata()
+    }
+  }, [currentStep, groupName, groupDescription])
 
   const handleContinue = async () => {
     if (currentStep === 2) {
@@ -150,6 +202,10 @@ export default function TestGroupWizardPage() {
     setSaveStatus('idle')
     setIsSaving(false)
     setCreatedPatch(null)
+    setIsLoadingAI(false)
+    setAvailableTags(AVAILABLE_TAGS)
+    setAvailableCategories(AVAILABLE_CATEGORIES)
+    setAiError(null)
   }
 
   const toggleTag = (tag: string) => {
@@ -267,13 +323,28 @@ export default function TestGroupWizardPage() {
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">Choose Topics</h3>
               
+              {/* AI Loading State */}
+              {isLoadingAI && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Customizing your tags for you...
+                </div>
+              )}
+
+              {/* AI Error State */}
+              {aiError && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                  Tag generation failed: {aiError}. Using fallback options.
+                </div>
+              )}
+              
               {/* Tags Section */}
               <div>
                 <h4 className="text-base font-medium text-gray-900 mb-3">
                   Tags — select all that apply
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_TAGS.map((tag) => (
+                  {availableTags.map((tag) => (
                     <Badge
                       key={tag}
                       variant={selectedTags.includes(tag) ? "default" : "outline"}
@@ -296,7 +367,7 @@ export default function TestGroupWizardPage() {
                   Categories — select all that apply
                 </h4>
                 <div className="space-y-2">
-                  {AVAILABLE_CATEGORIES.map((category) => (
+                  {availableCategories.map((category) => (
                     <div key={category} className="flex items-center space-x-2">
                       <Checkbox
                         id={category}
