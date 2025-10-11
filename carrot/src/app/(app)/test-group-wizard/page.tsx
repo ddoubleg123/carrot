@@ -177,10 +177,8 @@ export default function TestGroupWizardPage() {
       setSaveStatus('saved')
       setIsSaving(false)
       
-      // Auto-redirect to the created group after a short delay
-      setTimeout(() => {
-        window.location.href = `/patch/${patch.handle}`
-      }, 2000)
+      // Show success message instead of redirecting
+      console.log('Group created successfully!', patch)
 
     } catch (error) {
       console.error('Error creating group:', error)
@@ -404,74 +402,103 @@ export default function TestGroupWizardPage() {
           {/* Step 3: Review */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold">Review</h3>
-              
-              <div className="space-y-4">
-                <div className="p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium">Group Details</h4>
-                    <Button variant="ghost" size="sm" className="text-orange-500 hover:text-orange-600">
-                      Edit
-                    </Button>
+              {saveStatus === 'saved' ? (
+                <div className="text-center space-y-4">
+                  <div className="flex justify-center">
+                    <CheckCircle className="w-16 h-16 text-green-500" />
                   </div>
-                  <p className="text-sm text-gray-600">{groupName}</p>
-                  <p className="text-sm text-gray-600">{groupDescription}</p>
+                  <h3 className="text-2xl font-bold text-green-700">Group Created Successfully!</h3>
+                  <p className="text-gray-600">Your group "{groupName}" has been created and content discovery has been started.</p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium text-green-800 mb-2">What's Next?</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                      <li>• AI is discovering relevant content for your group</li>
+                      <li>• Check the group page to see discovered content</li>
+                      <li>• Invite members to join your group</li>
+                    </ul>
+                  </div>
+                  <Button 
+                    onClick={resetWizard}
+                    variant="outline"
+                    className="mt-4"
+                  >
+                    Create Another Group
+                  </Button>
                 </div>
+              ) : (
+                <>
+                  <h3 className="text-lg font-semibold">Review</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium">Group Details</h4>
+                        <Button variant="ghost" size="sm" className="text-orange-500 hover:text-orange-600">
+                          Edit
+                        </Button>
+                      </div>
+                      <p className="text-sm text-gray-600">{groupName}</p>
+                      <p className="text-sm text-gray-600">{groupDescription}</p>
+                    </div>
 
-                <div className="p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium">Tags & Categories</h4>
-                    <Button variant="ghost" size="sm" className="text-orange-500 hover:text-orange-600">
-                      Edit
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1">
-                      {selectedTags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium">Tags & Categories</h4>
+                        <Button variant="ghost" size="sm" className="text-orange-500 hover:text-orange-600">
+                          Edit
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          {selectedTags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Categories: {selectedCategories.join(', ')}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      Categories: {selectedCategories.join(', ')}
-                    </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           )}
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-between pt-6 border-t">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={currentStep === 1}
-              className="flex items-center gap-2"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Back
-            </Button>
-            
-            <Button
-              onClick={handleContinue}
-              disabled={currentStep === 1 && (!groupName || !groupDescription)}
-              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600"
-            >
-              {currentStep === 3 ? (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  Create Group
-                </>
-              ) : (
-                <>
-                  Continue
-                  <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-          </div>
+          {!(currentStep === 3 && saveStatus === 'saved') && (
+            <div className="flex items-center justify-between pt-6 border-t">
+              <Button
+                variant="outline"
+                onClick={handleBack}
+                disabled={currentStep === 1}
+                className="flex items-center gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </Button>
+              
+              <Button
+                onClick={handleContinue}
+                disabled={currentStep === 1 && (!groupName || !groupDescription)}
+                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600"
+              >
+                {currentStep === 3 ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Create Group
+                  </>
+                ) : (
+                  <>
+                    Continue
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
