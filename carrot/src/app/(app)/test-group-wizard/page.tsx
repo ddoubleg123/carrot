@@ -159,6 +159,7 @@ export default function TestGroupWizardPage() {
       setCreatedPatch(patch.patch) // Set the actual patch object, not the wrapper
 
       // Step 2: Start content discovery
+      console.log('[Test Wizard] Starting discovery for patch:', patch.patch.handle)
       const discoveryResponse = await fetch(`/api/patches/${patch.patch.handle}/start-discovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,12 +168,17 @@ export default function TestGroupWizardPage() {
         })
       })
 
+      console.log('[Test Wizard] Discovery response status:', discoveryResponse.status)
+      
       if (!discoveryResponse.ok) {
-        console.warn('Discovery start failed:', discoveryResponse.status)
-        // Continue anyway - discovery might start later
+        const errorText = await discoveryResponse.text()
+        console.error('[Test Wizard] Discovery start failed:', discoveryResponse.status, errorText)
+        setSaveStatus('error')
+        setIsSaving(false)
+        return
       } else {
         const discoveryResult = await discoveryResponse.json()
-        console.log('Started discovery:', discoveryResult)
+        console.log('[Test Wizard] Started discovery:', discoveryResult)
         
         // Trigger a refetch of discovered content after discovery starts
         // This will help pick up items that were just saved
@@ -191,11 +197,16 @@ export default function TestGroupWizardPage() {
       // Show success message instead of redirecting
       console.log('Group created successfully!', patch)
 
-    } catch (error) {
-      console.error('Error creating group:', error)
-      setSaveStatus('error')
-      setIsSaving(false)
-    }
+      } catch (error) {
+        console.error('Error creating group:', error)
+        setSaveStatus('error')
+        setIsSaving(false)
+        
+        // Check if it's a network error during discovery
+        if (error instanceof Error && error.message.includes('fetch')) {
+          console.error('[Test Wizard] Network error during discovery:', error.message)
+        }
+      }
   }
 
   const handleBack = () => {
