@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface Filters {
@@ -144,11 +144,12 @@ export function useDiscoveredItems(
     fetchItems()
   }, [fetchItems])
 
-  return {
+  // Memoize return value to prevent unnecessary re-renders
+  return useMemo(() => ({
     items,
     isLoading,
     error,
     refetch
-  }
+  }), [items, isLoading, error, refetch])
 }
 

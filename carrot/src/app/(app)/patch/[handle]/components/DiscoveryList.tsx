@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Clock, Search } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import { useDiscoveredItems } from '../useDiscoveredItems'
+import { pickHero } from '@/lib/media/hero'
 
 interface DiscoveryListProps {
   patchHandle: string
@@ -47,6 +48,27 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
     timeRange,
     status: 'all'
   })
+
+  // Preload first 2 hero images for faster loading
+  useEffect(() => {
+    const preloadImages = items.slice(0, 2).map(item => {
+      const heroSrc = pickHero(item)
+      return heroSrc
+    }).filter(Boolean)
+
+    preloadImages.forEach(src => {
+      const link = document.createElement('link')
+      link.rel = 'preload'
+      link.as = 'image'
+      link.href = src as string
+      document.head.appendChild(link)
+      
+      // Clean up after preload
+      setTimeout(() => {
+        document.head.removeChild(link)
+      }, 1000)
+    })
+  }, [items])
 
   return (
     <div className="space-y-6">
@@ -129,14 +151,14 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       {isLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {Array.from({ length: 6 }).map((_, index) => (
-            <DiscoveryCardSkeleton key={index} />
+            <DiscoveryCardSkeleton key={`skeleton-${index}`} />
           ))}
         </div>
       ) : items.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-live="polite">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <DiscoveryCard 
-              key={item.id} 
+              key={item.canonicalUrl ?? item.id} 
               item={item}
               onAttach={(mode) => console.log('Attach', mode, item.id)}
               onDiscuss={() => console.log('Discuss', item.id)}

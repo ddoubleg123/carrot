@@ -1,11 +1,14 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { ExternalLink, Bookmark, Link2, MessageCircle, Calendar, Clock, Globe } from 'lucide-react'
 import { DiscoveredItem } from '@/types/discovered-content'
 import { pickHero } from '@/lib/media/hero'
 import GeneratedCover from './GeneratedCover'
+
+// Placeholder for when no hero image is available
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSIjRjNGNEY2Ii8+Cjwvc3ZnPgo='
 
 interface DiscoveryCardProps {
   item: DiscoveredItem
@@ -51,24 +54,33 @@ function formatDate(dateString?: string): string | null {
   }
 }
 
-export default function DiscoveryCard({ item, onAttach, onDiscuss, onSave }: DiscoveryCardProps) {
+function DiscoveryCard({ item, onAttach, onDiscuss, onSave }: DiscoveryCardProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   
-  const realHero = pickHero(item)
+  // Stable hero source - memoized to prevent re-computation
+  const heroSrc = useMemo(() => pickHero(item), [item.id, item.media])
 
   return (
     <div className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
-      {/* Hero Section */}
-      <div className="relative aspect-[16/9] overflow-hidden rounded-xl">
-        {realHero ? (
-          <img 
-            src={realHero} 
-            alt="" 
-            loading="lazy" 
-            decoding="async" 
-            className="h-full w-full object-cover" 
-          />
-        ) : (
+      {/* Hero Section - Fixed aspect to prevent layout shift */}
+      <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-[#F3F4F6]">
+        {/* Always render img element to prevent remounting */}
+        <img
+          src={heroSrc ?? PLACEHOLDER}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-200"
+          style={{ opacity: heroSrc ? 0 : 1 }}
+          onLoad={(e) => {
+            if (heroSrc) {
+              (e.currentTarget as HTMLImageElement).style.opacity = '1'
+            }
+          }}
+        />
+        
+        {/* Generated cover behind the image */}
+        {!heroSrc && (
           <GeneratedCover 
             domain={item.meta.sourceDomain} 
             type={item.type} 
@@ -245,4 +257,7 @@ export default function DiscoveryCard({ item, onAttach, onDiscuss, onSave }: Dis
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export default memo(DiscoveryCard)
 
