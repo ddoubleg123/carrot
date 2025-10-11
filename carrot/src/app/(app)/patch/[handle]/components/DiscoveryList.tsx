@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Filter, SortAsc, Clock, Search } from 'lucide-react'
+import { Filter, SortAsc, Search, RefreshCw } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import { useDiscoveredItems } from '../useDiscoveredItems'
-import { pickHero } from '@/lib/media/hero'
 
 interface DiscoveryListProps {
   patchHandle: string
@@ -43,81 +42,103 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
 
   // Memoize filters to prevent unnecessary re-fetches
-  const filters = useMemo(() => ({
+  const filters = React.useMemo(() => ({
     type: filterType,
     sort: sortBy,
     timeRange,
     status: 'all' as const
   }), [filterType, sortBy, timeRange])
 
-  const { items, isLoading, error } = useDiscoveredItems(patchHandle, filters)
+  const { items, isLoading, error, refetch } = useDiscoveredItems(patchHandle, filters)
 
-  // Memoize stable handlers to prevent re-renders
-  const handleAttach = useCallback((mode: 'timeline' | 'fact' | 'source', itemId: string) => {
-    console.log('Attach', mode, itemId)
-  }, [])
-
-  const handleDiscuss = useCallback((itemId: string) => {
-    console.log('Discuss', itemId)
-  }, [])
-
-  const handleSave = useCallback((itemId: string) => {
-    console.log('Save', itemId)
-  }, [])
-
-  // Preload first 2 hero images only when items first load (not on every change)
-  const preloadedItems = useMemo(() => items.slice(0, 2), [items])
-  useEffect(() => {
-    if (preloadedItems.length === 0) return
-
-    const preloadImages = preloadedItems.map(item => pickHero(item)).filter(Boolean)
-    
-    preloadImages.forEach(src => {
-      const link = document.createElement('link')
-      link.rel = 'preload'
-      link.as = 'image'
-      link.href = src as string
-      document.head.appendChild(link)
-      
-      // Clean up after preload
-      setTimeout(() => {
-        try {
-          document.head.removeChild(link)
-        } catch (e) {
-          // Link might already be removed
-        }
-      }, 2000)
+  // Deduplicate items by canonicalUrl before rendering
+  const deduplicatedItems = React.useMemo(() => {
+    const seen = new Set<string>()
+    return items.filter(item => {
+      const key = item.canonicalUrl || `${item.meta.sourceDomain}|${item.title}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
     })
-  }, [preloadedItems.length]) // Only run when number of items changes
+  }, [items])
+
+  const handleRefresh = () => {
+    refetch()
+  }
+
+  const handleStartDiscovery = async () => {
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'start_deepseek_search'
+        })
+      })
+
+      if (response.ok) {
+        console.log('[DiscoveryList] Discovery started successfully')
+        // Trigger refetch after a delay to pick up new content
+        setTimeout(() => {
+          refetch()
+        }, 3000)
+      } else {
+        console.error('[DiscoveryList] Failed to start discovery:', response.status)
+      }
+    } catch (error) {
+      console.error('[DiscoveryList] Error starting discovery:', error)
+    }
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900">Discovering content</h2>
-          <Badge className="bg-orange-500 text-white">LIVE</Badge>
-          <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+          <h2 className="text-2xl font-bold text-[#0B0B0F]">Discovering content</h2>
+          <Badge variant="secondary" className="bg-[#FF6A00] text-white">
+            <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse" />
+            LIVE
+          </Badge>
         </div>
-        <div className="text-sm text-gray-500" aria-live="polite">
-          {items.length} items
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="h-8"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleStartDiscovery}
+            className="h-8 bg-[#FF6A00] hover:bg-[#E55A00]"
+          >
+            Start Content Discovery
+          </Button>
         </div>
       </div>
 
       {/* Subtext */}
-      <p className="text-gray-600">
-        We're actively finding posts, videos, and drills that match this group. New items will appear here.
+      <p className="text-slate-600 text-sm">
+        We're actively finding posts, videos, and resources that match this group. New items will appear here.
       </p>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Type Filter */}
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
+          <Filter className="h-4 w-4 text-slate-500" />
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as any)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
           >
             <option value="all">All Types</option>
             <option value="article">Articles</option>
@@ -127,76 +148,98 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             <option value="text">Text</option>
           </select>
         </div>
-        
-        {/* Sort */}
+
+        {/* Sort Filter */}
         <div className="flex items-center gap-2">
-          <SortAsc className="w-4 h-4 text-gray-500" />
+          <SortAsc className="h-4 w-4 text-slate-500" />
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
           >
             <option value="top">Top</option>
             <option value="new">New</option>
           </select>
         </div>
 
-        {/* Time Range */}
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-gray-500" />
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as any)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-          >
-            <option value="7d">7d</option>
-            <option value="30d">30d</option>
-            <option value="all">All</option>
-          </select>
-        </div>
+        {/* Time Range Filter */}
+        <select
+          value={timeRange}
+          onChange={(e) => setTimeRange(e.target.value as any)}
+          className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+        >
+          <option value="7d">7d</option>
+          <option value="30d">30d</option>
+          <option value="all">All</option>
+        </select>
 
-        <div className="text-sm text-gray-500 ml-auto">
-          {items.length} items • filtered
+        {/* Results Count */}
+        <div className="text-sm text-slate-600">
+          {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
+          {deduplicatedItems.length > 0 && (
+            <span className="text-slate-400 ml-1">• filtered</span>
+          )}
         </div>
       </div>
 
       {/* Error State */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="flex items-center gap-2 text-red-700">
+            <div className="h-2 w-2 rounded-full bg-red-500" />
+            <span className="text-sm font-medium">Error loading content</span>
+          </div>
+          <p className="mt-1 text-sm text-red-600">{error}</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh}
+            className="mt-2 h-8 text-red-600 border-red-200 hover:bg-red-100"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && deduplicatedItems.length === 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <DiscoveryCardSkeleton key={i} />
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && !error && deduplicatedItems.length === 0 && (
+        <div className="text-center py-12">
+          <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-slate-900 mb-2">No items yet</h3>
+          <p className="text-slate-600 mb-4">Expand the range to see more content.</p>
+          <Button
+            variant="outline"
+            onClick={handleStartDiscovery}
+            className="border-[#E6E8EC] hover:bg-slate-50"
+          >
+            Connect sources
+          </Button>
         </div>
       )}
 
       {/* Content Grid */}
-      {isLoading ? (
+      {!isLoading && deduplicatedItems.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <DiscoveryCardSkeleton key={`skeleton-${index}`} />
-          ))}
-        </div>
-      ) : items.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-live="polite">
-          {items.map((item) => (
+          {deduplicatedItems.map((item) => (
             <DiscoveryCard 
-              key={item.canonicalUrl ?? item.id} 
-              item={item}
-              onAttach={(mode) => handleAttach(mode, item.id)}
-              onDiscuss={() => handleDiscuss(item.id)}
-              onSave={() => handleSave(item.id)}
+              key={item.canonicalUrl || item.id} 
+              item={item} 
             />
           ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No items yet</h3>
-          <p className="text-gray-500 mb-4">Expand the range to see more content.</p>
-          <Button variant="outline">Connect sources</Button>
         </div>
       )}
     </div>
   )
 }
 
-export default React.memo(DiscoveryList)
-
+export default DiscoveryList

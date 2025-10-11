@@ -7,12 +7,14 @@ export type DiscoveredItem = {
   matchPct?: number;          // 0..1
   status: 'queued'|'fetching'|'enriching'|'pending_audit'|'ready'|'failed';
   media: {
-    hero: string | null;      // OG image or generated cover
+    hero?: string;            // proxied WebP/AVIF 1280w
     gallery?: string[];       // max 4
     videoThumb?: string;
     pdfPreview?: string;
+    blurDataURL?: string;     // tiny blur placeholder
     dominant?: string;        // hex of dominant color (optional)
-    mediaAssets?: any;        // Server-processed hero data with blur, source, etc.
+    source?: 'og'|'oembed'|'inline'|'video'|'pdf'|'image'|'generated';
+    license?: 'source'|'generated';
   };
   content: {
     summary150: string;       // 120–180 chars

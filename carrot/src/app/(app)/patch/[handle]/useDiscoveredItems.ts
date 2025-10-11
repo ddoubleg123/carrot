@@ -54,14 +54,17 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
             apiItem.status === 'requires_review' ? 'pending_audit' : 
             (apiItem.status as any) || 'ready',
     media: {
-      hero: apiItem.mediaAssets?.hero || apiItem.enrichedContent?.hero || null,
+      hero: apiItem.mediaAssets?.hero || 
+            apiItem.enrichedContent?.hero || 
+            undefined,
+      blurDataURL: apiItem.mediaAssets?.blurDataURL,
+      dominant: apiItem.mediaAssets?.dominant,
+      source: apiItem.mediaAssets?.source,
+      license: apiItem.mediaAssets?.license,
       gallery: apiItem.mediaAssets?.gallery || [],
       videoThumb: apiItem.mediaAssets?.videoThumb,
-      pdfPreview: apiItem.mediaAssets?.pdfPreview,
-      dominant: apiItem.mediaAssets?.dominant || '#0A5AFF',
-      // Pass through the full mediaAssets for server-processed hero data
-      mediaAssets: apiItem.mediaAssets
-    },
+      pdfPreview: apiItem.mediaAssets?.pdfPreview
+    } as any, // Temporary type assertion for compatibility
     content: {
       summary150: apiItem.enrichedContent?.summary150 || 
                   apiItem.description || 
@@ -77,7 +80,6 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     },
     meta: {
       sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl),
-      favicon: apiItem.metadata?.favicon,
       author: apiItem.metadata?.author || 
               apiItem.author || 
               apiItem.enrichedContent?.author,
@@ -139,22 +141,9 @@ export function useDiscoveredItems(
       const mappedItems = rawItems.map(mapToDiscoveredItem)
       const dedupedItems = deduplicateItems(mappedItems)
       
-      // Only update if items actually changed (prevent unnecessary re-renders)
-      setItems(prevItems => {
-        if (prevItems.length !== dedupedItems.length) {
-          return dedupedItems
-        }
-        
-        // Check if items are actually different
-        const prevKeys = new Set(prevItems.map(item => item.canonicalUrl ?? item.id))
-        const newKeys = new Set(dedupedItems.map(item => item.canonicalUrl ?? item.id))
-        
-        if (prevKeys.size !== newKeys.size || ![...prevKeys].every(key => newKeys.has(key))) {
-          return dedupedItems
-        }
-        
-        return prevItems // No change, keep existing reference
-      })
+      setItems(dedupedItems)
+      console.log('[useDiscoveredItems] Final items count:', dedupedItems.length)
+      
     } catch (err) {
       console.error('[useDiscoveredItems] Error:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch items')
@@ -162,7 +151,7 @@ export function useDiscoveredItems(
     } finally {
       setIsLoading(false)
     }
-  }, [patchHandle, filters])
+  }, [patchHandle, filters.status, filters.type, filters.sort, filters.timeRange])
 
   const refetch = useCallback(() => {
     fetchItems()
@@ -195,4 +184,3 @@ export function useDiscoveredItems(
     refetch
   }), [items, isLoading, error, refetch])
 }
-

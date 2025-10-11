@@ -1,50 +1,102 @@
-import { Globe, FileText, Play, FileText as Pdf } from 'lucide-react'
+'use client'
 
-type Props = { 
+import React, { useMemo } from 'react'
+
+interface GeneratedCoverProps {
   domain: string
   type: 'article' | 'video' | 'pdf' | 'image' | 'text'
-  dominant?: string 
+  dominant?: string
+  className?: string
 }
 
-const iconMap = { 
-  article: FileText, 
-  video: Play, 
-  pdf: Pdf, 
-  image: FileText, 
-  text: FileText 
+const TYPE_ICONS = {
+  article: '📄',
+  video: '🎥',
+  pdf: '📋',
+  image: '🖼️',
+  text: '📝'
 }
 
-/**
- * Tasteful generated cover with NO LETTERS.
- * Uses gradients, subtle patterns, and small icons only.
- */
-export default function GeneratedCover({ domain, type, dominant = '#0A5AFF' }: Props) {
-  const Icon = iconMap[type] ?? FileText
+const TYPE_COLORS = {
+  article: '#3B82F6',
+  video: '#EF4444',
+  pdf: '#F59E0B',
+  image: '#10B981',
+  text: '#8B5CF6'
+}
+
+export default function GeneratedCover({ 
+  domain, 
+  type, 
+  dominant = '#667eea',
+  className = ''
+}: GeneratedCoverProps) {
+  
+  const svgContent = useMemo(() => {
+    // Convert hex to RGB for gradients
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 102, g: 126, b: 234 }
+    }
+    
+    const rgb = hexToRgb(dominant)
+    const darkerRgb = {
+      r: Math.max(0, rgb.r - 40),
+      g: Math.max(0, rgb.g - 40),
+      b: Math.max(0, rgb.b - 40)
+    }
+    
+    const icon = TYPE_ICONS[type]
+    const iconColor = TYPE_COLORS[type]
+    
+    // Clean domain for display
+    const displayDomain = domain.replace('www.', '').split('.')[0]
+    
+    return `
+      <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:rgb(${rgb.r},${rgb.g},${rgb.b});stop-opacity:1" />
+            <stop offset="100%" style="stop-color:rgb(${darkerRgb.r},${darkerRgb.g},${darkerRgb.b});stop-opacity:1" />
+          </linearGradient>
+          <pattern id="dots" patternUnits="userSpaceOnUse" width="40" height="40">
+            <circle cx="20" cy="20" r="1" fill="white" opacity="0.1"/>
+          </pattern>
+        </defs>
+        
+        <!-- Background gradient -->
+        <rect width="100%" height="100%" fill="url(#grad)" />
+        
+        <!-- Subtle dot pattern -->
+        <rect width="100%" height="100%" fill="url(#dots)" />
+        
+        <!-- Type icon (top left) -->
+        <text x="60" y="80" font-size="32" fill="white" opacity="0.3" font-family="system-ui">
+          ${icon}
+        </text>
+        
+        <!-- Domain chip (bottom left) -->
+        <rect x="60" y="600" rx="12" ry="12" width="120" height="24" fill="rgba(255,255,255,0.15)" />
+        <text x="120" y="616" font-size="12" fill="white" text-anchor="middle" font-family="system-ui" font-weight="500">
+          ${displayDomain}
+        </text>
+        
+        <!-- Subtle geometric pattern -->
+        <circle cx="1100" cy="150" r="80" fill="rgba(255,255,255,0.05)" />
+        <circle cx="1200" cy="300" r="60" fill="rgba(255,255,255,0.03)" />
+        <rect x="1000" y="500" width="120" height="120" rx="20" fill="rgba(255,255,255,0.04)" transform="rotate(15 1060 560)" />
+      </svg>
+    `
+  }, [domain, type, dominant])
   
   return (
-    <div className="h-full w-full relative rounded-xl overflow-hidden">
-      {/* Gradient background with subtle overlay pattern */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            `linear-gradient(135deg, ${dominant}, #0B0B0F 85%), radial-gradient(1200px 600px at 0% 100%, rgba(255,255,255,0.06), transparent)`,
-          backgroundBlendMode: 'overlay, normal'
-        }}
-      />
-      
-      {/* Type badge - top left */}
-      <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/12 backdrop-blur px-2.5 py-1 text-white text-xs">
-        <Icon className="h-3.5 w-3.5" />
-        <span className="capitalize">{type}</span>
-      </div>
-      
-      {/* Domain chip - bottom left */}
-      <div className="absolute left-3 bottom-3 inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-1 text-[12px] text-slate-800">
-        <Globe className="h-3.5 w-3.5 text-slate-600" />
-        <span className="font-medium">{domain}</span>
-      </div>
-    </div>
+    <div 
+      className={`absolute inset-0 flex items-center justify-center ${className}`}
+      style={{ backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svgContent)}")` }}
+    />
   )
 }
-
