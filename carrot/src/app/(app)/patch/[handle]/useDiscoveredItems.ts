@@ -35,13 +35,23 @@ function deduplicateItems(items: DiscoveredItem[]): DiscoveredItem[] {
  */
 function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
   const getDomain = (url?: string) => {
-    if (!url) return 'unknown'
+    if (!url) return 'carrot.app' // Default fallback
     try {
       return new URL(url).hostname.replace('www.', '')
     } catch {
-      return 'unknown'
+      return 'carrot.app' // Default fallback
     }
   }
+
+  // Debug logging
+  console.log('[mapToDiscoveredItem] Processing item:', {
+    id: apiItem.id,
+    title: apiItem.title,
+    url: apiItem.url,
+    sourceUrl: apiItem.sourceUrl,
+    mediaAssets: apiItem.mediaAssets,
+    type: apiItem.type
+  })
 
   return {
     id: apiItem.id || `item-${Math.random()}`,
