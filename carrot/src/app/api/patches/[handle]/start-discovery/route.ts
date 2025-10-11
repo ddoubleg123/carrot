@@ -190,6 +190,32 @@ export async function POST(
           }
         });
 
+        // Trigger hero enrichment for this item
+        try {
+          console.log('[Start Discovery] Triggering hero enrichment for:', source.url);
+          
+          // Call the hero enrichment API
+          const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/internal/enrich/${source.id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: source.url,
+              type: (source.citeMeta as any)?.type || 'article'
+            })
+          });
+          
+          if (enrichResponse.ok) {
+            console.log('[Start Discovery] Hero enrichment successful for:', source.id);
+          } else {
+            console.warn('[Start Discovery] Hero enrichment failed for:', source.id, enrichResponse.status);
+          }
+        } catch (enrichError) {
+          console.warn('[Start Discovery] Hero enrichment error for:', source.id, enrichError);
+          // Don't fail the whole discovery if hero enrichment fails
+        }
+
         savedItems.push({
           id: source.id,
           title: source.title,
