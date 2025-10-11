@@ -74,7 +74,7 @@ export async function POST(
       await prisma.discoveredContent.update({
         where: { id },
         data: { 
-          mediaAssets: updatedMediaAssets,
+          mediaAssets: updatedMediaAssets as any, // Cast to satisfy Prisma JSON type
           status: 'ready'
         }
       })
