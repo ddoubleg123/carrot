@@ -221,16 +221,16 @@ export default function TestGroupWizardPage() {
   // Mock patch data for the group page structure
   const mockPatch = {
     id: 'test-patch',
-    handle: 'houston-oilers',
-    name: groupName,
-    description: groupDescription,
+    handle: createdPatch?.handle || 'new-group',
+    name: groupName || 'New Group',
+    description: groupDescription || 'A new group',
     tags: selectedTags,
     colorScheme: 'orange',
     _count: {
       members: 1,
       posts: 0,
       events: 0,
-      sources: 34
+      sources: createdPatch ? 0 : 34 // Start with 0 sources for new groups
     }
   }
 
@@ -502,60 +502,71 @@ export default function TestGroupWizardPage() {
         </CardContent>
       </Card>
 
-      {/* Group Page Structure */}
-      <div className="space-y-8">
-        {/* Patch Header */}
-        <PatchHeader patch={mockPatch as any} />
+      {/* Group Page Structure - Only show after group is created */}
+      {createdPatch ? (
+        <div className="space-y-8">
+          {/* Patch Header */}
+          <PatchHeader patch={mockPatch as any} />
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
-            {/* Main Content Area */}
-            <div className="max-w-[880px]">
-              <PatchTabs activeTab={activeTab} patch={mockPatch as any}>
-                {activeTab === 'overview' && (
-                  <div className="space-y-8 px-6 md:px-10">
-                    {/* Discovering Content */}
-                    <div>
-                      <DiscoveryList patchHandle={mockPatch.handle} />
+          {/* Main Content */}
+          <div className="max-w-7xl mx-auto px-6 md:px-10">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
+              {/* Main Content Area */}
+              <div className="max-w-[880px]">
+                <PatchTabs activeTab={activeTab} patch={mockPatch as any}>
+                  {activeTab === 'overview' && (
+                    <div className="space-y-8 px-6 md:px-10">
+                      {/* Discovering Content */}
+                      <div>
+                        <DiscoveryList patchHandle={createdPatch.handle} />
+                      </div>
                     </div>
-                  </div>
-                )}
-                {activeTab === 'documents' && (
-                  <div className="p-6 text-center text-gray-500">
-                    Documents view would go here
-                  </div>
-                )}
-                {activeTab === 'timeline' && (
-                  <div className="p-6 text-center text-gray-500">
-                    Timeline view would go here
-                  </div>
-                )}
-                {activeTab === 'sources' && (
-                  <div className="p-6 text-center text-gray-500">
-                    Sources view would go here
-                  </div>
-                )}
-                {activeTab === 'discussions' && (
-                  <div className="p-6 text-center text-gray-500">
-                    Discussions view would go here
-                  </div>
-                )}
-              </PatchTabs>
-            </div>
+                  )}
+                  {activeTab === 'documents' && (
+                    <div className="p-6 text-center text-gray-500">
+                      Documents view would go here
+                    </div>
+                  )}
+                  {activeTab === 'timeline' && (
+                    <div className="p-6 text-center text-gray-500">
+                      Timeline view would go here
+                    </div>
+                  )}
+                  {activeTab === 'sources' && (
+                    <div className="p-6 text-center text-gray-500">
+                      Sources view would go here
+                    </div>
+                  )}
+                  {activeTab === 'discussions' && (
+                    <div className="p-6 text-center text-gray-500">
+                      Discussions view would go here
+                    </div>
+                  )}
+                </PatchTabs>
+              </div>
 
-            {/* Right Rail */}
-            <div className="w-[320px] shrink-0">
-              <RightRail
-                patch={mockPatch as any}
-                followers={mockFollowers as any}
-                botSubscriptions={mockBotSubscriptions as any}
-                followerCount={mockFollowers.length}
-              />
+              {/* Right Rail */}
+              <div className="w-[320px] shrink-0">
+                <RightRail
+                  patch={mockPatch as any}
+                  followers={mockFollowers as any}
+                  botSubscriptions={mockBotSubscriptions as any}
+                  followerCount={mockFollowers.length}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-gray-50 rounded-lg p-8 text-center">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Group Preview
+          </h3>
+          <p className="text-gray-600">
+            Complete the wizard above to see your group page and content discovery in action.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
