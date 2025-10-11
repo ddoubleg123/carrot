@@ -9,8 +9,10 @@ export async function GET(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
+    console.log('[Discovered Content] ===== API CALLED =====');
     const t0 = Date.now();
     const { handle } = await params;
+    console.log('[Discovered Content] Fetching content for patch handle:', handle);
 
     // Find the patch by handle
     const t1 = Date.now();
@@ -47,6 +49,9 @@ export async function GET(
       sources: sources.map(s => ({ id: s.id, title: s.title, url: s.url })),
       discoveredContent: discoveredContentData.map(d => ({ id: d.id, title: d.title, sourceUrl: d.sourceUrl }))
     });
+
+    console.log('[Discovered Content] Raw sources data:', sources);
+    console.log('[Discovered Content] Raw discoveredContent data:', discoveredContentData);
 
     // Transform sources to discovered content format
     const sourceItems = sources.map(source => ({
