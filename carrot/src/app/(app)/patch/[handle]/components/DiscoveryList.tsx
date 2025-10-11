@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Filter, SortAsc, Search } from 'lucide-react'
+import { Filter, SortAsc, Search, RefreshCw } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import DiscoveryHeader from './DiscoveryHeader'
 import ContentModal from './ContentModal'
