@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       ...(patchId && { patchId }),
       status,
       OR: [
-        { mediaAssets: null },
+        { mediaAssets: { equals: null } },
         { mediaAssets: { path: ['hero'], equals: null } },
         { mediaAssets: { path: ['source'], equals: null } }
       ]
@@ -147,9 +147,9 @@ export async function GET(request: NextRequest) {
       prisma.discoveredContent.count({ where: { ...whereClause, status: 'failed' } }),
       prisma.discoveredContent.count({
         where: {
-          ...whereClause,
+          ...(patchId && { patchId }),
           OR: [
-            { mediaAssets: null },
+            { mediaAssets: { equals: null } },
             { mediaAssets: { path: ['hero'], equals: null } },
             { mediaAssets: { path: ['source'], equals: null } }
           ]
