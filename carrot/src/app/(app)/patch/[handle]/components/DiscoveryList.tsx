@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Clock, Search } from 'lucide-react'
@@ -37,25 +37,41 @@ function DiscoveryCardSkeleton() {
   )
 }
 
-export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
+function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'image' | 'text'>('all')
   const [sortBy, setSortBy] = useState<'top' | 'new'>('top')
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
 
-  const { items, isLoading, error } = useDiscoveredItems(patchHandle, {
+  // Memoize filters to prevent unnecessary re-fetches
+  const filters = useMemo(() => ({
     type: filterType,
     sort: sortBy,
     timeRange,
-    status: 'all'
-  })
+    status: 'all' as const
+  }), [filterType, sortBy, timeRange])
 
-  // Preload first 2 hero images for faster loading
+  const { items, isLoading, error } = useDiscoveredItems(patchHandle, filters)
+
+  // Memoize stable handlers to prevent re-renders
+  const handleAttach = useCallback((mode: 'timeline' | 'fact' | 'source', itemId: string) => {
+    console.log('Attach', mode, itemId)
+  }, [])
+
+  const handleDiscuss = useCallback((itemId: string) => {
+    console.log('Discuss', itemId)
+  }, [])
+
+  const handleSave = useCallback((itemId: string) => {
+    console.log('Save', itemId)
+  }, [])
+
+  // Preload first 2 hero images only when items first load (not on every change)
+  const preloadedItems = useMemo(() => items.slice(0, 2), [items])
   useEffect(() => {
-    const preloadImages = items.slice(0, 2).map(item => {
-      const heroSrc = pickHero(item)
-      return heroSrc
-    }).filter(Boolean)
+    if (preloadedItems.length === 0) return
 
+    const preloadImages = preloadedItems.map(item => pickHero(item)).filter(Boolean)
+    
     preloadImages.forEach(src => {
       const link = document.createElement('link')
       link.rel = 'preload'
@@ -65,10 +81,14 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       
       // Clean up after preload
       setTimeout(() => {
-        document.head.removeChild(link)
-      }, 1000)
+        try {
+          document.head.removeChild(link)
+        } catch (e) {
+          // Link might already be removed
+        }
+      }, 2000)
     })
-  }, [items])
+  }, [preloadedItems.length]) // Only run when number of items changes
 
   return (
     <div className="space-y-6">
@@ -156,13 +176,13 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       ) : items.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-live="polite">
-          {items.map((item, index) => (
+          {items.map((item) => (
             <DiscoveryCard 
               key={item.canonicalUrl ?? item.id} 
               item={item}
-              onAttach={(mode) => console.log('Attach', mode, item.id)}
-              onDiscuss={() => console.log('Discuss', item.id)}
-              onSave={() => console.log('Save', item.id)}
+              onAttach={(mode) => handleAttach(mode, item.id)}
+              onDiscuss={() => handleDiscuss(item.id)}
+              onSave={() => handleSave(item.id)}
             />
           ))}
         </div>
@@ -177,4 +197,6 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
     </div>
   )
 }
+
+export default React.memo(DiscoveryList)
 

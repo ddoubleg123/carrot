@@ -126,7 +126,22 @@ export function useDiscoveredItems(
       const mappedItems = rawItems.map(mapToDiscoveredItem)
       const dedupedItems = deduplicateItems(mappedItems)
       
-      setItems(dedupedItems)
+      // Only update if items actually changed (prevent unnecessary re-renders)
+      setItems(prevItems => {
+        if (prevItems.length !== dedupedItems.length) {
+          return dedupedItems
+        }
+        
+        // Check if items are actually different
+        const prevKeys = new Set(prevItems.map(item => item.canonicalUrl ?? item.id))
+        const newKeys = new Set(dedupedItems.map(item => item.canonicalUrl ?? item.id))
+        
+        if (prevKeys.size !== newKeys.size || ![...prevKeys].every(key => newKeys.has(key))) {
+          return dedupedItems
+        }
+        
+        return prevItems // No change, keep existing reference
+      })
     } catch (err) {
       console.error('[useDiscoveredItems] Error:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch items')
