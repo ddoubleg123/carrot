@@ -50,7 +50,9 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     url: apiItem.url,
     sourceUrl: apiItem.sourceUrl,
     mediaAssets: apiItem.mediaAssets,
-    type: apiItem.type
+    type: apiItem.type,
+    citeMeta: apiItem.citeMeta,
+    enrichedContent: apiItem.enrichedContent
   })
 
   return {
@@ -77,11 +79,13 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     } as any, // Temporary type assertion for compatibility
     content: {
       summary150: apiItem.enrichedContent?.summary150 || 
+                  apiItem.citeMeta?.description ||
                   apiItem.description || 
                   apiItem.content?.substring(0, 150) + '...' || 
                   'No summary available',
       keyPoints: apiItem.enrichedContent?.keyPoints || 
                  apiItem.tags?.slice(0, 5) || 
+                 apiItem.citeMeta?.tags?.slice(0, 5) ||
                  ['Key information available'],
       notableQuote: apiItem.enrichedContent?.notableQuote,
       readingTimeMin: apiItem.metadata?.readingTime || 
@@ -89,10 +93,11 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
                       Math.max(1, Math.floor((apiItem.content?.length || 1000) / 200))
     },
     meta: {
-      sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl),
+      sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl || apiItem.citeMeta?.url),
       author: apiItem.metadata?.author || 
               apiItem.author || 
-              apiItem.enrichedContent?.author,
+              apiItem.enrichedContent?.author ||
+              apiItem.citeMeta?.author,
       publishDate: apiItem.metadata?.publishDate || 
                    apiItem.publishDate || 
                    apiItem.createdAt

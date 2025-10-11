@@ -53,8 +53,9 @@ export default function GeneratedCover({
     const icon = TYPE_ICONS[type]
     const iconColor = TYPE_COLORS[type]
     
-    // Clean domain for display
-    const displayDomain = domain.replace('www.', '').split('.')[0]
+    // Clean domain for display - handle undefined/empty domains
+    const safeDomain = domain || 'carrot.app'
+    const displayDomain = safeDomain.replace('www.', '').split('.')[0]
     
     return `
       <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
