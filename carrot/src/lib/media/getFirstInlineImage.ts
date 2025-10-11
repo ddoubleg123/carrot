@@ -28,13 +28,17 @@ export async function getFirstInlineImage(url: string): Promise<InlineImageResul
  */
 async function tryWithReadability(url: string): Promise<InlineImageResult | null> {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    
     const response = await fetch(url, {
-      timeout: 10000,
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
       }
     })
 
+    clearTimeout(timeoutId)
     if (!response.ok) return null
 
     const html = await response.text()
@@ -139,10 +143,15 @@ function isNonContentImage(src: string): boolean {
  */
 async function isValidImageUrl(url: string): Promise<boolean> {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     const response = await fetch(url, { 
       method: 'HEAD',
-      timeout: 3000
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     return response.ok && response.headers.get('content-type')?.startsWith('image/')
   } catch {
     return false

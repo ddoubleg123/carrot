@@ -71,8 +71,13 @@ async function getVimeoThumbnail(url: string): Promise<OpenGraphResult | null> {
 
     // Vimeo oEmbed API
     const oembedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`
-    const response = await fetch(oembedUrl, { timeout: 5000 })
     
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
+    const response = await fetch(oembedUrl, { signal: controller.signal })
+    
+    clearTimeout(timeoutId)
     if (!response.ok) return null
     
     const data = await response.json()
@@ -98,8 +103,13 @@ async function getTwitterThumbnail(url: string): Promise<OpenGraphResult | null>
   try {
     // Twitter oEmbed API
     const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}`
-    const response = await fetch(oembedUrl, { timeout: 5000 })
     
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
+    const response = await fetch(oembedUrl, { signal: controller.signal })
+    
+    clearTimeout(timeoutId)
     if (!response.ok) return null
     
     const data = await response.json()
@@ -173,10 +183,15 @@ function extractVimeoVideoId(url: string): string | null {
  */
 async function isValidImageUrl(url: string): Promise<boolean> {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     const response = await fetch(url, { 
       method: 'HEAD',
-      timeout: 3000
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     return response.ok && response.headers.get('content-type')?.startsWith('image/')
   } catch {
     return false

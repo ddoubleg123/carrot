@@ -11,9 +11,11 @@ export async function getOpenGraphImage(url: string): Promise<OpenGraphResult | 
     
     const options = {
       url,
-      timeout: 10000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
+      fetchOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
+        },
+        signal: AbortSignal.timeout(10000)
       }
     }
 
@@ -70,11 +72,15 @@ async function isValidImageUrl(url: string): Promise<boolean> {
     }
 
     // Quick HEAD request to check if image is accessible
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
     const response = await fetch(url, { 
       method: 'HEAD',
-      timeout: 5000
+      signal: controller.signal
     })
     
+    clearTimeout(timeoutId)
     if (!response.ok) {
       return false
     }
