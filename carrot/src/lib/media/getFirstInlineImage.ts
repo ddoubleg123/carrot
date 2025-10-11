@@ -152,7 +152,8 @@ async function isValidImageUrl(url: string): Promise<boolean> {
     })
     
     clearTimeout(timeoutId)
-    return response.ok && response.headers.get('content-type')?.startsWith('image/')
+    const contentType = response.headers.get('content-type')
+    return response.ok && (contentType?.startsWith('image/') ?? false)
   } catch {
     return false
   }
