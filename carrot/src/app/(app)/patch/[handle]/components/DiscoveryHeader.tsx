@@ -36,7 +36,7 @@ export default function DiscoveryHeader({ patchHandle, onRefresh }: DiscoveryHea
       case 'idle':
         return {
           label: 'Start Discovery',
-          variant: 'default' as const,
+          variant: 'primary' as const,
           onClick: start
         }
       case 'running':
@@ -48,19 +48,19 @@ export default function DiscoveryHeader({ patchHandle, onRefresh }: DiscoveryHea
       case 'paused':
         return {
           label: 'Resume Discovery',
-          variant: 'default' as const,
+          variant: 'primary' as const,
           onClick: resume
         }
       case 'completed':
         return {
           label: 'Restart Discovery',
-          variant: 'default' as const,
+          variant: 'primary' as const,
           onClick: restart
         }
       default:
         return {
           label: 'Start Discovery',
-          variant: 'default' as const,
+          variant: 'primary' as const,
           onClick: start
         }
     }
