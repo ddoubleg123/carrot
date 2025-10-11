@@ -173,6 +173,16 @@ export default function TestGroupWizardPage() {
       } else {
         const discoveryResult = await discoveryResponse.json()
         console.log('Started discovery:', discoveryResult)
+        
+        // Trigger a refetch of discovered content after discovery starts
+        // This will help pick up items that were just saved
+        setTimeout(() => {
+          console.log('[Test Wizard] Triggering content refetch after discovery')
+          // Dispatch a custom event to trigger refetch in DiscoveryList
+          window.dispatchEvent(new CustomEvent('discovery-completed', { 
+            detail: { patchHandle: patch.patch.handle } 
+          }))
+        }, 3000) // Wait 3 seconds for discovery to save items
       }
 
       setSaveStatus('saved')

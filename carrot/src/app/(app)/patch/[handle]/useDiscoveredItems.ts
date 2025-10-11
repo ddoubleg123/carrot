@@ -163,7 +163,22 @@ export function useDiscoveredItems(
 
   useEffect(() => {
     fetchItems()
-  }, [fetchItems])
+    
+    // Listen for discovery completion events to trigger refetch
+    const handleDiscoveryCompleted = (event: CustomEvent) => {
+      const eventPatchHandle = event.detail?.patchHandle
+      if (eventPatchHandle === patchHandle) {
+        console.log('[useDiscoveredItems] Discovery completed event received, refetching...')
+        fetchItems()
+      }
+    }
+    
+    window.addEventListener('discovery-completed', handleDiscoveryCompleted as EventListener)
+    
+    return () => {
+      window.removeEventListener('discovery-completed', handleDiscoveryCompleted as EventListener)
+    }
+  }, [fetchItems, patchHandle])
 
   // Memoize return value to prevent unnecessary re-renders
   return useMemo(() => ({
