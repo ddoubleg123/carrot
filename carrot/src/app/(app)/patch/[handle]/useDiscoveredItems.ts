@@ -68,13 +68,13 @@ function generateDisplayTitle(apiItem: any): string {
     if (summary && summary.length > 20) {
       // Take first 8-12 meaningful words from summary and capitalize
       const words = summary.split(' ').slice(0, 12)
-      const meaningfulWords = words.filter(word => 
+      const meaningfulWords = words.filter((word: string) => 
         word.length > 2 && 
         !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(word.toLowerCase())
       ).slice(0, 8)
       
       if (meaningfulWords.length >= 3) {
-        return meaningfulWords.map(word => 
+        return meaningfulWords.map((word: string) => 
           word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
         ).join(' ')
       }
