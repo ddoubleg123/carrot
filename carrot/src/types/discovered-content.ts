@@ -2,6 +2,7 @@ export type DiscoveredItem = {
   id: string;
   type: 'article'|'video'|'pdf'|'image'|'text';
   title: string;
+  displayTitle?: string;      // specific, meaningful title for display
   url: string; // original
   canonicalUrl?: string;      // used for dedupe
   matchPct?: number;          // 0..1

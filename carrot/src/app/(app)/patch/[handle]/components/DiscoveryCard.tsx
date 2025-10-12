@@ -1,37 +1,18 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { ExternalLink, Bookmark, MessageSquare, Link2, Clock, Calendar } from 'lucide-react'
+import { Clock, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { pickHero, getDominantColor } from '@/lib/media/hero'
 import { DiscoveredItem } from '@/types/discovered-content'
 import GeneratedCover from './GeneratedCover'
+import PostActionBar from '@/components/post/PostActionBar'
 
 interface DiscoveryCardProps {
   item: DiscoveredItem
   onHeroClick?: (item: DiscoveredItem) => void
 }
 
-const TYPE_LABELS = {
-  article: 'Article',
-  video: 'Video',
-  pdf: 'PDF',
-  image: 'Image',
-  text: 'Text'
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case 'queued': return 'Queued'
-    case 'fetching': return 'Fetching'
-    case 'enriching': return 'Enriching'
-    case 'pending_audit': return 'Pending'
-    case 'ready': return 'Ready'
-    case 'failed': return 'Failed'
-    default: return status
-  }
-}
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return ''
@@ -103,30 +84,11 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
         
         {/* Bottom gradient overlay */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
-        
-        {/* Type badge (top left) */}
-        <span className="absolute left-3 top-3 text-[12px] rounded-full bg-black/55 text-white px-2.5 py-1 font-medium">
-          {TYPE_LABELS[item.type]}
-        </span>
-        
-        {/* Match percentage (top right) */}
-        {item.matchPct != null && (
-          <span className="absolute right-3 top-3 text-[12px] rounded-full bg-white/90 text-slate-900 px-2.5 py-1 font-medium">
-            Match: {Math.round(item.matchPct * 100)}%
-          </span>
-        )}
-        
-        {/* Status badge (bottom left) - only for non-ready status */}
-        {item.status !== 'ready' && (
-          <span className="absolute left-3 bottom-3 text-[12px] rounded bg-white/85 text-slate-800 px-2 py-0.5 font-medium">
-            {statusLabel(item.status)}
-          </span>
-        )}
       </button>
       
       {/* Title */}
       <h3 className="text-base md:text-lg font-semibold leading-6 mt-3 line-clamp-2 text-slate-900">
-        {item.title}
+        {item.displayTitle || item.title}
       </h3>
       
       {/* Summary */}
@@ -134,97 +96,46 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
         {item.content.summary150}
       </p>
       
-      {/* Key Points */}
-      {item.content.keyPoints && item.content.keyPoints.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {item.content.keyPoints.slice(0, 3).map((point, index) => (
-            <span 
-              key={index}
-              className="text-sm rounded-full border border-[#E6E8EC] bg-[#FAFAFB] px-2.5 py-1 text-slate-700"
-            >
-              {point}
-            </span>
-          ))}
-        </div>
-      )}
-      
-      {/* Notable Quote */}
-      {item.content.notableQuote && (
-        <blockquote className="italic text-slate-600 mt-2 line-clamp-2 text-sm border-l-2 border-slate-200 pl-3">
-          "{item.content.notableQuote}"
-        </blockquote>
-      )}
-      
       {/* Meta Row */}
-      <div className="mt-3 text-sm text-slate-600 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {/* Favicon + Domain */}
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="w-4 h-4 rounded-sm bg-slate-200 flex items-center justify-center text-xs">
-              {item.meta.sourceDomain.charAt(0).toUpperCase()}
-            </div>
-            <span className="truncate">{item.meta.sourceDomain}</span>
+      <div className="mt-3 text-sm text-slate-600 flex items-center gap-2 min-w-0">
+        {/* Favicon + Domain */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-4 h-4 rounded-sm bg-slate-200 flex items-center justify-center text-xs">
+            {item.meta.sourceDomain.charAt(0).toUpperCase()}
           </div>
-          
-          {/* Separator */}
-          <span className="text-slate-400">·</span>
-          
-          {/* Date */}
-          {item.meta.publishDate && (
-            <>
-              <span>{formatDate(item.meta.publishDate)}</span>
-              <span className="text-slate-400">·</span>
-            </>
-          )}
-          
-          {/* Reading Time */}
-          {item.content.readingTimeMin && (
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              <span>{item.content.readingTimeMin} min</span>
-            </div>
-          )}
+          <span className="truncate">{item.meta.sourceDomain}</span>
         </div>
         
-        {/* Save Button */}
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-        >
-          <Bookmark className="h-4 w-4" />
-        </Button>
+        {/* Separator */}
+        <span className="text-slate-400">·</span>
+        
+        {/* Date */}
+        {item.meta.publishDate && (
+          <>
+            <span>{formatDate(item.meta.publishDate)}</span>
+            <span className="text-slate-400">·</span>
+          </>
+        )}
+        
+        {/* Reading Time */}
+        {item.content.readingTimeMin && (
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            <span>{item.content.readingTimeMin} min</span>
+          </div>
+        )}
       </div>
       
-      {/* Actions */}
-      <div className="mt-4 flex items-center gap-2">
-        <Button 
-          variant="primary" 
-          size="sm" 
-          className="h-8 px-3 bg-[#FF6A00] hover:bg-[#E55A00] text-white focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-          onClick={() => window.open(item.url, '_blank')}
-        >
-          <ExternalLink className="h-3 w-3 mr-1.5" />
-          Open
-        </Button>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="h-8 px-3 border-[#E6E8EC] hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-        >
-          <Link2 className="h-3 w-3 mr-1.5" />
-          Attach →
-        </Button>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="h-8 px-3 border-[#E6E8EC] hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-        >
-          <MessageSquare className="h-3 w-3 mr-1.5" />
-          Discuss
-        </Button>
+      {/* PostActionBar */}
+      <div className="mt-3 pt-3 border-t border-[#E6E8EC]">
+        <PostActionBar
+          postId={item.id}
+          stats={{ likes: 0, comments: 0, reposts: 0, views: 0 }}
+          canTranscribe={false}
+          permalink={item.url}
+          initiallySaved={false}
+          initiallyLiked={false}
+        />
       </div>
     </div>
   )

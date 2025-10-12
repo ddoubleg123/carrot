@@ -85,14 +85,14 @@ export default function Overview({ patch }: OverviewProps) {
     { id: '2', title: 'New discussion started', body: '"What would be the ideal term limit structure?"', createdAt: new Date(), author: { name: 'John Doe' } },
   ];
   return (
-    <div className="space-y-8 px-6 md:px-10">
+    <div className="space-y-6 px-6 md:px-10">
       {/* Discovering Content */}
       <div>
         <DiscoveryList patchHandle={patch.handle} />
       </div>
 
       {/* Key Facts Grid */}
-      <div className="pt-6">
+      <div className="pt-2">
         <h2 className="text-2xl font-bold text-[#0B0B0F] mb-6">Key Facts</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {facts.slice(0, 8).map((fact) => (

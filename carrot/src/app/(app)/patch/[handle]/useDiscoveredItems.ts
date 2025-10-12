@@ -30,18 +30,71 @@ function deduplicateItems(items: DiscoveredItem[]): DiscoveredItem[] {
   })
 }
 
+const getDomain = (url?: string) => {
+  if (!url) return 'carrot.app' // Default fallback
+  try {
+    return new URL(url).hostname.replace('www.', '')
+  } catch {
+    return 'carrot.app' // Default fallback
+  }
+}
+
+/**
+ * Generate a specific display title, preferring meaningful titles over generic ones
+ */
+function generateDisplayTitle(apiItem: any): string {
+  const originalTitle = apiItem.title || ''
+  const summary = apiItem.enrichedContent?.summary150 || apiItem.description || ''
+  const citeMeta = apiItem.citeMeta || {}
+  
+  // Check if title contains generic phrases
+  const genericPhrases = [
+    'News and Updates',
+    'Official Website', 
+    'Home',
+    'Welcome',
+    'About Us',
+    'Contact',
+    'News',
+    'Updates'
+  ]
+  
+  const hasGenericPhrase = genericPhrases.some(phrase => 
+    originalTitle.toLowerCase().includes(phrase.toLowerCase())
+  )
+  
+  // If title is generic or empty, try to create a better one from summary
+  if (hasGenericPhrase || originalTitle.length < 10) {
+    if (summary && summary.length > 20) {
+      // Take first 8-12 meaningful words from summary and capitalize
+      const words = summary.split(' ').slice(0, 12)
+      const meaningfulWords = words.filter(word => 
+        word.length > 2 && 
+        !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(word.toLowerCase())
+      ).slice(0, 8)
+      
+      if (meaningfulWords.length >= 3) {
+        return meaningfulWords.map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ')
+      }
+    }
+  }
+  
+  // Remove common site name suffixes
+  const cleanTitle = originalTitle
+    .replace(/\s*\|.*$/, '') // Remove " | Site Name" suffixes
+    .replace(/\s*-\s*.*$/, '') // Remove " - Site Name" suffixes
+    .replace(/\s*::.*$/, '') // Remove " :: Site Name" suffixes
+    .trim()
+  
+  return cleanTitle || originalTitle || 'Untitled Content'
+}
+
 /**
  * Maps API response to DiscoveredItem format
  */
 function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
-  const getDomain = (url?: string) => {
-    if (!url) return 'carrot.app' // Default fallback
-    try {
-      return new URL(url).hostname.replace('www.', '')
-    } catch {
-      return 'carrot.app' // Default fallback
-    }
-  }
 
   // Debug logging
   console.log('[mapToDiscoveredItem] Processing item:', {
@@ -55,6 +108,9 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     enrichedContent: apiItem.enrichedContent
   })
 
+  // Generate displayTitle - prefer specific titles over generic ones
+  const displayTitle = generateDisplayTitle(apiItem)
+
   return {
     id: apiItem.id || `item-${Math.random()}`,
     type: apiItem.type || 'article',
@@ -65,6 +121,7 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     status: apiItem.status === 'pending_audit' ? 'pending_audit' : 
             apiItem.status === 'requires_review' ? 'pending_audit' : 
             (apiItem.status as any) || 'ready',
+    displayTitle, // Add the generated display title
     media: {
       hero: apiItem.mediaAssets?.hero || 
             apiItem.enrichedContent?.hero || 
@@ -100,6 +157,8 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
               apiItem.citeMeta?.author,
       publishDate: apiItem.metadata?.publishDate || 
                    apiItem.publishDate || 
+                   apiItem.citeMeta?.publishDate ||
+                   apiItem.enrichedContent?.publishDate ||
                    apiItem.createdAt
     }
   }

@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Filter, SortAsc, Search, RefreshCw } from 'lucide-react'
+import { Filter, SortAsc, Search, RefreshCw, Play, Square } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import DiscoveryHeader from './DiscoveryHeader'
 import ContentModal from './ContentModal'
@@ -45,6 +45,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
   const [selectedItem, setSelectedItem] = useState<DiscoveredItem | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDiscoveryActive, setIsDiscoveryActive] = useState(false)
 
   // Memoize filters to prevent unnecessary re-fetches
   const filters = React.useMemo(() => ({
@@ -81,29 +82,38 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
     refetch()
   }
 
-  const handleStartDiscovery = async () => {
-    try {
-      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'start_deepseek_search'
+  const handleToggleDiscovery = async () => {
+    if (isDiscoveryActive) {
+      // Stop discovery
+      setIsDiscoveryActive(false)
+      // TODO: Implement stop discovery API call
+      console.log('[DiscoveryList] Discovery stopped')
+    } else {
+      // Start discovery
+      try {
+        const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'start_deepseek_search'
+          })
         })
-      })
 
-      if (response.ok) {
-        console.log('[DiscoveryList] Discovery started successfully')
-        // Trigger refetch after a delay to pick up new content
-        setTimeout(() => {
-          refetch()
-        }, 3000)
-      } else {
-        console.error('[DiscoveryList] Failed to start discovery:', response.status)
+        if (response.ok) {
+          console.log('[DiscoveryList] Discovery started successfully')
+          setIsDiscoveryActive(true)
+          // Trigger refetch after a delay to pick up new content
+          setTimeout(() => {
+            refetch()
+          }, 3000)
+        } else {
+          console.error('[DiscoveryList] Failed to start discovery:', response.status)
+        }
+      } catch (error) {
+        console.error('[DiscoveryList] Error starting discovery:', error)
       }
-    } catch (error) {
-      console.error('[DiscoveryList] Error starting discovery:', error)
     }
   }
 
@@ -113,7 +123,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       <DiscoveryHeader patchHandle={patchHandle} onRefresh={refetch} />
 
       {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap mb-6">
         {/* Type Filter */}
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-slate-500" />
@@ -158,9 +168,28 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         {/* Results Count */}
         <div className="text-sm text-slate-600">
           {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
-          {deduplicatedItems.length > 0 && (
-            <span className="text-slate-400 ml-1">• filtered</span>
-          )}
+        </div>
+
+        {/* Discovery Toggle Button */}
+        <div className="ml-auto">
+          <Button
+            onClick={handleToggleDiscovery}
+            variant={isDiscoveryActive ? "destructive" : "default"}
+            size="sm"
+            className={`flex items-center gap-2 ${isDiscoveryActive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#0A5AFF] hover:bg-[#0056CC]'}`}
+          >
+            {isDiscoveryActive ? (
+              <>
+                <Square className="h-3 w-3" />
+                Stop discovery
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3" />
+                Start discovery
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -201,10 +230,11 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           <p className="text-slate-600 mb-4">Expand the range to see more content.</p>
           <Button
             variant="outline"
-            onClick={handleStartDiscovery}
+            onClick={handleToggleDiscovery}
             className="border-[#E6E8EC] hover:bg-slate-50"
           >
-            Connect sources
+            <Play className="h-3 w-3 mr-1" />
+            Start discovery
           </Button>
         </div>
       )}

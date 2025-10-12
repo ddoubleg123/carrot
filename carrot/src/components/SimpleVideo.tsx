@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useVideoContext } from '@/context/VideoContext';
 
 interface SimpleVideoProps {
   src: string;
@@ -25,6 +26,15 @@ export default function SimpleVideo({
   postId,
   onVideoRef,
 }: SimpleVideoProps) {
+  const {
+    setVideoElement,
+    setCurrentTime,
+    setDuration,
+    setIsPlaying,
+    setIsMuted,
+    setVolume,
+    isModalTransitioning,
+  } = useVideoContext();
   // VALIDATION: Check for valid video formats before attempting to render
   const VALID_VIDEO_FORMATS = /\.(mp4|webm|mov|m4v|avi|mkv|ogg|ogv)(\?|$)/i;
   const VALID_VIDEO_MIME_TYPES = /^(video\/|application\/x-mpegURL|application\/vnd\.apple\.mpegurl)/i;
@@ -264,12 +274,19 @@ export default function SimpleVideo({
     registerWithFeedMediaManager();
   }, [postId]);
 
-  // Call onVideoRef when video element is ready
+  // Call onVideoRef when video element is ready and sync with VideoContext
   useEffect(() => {
-    if (videoRef.current && onVideoRef) {
-      onVideoRef(videoRef.current);
+    if (videoRef.current) {
+      if (onVideoRef) {
+        onVideoRef(videoRef.current);
+      }
+      setVideoElement(videoRef.current);
     }
-  }, [onVideoRef]);
+    
+    return () => {
+      setVideoElement(null);
+    };
+  }, [onVideoRef, setVideoElement]);
 
   // CRITICAL FIX: Register with GlobalVideoManager on mount
   useEffect(() => {
@@ -300,6 +317,7 @@ export default function SimpleVideo({
 
         const handlePlay = async () => {
           setIsPlaying(true);
+          setIsPlaying(true); // Update VideoContext
           console.log(`[SimpleVideo] ▶️  PLAY event`, {
             postId,
             mountId: mountIdRef.current,
@@ -325,6 +343,7 @@ export default function SimpleVideo({
 
     const handlePause = () => {
       setIsPlaying(false);
+      setIsPlaying(false); // Update VideoContext
       console.log(`[SimpleVideo] ⏸️  PAUSE event`, {
         postId,
         mountId: mountIdRef.current,
@@ -363,6 +382,9 @@ export default function SimpleVideo({
           const currentTime = video.currentTime;
           const timeDiff = Math.abs(currentTime - currentTimeRef.current);
           
+          // Update VideoContext
+          setCurrentTime(currentTime);
+          
           // Detect unexpected backwards jumps (scrubbing loop or reset)
           if (timeDiff > 5 && currentTime < currentTimeRef.current) {
             console.warn(`[SimpleVideo] ⚠️  SCRUBBING LOOP / RESET DETECTED`, {
@@ -391,12 +413,23 @@ export default function SimpleVideo({
           currentTimeRef.current = currentTime;
         };
 
+        const handleDurationChange = () => {
+          setDuration(video.duration);
+        };
+
+        const handleVolumeChange = () => {
+          setVolume(video.volume);
+          setIsMuted(video.muted);
+        };
+
         video.addEventListener('play', handlePlay);
         video.addEventListener('pause', handlePause);
         video.addEventListener('seeking', handleSeeking);
         video.addEventListener('seeked', handleSeeked);
         video.addEventListener('ended', handleEnded);
         video.addEventListener('timeupdate', handleTimeUpdate);
+        video.addEventListener('durationchange', handleDurationChange);
+        video.addEventListener('volumechange', handleVolumeChange);
 
     // Add intersection observer to handle visibility and promote to full download when visible
     const io = new IntersectionObserver(async (entries) => {
@@ -439,6 +472,8 @@ export default function SimpleVideo({
       video.removeEventListener('seeked', handleSeeked);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('durationchange', handleDurationChange);
+      video.removeEventListener('volumechange', handleVolumeChange);
       io.disconnect();
     };
   }, [postId]);
@@ -893,26 +928,41 @@ export default function SimpleVideo({
             
             setIsStuck(true);
             
-            // Auto-retry stuck videos once
-            if (!autoRetryAttempted) {
-              console.warn(`[SimpleVideo] 🔄 Auto-retrying stuck video`);
-              setAutoRetryAttempted(true);
+            // Auto-retry stuck videos up to 3 times with exponential backoff
+            if (retryCount < 3) {
+              const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 8000); // 1s, 2s, 4s, max 8s
+              console.warn(`[SimpleVideo] 🔄 Auto-retrying stuck video (attempt ${retryCount + 1}/3) in ${retryDelay}ms`);
               setRetryCount(prev => prev + 1);
-              video.load(); // Force reload
               
-              // Give it another 5 seconds
               setTimeout(() => {
-                if (video.readyState < 2) {
-                  console.error(`[SimpleVideo] ❌ Video still stuck after retry`);
-                  setHasError(true);
-                  setIsLoading(false);
+                if (videoRef.current) {
+                  videoRef.current.load(); // Force reload
+                  
+                  // Give it another timeout based on attempt number
+                  const timeoutDelay = Math.min(5000 + (retryCount * 2000), 15000); // 5s, 7s, 9s, max 15s
+                  setTimeout(() => {
+                    if (videoRef.current && videoRef.current.readyState < 2) {
+                      if (retryCount >= 2) {
+                        console.error(`[SimpleVideo] ❌ Video still stuck after ${retryCount + 1} retries`);
+                        setHasError(true);
+                        setIsLoading(false);
+                        setErrorMessage('Video failed to load after multiple attempts');
+                      } else {
+                        // Try one more time
+                        console.warn(`[SimpleVideo] 🔄 Retrying again (attempt ${retryCount + 2}/3)`);
+                        setRetryCount(prev => prev + 1);
+                        videoRef.current.load();
+                      }
+                    }
+                  }, timeoutDelay);
                 }
-              }, 5000);
+              }, retryDelay);
             } else {
-              // Give up and show error
-              console.error(`[SimpleVideo] ❌ Video load failed after retry`);
+              // Give up and show error after 3 attempts
+              console.error(`[SimpleVideo] ❌ Video load failed after 3 retry attempts`);
               setHasError(true);
               setIsLoading(false);
+              setErrorMessage('Video failed to load after multiple attempts');
             }
           } else {
             // Video is loading, just slow - show it anyway
@@ -970,8 +1020,8 @@ export default function SimpleVideo({
                               video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
                               video.src.includes('firebasestorage.googleapis.com');
         
-        // CRITICAL FIX: Auto-retry once before showing manual retry button
-        const maxAutoRetries = 1;
+        // CRITICAL FIX: Auto-retry up to 3 times before showing manual retry button
+        const maxAutoRetries = 3;
         const currentRetryCount = isNetworkError ? networkRetryCount : retryCount;
         
         if (!autoRetryAttempted && currentRetryCount < maxAutoRetries) {
