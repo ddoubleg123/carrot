@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
+  let itemId: string | undefined
+  let heroImageUrl: string | undefined
+  
   try {
-    const { itemId, heroImageUrl, source, license } = await request.json()
+    const requestData = await request.json()
+    itemId = requestData.itemId
+    heroImageUrl = requestData.heroImageUrl
+    const { source, license } = requestData
 
     if (!itemId || !heroImageUrl) {
       return NextResponse.json({ error: 'Missing itemId or heroImageUrl' }, { status: 400 })
