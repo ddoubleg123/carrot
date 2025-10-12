@@ -7,29 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { ExternalLink, Link2, MessageSquare, Share2, Clock, Calendar, Bookmark } from 'lucide-react'
 import { pickHero, getDominantColor } from '@/lib/media/hero'
 import GeneratedCover from '@/app/(app)/patch/[handle]/components/GeneratedCover'
-
-// Types for different content sources
-interface DiscoveredItem {
-  id: string
-  title: string
-  url: string
-  type: 'article' | 'video' | 'pdf' | 'image' | 'text'
-  content: {
-    summary150: string
-    keyPoints?: string[]
-    notableQuote?: string
-    readingTimeMin?: number
-  }
-  meta: {
-    sourceDomain: string
-    publishDate?: string
-  }
-  media?: {
-    hero?: string
-    dominant?: string
-  }
-  matchPct?: number
-}
+import { DiscoveredItem } from '@/types/discovered-content'
 
 interface PostItem {
   id: string
