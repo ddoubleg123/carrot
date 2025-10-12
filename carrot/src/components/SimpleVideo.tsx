@@ -28,11 +28,11 @@ export default function SimpleVideo({
 }: SimpleVideoProps) {
   const {
     setVideoElement,
-    setCurrentTime,
-    setDuration,
-    setIsPlaying,
-    setIsMuted,
-    setVolume,
+    setCurrentTime: setGlobalCurrentTime,
+    setDuration: setGlobalDuration,
+    setIsPlaying: setGlobalIsPlaying,
+    setIsMuted: setGlobalIsMuted,
+    setVolume: setGlobalVolume,
     isModalTransitioning,
   } = useVideoContext();
   // VALIDATION: Check for valid video formats before attempting to render
@@ -317,7 +317,7 @@ export default function SimpleVideo({
 
         const handlePlay = async () => {
           setIsPlaying(true);
-          setIsPlaying(true); // Update VideoContext
+          setGlobalIsPlaying(true); // Update VideoContext
           console.log(`[SimpleVideo] ▶️  PLAY event`, {
             postId,
             mountId: mountIdRef.current,
@@ -343,7 +343,7 @@ export default function SimpleVideo({
 
     const handlePause = () => {
       setIsPlaying(false);
-      setIsPlaying(false); // Update VideoContext
+      setGlobalIsPlaying(false); // Update VideoContext
       console.log(`[SimpleVideo] ⏸️  PAUSE event`, {
         postId,
         mountId: mountIdRef.current,
@@ -383,7 +383,7 @@ export default function SimpleVideo({
           const timeDiff = Math.abs(currentTime - currentTimeRef.current);
           
           // Update VideoContext
-          setCurrentTime(currentTime);
+          setGlobalCurrentTime(currentTime);
           
           // Detect unexpected backwards jumps (scrubbing loop or reset)
           if (timeDiff > 5 && currentTime < currentTimeRef.current) {
@@ -414,12 +414,12 @@ export default function SimpleVideo({
         };
 
         const handleDurationChange = () => {
-          setDuration(video.duration);
+          setGlobalDuration(video.duration);
         };
 
         const handleVolumeChange = () => {
-          setVolume(video.volume);
-          setIsMuted(video.muted);
+          setGlobalVolume(video.volume);
+          setGlobalIsMuted(video.muted);
         };
 
         video.addEventListener('play', handlePlay);
