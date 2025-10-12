@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     console.log('[UpdateHeroImage] Found item:', { id: existingItem.id, title: existingItem.title })
 
     // Merge with existing mediaAssets
-    const existingMediaAssets = existingItem.mediaAssets as MediaAssets || {}
-    const updatedMediaAssets: MediaAssets = {
+    const existingMediaAssets = existingItem.mediaAssets as any || {}
+    const updatedMediaAssets = {
       ...existingMediaAssets,
       hero: heroImageUrl,
       source: (source as HeroSource) || 'ai-generated',
