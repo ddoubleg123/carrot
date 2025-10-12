@@ -65,7 +65,7 @@ export async function GET(
       createdAt: source.createdAt,
       // Legacy format - no enriched content
       enrichedContent: undefined,
-      mediaAssets: undefined,
+      mediaAssets: (source.citeMeta as any)?.mediaAssets || undefined, // Check for existing mediaAssets
       metadata: undefined,
       qualityScore: undefined
     }));
