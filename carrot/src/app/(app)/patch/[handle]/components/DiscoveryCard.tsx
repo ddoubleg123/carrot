@@ -55,13 +55,23 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
   }
   
   return (
-    <div className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div 
+      className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2"
+      onClick={() => onHeroClick?.(item)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${item.displayTitle || item.title}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onHeroClick?.(item);
+        }
+      }}
+    >
       {/* Hero Section */}
-      <button
-        className="relative aspect-[16/9] overflow-hidden rounded-xl w-full block focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2"
+      <div
+        className="relative aspect-[16/9] overflow-hidden rounded-xl w-full block"
         style={{ backgroundColor: dominantColor }}
-        onClick={() => onHeroClick?.(item)}
-        aria-label="Open content preview"
       >
         {hero ? (
           <img 
@@ -84,7 +94,7 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
         
         {/* Bottom gradient overlay */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
-      </button>
+      </div>
       
       {/* Title */}
       <h3 className="text-base md:text-lg font-semibold leading-6 mt-3 line-clamp-2 text-slate-900">
@@ -127,7 +137,10 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
       </div>
       
       {/* PostActionBar */}
-      <div className="mt-3 pt-3 border-t border-[#E6E8EC]">
+      <div 
+        className="mt-3 pt-3 border-t border-[#E6E8EC]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <PostActionBar
           postId={item.id}
           stats={{ likes: 0, comments: 0, reposts: 0, views: 0 }}

@@ -83,12 +83,14 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
 
   const handleToggleDiscovery = async () => {
     if (isDiscoveryActive) {
-      // Stop discovery
+      // Stop discovery - immediately toggle state
       setIsDiscoveryActive(false)
       // TODO: Implement stop discovery API call
       console.log('[DiscoveryList] Discovery stopped')
     } else {
-      // Start discovery
+      // Start discovery - immediately toggle state for responsive UI
+      setIsDiscoveryActive(true)
+      
       try {
         const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
           method: 'POST',
@@ -102,16 +104,19 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
 
         if (response.ok) {
           console.log('[DiscoveryList] Discovery started successfully')
-          setIsDiscoveryActive(true)
           // Trigger refetch after a delay to pick up new content
           setTimeout(() => {
             refetch()
           }, 3000)
         } else {
           console.error('[DiscoveryList] Failed to start discovery:', response.status)
+          // Revert state on failure
+          setIsDiscoveryActive(false)
         }
       } catch (error) {
         console.error('[DiscoveryList] Error starting discovery:', error)
+        // Revert state on error
+        setIsDiscoveryActive(false)
       }
     }
   }
@@ -122,7 +127,14 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       <div className="mt-6 mb-3">
         <h2 className="text-xl font-semibold text-slate-900">Discovering content</h2>
         <p className="mt-1 mb-3 text-sm text-slate-600">
-          Click 'Start Discovery' to begin finding relevant content for this group.
+          {isDiscoveryActive ? (
+            <span className="flex items-center gap-2 text-green-600">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              Discovery live
+            </span>
+          ) : (
+            "Click 'Start Discovery' to begin finding relevant content for this group."
+          )}
         </p>
       </div>
 
