@@ -1361,7 +1361,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
             </div>
             
             {/* White input card */}
-            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 mb-4 relative">
+            <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 relative">
               <label htmlFor="postContent" className="sr-only">What's happening?</label>
               <textarea
                 ref={textareaRef}

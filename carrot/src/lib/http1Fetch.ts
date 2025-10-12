@@ -180,6 +180,11 @@ class HTTP1FetchManager {
       throw new Error(`Invalid URL: ${url}`);
     }
 
+    // CRITICAL FIX: Reject data URIs (violates CSP and can't be fetched)
+    if (url.startsWith('data:')) {
+      throw new Error(`Cannot fetch data URI - CSP violation. Data URIs should be used directly, not fetched.`);
+    }
+
     // Handle relative URLs by making them absolute
     if (url.startsWith('/')) {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://carrot-app.onrender.com';

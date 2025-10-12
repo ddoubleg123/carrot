@@ -163,6 +163,15 @@ export default function FlagChip({
     return null;
   }
 
+  // Debug logging to see what's happening
+  console.log('[FlagChip] Rendering flag:', {
+    countryCode,
+    normalizedCode,
+    flagEmoji,
+    flagEmojiLength: flagEmoji.length,
+    flagEmojiChars: Array.from(flagEmoji).map(c => c.codePointAt(0)?.toString(16))
+  });
+
   // Get country name for accessibility
   const countryName = COUNTRY_NAMES[normalizedCode.toUpperCase()] || countryCode.toUpperCase();
   const ariaLabel = label || `${countryName} flag`;

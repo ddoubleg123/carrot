@@ -173,57 +173,54 @@ export async function POST(
     const savedItems = [];
     for (const item of discoveredItems) {
       try {
-        // Create a source record for each discovered item
-        const source = await prisma.source.create({
+        // Create a discoveredContent record for each discovered item
+        const discoveredContent = await prisma.discoveredContent.create({
           data: {
             patchId: patch.id,
+            type: item.type || 'article',
             title: item.title,
-            url: item.url,
-            author: item.source_authority || 'Unknown',
-            addedBy: session.user.id,
-            citeMeta: {
-              description: item.description,
-              type: item.type || 'article',
-              relevanceScore: item.relevance_score || 0.8,
-              status: 'pending_audit'
-            }
+            content: item.description || '',
+            sourceUrl: item.url,
+            relevanceScore: item.relevance_score || 0.8,
+            tags: patch.tags.slice(0, 3), // Use patch tags
+            status: 'pending'
           }
         });
 
         // Trigger hero enrichment for this item
         try {
-          console.log('[Start Discovery] Triggering hero enrichment for:', source.url);
+          console.log('[Start Discovery] Triggering hero enrichment for:', discoveredContent.sourceUrl);
           
           // Call the hero enrichment API
-          const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/internal/enrich/${source.id}`, {
+          const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/internal/enrich/${discoveredContent.id}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              url: source.url,
-              type: (source.citeMeta as any)?.type || 'article'
+              url: discoveredContent.sourceUrl,
+              type: discoveredContent.type
             })
           });
           
           if (enrichResponse.ok) {
-            console.log('[Start Discovery] Hero enrichment successful for:', source.id);
+            console.log('[Start Discovery] Hero enrichment successful for:', discoveredContent.id);
           } else {
-            console.warn('[Start Discovery] Hero enrichment failed for:', source.id, enrichResponse.status);
+            console.warn('[Start Discovery] Hero enrichment failed for:', discoveredContent.id, enrichResponse.status);
           }
         } catch (enrichError) {
-          console.warn('[Start Discovery] Hero enrichment error for:', source.id, enrichError);
+          console.warn('[Start Discovery] Hero enrichment error for:', discoveredContent.id, enrichError);
           // Don't fail the whole discovery if hero enrichment fails
         }
 
         savedItems.push({
-          id: source.id,
-          title: source.title,
-          url: source.url,
-          type: (source.citeMeta as any)?.type || 'article',
-          description: (source.citeMeta as any)?.description || '',
-          relevanceScore: (source.citeMeta as any)?.relevanceScore || 0.8,
-          status: (source.citeMeta as any)?.status || 'pending_audit'
+          id: discoveredContent.id,
+          title: discoveredContent.title,
+          url: discoveredContent.sourceUrl,
+          type: discoveredContent.type,
+          description: discoveredContent.content,
+          relevanceScore: discoveredContent.relevanceScore,
+          status: discoveredContent.status
         });
       } catch (dbError) {
         console.error('[Start Discovery] Failed to save item:', item.title, dbError);
