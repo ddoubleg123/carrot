@@ -41,7 +41,7 @@ For each piece of content you discover, provide:
 2. Detailed, informative content (2-3 paragraphs)
 3. A relevance score (1-10)
 4. Relevant tags from the group's tag list
-5. Optional source URL (make it realistic but fictional)
+5. REAL source URL (use actual, accessible websites - NOT fictional URLs)
 
 Content types to discover:
 - Documents: Research papers, guides, tutorials, reports
@@ -55,6 +55,13 @@ Guidelines:
 - Make content realistic and valuable
 - Use the group's tags and categories as context
 - Ensure high relevance (score 7+)
+- CRITICAL: Use REAL, accessible URLs that actually exist and have content
+
+Real URL examples for different topics:
+- Sports: ESPN, official team websites, league websites, reputable sports news
+- Tech: GitHub, Stack Overflow, official documentation, reputable tech blogs
+- Business: company websites, industry publications, government sites
+- News: major news outlets, official press releases, verified sources
 
 Return as JSON array with this exact structure:
 [
@@ -63,7 +70,7 @@ Return as JSON array with this exact structure:
     "title": "Content Title",
     "content": "Detailed content here...",
     "relevance_score": 8,
-    "source_url": "https://example.com/source",
+    "source_url": "https://real-website.com/actual-page",
     "tags": ["tag1", "tag2"]
   }
 ]`
@@ -130,6 +137,7 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
           title: `Introduction to ${patchName}`,
           content: `This is a comprehensive guide to ${patchName}. ${description || 'This group focuses on exploring and understanding this topic in depth.'}`,
           relevance_score: 8,
+          source_url: 'https://www.wikipedia.org',
           tags: tags.slice(0, 2)
         }
       ];
