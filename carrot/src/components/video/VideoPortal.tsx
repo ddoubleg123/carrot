@@ -25,9 +25,6 @@ export default function VideoPortal({
 }: VideoPortalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   
   const {
     videoElement: globalVideoElement,
@@ -37,11 +34,11 @@ export default function VideoPortal({
     isMuted: globalIsMuted,
     volume: globalVolume,
     setVideoElement,
-    setCurrentTime,
-    setDuration,
-    setIsPlaying,
-    setIsMuted,
-    setVolume,
+    setCurrentTime: setGlobalCurrentTime,
+    setDuration: setGlobalDuration,
+    setIsPlaying: setGlobalIsPlaying,
+    setIsMuted: setGlobalIsMuted,
+    setVolume: setGlobalVolume,
     isModalTransitioning,
     transferFromModal,
   } = useVideoContext();
@@ -78,28 +75,24 @@ export default function VideoPortal({
     if (!video) return;
 
     const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      setCurrentTime(video.currentTime); // Update global context
+      setGlobalCurrentTime(video.currentTime);
     };
 
     const handleDurationChange = () => {
-      setDuration(video.duration);
-      setDuration(video.duration); // Update global context
+      setGlobalDuration(video.duration);
     };
 
     const handlePlay = () => {
-      setIsPlaying(true);
-      setIsPlaying(true); // Update global context
+      setGlobalIsPlaying(true);
     };
 
     const handlePause = () => {
-      setIsPlaying(false);
-      setIsPlaying(false); // Update global context
+      setGlobalIsPlaying(false);
     };
 
     const handleVolumeChange = () => {
-      setVolume(video.volume);
-      setIsMuted(video.muted);
+      setGlobalVolume(video.volume);
+      setGlobalIsMuted(video.muted);
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -115,7 +108,7 @@ export default function VideoPortal({
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('volumechange', handleVolumeChange);
     };
-  }, [setCurrentTime, setDuration, setIsPlaying, setVolume, setIsMuted]);
+  }, [setGlobalCurrentTime, setGlobalDuration, setGlobalIsPlaying, setGlobalVolume, setGlobalIsMuted]);
 
   // Register with global video context
   useEffect(() => {
@@ -135,11 +128,11 @@ export default function VideoPortal({
     if (isModal && videoRef.current) {
       // Capture current state before closing
       const video = videoRef.current;
-      setCurrentTime(video.currentTime);
-      setDuration(video.duration);
-      setIsPlaying(!video.paused);
-      setIsMuted(video.muted);
-      setVolume(video.volume);
+      setGlobalCurrentTime(video.currentTime);
+      setGlobalDuration(video.duration);
+      setGlobalIsPlaying(!video.paused);
+      setGlobalIsMuted(video.muted);
+      setGlobalVolume(video.volume);
       
       // Transfer state back to feed
       transferFromModal(postId);
