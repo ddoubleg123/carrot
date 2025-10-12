@@ -107,10 +107,7 @@ function createImagePrompt(title: string, summary: string, sourceDomain?: string
 
 async function generateImageWithDeepSeek(prompt: string): Promise<string | null> {
   try {
-    console.log('[AI Image Generator] DeepSeek prompt:', prompt.substring(0, 200) + '...')
-    
-    // TODO: Replace with actual DeepSeek Vision API call
-    // For now, we'll create a more sophisticated AI-generated placeholder
+    console.log('[AI Image Generator] DeepSeek Janus Pro prompt:', prompt.substring(0, 200) + '...')
     
     // Check if we have a DeepSeek API key
     if (!process.env.DEEPSEEK_API_KEY) {
@@ -118,28 +115,43 @@ async function generateImageWithDeepSeek(prompt: string): Promise<string | null>
       return createAIPlaceholderSvg()
     }
     
-    // TODO: Implement actual DeepSeek API call
-    // const response = await fetch('https://api.deepseek.com/v1/images/generations', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     model: 'deepseek-vision',
-    //     prompt: prompt,
-    //     size: '1280x720',
-    //     quality: 'hd',
-    //     n: 1
-    //   })
-    // })
+    // Use DeepSeek Janus Pro for image generation
+    const response = await fetch('https://api.deepseek.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'janus-pro-1b', // Use Janus Pro 1B model for faster generation
+        prompt: prompt,
+        size: '1280x720',
+        quality: 'hd',
+        style: 'professional',
+        aspect_ratio: '16:9',
+        num_images: 1
+      })
+    })
     
-    // For now, return an enhanced placeholder that indicates AI generation
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[AI Image Generator] DeepSeek API error:', response.status, errorText)
+      return createAIPlaceholderSvg()
+    }
+    
+    const data = await response.json()
+    
+    if (data.data && data.data[0] && data.data[0].url) {
+      console.log('[AI Image Generator] Successfully generated image with Janus Pro')
+      return data.data[0].url
+    }
+    
+    console.warn('[AI Image Generator] No image URL in response, using placeholder')
     return createAIPlaceholderSvg()
     
   } catch (error) {
     console.error('[AI Image Generator] DeepSeek API error:', error)
-    return null
+    return createAIPlaceholderSvg()
   }
 }
 
