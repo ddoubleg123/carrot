@@ -509,8 +509,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       authorData: author
                     });
                   }
-                  // Only show flag chip if we have a valid country code
-                  return cc ? <FlagChip countryCode={cc} size={24} /> : null;
+                  // Only show flag chip if we have a valid country code (size defaults to 36px)
+                  return cc ? <FlagChip countryCode={cc} /> : null;
                 })()}
                 <button
                   type="button"
