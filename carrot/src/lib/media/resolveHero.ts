@@ -83,9 +83,41 @@ export async function resolveHero(input: HeroInput): Promise<HeroOutput> {
     }
   }
 
-  // Tier 4: Programmatic generation (last resort - CANNOT FAIL)
+  // Tier 4: AI Image Generation (new tier for custom images)
+  if (input.title && input.summary) {
+    try {
+      console.log('[resolveHero] Tier 4: Attempting AI image generation')
+      
+      // Import the AI generation function directly to avoid fetch issues
+      const { generateAIImage } = await import('./aiImageGenerator')
+      const aiResult = await generateAIImage({
+        title: input.title,
+        summary: input.summary,
+        sourceDomain: input.url ? new URL(input.url).hostname : undefined,
+        contentType: input.type,
+        patchTheme: input.patchTheme
+      })
+
+      if (aiResult && aiResult.success && aiResult.imageUrl) {
+        console.log('[resolveHero] AI image generated successfully')
+        return {
+          hero: aiResult.imageUrl,
+          blurDataURL: undefined,
+          dominant: '#667eea',
+          source: 'ai-generated',
+          license: 'generated'
+        }
+      }
+      
+      console.log('[resolveHero] AI image generation failed, falling back to programmatic cover')
+    } catch (error) {
+      console.warn('[resolveHero] AI image generation failed:', error)
+    }
+  }
+
+  // Tier 5: Programmatic generation (last resort - CANNOT FAIL)
   try {
-    console.log('[resolveHero] Tier 4: Generating programmatic cover')
+    console.log('[resolveHero] Tier 5: Generating programmatic cover')
     
     let domain = 'carrot.app'
     try {

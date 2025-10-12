@@ -21,7 +21,13 @@ export default function TestHeroImages() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url, type })
+        body: JSON.stringify({ 
+          url, 
+          type,
+          title: `Test Article from ${url}`,
+          summary: `This is a test article from ${url} to verify hero image generation.`,
+          patchTheme: 'Chicago Bulls'
+        })
       });
 
       if (!response.ok) {
@@ -33,6 +39,51 @@ export default function TestHeroImages() {
       setResult(heroResult);
     } catch (err) {
       console.error('[TestHero] Error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testAIImageGeneration = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      console.log('[TestAI] Testing AI image generation');
+      
+      const response = await fetch('/api/ai/generate-hero-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: `Test Article: ${url}`,
+          summary: `This is a test article about ${url} to verify AI hero image generation.`,
+          sourceDomain: url ? new URL(url).hostname : undefined,
+          contentType: type,
+          patchTheme: 'Chicago Bulls'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const aiResult = await response.json();
+      console.log('[TestAI] AI generation result:', aiResult);
+      
+      // Format the result to match the hero resolution format
+      setResult({
+        hero: aiResult.imageUrl,
+        source: 'ai-generated',
+        license: 'generated',
+        dominant: '#667eea',
+        prompt: aiResult.prompt
+      });
+    } catch (err) {
+      console.error('[TestAI] Error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -77,13 +128,23 @@ export default function TestHeroImages() {
               </select>
             </div>
             
-            <button
-              onClick={testHeroResolution}
-              disabled={loading}
-              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Testing...' : 'Test Hero Resolution'}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={testHeroResolution}
+                disabled={loading}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Testing...' : 'Test Hero Resolution'}
+              </button>
+              
+              <button
+                onClick={testAIImageGeneration}
+                disabled={loading}
+                className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? 'Generating...' : 'Test AI Generation'}
+              </button>
+            </div>
           </div>
         </div>
 

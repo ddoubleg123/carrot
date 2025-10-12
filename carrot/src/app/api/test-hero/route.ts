@@ -3,18 +3,21 @@ import { resolveHero } from '@/lib/media/resolveHero'
 
 export async function POST(request: NextRequest) {
   try {
-    const { url, type } = await request.json()
+    const { url, type, title, summary, patchTheme } = await request.json()
 
     if (!url || !type) {
       return NextResponse.json({ error: 'Missing url or type parameter' }, { status: 400 })
     }
 
-    console.log('[TestHero] Testing hero resolution for:', { url, type })
+    console.log('[TestHero] Testing hero resolution for:', { url, type, title: title?.substring(0, 50) })
     
     const heroResult = await resolveHero({
       url: url,
       type: type as any,
-      assetUrl: url
+      assetUrl: url,
+      title: title,
+      summary: summary,
+      patchTheme: patchTheme
     })
 
     console.log('[TestHero] Hero resolution result:', heroResult)
