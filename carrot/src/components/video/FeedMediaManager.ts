@@ -326,7 +326,7 @@ class FeedMediaManager {
               hasPath: !!post.path
             });
             // Skip this post instead of continuing with invalid data
-            continue;
+            return; // Exit early instead of continue
           }
         }
         break;
