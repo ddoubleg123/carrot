@@ -37,14 +37,9 @@ export async function POST(req: Request) {
         }, { status: 404 });
       }
       
-      // Get sources for this specific patch that need hero images
+      // Get sources for this specific patch (we'll filter for missing mediaAssets manually)
       whereClause = {
-        patchId: patch.id,
-        OR: [
-          { citeMeta: { equals: null } },
-          { citeMeta: { path: ['mediaAssets'], equals: null } },
-          { citeMeta: { path: ['mediaAssets', 'hero'], equals: null } }
-        ]
+        patchId: patch.id
       };
       
       console.log(`🎯 Targeting patch: ${patchHandle} (ID: ${patch.id})`);
@@ -72,8 +67,16 @@ export async function POST(req: Request) {
     })
 
     console.log(`📊 Found ${sources.length} sources to process`)
+    
+    // Filter for sources that actually need hero images
+    const sourcesNeedingHero = sources.filter(source => {
+      const citeMeta = source.citeMeta as any;
+      return !citeMeta?.mediaAssets?.hero;
+    });
+    
+    console.log(`📸 Sources needing hero images: ${sourcesNeedingHero.length}`)
 
-    if (sources.length === 0) {
+    if (sourcesNeedingHero.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No sources need hero image enrichment',
@@ -89,7 +92,7 @@ export async function POST(req: Request) {
     const results = []
 
     // Process sources
-    for (const source of sources) {
+    for (const source of sourcesNeedingHero) {
       try {
         console.log(`🎯 Processing source: ${source.title} (${source.url})`)
         
@@ -165,11 +168,11 @@ export async function POST(req: Request) {
       success: true,
       message: 'Source hero image backfill completed',
       summary: {
-        total: sources.length,
+        total: sourcesNeedingHero.length,
         processed,
         successful,
         failed,
-        successRate: ((successful / processed) * 100).toFixed(1) + '%'
+        successRate: processed > 0 ? ((successful / processed) * 100).toFixed(1) + '%' : '0%'
       },
       results
     })
