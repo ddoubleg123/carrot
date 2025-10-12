@@ -11,17 +11,27 @@ export async function POST(request: NextRequest) {
 
     console.log('[UpdateHeroImage] Updating hero image for item:', itemId)
 
+    // First, get the existing mediaAssets to preserve other fields
+    const existingItem = await prisma.discoveredContent.findUnique({
+      where: { id: itemId },
+      select: { mediaAssets: true }
+    })
+
+    // Merge with existing mediaAssets
+    const existingMediaAssets = existingItem?.mediaAssets as any || {}
+    const updatedMediaAssets = {
+      ...existingMediaAssets,
+      hero: heroImageUrl,
+      source: source || 'ai-generated',
+      license: license || 'generated',
+      dominant: '#667eea' // Default AI-generated color
+    }
+
     // Update the DiscoveredContent record with the new hero image
     const updatedItem = await prisma.discoveredContent.update({
       where: { id: itemId },
       data: {
-        mediaAssets: {
-          hero: heroImageUrl,
-          source: source || 'ai-generated',
-          license: license || 'generated',
-          // Keep existing values for other media assets
-          dominant: '#667eea' // Default AI-generated color
-        }
+        mediaAssets: updatedMediaAssets
       }
     })
 
@@ -34,9 +44,18 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[UpdateHeroImage] Error:', error)
+    console.error('[UpdateHeroImage] Error details:', {
+      error: error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      itemId,
+      heroImageUrl: heroImageUrl?.substring(0, 50)
+    })
     return NextResponse.json(
-      { error: 'Failed to update hero image' },
+      { 
+        error: 'Failed to update hero image',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
