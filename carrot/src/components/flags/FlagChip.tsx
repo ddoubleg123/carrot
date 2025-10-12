@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { getCountryData } from 'react-international-phone';
 
 interface FlagChipProps {
   countryCode?: string | null;
@@ -10,68 +9,82 @@ interface FlagChipProps {
 }
 
 /**
- * Displays a country flag using react-international-phone
- * - Uses the same library as CustomPhoneInput for consistency
- * - Proper flag display that actually works
- * - 36px default size for visibility
+ * Displays a country flag using Unicode flag emojis.
+ * - Ensures correct sizing (default 36px).
+ * - No fallback text, only the flag.
+ * - Works reliably across all platforms.
  */
-export default function FlagChip({ 
-  countryCode, 
-  label, 
-  className, 
-  size = 36 
+export default function FlagChip({
+  countryCode,
+  label,
+  className,
+  size = 36
 }: FlagChipProps) {
   if (!countryCode) {
     return null;
   }
 
-  // Normalize country code to lowercase
-  const normalizedCode = countryCode.toLowerCase();
-  
-  try {
-    // Get country data from react-international-phone
-    const countryData = getCountryData({ code: normalizedCode });
-    
-    if (!countryData) {
-      console.warn(`[FlagChip] Country not found: ${countryCode}`);
-      return null;
-    }
+  const normalizedCode = countryCode.toUpperCase();
 
-    const countryName = countryData.name || countryCode.toUpperCase();
-    const ariaLabel = label || `${countryName} flag`;
+  // Apply override: Israel -> Palestine
+  const effectiveCode = normalizedCode === 'IL' ? 'PS' : normalizedCode;
 
-    return (
-      <span
-        className={[
-          "inline-flex items-center justify-center",
-          "px-1 py-0.5 rounded-md",
-          "bg-white/50 border border-black/5",
-          "transition-transform duration-200 hover:scale-105",
-          "cursor-default",
-          className
-        ].filter(Boolean).join(" ")}
-        role="img"
-        aria-label={ariaLabel}
-        title={ariaLabel}
-      >
-        <span
-          className="inline-block leading-none"
-          style={{
-            fontSize: `${size}px`,
-            lineHeight: 1,
-            width: `${size}px`,
-            height: `${size}px`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          {countryData.flag}
-        </span>
-      </span>
-    );
-  } catch (error) {
-    console.warn(`[FlagChip] Error getting country data for ${countryCode}:`, error);
-    return null;
-  }
+  // Convert ISO country code to flag emoji
+  const getFlagEmoji = (code: string): string => {
+    const codePoints = code
+      .toUpperCase()
+      .split('')
+      .map(char => 127397 + char.charCodeAt(0));
+    return String.fromCodePoint(...codePoints);
+  };
+
+  // Country name mapping for accessibility
+  const countryNames: Record<string, string> = {
+    'US': 'United States',
+    'GB': 'United Kingdom',
+    'CA': 'Canada',
+    'AU': 'Australia',
+    'DE': 'Germany',
+    'FR': 'France',
+    'IT': 'Italy',
+    'ES': 'Spain',
+    'JP': 'Japan',
+    'KR': 'South Korea',
+    'CN': 'China',
+    'IN': 'India',
+    'BR': 'Brazil',
+    'MX': 'Mexico',
+    'RU': 'Russia',
+    'PS': 'Palestine'
+  };
+
+  const countryName = countryNames[effectiveCode] || effectiveCode;
+  const flagEmoji = getFlagEmoji(effectiveCode);
+  const ariaLabel = label || `${countryName} flag`;
+
+  return (
+    <span
+      className={[
+        "inline-flex items-center justify-center",
+        "rounded-md",
+        "bg-white/50 border border-black/5",
+        "transition-transform duration-200 hover:scale-105",
+        "cursor-default",
+        className
+      ].filter(Boolean).join(" ")}
+      role="img"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      style={{
+        width: `${size + 8}px`,
+        height: `${size + 8}px`,
+        padding: '4px',
+        fontSize: `${size}px`,
+        lineHeight: '1',
+        fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif'
+      }}
+    >
+      {flagEmoji}
+    </span>
+  );
 }
