@@ -908,7 +908,7 @@ export default function SimpleVideo({
       }
     }
     
-        // CRITICAL: Set a 8 second timeout to detect stuck videos
+        // CRITICAL: Set a 15 second timeout to detect stuck videos
         if (loadingTimeoutRef.current) {
           clearTimeout(loadingTimeoutRef.current);
         }
@@ -972,7 +972,7 @@ export default function SimpleVideo({
             });
             setIsLoading(false);
           }
-        }, 8000); // 8 second timeout to detect stuck videos
+        }, 15000); // 15 second timeout to detect stuck videos
   };
 
   const handleLoadedData = () => {

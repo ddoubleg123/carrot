@@ -42,6 +42,10 @@ function isAllowedUrl(u: URL) {
 }
 
 export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<Response> {
+  // Add request timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  
   try {
     const urlObj = new URL(req.url);
     const { searchParams } = urlObj;
@@ -131,6 +135,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         method: 'GET',
         headers,
         redirect: 'follow',
+        signal: controller.signal, // Add timeout signal
       }, {
         maxRetries: 2,
         baseDelay: 1000,
@@ -508,6 +513,9 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
     statBump(status);
     return new NextResponse(upstream.body, { status, headers });
   } catch (e: any) {
+    // Clean up timeout
+    clearTimeout(timeoutId);
+    
     console.error('[api/video] proxy error', e);
     console.error('[api/video] Error details:', {
       message: e.message,

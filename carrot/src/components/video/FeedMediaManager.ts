@@ -325,6 +325,8 @@ class FeedMediaManager {
               hasBucket: !!post.bucket,
               hasPath: !!post.path
             });
+            // Skip this post instead of continuing with invalid data
+            continue;
           }
         }
         break;
