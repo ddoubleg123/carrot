@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, Link2, MessageSquare, Share2, Clock, Calendar, Bookmark } from 'lucide-react'
 import { pickHero, getDominantColor } from '@/lib/media/hero'
-import GeneratedCover from '../patch/GeneratedCover'
+import GeneratedCover from '@/app/(app)/patch/[handle]/components/GeneratedCover'
 
 // Types for different content sources
 interface DiscoveredItem {
