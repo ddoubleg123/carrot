@@ -9,10 +9,10 @@ interface FlagChipProps {
 }
 
 /**
- * Displays a country flag using Unicode flag emojis.
- * - Ensures correct sizing (default 36px).
- * - No fallback text, only the flag.
- * - Works reliably across all platforms.
+ * Displays a country flag using local SVG files from /public/flags/.
+ * - Uses the actual SVG flag files stored in the project
+ * - No fallback text, only the flag
+ * - Works reliably across all platforms and browsers
  */
 export default function FlagChip({
   countryCode,
@@ -24,43 +24,36 @@ export default function FlagChip({
     return null;
   }
 
-  const normalizedCode = countryCode.toUpperCase();
+  const normalizedCode = countryCode.toLowerCase();
 
   // Apply override: Israel -> Palestine
-  const effectiveCode = normalizedCode === 'IL' ? 'PS' : normalizedCode;
-
-  // Convert ISO country code to flag emoji
-  const getFlagEmoji = (code: string): string => {
-    const codePoints = code
-      .toUpperCase()
-      .split('')
-      .map(char => 127397 + char.charCodeAt(0));
-    return String.fromCodePoint(...codePoints);
-  };
+  const effectiveCode = normalizedCode === 'il' ? 'ps' : normalizedCode;
 
   // Country name mapping for accessibility
   const countryNames: Record<string, string> = {
-    'US': 'United States',
-    'GB': 'United Kingdom',
-    'CA': 'Canada',
-    'AU': 'Australia',
-    'DE': 'Germany',
-    'FR': 'France',
-    'IT': 'Italy',
-    'ES': 'Spain',
-    'JP': 'Japan',
-    'KR': 'South Korea',
-    'CN': 'China',
-    'IN': 'India',
-    'BR': 'Brazil',
-    'MX': 'Mexico',
-    'RU': 'Russia',
-    'PS': 'Palestine'
+    'us': 'United States',
+    'gb': 'United Kingdom',
+    'ca': 'Canada',
+    'au': 'Australia',
+    'de': 'Germany',
+    'fr': 'France',
+    'it': 'Italy',
+    'es': 'Spain',
+    'jp': 'Japan',
+    'kr': 'South Korea',
+    'cn': 'China',
+    'in': 'India',
+    'br': 'Brazil',
+    'mx': 'Mexico',
+    'ru': 'Russia',
+    'ps': 'Palestine'
   };
 
-  const countryName = countryNames[effectiveCode] || effectiveCode;
-  const flagEmoji = getFlagEmoji(effectiveCode);
+  const countryName = countryNames[effectiveCode] || effectiveCode.toUpperCase();
   const ariaLabel = label || `${countryName} flag`;
+
+  // Use local SVG flag files from /public/flags/
+  const flagSvgUrl = `/flags/${effectiveCode}.svg`;
 
   return (
     <span
@@ -70,6 +63,7 @@ export default function FlagChip({
         "bg-white/50 border border-black/5",
         "transition-transform duration-200 hover:scale-105",
         "cursor-default",
+        "overflow-hidden",
         className
       ].filter(Boolean).join(" ")}
       role="img"
@@ -79,12 +73,15 @@ export default function FlagChip({
         width: `${size + 8}px`,
         height: `${size + 8}px`,
         padding: '4px',
-        fontSize: `${size}px`,
-        lineHeight: '1',
-        fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif'
       }}
     >
-      {flagEmoji}
+      <img
+        src={flagSvgUrl}
+        alt={ariaLabel}
+        width={size}
+        height={size}
+        className="block rounded-sm"
+      />
     </span>
   );
 }
