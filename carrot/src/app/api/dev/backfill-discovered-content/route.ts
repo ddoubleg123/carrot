@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         
         // Resolve hero image using the 4-tier pipeline
         const heroResult = await resolveHero({
-          url: item.sourceUrl,
+          url: item.sourceUrl || undefined,
           type: type as any,
         })
 
