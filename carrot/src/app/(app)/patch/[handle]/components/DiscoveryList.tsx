@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Search, RefreshCw, Play, Square } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
-import DiscoveryHeader from './DiscoveryHeader'
 import ContentModal from './ContentModal'
 import { useDiscoveredItems } from '../useDiscoveredItems'
 import { DiscoveredItem } from '@/types/discovered-content'
@@ -120,7 +119,12 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   return (
     <div className="border-t border-[#E6E8EC] pt-4">
       {/* Discovery Header */}
-      <DiscoveryHeader patchHandle={patchHandle} onRefresh={refetch} />
+      <div className="mt-6 mb-3">
+        <h2 className="text-xl font-semibold text-slate-900">Discovering content</h2>
+        <p className="mt-1 mb-3 text-sm text-slate-600">
+          Click 'Start Discovery' to begin finding relevant content for this group.
+        </p>
+      </div>
 
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap mb-6">
@@ -176,20 +180,20 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             onClick={handleToggleDiscovery}
             variant={isDiscoveryActive ? "danger" : "primary"}
             size="sm"
-            className={`flex items-center gap-3 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+            className={`flex items-center gap-4 px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 border-2 ${
               isDiscoveryActive 
-                ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md' 
-                : 'bg-[#0A5AFF] hover:bg-[#0056CC] text-white shadow-sm hover:shadow-md'
+                ? 'bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700 shadow-lg hover:shadow-xl' 
+                : 'bg-[#0A5AFF] hover:bg-[#0056CC] text-white border-[#0A5AFF] hover:border-[#0056CC] shadow-lg hover:shadow-xl'
             }`}
           >
             {isDiscoveryActive ? (
               <>
-                <Square className="h-4 w-4" />
+                <Square className="h-5 w-5" />
                 Stop discovery
               </>
             ) : (
               <>
-                <Play className="h-4 w-4" />
+                <Play className="h-5 w-5" />
                 Start discovery
               </>
             )}
