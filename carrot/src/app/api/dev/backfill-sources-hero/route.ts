@@ -11,14 +11,56 @@ export async function POST(req: Request) {
   try {
     console.log('🚀 Starting hero image backfill for SOURCES...')
     
-    // Get recent sources that likely need hero enrichment
-    const sources = await prisma.source.findMany({
-      where: {
+    // Parse request body to check for patch handle
+    let patchHandle = null;
+    try {
+      const body = await req.json();
+      patchHandle = body.patchHandle;
+    } catch {
+      // No body or invalid JSON, continue with default behavior
+    }
+    
+    // Build where clause based on whether patchHandle is provided
+    let whereClause: any = {};
+    
+    if (patchHandle) {
+      // Find the patch by handle
+      const patch = await prisma.patch.findUnique({
+        where: { handle: patchHandle },
+        select: { id: true }
+      });
+      
+      if (!patch) {
+        return NextResponse.json({
+          success: false,
+          error: `Patch with handle '${patchHandle}' not found`
+        }, { status: 404 });
+      }
+      
+      // Get sources for this specific patch that need hero images
+      whereClause = {
+        patchId: patch.id,
+        OR: [
+          { citeMeta: { equals: null } },
+          { citeMeta: { path: ['mediaAssets'], equals: null } },
+          { citeMeta: { path: ['mediaAssets', 'hero'], equals: null } }
+        ]
+      };
+      
+      console.log(`🎯 Targeting patch: ${patchHandle} (ID: ${patch.id})`);
+    } else {
+      // Default behavior: Get recent sources that likely need hero enrichment
+      whereClause = {
         // Get sources created in the last 30 days
         createdAt: {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
         }
-      },
+      };
+    }
+    
+    // Get sources that need hero enrichment
+    const sources = await prisma.source.findMany({
+      where: whereClause,
       select: {
         id: true,
         title: true,
@@ -26,7 +68,7 @@ export async function POST(req: Request) {
         patchId: true,
         citeMeta: true
       },
-      take: 10 // Limit for testing
+      take: patchHandle ? 20 : 10 // Allow more for targeted backfill
     })
 
     console.log(`📊 Found ${sources.length} sources to process`)
