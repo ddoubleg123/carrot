@@ -174,7 +174,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         <div className="ml-auto">
           <Button
             onClick={handleToggleDiscovery}
-            variant={isDiscoveryActive ? "destructive" : "default"}
+            variant={isDiscoveryActive ? "danger" : "primary"}
             size="sm"
             className={`flex items-center gap-2 ${isDiscoveryActive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#0A5AFF] hover:bg-[#0056CC]'}`}
           >
