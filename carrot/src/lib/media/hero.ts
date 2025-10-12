@@ -18,7 +18,9 @@ async function generateAIHeroImage(item: DiscoveredItem): Promise<void> {
         summary: item.content.summary150,
         sourceDomain: item.meta?.sourceDomain,
         contentType: item.type,
-        patchTheme: item.patchHandle // Use patch handle as theme context
+        patchTheme: item.meta?.sourceDomain?.includes('espn') ? 'Sports' : 
+                    item.meta?.sourceDomain?.includes('politico') ? 'Politics' : 
+                    'General'
       })
     })
 
