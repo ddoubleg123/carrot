@@ -63,16 +63,23 @@ export default function PatchHeader({
     if (confirm(`Are you sure you want to delete the "${patch.name}" patch? This action cannot be undone.`)) {
       (async () => {
         try {
+          console.log('[PatchHeader] Attempting to delete patch:', patch.handle);
           const res = await fetch(`/api/patches/${patch.handle}`, { method: 'DELETE' });
           const data = await res.json().catch(() => ({}));
+          
+          console.log('[PatchHeader] Delete response:', { status: res.status, data });
+          
           if (!res.ok || !data?.success) {
+            console.error('[PatchHeader] Delete failed:', { status: res.status, error: data?.error });
             alert(`Delete failed: ${data?.error || res.status}`);
             return;
           }
-          // Redirect back to dashboard after deletion
-          router.push('/dashboard');
+          
+          console.log('[PatchHeader] Delete successful, redirecting to /patch');
+          // Redirect back to patch list page after deletion
+          router.push('/patch');
         } catch (e) {
-          console.error('Delete error', e);
+          console.error('[PatchHeader] Delete error', e);
           alert('Delete failed');
         }
       })();
