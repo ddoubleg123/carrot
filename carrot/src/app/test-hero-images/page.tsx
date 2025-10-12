@@ -1,6 +1,5 @@
 "use client";
 import React, { useState } from 'react';
-import { resolveHero } from '@/lib/media/resolveHero';
 
 export default function TestHeroImages() {
   const [url, setUrl] = useState('https://theathletic.com/');
@@ -16,12 +15,20 @@ export default function TestHeroImages() {
 
     try {
       console.log('[TestHero] Testing hero resolution for:', { url, type });
-      const heroResult = await resolveHero({
-        url: url,
-        type: type as any,
-        assetUrl: url
+      
+      const response = await fetch('/api/test-hero', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url, type })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const heroResult = await response.json();
       console.log('[TestHero] Hero resolution result:', heroResult);
       setResult(heroResult);
     } catch (err) {
