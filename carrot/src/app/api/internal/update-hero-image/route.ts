@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { MediaAssets, HeroSource, HeroLicense } from '@/lib/media/hero-types'
 
 export async function POST(request: NextRequest) {
   let itemId: string | undefined
@@ -31,12 +32,12 @@ export async function POST(request: NextRequest) {
     console.log('[UpdateHeroImage] Found item:', { id: existingItem.id, title: existingItem.title })
 
     // Merge with existing mediaAssets
-    const existingMediaAssets = existingItem.mediaAssets as any || {}
-    const updatedMediaAssets = {
+    const existingMediaAssets = existingItem.mediaAssets as MediaAssets || {}
+    const updatedMediaAssets: MediaAssets = {
       ...existingMediaAssets,
       hero: heroImageUrl,
-      source: source || 'ai-generated',
-      license: license || 'generated',
+      source: (source as HeroSource) || 'ai-generated',
+      license: (license as HeroLicense) || 'generated',
       dominant: '#667eea' // Default AI-generated color
     }
 
