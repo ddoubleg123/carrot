@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, Link2, MessageSquare, Share2, Clock, Calendar, Bookmark } from 'lucide-react'
@@ -74,6 +74,9 @@ export default function ContentModal({ item, isOpen, onClose }: ContentModalProp
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+        <DialogDescription className="sr-only">
+          Content preview for {item.title} from {item.meta.sourceDomain}
+        </DialogDescription>
         {/* Hero Section */}
         <div 
           className="relative aspect-[16/9] w-full overflow-hidden"

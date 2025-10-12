@@ -28,9 +28,13 @@ export async function GET(request: NextRequest) {
 
     // Fetch the original image with timeout
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
+    const timeoutId = setTimeout(() => {
+      console.log('[Media Proxy] Timeout after 30s for:', imageUrl.substring(0, 50))
+      controller.abort()
+    }, 30000) // Increased to 30 seconds
 
     try {
+      const startTime = Date.now()
       const response = await fetch(imageUrl, {
         signal: controller.signal,
         headers: {
@@ -39,8 +43,11 @@ export async function GET(request: NextRequest) {
       })
 
       clearTimeout(timeoutId)
+      const fetchTime = Date.now() - startTime
+      console.log('[Media Proxy] Fetched in', fetchTime, 'ms:', imageUrl.substring(0, 50))
 
       if (!response.ok) {
+        console.log('[Media Proxy] Failed to fetch:', response.status, imageUrl.substring(0, 50))
         return NextResponse.json({ error: 'Failed to fetch image' }, { status: response.status })
       }
 
@@ -63,8 +70,10 @@ export async function GET(request: NextRequest) {
     } catch (fetchError) {
       clearTimeout(timeoutId)
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.log('[Media Proxy] Request timeout for:', imageUrl.substring(0, 50))
         return NextResponse.json({ error: 'Request timeout' }, { status: 408 })
       }
+      console.log('[Media Proxy] Fetch error for:', imageUrl.substring(0, 50), fetchError)
       throw fetchError
     }
 
