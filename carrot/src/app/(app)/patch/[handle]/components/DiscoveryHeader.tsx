@@ -101,19 +101,6 @@ export default function DiscoveryHeader({ patchHandle, onRefresh }: DiscoveryHea
 
         {/* Right Side - Buttons */}
         <div className="flex items-center gap-2">
-          {/* Refresh Button - shown when not running */}
-          {state !== 'running' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              className="h-8"
-            >
-              <RotateCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-          )}
-          
           {/* Primary Action Button */}
           <Button
             variant={primaryButton.variant}

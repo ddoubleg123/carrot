@@ -176,16 +176,20 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             onClick={handleToggleDiscovery}
             variant={isDiscoveryActive ? "danger" : "primary"}
             size="sm"
-            className={`flex items-center gap-2 ${isDiscoveryActive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#0A5AFF] hover:bg-[#0056CC]'}`}
+            className={`flex items-center gap-3 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+              isDiscoveryActive 
+                ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md' 
+                : 'bg-[#0A5AFF] hover:bg-[#0056CC] text-white shadow-sm hover:shadow-md'
+            }`}
           >
             {isDiscoveryActive ? (
               <>
-                <Square className="h-3 w-3" />
+                <Square className="h-4 w-4" />
                 Stop discovery
               </>
             ) : (
               <>
-                <Play className="h-3 w-3" />
+                <Play className="h-4 w-4" />
                 Start discovery
               </>
             )}

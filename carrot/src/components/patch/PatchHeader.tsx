@@ -192,8 +192,8 @@ export default function PatchHeader({
           onClick={isMember ? () => {} : handleJoin}
           variant={isMember ? "outline" : "secondary"}
           className={isMember 
-            ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-3 py-2 flex items-center gap-2" 
-            : "bg-white text-[#FF6A00] hover:bg-white/90 px-3 py-2 flex items-center gap-2"
+            ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-3 py-2 flex items-center gap-3" 
+            : "bg-white text-[#FF6A00] hover:bg-white/90 px-3 py-2 flex items-center gap-3"
           }
         >
           <Users className="w-4 h-4 flex-shrink-0" />
@@ -203,7 +203,7 @@ export default function PatchHeader({
         <Button
           variant="ghost"
           onClick={handleShare}
-          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-2"
+          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-3"
         >
           <Share2 className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Share</span>
@@ -212,7 +212,7 @@ export default function PatchHeader({
         <Button
           variant="ghost"
           onClick={handleSettings}
-          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-2"
+          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-3"
         >
           <Settings className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Settings</span>
@@ -226,7 +226,7 @@ export default function PatchHeader({
             const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
             handleThemeChange({ mode: 'preset', preset: nextIndex });
           }}
-          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-2"
+          className="text-white hover:bg-white/10 px-3 py-2 flex items-center gap-3"
           title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
         >
           <Zap className="w-4 h-4 flex-shrink-0" />
