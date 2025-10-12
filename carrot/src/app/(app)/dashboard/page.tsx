@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
 import ClientSessionProvider from './components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
-import PostModalController from '../../../components/post-modal/PostModalController';
+import UnifiedPostModalController from '../../../components/post-modal/UnifiedPostModalController';
 import Widgets from './components/Widgets';
 import { Inter } from 'next/font/google';
 
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
               {/* Client dashboard (hydrated in client file) */}
               <DashboardClient initialCommitments={commitments} isModalComposer={true} />
               {/* Global controller that mounts the Post Modal when ?modal=1&post=ID */}
-              <PostModalController />
+              <UnifiedPostModalController />
             </ClientSessionProvider>
           </div>
           
