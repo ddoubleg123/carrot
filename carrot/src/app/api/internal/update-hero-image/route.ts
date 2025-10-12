@@ -17,14 +17,21 @@ export async function POST(request: NextRequest) {
 
     console.log('[UpdateHeroImage] Updating hero image for item:', itemId)
 
-    // First, get the existing mediaAssets to preserve other fields
+    // First, check if the item exists
     const existingItem = await prisma.discoveredContent.findUnique({
       where: { id: itemId },
-      select: { mediaAssets: true }
+      select: { id: true, mediaAssets: true, title: true }
     })
 
+    if (!existingItem) {
+      console.error('[UpdateHeroImage] Item not found:', itemId)
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+    }
+
+    console.log('[UpdateHeroImage] Found item:', { id: existingItem.id, title: existingItem.title })
+
     // Merge with existing mediaAssets
-    const existingMediaAssets = existingItem?.mediaAssets as any || {}
+    const existingMediaAssets = existingItem.mediaAssets as any || {}
     const updatedMediaAssets = {
       ...existingMediaAssets,
       hero: heroImageUrl,
@@ -32,6 +39,11 @@ export async function POST(request: NextRequest) {
       license: license || 'generated',
       dominant: '#667eea' // Default AI-generated color
     }
+
+    console.log('[UpdateHeroImage] Updating mediaAssets:', { 
+      existing: Object.keys(existingMediaAssets), 
+      updated: Object.keys(updatedMediaAssets) 
+    })
 
     // Update the DiscoveredContent record with the new hero image
     const updatedItem = await prisma.discoveredContent.update({
