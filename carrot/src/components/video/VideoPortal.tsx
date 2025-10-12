@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useVideoContext } from '@/context/VideoContext';
+
+// Note: framer-motion animations will be added when the package is installed
+// For now, using plain divs without animation
 
 interface VideoPortalProps {
   postId: string;
@@ -148,41 +150,8 @@ export default function VideoPortal({
     }
   };
 
-  const videoVariants = {
-    hidden: { 
-      opacity: 0, 
-      scale: 0.8,
-      y: isModal ? 50 : 0 
-    },
-    visible: { 
-      opacity: 1, 
-      scale: 1,
-      y: 0,
-      transition: {
-        duration: 0.3,
-        ease: "easeOut"
-      }
-    },
-    exit: { 
-      opacity: 0, 
-      scale: 0.8,
-      y: isModal ? -50 : 0,
-      transition: {
-        duration: 0.2,
-        ease: "easeIn"
-      }
-    }
-  };
-
   return (
-    <AnimatePresence>
-      <motion.div
-        variants={videoVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        className={`relative ${className}`}
-      >
+    <div className={`relative ${className}`}>
         {isModal && (
           <button
             onClick={handleClose}
@@ -220,7 +189,6 @@ export default function VideoPortal({
             <div className="text-white text-sm">Transferring...</div>
           </div>
         )}
-      </motion.div>
-    </AnimatePresence>
+    </div>
   );
 }
