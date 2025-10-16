@@ -5,6 +5,10 @@ import { deepseekAudit } from '@/lib/audit/deepseek';
 import { relevanceScore } from '@/lib/router/relevance';
 import { transcribeWithVosk } from '@/lib/asr/vosk';
 import { polishTranscript } from '@/lib/audit/deepseek';
+import { generateAIImage } from '@/lib/media/aiImageGenerator';
+import { uploadHeroImage } from '@/lib/media/uploadHeroImage';
+import { tryFallbackImage } from '@/lib/media/fallbackImages';
+import { DISCOVERY_CONFIG } from '@/config/discovery';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -87,6 +91,70 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
           relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
         },
       });
+    }
+
+    // Generate hero image automatically if enabled
+    if (DISCOVERY_CONFIG.ENABLE_AUTO_IMAGES) {
+      try {
+        console.log(`[Discovery] Generating hero image for: ${item.title}`);
+        
+        const heroResult = await generateAIImage({
+          title: item.title,
+          summary: item.content || '',
+          artisticStyle: DISCOVERY_CONFIG.DEFAULT_IMAGE_STYLE,
+          enableHiresFix: DISCOVERY_CONFIG.HD_MODE
+        });
+        
+        if (heroResult.success && heroResult.imageUrl) {
+          // Upload to Firebase
+          const firebaseUrl = await uploadHeroImage({
+            base64Image: heroResult.imageUrl,
+            itemId: item.id,
+            storageType: 'discovered'
+          });
+          
+          // Update with hero image using correct field names per schema
+          await prisma.discoveredContent.update({
+            where: { id: item.id },
+            data: {
+              mediaAssets: {
+                hero: firebaseUrl,  // ← Correct field name!
+                source: 'ai-generated-auto',
+                license: 'generated',
+                generatedAt: new Date().toISOString(),
+                prompt: heroResult.prompt
+              }
+            }
+          });
+          
+          console.log(`[Discovery] ✅ Generated hero image for: ${item.title}`);
+        } else {
+          // Try fallback images
+          console.log(`[Discovery] AI generation failed, trying fallbacks for: ${item.title}`);
+          const fallbackResult = await tryFallbackImage({
+            title: item.title,
+            content: item.content || undefined,
+            sourceUrl: url
+          });
+          
+          if (fallbackResult.success && fallbackResult.imageUrl) {
+            await prisma.discoveredContent.update({
+              where: { id: item.id },
+              data: {
+                mediaAssets: {
+                  hero: fallbackResult.imageUrl,  // ← Correct field name!
+                  source: `fallback-${fallbackResult.source}`,
+                  license: 'source'
+                }
+              }
+            });
+            console.log(`[Discovery] ⚠️  Used fallback image (${fallbackResult.source}) for: ${item.title}`);
+          }
+        }
+      } catch (imageError) {
+        console.error(`[Discovery] Image generation error:`, imageError);
+        // Continue without image - don't fail the whole discovery
+      }
     }
 
     return NextResponse.json({ ok: true, id: item.id });

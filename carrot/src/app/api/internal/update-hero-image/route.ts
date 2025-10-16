@@ -1,81 +1,78 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { MediaAssets, HeroSource, HeroLicense } from '@/lib/media/hero-types'
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/firebase";
+import { doc, updateDoc } from "firebase/firestore";
+import prisma from "@/lib/prisma";
 
+/**
+ * Update hero image for discovered content
+ * POST /api/internal/update-hero-image
+ */
 export async function POST(request: NextRequest) {
-  let itemId: string | undefined
-  let heroImageUrl: string | undefined
-  
   try {
-    const requestData = await request.json()
-    itemId = requestData.itemId
-    heroImageUrl = requestData.heroImageUrl
-    const { source, license } = requestData
+    const body = await request.json();
+    const { id, hero, source = 'ai-generated' } = body;
 
-    if (!itemId || !heroImageUrl) {
-      return NextResponse.json({ error: 'Missing itemId or heroImageUrl' }, { status: 400 })
+    if (!id || !hero) {
+      return NextResponse.json(
+        { error: "Missing id or hero URL" },
+        { status: 400 }
+      );
     }
 
-    console.log('[UpdateHeroImage] Updating hero image for item:', itemId)
+    console.log(`[update-hero-image] Updating hero for ${id}`);
 
-    // First, check if the item exists
-    const existingItem = await prisma.discoveredContent.findUnique({
-      where: { id: itemId },
-      select: { id: true, mediaAssets: true, title: true }
-    })
+    // Update in Prisma (primary database)
+    try {
+      const currentItem = await prisma.discoveredContent.findUnique({
+        where: { id },
+        select: { mediaAssets: true }
+      });
 
-    if (!existingItem) {
-      console.error('[UpdateHeroImage] Item not found:', itemId)
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      const currentMediaAssets = (currentItem?.mediaAssets as any) || {};
+
+      await prisma.discoveredContent.update({
+        where: { id },
+        data: {
+          mediaAssets: {
+            ...currentMediaAssets,
+            hero: hero,  // ← Correct field name per schema!
+            source: source,
+            license: source.includes('generated') ? 'generated' : 'source',
+            updatedAt: new Date().toISOString()
+          }
+        }
+      });
+
+      console.log(`[update-hero-image] ✅ Updated hero in Prisma for ${id}`);
+    } catch (prismaErr) {
+      console.error(`[update-hero-image] Prisma update failed:`, prismaErr);
+      return NextResponse.json(
+        { error: "Failed to update database" },
+        { status: 500 }
+      );
     }
 
-    console.log('[UpdateHeroImage] Found item:', { id: existingItem.id, title: existingItem.title })
-
-    // Merge with existing mediaAssets
-    const existingMediaAssets = existingItem.mediaAssets as any || {}
-    const updatedMediaAssets = {
-      ...existingMediaAssets,
-      hero: heroImageUrl,
-      source: (source as HeroSource) || 'ai-generated',
-      license: (license as HeroLicense) || 'generated',
-      dominant: '#667eea' // Default AI-generated color
-    }
-
-    console.log('[UpdateHeroImage] Updating mediaAssets:', { 
-      existing: Object.keys(existingMediaAssets), 
-      updated: Object.keys(updatedMediaAssets) 
-    })
-
-    // Update the DiscoveredContent record with the new hero image
-    const updatedItem = await prisma.discoveredContent.update({
-      where: { id: itemId },
-      data: {
-        mediaAssets: updatedMediaAssets
+    // Optional: Also update in Firebase if available
+    if (db) {
+      try {
+        const ref = doc(db, "discovered_content", id);
+        await updateDoc(ref, { hero, heroSource: source, updatedAt: new Date().toISOString() });
+        console.log(`[update-hero-image] ✅ Updated hero in Firebase for ${id}`);
+      } catch (firebaseErr) {
+        console.warn("[update-hero-image] Firebase update failed (non-critical):", firebaseErr);
+        // Don't fail the request if Firebase fails - Prisma is primary
       }
-    })
+    } else {
+      console.warn("[update-hero-image] Firebase unavailable, skipping Firestore update.");
+    }
 
-    console.log('[UpdateHeroImage] Successfully updated item with hero image')
+    return NextResponse.json({ success: true });
 
-    return NextResponse.json({
-      success: true,
-      itemId: updatedItem.id,
-      heroImageUrl
-    })
-
-  } catch (error) {
-    console.error('[UpdateHeroImage] Error details:', {
-      error: error,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      itemId,
-      heroImageUrl: heroImageUrl?.substring(0, 50)
-    })
+  } catch (err: any) {
+    console.error("[update-hero-image] ❌ Error:", err);
     return NextResponse.json(
-      { 
-        error: 'Failed to update hero image',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: err.message || "Failed to update hero image" },
       { status: 500 }
-    )
+    );
   }
 }

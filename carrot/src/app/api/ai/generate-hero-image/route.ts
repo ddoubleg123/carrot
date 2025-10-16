@@ -1,186 +1,148 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { runPipeline } from '@/lib/pipeline'
 
 interface GenerateHeroImageRequest {
   title: string
   summary: string
   sourceDomain?: string
   contentType?: string
-  patchTheme?: string // e.g., 'Chicago Bulls', 'Politics', etc.
+  patchTheme?: string
+  artisticStyle?: string
+  enableHiresFix?: boolean
+}
+
+// Simplified sanitization and name extraction (as per task requirements)
+function sanitizeText(text: string): string {
+  return text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
+function extractNames(title: string, summary: string): string[] {
+  const pattern = /\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/g;
+  const matches = [...title.matchAll(pattern), ...summary.matchAll(pattern)];
+  return Array.from(new Set(matches.map((m) => m[1])));
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, summary, sourceDomain, contentType = 'article', patchTheme }: GenerateHeroImageRequest = await request.json()
+    const reqBody: GenerateHeroImageRequest = await request.json();
+    
+    // Extract fields safely
+    const { 
+      title = "", 
+      summary = "", 
+      artisticStyle = "photorealistic", 
+      enableHiresFix = false 
+    } = reqBody;
 
+    // Validate required fields
     if (!title || !summary) {
-      return NextResponse.json({ error: 'Title and summary are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Title and summary are required' },
+        { status: 400 }
+      );
     }
 
-    console.log('[GenerateHeroImage] Generating AI image for:', { title: title.substring(0, 50), sourceDomain, patchTheme })
+    // Sanitize inputs
+    const cleanTitle = sanitizeText(title);
+    const cleanSummary = sanitizeText(summary);
+    
+    // Extract names from title and summary
+    const names = extractNames(cleanTitle, cleanSummary);
+    const subjectPhrase = names.length > 0 ? names.join(" and ") : "the subject";
 
-    // Create a detailed prompt for DeepSeek Vision
-    const prompt = createImagePrompt(title, summary, sourceDomain, contentType, patchTheme)
+    // Build the prompt safely - preserve user text and avoid duplication
+    // Check if summary already contains the subject name to avoid repetition
+    const summaryContainsSubject = names.some(name => 
+      cleanSummary.toLowerCase().includes(name.toLowerCase())
+    );
     
-    // Call DeepSeek Vision API
-    const imageUrl = await generateImageWithDeepSeek(prompt)
+    // If summary already has the subject, use it as-is; otherwise prepend subject
+    const positivePrompt = summaryContainsSubject 
+      ? `${cleanSummary}, professional quality, dynamic composition, natural light, realistic depth and shadow, ${artisticStyle}, 8K detail, perfect composition, rule of thirds`
+      : `${subjectPhrase} — ${cleanSummary}, professional quality, dynamic composition, natural light, realistic depth and shadow, ${artisticStyle}, 8K detail, perfect composition, rule of thirds`;
     
-    if (!imageUrl) {
-      throw new Error('Failed to generate image with DeepSeek')
+    const negativePrompt = "lowres, blurry, pixelated, duplicate people, text artifacts, visible words, legible text, cartoon, anime, sketch, oversaturated";
+
+    // Log final configuration for debugging
+    console.log("[GenerateHeroImage] Config:", {
+      enableHiresFix,
+      positivePrompt: positivePrompt.substring(0, 150) + '...',
+      names,
+      subjectPhrase,
+      artisticStyle
+    });
+
+    console.log(`[AI Image Generator] HD Option: ${enableHiresFix ? "ON" : "OFF"}`);
+
+    if (enableHiresFix) {
+      console.log('[AI Image Generator] 🔧 Running Hires Fix pass...');
+    } else {
+      console.log('[AI Image Generator] ℹ️ Hires Fix skipped (HD = No)');
     }
 
-    console.log('[GenerateHeroImage] Successfully generated image:', imageUrl.substring(0, 50))
+    // Generate image using the real pipeline with safety-filter and HD logic
+    try {
+      const result = await runPipeline({
+        positive: positivePrompt,
+        negative: negativePrompt,
+        seed: 12345, // or 'auto' for random
+        enableRefiner: true,
+        enableFaceRestore: true,
+        enableUpscale: true,
+        enableHiresFix: enableHiresFix,
+        styleMode: artisticStyle
+      });
 
-    return NextResponse.json({
-      success: true,
-      imageUrl,
-      source: 'ai-generated',
-      license: 'generated',
-      prompt: prompt.substring(0, 100) + '...'
-    })
+      // Handle safety filter blocking (if image generation returns null/empty)
+      if (!result.image) {
+        return NextResponse.json(
+          {
+            error: "This image can't be generated because it violates content safety rules (hate, violence, or explicit imagery).",
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log('[GenerateHeroImage] ✅ Successfully generated image');
+
+      // Success response
+      return NextResponse.json({
+        success: true,
+        imageUrl: result.image,
+        prompt: positivePrompt,
+        source: 'ai-generated',
+        license: 'generated',
+        featuresApplied: result.featuresApplied
+      });
+      
+    } catch (err: any) {
+      // Handle safety-related errors
+      if (err.message?.toLowerCase().includes("safety") || 
+          err.message?.toLowerCase().includes("inappropriate") ||
+          err.message?.toLowerCase().includes("violates")) {
+        return NextResponse.json(
+          {
+            error: "This image can't be generated because it violates content safety rules (hate, violence, or explicit imagery).",
+          },
+          { status: 400 }
+        );
+      }
+      
+      // Log unexpected errors
+      console.error("Image generation failed:", err);
+      return NextResponse.json(
+        { error: "Unexpected generation error." },
+        { status: 500 }
+      );
+    }
 
   } catch (error) {
-    console.error('[GenerateHeroImage] Error:', error)
+    console.error('[GenerateHeroImage] Request error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate image' },
-      { status: 500 }
-    )
-  }
-}
-
-function createImagePrompt(title: string, summary: string, sourceDomain?: string, contentType?: string, patchTheme?: string): string {
-  // Base prompt for high-quality hero images
-  let prompt = `Create a professional, high-quality hero image for a web article. `
-  
-  // Add context based on content type
-  if (contentType === 'article') {
-    prompt += `Style: Modern, clean, editorial design. `
-  } else if (contentType === 'video') {
-    prompt += `Style: Dynamic, engaging, video thumbnail design. `
-  } else if (contentType === 'pdf') {
-    prompt += `Style: Professional, document-focused design. `
-  }
-
-  // Add patch theme context for better relevance
-  if (patchTheme) {
-    if (patchTheme.toLowerCase().includes('bulls') || patchTheme.toLowerCase().includes('basketball')) {
-      prompt += `Theme: Chicago Bulls basketball, red and black colors, sports atmosphere. `
-    } else if (patchTheme.toLowerCase().includes('politics') || patchTheme.toLowerCase().includes('political')) {
-      prompt += `Theme: Political, government, civic engagement, professional tone. `
-    } else if (patchTheme.toLowerCase().includes('sports')) {
-      prompt += `Theme: Sports, athletic, dynamic, energetic. `
-    }
-  }
-
-  // Add source domain context
-  if (sourceDomain) {
-    if (sourceDomain.includes('espn')) {
-      prompt += `Style: ESPN sports journalism, bold, athletic. `
-    } else if (sourceDomain.includes('politico') || sourceDomain.includes('thehill')) {
-      prompt += `Style: Political journalism, authoritative, news-focused. `
-    } else if (sourceDomain.includes('theathletic')) {
-      prompt += `Style: Sports journalism, premium, detailed. `
-    } else if (sourceDomain.includes('cnn') || sourceDomain.includes('bbc')) {
-      prompt += `Style: News journalism, professional, informative. `
-    }
-  }
-
-  // Add content-specific details
-  prompt += `Content context: "${title}". `
-  
-  // Extract key themes from summary for better image relevance
-  const summaryWords = summary.toLowerCase().split(' ')
-  const keyTerms = summaryWords.filter(word => 
-    word.length > 4 && 
-    !['this', 'that', 'with', 'from', 'they', 'have', 'been', 'were', 'will', 'said', 'could', 'would'].includes(word)
-  ).slice(0, 5)
-  
-  if (keyTerms.length > 0) {
-    prompt += `Key themes: ${keyTerms.join(', ')}. `
-  }
-
-  // Final specifications
-  prompt += `Requirements: 1280x720 aspect ratio, high resolution, professional quality, suitable for web hero image, no text overlays, clean composition.`
-
-  return prompt
-}
-
-async function generateImageWithDeepSeek(prompt: string): Promise<string | null> {
-  try {
-    // Note: This is a placeholder implementation
-    console.log('[GenerateHeroImage] DeepSeek Janus Pro prompt:', prompt.substring(0, 200) + '...')
-    
-    // Check if we have a DeepSeek API key
-    if (!process.env.DEEPSEEK_API_KEY) {
-      console.warn('[GenerateHeroImage] No DeepSeek API key found, using placeholder')
-      return createAIPlaceholderSvg()
-    }
-    
-    // Use DeepSeek Janus Pro for image generation
-    const response = await fetch('https://api.deepseek.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json',
+      { 
+        error: error instanceof Error ? error.message : 'Failed to process request' 
       },
-      body: JSON.stringify({
-        model: 'janus-pro-1b', // Use Janus Pro 1B model for faster generation
-        prompt: prompt,
-        size: '1280x720',
-        quality: 'hd',
-        style: 'professional',
-        aspect_ratio: '16:9',
-        num_images: 1
-      })
-    })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('[GenerateHeroImage] DeepSeek API error:', response.status, errorText)
-      return createAIPlaceholderSvg()
-    }
-    
-    const data = await response.json()
-    
-    if (data.data && data.data[0] && data.data[0].url) {
-      console.log('[GenerateHeroImage] Successfully generated image with Janus Pro')
-      return data.data[0].url
-    }
-    
-    console.warn('[GenerateHeroImage] No image URL in response, using placeholder')
-    return createAIPlaceholderSvg()
-    
-  } catch (error) {
-    console.error('[GenerateHeroImage] DeepSeek API error:', error)
-    return null
+      { status: 500 }
+    );
   }
-}
-
-function createAIPlaceholderSvg(): string {
-  // Create a more sophisticated placeholder that indicates AI generation
-  const svg = `
-    <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="aiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-          <stop offset="50%" style="stop-color:#764ba2;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#f093fb;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#aiGradient)"/>
-      <g transform="translate(640,360)">
-        <circle cx="0" cy="-30" r="40" fill="white" opacity="0.9"/>
-        <circle cx="-25" cy="0" r="35" fill="white" opacity="0.8"/>
-        <circle cx="25" cy="0" r="35" fill="white" opacity="0.8"/>
-        <circle cx="0" cy="30" r="40" fill="white" opacity="0.9"/>
-        <text x="0" y="100" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="24" font-weight="bold" opacity="0.9">
-          AI Generated
-        </text>
-        <text x="0" y="130" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" opacity="0.7">
-          Custom Hero Image
-        </text>
-      </g>
-    </svg>
-  `
-  
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
 }
