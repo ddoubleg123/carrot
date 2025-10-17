@@ -700,7 +700,7 @@ function extractSubjectNamesFromInput(title: string, summary: string): string[] 
 }
 
 function getStyleOverride(artisticStyle: string): string {
-  const styleOverrides = {
+  const styleOverrides: Record<string, string> = {
     'hyperrealistic': 'photorealistic, high quality, detailed',
     'cinematic': 'cinematic photography, movie still, dramatic scene',
     'documentary': 'documentary photography, journalistic style, authentic',
@@ -750,7 +750,7 @@ function enforceDualSubjectScenes(prompt: string, title: string, summary: string
 
 function getExactSubjectName(subjectName: string, content: string): string | null {
   // Get exact subject name as it appears in the input
-  const nameVariations = {
+  const nameVariations: Record<string, string[]> = {
     'jfk': ['JFK', 'John F. Kennedy', 'John Kennedy'],
     'jesus': ['Jesus Christ', 'Jesus', 'Christ'],
     'hitler': ['Adolf Hitler', 'Hitler'],
@@ -775,7 +775,7 @@ function enforceStyleTagOverride(prompt: string, artisticStyle: string): string 
   // ENFORCE STYLE TAG OVERRIDE - Drop unnecessary styling unless specified by user
   // Remove generic styling that conflicts with user's artistic style choice
   
-  const styleConflicts = {
+  const styleConflicts: Record<string, string[]> = {
     'hyperrealistic': ['award-winning photography', 'golden hour lighting', 'cinematic', 'artistic', 'painterly'],
     'cinematic': ['award-winning photography', 'golden hour lighting', 'documentary', 'editorial'],
     'documentary': ['award-winning photography', 'golden hour lighting', 'cinematic', 'artistic'],
