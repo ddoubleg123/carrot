@@ -696,7 +696,7 @@ function extractSubjectNamesFromInput(title: string, summary: string): string[] 
     })
   }
   
-  return [...new Set(subjectNames)] // Remove duplicates
+  return Array.from(new Set(subjectNames)) // Remove duplicates
 }
 
 function getStyleOverride(artisticStyle: string): string {
@@ -909,7 +909,7 @@ function extractSubjects(content: string): string[] {
     }
   }
   
-  return [...new Set(subjects)] // Remove duplicates
+  return Array.from(new Set(subjects)) // Remove duplicates
 }
 
 function addMissingSubjects(prompt: string, missingSubjects: string[]): string {
