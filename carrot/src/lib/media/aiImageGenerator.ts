@@ -511,7 +511,7 @@ function buildStyleDirective(): string {
 
 function buildModularStyleLayer(artisticStyle: string): string {
   // Separate style layer passed post-prompt instead of being hardcoded
-  const styleLayers = {
+  const styleLayers: Record<string, string> = {
     "Hyper-Realistic (Photorealistic)": "8K resolution, shot with Canon R5, 85mm lens, f/1.4 aperture, professional studio setup",
     "Cinematic": "4K cinematic quality, film grain, professional cinematography, shot on ARRI Alexa, 35mm lens",
     "Documentary": "editorial photography, raw authenticity, journalistic quality, shot with Leica, 50mm lens, natural light",
