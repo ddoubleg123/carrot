@@ -1,5 +1,5 @@
 import { findBestWikimediaImage } from './wikimediaCommons'
-import { buildPrompt, buildNegativePrompt, getPromptTemplate } from './enhancedPromptTemplates'
+import { buildEnhancedPrompt } from './enhancedPromptTemplates'
 
 interface GenerateAIImageRequest {
   title: string
