@@ -101,8 +101,8 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         const heroResult = await generateAIImage({
           title: item.title,
           summary: item.content || '',
-          artisticStyle: DISCOVERY_CONFIG.AI_IMAGE.DEFAULT_STYLE,
-          enableHiresFix: DISCOVERY_CONFIG.AI_IMAGE.DEFAULT_HD
+          artisticStyle: DISCOVERY_CONFIG.DEFAULT_IMAGE_STYLE,
+          enableHiresFix: DISCOVERY_CONFIG.HD_MODE
         });
         
         if (heroResult.success && heroResult.imageUrl) {
