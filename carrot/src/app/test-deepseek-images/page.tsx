@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, Image as ImageIcon, Download } from 'lucide-react';
 
 interface TestResult {
@@ -16,18 +17,31 @@ interface TestResult {
   timestamp: string;
 }
 
+// Helper function to format timestamp consistently
+const formatTimestamp = (timestamp: string) => {
+  const date = new Date(parseInt(timestamp));
+  return date.toLocaleTimeString();
+};
+
 export default function TestDeepSeekImagesPage() {
   const [title, setTitle] = useState('Derrick Rose MVP Season Analysis');
   const [summary, setSummary] = useState('Comprehensive look at Derrick Rose\'s 2011 MVP season with the Bulls, including his stats, impact on the team, and legacy in Chicago basketball.');
   const [sourceDomain, setSourceDomain] = useState('theathletic.com');
   const [patchTheme, setPatchTheme] = useState('Sports');
   const [contentType, setContentType] = useState('article');
+  const [artisticStyle, setArtisticStyle] = useState('hyperrealistic');
+  const [enableHiresFix, setEnableHiresFix] = useState(true); // Default to true for HD quality
   const [results, setResults] = useState<TestResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const generateImage = async () => {
     setIsGenerating(true);
-    const timestamp = new Date().toLocaleTimeString();
+    const timestamp = Date.now().toString();
     
     // Add loading result
     const loadingResult: TestResult = {
@@ -53,7 +67,9 @@ export default function TestDeepSeekImagesPage() {
           summary,
           sourceDomain,
           contentType,
-          patchTheme
+          patchTheme,
+          artisticStyle,
+          enableHiresFix
         })
       });
 
@@ -216,6 +232,43 @@ export default function TestDeepSeekImagesPage() {
                 <option value="text">Text</option>
               </select>
             </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">Artistic Style</label>
+              <select
+                value={artisticStyle}
+                onChange={(e) => setArtisticStyle(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md"
+              >
+                <option value="hyperrealistic">🎭 Hyper-Realistic (Photorealistic)</option>
+                <option value="illustration">🎨 Illustration (Stylized Art)</option>
+                <option value="animation">🎬 Animation (Cartoon/Anime Style)</option>
+                <option value="painting">🖼️ Painting (Artistic Brushwork)</option>
+                <option value="digital_art">💻 Digital Art (Modern CGI)</option>
+                <option value="sketch">✏️ Sketch (Pencil/Drawing)</option>
+                <option value="watercolor">🎨 Watercolor (Soft & Flowing)</option>
+                <option value="oil_painting">🖌️ Oil Painting (Classic Art)</option>
+                <option value="minimalist">⚪ Minimalist (Clean & Simple)</option>
+                <option value="vintage">📸 Vintage (Retro Photography)</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center justify-between border rounded-lg p-3 bg-white">
+              <div>
+                <div className="font-medium">HD (High-Resolution Fix)</div>
+                <div className="text-sm text-slate-500">
+                  Enables extra resolution enhancement (~10s slower)
+                </div>
+              </div>
+              {isClient ? (
+                <Switch
+                  checked={enableHiresFix}
+                  onCheckedChange={(val) => setEnableHiresFix(!!val)}
+                />
+              ) : (
+                <div className="h-6 w-11 bg-gray-200 rounded-full animate-pulse"></div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -240,7 +293,7 @@ export default function TestDeepSeekImagesPage() {
                       <Badge variant={result.loading ? "secondary" : result.error ? "destructive" : "default"}>
                         {result.loading ? 'Generating...' : result.error ? 'Failed' : 'Success'}
                       </Badge>
-                      <span className="text-xs text-gray-500">{result.timestamp}</span>
+                      <span className="text-xs text-gray-500">{formatTimestamp(result.timestamp)}</span>
                     </div>
                     
                     {result.loading ? (
@@ -278,7 +331,7 @@ export default function TestDeepSeekImagesPage() {
                                 onClick={() => {
                                   const link = document.createElement('a');
                                   link.href = result.imageUrl!;
-                                  link.download = `deepseek-generated-${Date.now()}.jpg`;
+                                  link.download = `deepseek-generated-${result.timestamp}.jpg`;
                                   link.click();
                                 }}
                                 className="h-8 w-8 p-0"

@@ -7,7 +7,7 @@ import { transcribeWithVosk } from '@/lib/asr/vosk';
 import { polishTranscript } from '@/lib/audit/deepseek';
 import { generateAIImage } from '@/lib/media/aiImageGenerator';
 import { uploadHeroImage } from '@/lib/media/uploadHeroImage';
-import { tryFallbackImage } from '@/lib/media/fallbackImages';
+import { fetchWikimediaFallback, generateSVGPlaceholder } from '@/lib/media/fallbackImages';
 import { DISCOVERY_CONFIG } from '@/config/discovery';
 
 export const runtime = 'nodejs';
@@ -101,17 +101,14 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         const heroResult = await generateAIImage({
           title: item.title,
           summary: item.content || '',
-          artisticStyle: DISCOVERY_CONFIG.DEFAULT_IMAGE_STYLE,
-          enableHiresFix: DISCOVERY_CONFIG.HD_MODE
+          artisticStyle: DISCOVERY_CONFIG.AI_IMAGE.DEFAULT_STYLE,
+          enableHiresFix: DISCOVERY_CONFIG.AI_IMAGE.DEFAULT_HD
         });
         
         if (heroResult.success && heroResult.imageUrl) {
           // Upload to Firebase
-          const firebaseUrl = await uploadHeroImage({
-            base64Image: heroResult.imageUrl,
-            itemId: item.id,
-            storageType: 'discovered'
-          });
+          const uploadResult = await uploadHeroImage(heroResult.imageUrl, item.id);
+          const firebaseUrl = uploadResult.success ? uploadResult.url : null;
           
           // Update with hero image using correct field names per schema
           await prisma.discoveredContent.update({
@@ -131,24 +128,27 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         } else {
           // Try fallback images
           console.log(`[Discovery] AI generation failed, trying fallbacks for: ${item.title}`);
-          const fallbackResult = await tryFallbackImage({
-            title: item.title,
-            content: item.content || undefined,
-            sourceUrl: url
-          });
+          // Try Wikimedia first
+          const wikimediaUrl = await fetchWikimediaFallback(item.title);
+          let fallbackUrl = wikimediaUrl;
           
-          if (fallbackResult.success && fallbackResult.imageUrl) {
+          // If no Wikimedia image, use SVG placeholder
+          if (!fallbackUrl) {
+            fallbackUrl = generateSVGPlaceholder(item.title);
+          }
+          
+          if (fallbackUrl) {
             await prisma.discoveredContent.update({
               where: { id: item.id },
               data: {
                 mediaAssets: {
-                  hero: fallbackResult.imageUrl,  // ← Correct field name!
-                  source: `fallback-${fallbackResult.source}`,
-                  license: 'source'
+                  hero: fallbackUrl,  // ← Correct field name!
+                  source: wikimediaUrl ? 'wikimedia' : 'generated',
+                  license: wikimediaUrl ? 'source' : 'generated'
                 }
               }
             });
-            console.log(`[Discovery] ⚠️  Used fallback image (${fallbackResult.source}) for: ${item.title}`);
+            console.log(`[Discovery] ⚠️  Used fallback image (${wikimediaUrl ? 'wikimedia' : 'generated'}) for: ${item.title}`);
           }
         }
       } catch (imageError) {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env PORT=3005 node server.js",
+    "dev": "cross-env PORT=3005 NEXT_TELEMETRY_DISABLED=1 node server.js",
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
@@ -11,7 +11,9 @@
     "type-check": "tsc --noEmit",
     "deploy-check": "node scripts/deploy-check.js",
     "build:production": "npm run deploy-check && npm run build",
-    "health-check": "curl -f http://localhost:3005/api/health || exit 1"
+    "health-check": "curl -f http://localhost:3005/api/health || exit 1",
+    "backfill-images": "tsx scripts/backfill-hero-images.ts",
+    "inspect-images": "tsx scripts/inspect-patch-images.ts"
   },
   "engines": {
     "node": "20.x",
@@ -117,6 +119,7 @@
     "request": "^2.88.2",
     "sharp": "^0.34.4",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
     "typescript": "^5.8.3"
   },
   "prisma": {

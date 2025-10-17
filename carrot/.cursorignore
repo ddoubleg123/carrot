@@ -1,0 +1,107 @@
+# Build outputs and dependencies
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+
+# Temporary files - THIS IS CRITICAL
+temp/
+tmp/
+*.tmp
+
+# Database files
+*.db
+*.db-*
+dev.db.*
+*.backup
+
+# Logs and debug output
+*.log
+*-out.txt
+*-err.txt
+debug_*.json
+debug_*.txt
+debug-*.json
+error.log
+
+# Test outputs
+test-results/
+playwright-report/
+*.test-error.json
+
+# Media files that don't need AI review
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+public/agents/
+public/agents-backup/
+public/agents-optimized/
+public/flags/
+public/avatars/
+
+# Backup and old files
+*.bak
+*.old
+*.backup
+*.new
+
+# Binary and executables
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Authentication and sensitive data
+cookies.txt
+secrets/
+
+# Script outputs and check files
+*-check.json
+*-results.json
+transcripts-check.json
+database-test-error.json
+retrigger-results.json
+correct-database-check.json
+
+# Development scripts (you can uncomment if you want to include them)
+# check-*.js
+# debug-*.js
+# test-*.js
+# verify-*.js
+# fix-*.js
+# analyze-*.js
+# audit-*.js
+# backfill-*.js
+# create-*.js
+# delete-*.js
+# direct-*.js
+# enable-*.js
+# ensure-*.js
+# extract-*.js
+# find-*.js
+# force-*.js
+# forensic-*.js
+# generate-*.js
+# inspect-*.js
+# query-*.js
+# quick-*.js
+# resolve-*.js
+# restore-*.js
+# save-*.js
+# seed-*.js
+# simple-*.js
+# transcribe-*.js
+# trigger-*.js
+# update-*.js
+
+# Build and deployment configs (include these selectively if needed)
+# firebase.json
+# firestore.indexes.json
+# render.yaml
+# Dockerfile
+
+# Documentation files (keep these visible for context)
+# *.md
+
