@@ -1,0 +1,23 @@
+# Local .env.local for Next.js App (carrot/.env.local)
+# Add these to your existing .env.local file
+
+# Vast.ai Generator API URL
+# Replace with your actual Vast.ai server IP and port
+VAST_AI_URL=http://111.59.36.106:30400
+
+# If using SSH tunnel (recommended for security)
+# Use localhost with the tunneled port
+# VAST_AI_URL=http://localhost:30400
+
+# Firebase Configuration (if not already set)
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+
+# Server-side Firebase Admin (if needed)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_HERE\n-----END PRIVATE KEY-----\n"

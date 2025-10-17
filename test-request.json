@@ -1,0 +1,15 @@
+{
+  "prompt": "professional headshot of a smiling business executive, sharp focus, detailed face, 8k, photorealistic",
+  "negative_prompt": "blurry, low quality, distorted, ugly, deformed, bad anatomy, bad proportions, poorly drawn face, poorly drawn eyes, poorly drawn hands, text, watermark, signature, logo, extra limbs, cloned face, disfigured, out of frame, missing fingers, extra fingers, mutated hands",
+  "width": 1024,
+  "height": 1024,
+  "num_inference_steps": 25,
+  "guidance_scale": 7.5,
+  "use_refiner": true,
+  "use_face_restoration": false,
+  "face_restoration_weight": 0.6,
+  "hires_fix": false,
+  "hires_fix_simple": false,
+  "use_realesrgan": false,
+  "seed": 42
+}

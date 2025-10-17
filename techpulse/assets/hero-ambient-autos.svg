@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" fill="none">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#22d3ee" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="640" fill="url(#glow)"/>
+
+  <!-- Ambient waves -->
+  <g opacity="0.35" stroke="url(#stroke)" stroke-width="2" fill="none">
+    <path d="M-40 450 C 100 390, 220 520, 360 460 S 650 370, 820 440 S 1040 520, 1100 470"/>
+    <path d="M-60 500 C 80 430, 260 560, 420 500 S 700 410, 860 470 S 1040 560, 1140 520" opacity="0.5"/>
+    <path d="M-20 560 C 140 490, 300 600, 460 560 S 760 470, 980 540 S 1120 620, 1220 600" opacity="0.35"/>
+  </g>
+
+  <!-- Car silhouettes group with subtle glow -->
+  <g stroke="url(#stroke)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Sedan -->
+    <g transform="translate(150,255)">
+      <path d="M0 60 h380 a20 20 0 0 0 18-13 l20-50 a28 28 0 0 0-26-37 h-140 l-60-30 a40 40 0 0 0-18-4 h-84 a36 36 0 0 0-34 26 l-20 70 a28 28 0 0 0 26 38z"/>
+      <circle cx="110" cy="60" r="26"/>
+      <circle cx="300" cy="60" r="26"/>
+      <path d="M180 10 h-96 a14 14 0 0 0-13 10 l-6 20 h160 l-12-30 a14 14 0 0 0-13-9 h-20" opacity="0.8"/>
+    </g>
+    <!-- SUV -->
+    <g transform="translate(520,235)">
+      <path d="M0 80 h340 a26 26 0 0 0 24-18 l20-60 a30 30 0 0 0-28-40 h-110 l-46-22 a60 60 0 0 0-26-6 h-78 a36 36 0 0 0-34 26 l-24 92 a28 28 0 0 0 26 28z"/>
+      <circle cx="84" cy="80" r="28"/>
+      <circle cx="268" cy="80" r="28"/>
+      <path d="M150 18 h-86 a14 14 0 0 0-13 10 l-8 26 h152 l-12-30 a14 14 0 0 0-13-9 h-20" opacity="0.8"/>
+    </g>
+    <!-- Pickup -->
+    <g transform="translate(260,370)">
+      <path d="M0 44 h380 a20 20 0 0 0 20-20 v-30 h-96 l-28-30 h-120 a30 30 0 0 0-30 30 v20 h-70 a30 30 0 0 0-28 20 z"/>
+      <circle cx="110" cy="44" r="24"/>
+      <circle cx="300" cy="44" r="24"/>
+    </g>
+  </g>
+
+  <!-- Add soft glow behind vehicles -->
+  <g filter="url(#soft)" opacity="0.35">
+    <ellipse cx="340" cy="330" rx="180" ry="90" fill="#22d3ee"/>
+    <ellipse cx="700" cy="320" rx="160" ry="84" fill="#22d3ee"/>
+    <ellipse cx="460" cy="460" rx="200" ry="80" fill="#22d3ee"/>
+  </g>
+</svg>

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login — Techpulse</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../assets/favicon-wrench.svg" type="image/svg+xml" />
+  <style>
+    body { background: radial-gradient(1000px 600px at 80% -10%, rgba(34,211,238,0.08), transparent 60%), #0B0B0F; }
+    .wrap { min-height: 100dvh; display:flex; align-items:center; justify-content:center; padding: 24px; }
+    .card { position:relative; width:100%; max-width: 768px; border-radius: 24px; border:1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 24px; align-items:center; }
+    @media (min-width: 768px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
+    .row { display:flex; align-items:center; gap:10px; color: rgba(255,255,255,0.7); letter-spacing: 0.06em; text-transform: lowercase; font-weight: 600; }
+    .h1 { font-size: clamp(24px, 4vw, 36px); font-weight: 600; margin: 6px 0 0; color: #fff; letter-spacing: -0.01em; }
+    .sub { margin-top: 8px; color: rgba(255,255,255,0.7); max-width: 60ch; }
+    .primary { margin-top: 18px; display:inline-flex; width:100%; align-items:center; justify-content:center; gap:10px; border-radius: 12px; background: linear-gradient(180deg, var(--accent), var(--primary-600)); color:#001018; font-weight: 700; padding: 12px 16px; border:none; box-shadow: 0 10px 30px rgba(34,211,238,0.22); transition: transform .15s ease, filter .15s ease; }
+    .primary:hover { filter: brightness(1.05); transform: scale(1.02); }
+    .primary:focus-visible { outline: 2px solid #0A5AFF; outline-offset: 2px; }
+    .divider { display:flex; align-items:center; gap:12px; margin: 18px 0; }
+    .divider .line { height:1px; flex:1; background: rgba(255,255,255,0.1); }
+    .divider .or { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.4); }
+    .label { display:block; font-size: 14px; font-weight:600; color: rgba(255,255,255,0.9); margin-bottom:6px; }
+    .input { width:100%; border-radius: 12px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#fff; padding: 12px 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+    .input:focus { outline:none; border-color:#0A5AFF; box-shadow: 0 0 0 3px rgba(10,90,255,0.25); }
+    .secondary { display:inline-flex; width:100%; align-items:center; justify-content:center; border-radius: 12px; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.02); color: rgba(255,255,255,0.95); padding: 12px 16px; font-weight: 600; transition: transform .15s ease, background .15s ease; }
+    .secondary:hover { background: rgba(255,255,255,0.06); transform: scale(1.01); }
+    .secondary:focus-visible { outline: 2px solid #0A5AFF; outline-offset: 2px; }
+    .err { display:none; margin-bottom: 10px; border:1px solid rgba(239,68,68,0.35); background: rgba(239,68,68,0.12); color:#fecaca; padding: 10px 12px; border-radius: 12px; }
+    .help { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 6px; }
+    .success { border:1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); padding: 14px; border-radius: 12px; }
+    .visual { display:none; }
+    @media (min-width: 768px) { .visual { display:block; } }
+    .artbox { position:relative; margin-inline:auto; aspect-ratio: 4/3; width:100%; max-width: 360px; border-radius: 16px; background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.1); box-shadow: inset 0 10px 30px rgba(0,0,0,0.35); overflow:hidden; }
+    .art { position:absolute; inset:0; display:grid; place-items:center; }
+  </style>
+</head>
+<body>
+  <header class="container site-header">
+    <a class="brand" href="/" aria-label="Home">
+      <img src="../assets/logo-temp.svg" alt="TechPulse logo" class="brand__logo" />
+    </a>
+    <nav class="nav"><a href="/" class="nav__link">Home</a></nav>
+  </header>
+
+  <section class="wrap">
+    <div class="card" role="region" aria-labelledby="auth-heading">
+      <div class="grid" id="login-card">
+        <div>
+          <h1 id="auth-heading" class="h1">Login / Register Here</h1>
+          <p class="sub">Use your Google account or request a one-time link to sign in.</p>
+
+          <button id="googleBtn" class="primary" type="button" aria-label="Sign in with Google"><span id="gLabel">Sign in with Google</span></button>
+
+          <div class="divider" role="separator" aria-label="or">
+            <div class="line"></div>
+            <span class="or">or</span>
+            <div class="line"></div>
+          </div>
+
+          <div id="errorBanner" class="err" role="alert" aria-live="polite"></div>
+
+          <form id="emailForm" class="login-form" novalidate>
+            <label for="email" class="label">Work email</label>
+            <input id="email" name="email" type="email" autocomplete="email" required class="input" placeholder="you@shop.com" aria-invalid="false" aria-describedby="email-error" />
+            <p id="email-error" class="form__error" style="display:none;margin-top:6px" aria-live="polite"></p>
+            <button id="emailBtn" class="secondary" type="submit">Send magic link</button>
+            <p class="help">We’ll email you a one-time link. No password required.</p>
+          </form>
+        </div>
+        <div class="visual" aria-hidden="true">
+          <div class="artbox">
+            <div class="art">
+              <!-- Blue rounded-square logo with pulse/M glyph -->
+              <svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <defs>
+                  <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#22D3EE"/>
+                    <stop offset="100%" stop-color="#38BDF8"/>
+                  </linearGradient>
+                </defs>
+                <!-- Rounded square background -->
+                <rect x="10" y="10" width="200" height="200" rx="36" fill="url(#logoGrad)"/>
+                <!-- Subtle inner highlight -->
+                <rect x="20" y="20" width="180" height="80" rx="24" fill="#fff" fill-opacity="0.1"/>
+                <!-- Pulse/M glyph -->
+                <path d="M48 140 L78 110 L96 150 L120 88 L142 150 L168 126" fill="none" stroke="#0B0C10" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
+    // Firebase Web config for project techpulse-78421
+    const firebaseConfig = {
+      apiKey: "AIzaSyBmdK_8bVKr--qgJ8cPGqCX3m8QS5EkMPg",
+      authDomain: "techpulse-78421.firebaseapp.com",
+      projectId: "techpulse-78421",
+      appId: "1:416281156741:web:c8c6da13d20b17c4a1ddec",
+      storageBucket: "techpulse-78421.firebasestorage.app",
+      messagingSenderId: "416281156741"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    auth.useDeviceLanguage();
+
+    const actionCodeSettings = {
+      url: window.location.origin + "/login/",
+      handleCodeInApp: true
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const card = $("login-card");
+    const emailForm = $("emailForm");
+    const emailInput = $("email");
+    const emailErr = $("email-error");
+    const emailBtn = $("emailBtn");
+    const googleBtn = $("googleBtn");
+    const gLabel = $("gLabel");
+    const errorBanner = $("errorBanner");
+
+    function showErr(msg){ errorBanner.textContent = msg || ''; errorBanner.style.display = msg ? 'block' : 'none'; }
+    function showFieldErr(msg){ emailErr.textContent = msg || ''; emailErr.style.display = msg ? 'block' : 'none'; emailInput.setAttribute('aria-invalid', msg ? 'true' : 'false'); }
+
+    // Complete email link sign-in if returning via email link
+    (async function completeEmailLink(){
+      try {
+        if (isSignInWithEmailLink(auth, window.location.href)) {
+          let email = window.localStorage.getItem('tp_emailForSignIn');
+          if (!email) {
+            email = window.prompt('Please confirm your email for sign-in');
+          }
+          const result = await signInWithEmailLink(auth, email, window.location.href);
+          window.localStorage.removeItem('tp_emailForSignIn');
+          window.location.href = '/dashboard/';
+        }
+      } catch (e) {
+        showErr(e.message || 'Sign-in failed');
+      }
+    })();
+
+    // If user is already signed in and hits /login, take them to /dashboard
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+    onAuthStateChanged(auth, (user) => {
+      if (user && !isSignInWithEmailLink(auth, window.location.href)) {
+        window.location.href = '/dashboard/';
+      }
+    });
+
+    // Google sign-in
+    googleBtn.addEventListener('click', async () => {
+      googleBtn.disabled = true; gLabel.textContent = 'Signing in…'; showErr('');
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+        window.location.href = '/dashboard/';
+      } catch (e) {
+        showErr(e.message || 'Google sign-in failed');
+        googleBtn.disabled = false; gLabel.textContent = 'Sign in with Google';
+      }
+    });
+
+    // Email link flow
+    const COOLDOWN_MS = 60000;
+    let lastSentAt = Number(localStorage.getItem('tp_magic_lastSent') || 0);
+    function canSend() { return Date.now() - lastSentAt >= COOLDOWN_MS; }
+    function disableEmailBtn(disabled, label) { emailBtn.disabled = !!disabled; emailBtn.textContent = label || (disabled ? 'Sending…' : 'Send magic link'); }
+
+    emailForm.addEventListener('submit', async (e) => {
+      e.preventDefault(); showErr(''); showFieldErr('');
+      const email = emailInput.value.trim().toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldErr('Enter a valid email'); return; }
+      if (!canSend()) { const secs = Math.ceil((COOLDOWN_MS - (Date.now() - lastSentAt)) / 1000); showErr(`Please wait ${secs}s before requesting another link.`); return; }
+      try {
+        disableEmailBtn(true, 'Sending…');
+        await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+        localStorage.setItem('tp_emailForSignIn', email);
+        lastSentAt = Date.now(); localStorage.setItem('tp_magic_lastSent', String(lastSentAt));
+        // Replace ONLY the form area with success state (keep heading and Google CTA visible)
+        emailForm.outerHTML = `<div class="success"><p class="text-sm text-white/90">Check your inbox for your sign-in link.</p><p class="text-xs text-white/60 mt-1">Didn’t get it? Check spam or try again in a minute.</p></div>`;
+      } catch (e) {
+        showErr(e.message || 'Could not send link');
+      } finally {
+        disableEmailBtn(false);
+      }
+    });
+  </script>
+</body>
+</html>

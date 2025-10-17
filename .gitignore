@@ -88,6 +88,8 @@ carrot/.env.local
 
 # Temporarily ignore root package.json to force Railway Docker build
 package.json
+# Allow package.json inside techpulse/ for local dev server
+!techpulse/package.json
 
 # dataconnect generated files
 .dataconnect

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60" role="img" aria-label="Techpulse temporary logo">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <!-- Symbol -->
+  <g transform="translate(10,10)">
+    <rect x="0" y="0" width="40" height="40" rx="10" fill="url(#g)" />
+    <path d="M10 28 L16 16 L20 22 L24 12 L30 28" fill="none" stroke="#001018" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Wordmark -->
+  <g font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#e6e8ee" transform="translate(60,40)">
+    <text>techpulse</text>
+  </g>
+</svg>

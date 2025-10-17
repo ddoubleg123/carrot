@@ -1,0 +1,50 @@
+$server = "46.217.24.207"
+$port = "40112"
+
+Write-Host "=== Manual Deployment Script ==="
+Write-Host ""
+Write-Host "Copy and paste these commands one by one into your SSH session:"
+Write-Host ""
+Write-Host "First, SSH into the server:"
+Write-Host "ssh -p $port root@$server"
+Write-Host ""
+Write-Host "Then run these commands:"
+Write-Host ""
+Write-Host "mkdir -p /root/sdxl-api"
+Write-Host "cd /root/sdxl-api"
+Write-Host ""
+Write-Host "=== Creating generator_api.py ==="
+Write-Host 'cat > generator_api.py << ''EOF'''
+Get-Content "vast-backup-20251015-115024/generator_api.py"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating enhancer_api.py ==="
+Write-Host 'cat > enhancer_api.py << ''EOF'''
+Get-Content "vast-backup-20251015-115024/enhancer_api.py"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating prompt_styles.py ==="
+Write-Host 'cat > prompt_styles.py << ''EOF'''
+Get-Content "vast-backup-20251015-115024/prompt_styles.py"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating prompt_builder.py ==="
+Write-Host 'cat > prompt_builder.py << ''EOF'''
+Get-Content "vast-backup-20251015-115024/prompt_builder.py"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating firebase_utils.py ==="
+Write-Host 'cat > firebase_utils.py << ''EOF'''
+Get-Content "vast-backup-20251015-115024/firebase_utils.py"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating requirements.txt ==="
+Write-Host 'cat > requirements.txt << ''EOF'''
+Get-Content "vast-backup-20251015-115024/requirements.txt"
+Write-Host "EOF"
+Write-Host ""
+Write-Host "=== Creating .env ==="
+Write-Host 'cat > .env << ''EOF'''
+Get-Content "vast-backup-20251015-115024/vast-server.env"
+Write-Host "EOF"
+

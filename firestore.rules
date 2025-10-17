@@ -26,5 +26,61 @@ service cloud.firestore {
         allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       }
     }
+
+    // CHAT ROOMS (Firestore chat)
+    function isAdmin() { return isSignedIn() && (request.auth.token.admin == true); }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      // Only admins can change isLocked; others can update benign fields
+      allow update: if isSignedIn() && (
+        (!('isLocked' in request.resource.data) && !('isLocked' in resource.data)) || isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        // Create requires timestamp and either text <= 2000 or an attachment url
+        allow create: if isSignedIn() && (request.resource.data.ts != null) && (
+          (('text' in request.resource.data) && request.resource.data.text.size() <= 2000) || ('url' in request.resource.data)
+        );
+        // Soft delete by author (setting deletedAt) or admin
+        allow update: if isAdmin() || (isSignedIn() && (request.resource.data.deletedAt != null) && (resource.data.uid == request.auth.uid));
+        allow delete: if isAdmin();
+
+        // Threads (replies)
+        match /replies/{replyId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn() && (request.resource.data.ts != null) && (
+            (('text' in request.resource.data) && request.resource.data.text.size() <= 2000) || ('url' in request.resource.data)
+          );
+          allow update, delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+        }
+
+        // Reactions by emoji key
+        match /reactions/{emoji} {
+          allow read: if isSignedIn();
+          allow write: if isSignedIn();
+        }
+      }
+
+      match /typing/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Per-user read markers for unread tracking
+    match /userRooms/{uid}/rooms/{rid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Unique slug index for rooms: create-only for non-admin (prevents collisions)
+    match /roomSlugs/{slug} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && !exists(/databases/$(database)/documents/roomSlugs/$(slug));
+      allow update, delete: if isAdmin();
+    }
   }
 }

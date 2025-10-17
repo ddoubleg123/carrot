@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Techpulse [LOCAL 4000] — AI-Powered Automotive Diagnostics</title>
+  <meta name="description" content="Techpulse Synth: AI-driven root-cause analysis for automotive diagnostics. Works with Snap‑On and traditional tools to save time and money." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="./assets/favicon-wrench.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="container site-header">
+    <a class="brand" href="#" aria-label="Home">
+      <img src="./assets/logo-temp.svg" alt="TechPulse logo" class="brand__logo" />
+    </a>
+    <nav class="nav">
+      <a href="/login/" class="button button--primary" aria-label="Login">LOGIN</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero__inner">
+        <div class="hero__content">
+          <h1>
+            WE BUILT A.I. FOR AUTOMOBILES
+          </h1>
+          <p class="lead">
+            Techpulse uses proprietary automotive data refined over 20 years. Our A.I., Synth, works with your diagnostic tools to pinpoint root causes faster and more accurately—saving you time and money.
+          </p>
+          <div class="cta">
+            <a href="/login/" class="button button--primary button--impact">LET'S GO</a>
+          </div>
+          <p class="subcopy">Get started for FREE today.</p>
+        </div>
+        <div class="hero__art" aria-hidden="true">
+          <img src="./assets/hero-ambient-autos.svg" alt="Ambient blue silhouettes of various automobiles" class="hero__logo" />
+        </div>
+      </div>
+    </section>
+
+    <section id="about" class="section section--emph">
+      <div class="container about__inner">
+        <div class="about__copy">
+          <h2>What is Synth?</h2>
+          <p>
+            Synth is Techpulse’s A.I. engine trained on decades of real-world service data. It integrates with traditional diagnostic tools and then correlates symptoms, telemetry, and historical repairs to surface the most likely root cause—reducing parts swapping and repeat visits.
+          </p>
+        </div>
+        <div class="about__art" aria-hidden="true">
+          <img src="./assets/synth-humanoid.svg" alt="Humanoid A.I. visual for Synth with blue circuit lines" class="about__img" />
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section section--alt">
+      <div class="container">
+        <h2>Works with your existing tools</h2>
+        <ul class="feature-list">
+          <li class="feature-item">
+            <div class="feature-icon" aria-hidden="true">⚙️</div>
+            <div>
+              <h3>Compatible diagnostics</h3>
+              <p>Integrates with leading providers like Snap‑On and others—no overhaul required.</p>
+            </div>
+          </li>
+          <li class="feature-item">
+            <div class="feature-icon" aria-hidden="true">🧠</div>
+            <div>
+              <h3>Root‑cause intelligence</h3>
+              <p>Goes beyond codes to recommend the most probable underlying issue, not just the next part to replace.</p>
+            </div>
+          </li>
+          <li class="feature-item">
+            <div class="feature-icon" aria-hidden="true">⏱️</div>
+            <div>
+              <h3>Time and cost savings</h3>
+              <p>Cut diagnostic time and reduce comebacks—delight customers while protecting margins.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="pricing" class="section">
+      <div class="container">
+        <h2>Pricing</h2>
+        <div class="pricing">
+          <div class="card">
+            <h3>Pay per use</h3>
+            <p class="price"><span class="currency">$</span>75</p>
+            <ul class="card__list">
+              <li>Per diagnostic session</li>
+              <li>Includes Synth analysis</li>
+              <li>Email summary</li>
+            </ul>
+            <a class="button button--primary" href="#contact">Get started</a>
+          </div>
+          <div class="card card--highlight">
+            <h3>Monthly unlimited</h3>
+            <p class="price"><span class="currency">$</span>350</p>
+            <ul class="card__list">
+              <li>Unlimited diagnostic sessions</li>
+              <li>Priority support</li>
+              <li>Team access</li>
+            </ul>
+            <a class="button button--secondary" href="#contact">Start subscription</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="section section--alt">
+      <div class="container">
+        <div class="contact__header">
+          <p class="eyebrow">Contact</p>
+          <h2>Talk to TechPulse</h2>
+          <p class="muted">Tell us about your shop and we’ll schedule a quick walkthrough.</p>
+        </div>
+
+        <div id="contact-card" class="contact__card">
+          <form id="contact-form" novalidate>
+            <div class="form__row">
+              <div class="form__field">
+                <label for="name">Full name <span aria-hidden="true">*</span></label>
+                <input id="name" name="name" type="text" autocomplete="name" required placeholder="Jane Smith" />
+                <p id="err-name" class="form__error"></p>
+              </div>
+              <div class="form__field">
+                <label for="email">Work email <span aria-hidden="true">*</span></label>
+                <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@shop.com" />
+                <p id="err-email" class="form__error"></p>
+              </div>
+            </div>
+            <div class="form__row">
+              <div class="form__field">
+                <label for="company">Company <span aria-hidden="true">*</span></label>
+                <input id="company" name="company" type="text" required placeholder="Shop name" />
+                <p id="err-company" class="form__error"></p>
+              </div>
+              <div class="form__field">
+                <label for="phone">Phone</label>
+                <input id="phone" name="phone" type="tel" inputmode="tel" placeholder="(555) 123-4567" />
+              </div>
+            </div>
+            <div class="form__row form__row--single">
+              <div class="form__field">
+                <label for="message">Message <span aria-hidden="true">*</span></label>
+                <textarea id="message" name="message" rows="4" required placeholder="Tell us about your shop and goals"></textarea>
+                <p id="err-message" class="form__error"></p>
+              </div>
+            </div>
+            <!-- honeypot -->
+            <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+
+            <div class="form__actions">
+              <p class="muted smallprint">We’ll never share your info.</p>
+              <button type="submit" class="button button--primary button--impact form__submit">BOOK A DEMO</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer__inner">
+      <div class="brand brand--footer">
+        <img src="./assets/logo-temp.svg" alt="Techpulse" class="brand__logo" />
+      </div>
+      <small>© <span id="year"></span> Techpulse. All rights reserved.</small>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    const card = document.getElementById('contact-card');
+    const form = document.getElementById('contact-form');
+    function setError(id, msg) {
+      const el = document.getElementById('err-' + id);
+      if (el) { el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
+    }
+    function validateEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+    form.addEventListener('submit', async function(e){
+      e.preventDefault();
+      const fd = new FormData(form);
+      const hp = (fd.get('website')||'').toString(); if (hp) return; // bot trap
+      const name = (fd.get('name')||'').toString().trim();
+      const email = (fd.get('email')||'').toString().trim();
+      const company = (fd.get('company')||'').toString().trim();
+      const message = (fd.get('message')||'').toString().trim();
+      const phone = (fd.get('phone')||'').toString().trim();
+      let ok = true;
+      setError('name',''); setError('email',''); setError('company',''); setError('message','');
+      if (!name) { setError('name','Please enter your full name'); ok=false; }
+      if (!email || !validateEmail(email)) { setError('email','Enter a valid work email'); ok=false; }
+      if (!company) { setError('company','Please enter your company'); ok=false; }
+      if (!message) { setError('message','Please add a short message'); ok=false; }
+      if (!ok) return;
+      const url = 'https://us-central1-techpulse-b87c1.cloudfunctions.net/submitContact';
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, company, phone, message, website: '' })
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          const msg = data && data.error ? data.error : 'Something went wrong. Please try again.';
+          setError('message', msg);
+          return;
+        }
+        card.innerHTML = `
+          <div class="contact__success">
+            <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" fill="currentColor" fill-opacity="0.12"/>
+              <path d="M5 13l4 4L19 7" stroke="#10B981" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>Thanks! We’ll reach out shortly.</h3>
+            <p>Look for an email with a link to book your demo.</p>
+            <a href="#" class="button button--ghost" style="border:1px solid rgba(255,255,255,0.12)">Back to homepage</a>
+          </div>`;
+      } catch (err) {
+        setError('message', 'Network error. Please try again.');
+      }
+    });
+  </script>
+</body>
+</html>

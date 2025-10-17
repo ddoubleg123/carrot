@@ -1,0 +1,130 @@
+# Node modules and dependencies
+node_modules/
+carrot/node_modules/
+carrot-worker/node_modules/
+worker/node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+.next/
+carrot/.next/
+*.tsbuildinfo
+
+# Temporary and cache files
+tmp/
+temp/
+*.tmp
+carrot/temp/
+
+# Database files
+*.db
+*.db-*
+prisma
+data/
+
+# Logs - THIS IS HUGE
+*.log
+*_out.txt
+*_err.txt
+*_code.txt
+*_tail.txt
+*_live.txt
+worker_*.txt
+app_*.txt
+healthz_*.txt
+debug_*.txt
+debug_*.json
+*-debug.json
+*-debug.err
+profile_debug.txt
+
+# Test outputs and results
+test-results/
+*-test-error.json
+*-error.json
+*-results.json
+*-check.json
+*-status.json
+
+# Media files
+*.mp4
+*.mp3
+*.wav
+*.ico
+*.zip
+
+# Output and debug files
+output.txt
+*_output.txt
+*_diag.txt
+*_resp.txt
+*_response.json
+*_submit.json
+*_body.json
+debug.json
+pids_*.json
+pids_*.txt
+net_*.txt
+routes_*.json
+routes_*.err
+ingest_*.txt
+ingest_*.json
+
+# Cookies and auth data
+cookies*.json
+cookies*.txt
+cookies*.b64
+gh_device.txt
+
+# Script outputs
+transcription-*.json
+real-posts-data.json
+target-post-data.json
+data_list.json
+firestore-posts-check.json
+largest_files.txt
+node_procs.txt
+
+# Backup and old files
+*.bak
+*.backup
+
+# Binary and executables
+*.exe
+
+# Worker and service directories (contain generated data)
+carrot-worker/
+worker/
+local-transcription/
+local-vosk/
+simple-local-transcription/
+simple-transcription-service/
+simple-vosk-service/
+node-transcription-service/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Text snippets and status files
+tatus
+utputFormat
+next
+
+# Development and test apps (if not part of main project)
+test-app/
+test-next-app/
+test-nextjs/
+
+# Shell and PowerShell scripts (keep visible but can exclude if too many)
+# *.ps1
+# *.sh
+# *.bat
+
+# Python scripts directory (contains many test scripts)
+python-scripts/
+
+# Documentation (keep these for context)
+# *.md
+

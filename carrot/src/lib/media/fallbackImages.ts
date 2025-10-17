@@ -61,3 +61,73 @@ export async function fetchOpenGraphImage(url: string): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Try all fallback sources in priority order
+ * Returns the first successful image URL or a placeholder
+ */
+export interface FallbackImageParams {
+  title: string;
+  content?: string;
+  sourceUrl?: string;
+}
+
+export interface FallbackImageResult {
+  success: boolean;
+  imageUrl?: string;
+  source?: 'wikimedia' | 'og-image' | 'placeholder';
+  error?: string;
+}
+
+export async function tryFallbackImage(params: FallbackImageParams): Promise<FallbackImageResult> {
+  const { title, content, sourceUrl } = params;
+  
+  // 1. Try Wikimedia Commons
+  try {
+    const wikimediaUrl = await fetchWikimediaFallback(title);
+    if (wikimediaUrl) {
+      console.log('[tryFallbackImage] ✅ Found Wikimedia image');
+      return {
+        success: true,
+        imageUrl: wikimediaUrl,
+        source: 'wikimedia'
+      };
+    }
+  } catch (error) {
+    console.warn('[tryFallbackImage] Wikimedia failed:', error);
+  }
+  
+  // 2. Try Open Graph image from source URL
+  if (sourceUrl) {
+    try {
+      const ogImage = await fetchOpenGraphImage(sourceUrl);
+      if (ogImage) {
+        console.log('[tryFallbackImage] ✅ Found Open Graph image');
+        return {
+          success: true,
+          imageUrl: ogImage,
+          source: 'og-image'
+        };
+      }
+    } catch (error) {
+      console.warn('[tryFallbackImage] Open Graph failed:', error);
+    }
+  }
+  
+  // 3. Generate SVG placeholder (always succeeds)
+  try {
+    const placeholder = generateSVGPlaceholder(title);
+    console.log('[tryFallbackImage] ✅ Generated SVG placeholder');
+    return {
+      success: true,
+      imageUrl: placeholder,
+      source: 'placeholder'
+    };
+  } catch (error) {
+    console.error('[tryFallbackImage] ❌ Even placeholder failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'All fallbacks failed'
+    };
+  }
+}

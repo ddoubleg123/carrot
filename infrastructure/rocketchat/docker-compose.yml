@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    volumes:
+      - ./data/db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rocketchat:
+    image: rocketchat/rocket.chat:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      - ROOT_URL=http://127.0.0.1:3100
+      - PORT=3000
+      - MONGO_URL=mongodb://mongo:27017/rocketchat
+      - Accounts_UseDNSDomainCheck=false
+      - Accounts_OAuth_Custom_TechPulse=true
+      - OVERWRITE_SETTING_Frame_Options=false
+      - OVERWRITE_SETTING_Content_Security_Policy=frame-ancestors 'self' http://127.0.0.1:4000 http://localhost:4000
+      - OVERWRITE_SETTING_Iframe_Integration_Enabled=true
+      - OVERWRITE_SETTING_Iframe_Integration_Whitelist=http://127.0.0.1:4000,http://localhost:4000
+      - OVERWRITE_SETTING_X_Frame_Options=
+    ports:
+      - "3100:3000"  # host:container (use 3100 to avoid conflict with TechPulse server on 4000)
+    # NOTE: For production, place behind Nginx and add SSL. This local setup exposes RC on port 4000.
+
+volumes:
+  data: {}

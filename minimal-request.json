@@ -1,0 +1,8 @@
+{
+  "prompt": "a simple test image",
+  "width": 512,
+  "height": 512,
+  "num_inference_steps": 10,
+  "use_refiner": false,
+  "use_face_restoration": false
+}
