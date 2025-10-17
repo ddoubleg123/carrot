@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runPipeline } from '@/lib/pipeline'
+import { sanitizeInputs } from '@/lib/prompt/sanitize'
+import { buildPrompt } from '@/lib/prompt/build'
 
 interface GenerateHeroImageRequest {
   title: string
@@ -11,16 +13,7 @@ interface GenerateHeroImageRequest {
   enableHiresFix?: boolean
 }
 
-// Simplified sanitization and name extraction (as per task requirements)
-function sanitizeText(text: string): string {
-  return text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-}
-
-function extractNames(title: string, summary: string): string[] {
-  const pattern = /\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/g;
-  const matches = [...title.matchAll(pattern), ...summary.matchAll(pattern)];
-  return Array.from(new Set(matches.map((m) => m[1])));
-}
+// Using new sanitizeInputs + buildPrompt system instead of simple helpers
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +23,9 @@ export async function POST(request: NextRequest) {
     const { 
       title = "", 
       summary = "", 
+      sourceDomain = "",
+      contentType = "article",
+      patchTheme = "general",
       artisticStyle = "photorealistic", 
       enableHiresFix = false 
     } = reqBody;
@@ -42,34 +38,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sanitize inputs
-    const cleanTitle = sanitizeText(title);
-    const cleanSummary = sanitizeText(summary);
-    
-    // Extract names from title and summary
-    const names = extractNames(cleanTitle, cleanSummary);
-    const subjectPhrase = names.length > 0 ? names.join(" and ") : "the subject";
+    // Use our new prompt system
+    const sanitized = sanitizeInputs(title, summary);
 
-    // Build the prompt safely - preserve user text and avoid duplication
-    // Check if summary already contains the subject name to avoid repetition
-    const summaryContainsSubject = names.some(name => 
-      cleanSummary.toLowerCase().includes(name.toLowerCase())
-    );
-    
-    // If summary already has the subject, use it as-is; otherwise prepend subject
-    const positivePrompt = summaryContainsSubject 
-      ? `${cleanSummary}, professional quality, dynamic composition, natural light, realistic depth and shadow, ${artisticStyle}, 8K detail, perfect composition, rule of thirds`
-      : `${subjectPhrase} — ${cleanSummary}, professional quality, dynamic composition, natural light, realistic depth and shadow, ${artisticStyle}, 8K detail, perfect composition, rule of thirds`;
-    
-    const negativePrompt = "lowres, blurry, pixelated, duplicate people, text artifacts, visible words, legible text, cartoon, anime, sketch, oversaturated";
+    const promptResult = buildPrompt({
+      s: sanitized,
+      styleOverride: artisticStyle
+    });
+
+    const positivePrompt = promptResult.positive;
+    const negativePrompt = promptResult.negative;
 
     // Log final configuration for debugging
     console.log("[GenerateHeroImage] Config:", {
       enableHiresFix,
       positivePrompt: positivePrompt.substring(0, 150) + '...',
-      names,
-      subjectPhrase,
-      artisticStyle
+      artisticStyle,
+      sanitizedNames: sanitized.names,
+      extractedHints: {
+        action: sanitized.actionHint,
+        location: sanitized.locationHint,
+        crowd: sanitized.crowdHint
+      }
     });
 
     console.log(`[AI Image Generator] HD Option: ${enableHiresFix ? "ON" : "OFF"}`);
