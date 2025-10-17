@@ -314,7 +314,7 @@ function createImagePrompt(title: string, summary: string, sourceDomain?: string
   }
   
   // ENFORCE STYLE TAG OVERRIDE - Drop unnecessary styling unless specified by user
-  finalPositive = enforceStyleTagOverride(finalPositive, artisticStyle)
+  finalPositive = enforceStyleTagOverride(finalPositive, artisticStyle || 'hyperrealistic')
   
   // Clean up the prompts
   const cleanedPositive = cleanPrompt(finalPositive)
