@@ -107,8 +107,11 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         
         if (heroResult.success && heroResult.imageUrl) {
           // Upload to Firebase
-          const uploadResult = await uploadHeroImage(heroResult.imageUrl, item.id);
-          const firebaseUrl = uploadResult.success ? uploadResult.url : null;
+          const firebaseUrl = await uploadHeroImage({
+            base64Image: heroResult.imageUrl,
+            itemId: item.id,
+            storageType: 'discovered'
+          });
           
           // Update with hero image using correct field names per schema
           await prisma.discoveredContent.update({
