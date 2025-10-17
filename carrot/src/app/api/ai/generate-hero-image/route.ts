@@ -83,11 +83,11 @@ export async function POST(request: NextRequest) {
         styleMode: artisticStyle
       });
 
-      // Handle safety filter blocking (if image generation returns null/empty)
+      // Handle case where no image was generated
       if (!result.image) {
         return NextResponse.json(
           {
-            error: "This image can't be generated because it violates content safety rules (hate, violence, or explicit imagery).",
+            error: "No image was generated. This could be due to content safety rules or technical issues.",
           },
           { status: 400 }
         );
@@ -106,10 +106,12 @@ export async function POST(request: NextRequest) {
       });
       
     } catch (err: any) {
-      // Handle safety-related errors
-      if (err.message?.toLowerCase().includes("safety") || 
-          err.message?.toLowerCase().includes("inappropriate") ||
-          err.message?.toLowerCase().includes("violates")) {
+      // Log the actual error for debugging
+      console.error("Image generation failed:", err);
+      
+      // Only return content safety error if DeepSeek actually said no
+      if (err.message?.toLowerCase().includes("content safety") || 
+          err.message?.toLowerCase().includes("violates content safety")) {
         return NextResponse.json(
           {
             error: "This image can't be generated because it violates content safety rules (hate, violence, or explicit imagery).",
@@ -118,10 +120,9 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // Log unexpected errors
-      console.error("Image generation failed:", err);
+      // For all other errors, return the actual error message
       return NextResponse.json(
-        { error: "Unexpected generation error." },
+        { error: err.message || "Image generation failed." },
         { status: 500 }
       );
     }
