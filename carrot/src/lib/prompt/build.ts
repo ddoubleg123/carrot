@@ -1,6 +1,7 @@
 import { SanitizeResult } from './sanitize';
 
 type StyleMode = 'photo' | 'cgi' | 'painting' | 'sketch' | 'illustration' | 'anime' | 'vintage' | 'minimalist';
+type Style = 'studio' | 'editorialSports' | 'photorealistic';
 
 export interface BuildPromptInput {
   s: SanitizeResult;
