@@ -1,5 +1,7 @@
 import { findBestWikimediaImage } from './wikimediaCommons'
 import { buildEnhancedPrompt } from './enhancedPromptTemplates'
+import { sanitizeInputs } from '../prompt/sanitize'
+import { buildPrompt } from '../prompt/build'
 
 interface GenerateAIImageRequest {
   title: string
@@ -54,14 +56,31 @@ export async function generateAIImage({
       finalPrompt = customPrompt;
       finalNegativePrompt = "lowres, blurry, pixelated, duplicate people, text artifacts, visible words, legible text, cartoon, anime, sketch, oversaturated";
     } else {
-      const prompts = createImagePrompt(title, summary, sourceDomain, contentType, patchTheme, artisticStyle, subjectFidelityPriority, preserveSubjectNames, forceBothSubjects)
+      // Use NEW prompt system (sanitize + build)
+      console.log('[AI Image Generator] Using NEW prompt system (sanitize + build)')
+      const sanitized = sanitizeInputs(title, summary)
+      console.log('[AI Image Generator] Sanitized:', { 
+        names: sanitized.names, 
+        mode: sanitized.mode,
+        actionHint: sanitized.actionHint,
+        objectHint: sanitized.objectHint,
+        countHint: sanitized.countHint,
+        locationHint: sanitized.locationHint
+      })
+      
+      const prompts = buildPrompt({ 
+        s: sanitized, 
+        styleOverride: artisticStyle 
+      })
       
       if (!prompts || !prompts.positive || !prompts.negative) {
-        throw new Error('Invalid prompts object returned from createImagePrompt')
+        throw new Error('Invalid prompts object returned from buildPrompt')
       }
       
       finalPrompt = prompts.positive;
       finalNegativePrompt = prompts.negative;
+      
+      console.log('[AI Image Generator] Style mode:', prompts.styleMode)
     }
     
     // Validate prompt
