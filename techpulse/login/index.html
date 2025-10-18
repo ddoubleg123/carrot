@@ -95,21 +95,8 @@
   </section>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-
-    // Firebase Web config for project techpulse-78421
-    const firebaseConfig = {
-      apiKey: "AIzaSyBmdK_8bVKr--qgJ8cPGqCX3m8QS5EkMPg",
-      authDomain: "techpulse-78421.firebaseapp.com",
-      projectId: "techpulse-78421",
-      appId: "1:416281156741:web:c8c6da13d20b17c4a1ddec",
-      storageBucket: "techpulse-78421.firebasestorage.app",
-      messagingSenderId: "416281156741"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+    import { auth } from "../chat/api/firebase.js";
+    import { GoogleAuthProvider, signInWithPopup, isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
     auth.useDeviceLanguage();
 
     const actionCodeSettings = {
@@ -147,8 +134,6 @@
       }
     })();
 
-    // If user is already signed in and hits /login, take them to /dashboard
-    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
     onAuthStateChanged(auth, (user) => {
       if (user && !isSignInWithEmailLink(auth, window.location.href)) {
         window.location.href = '/dashboard/';

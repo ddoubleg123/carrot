@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, AlertCircle, ExternalLink, Filter, SortAsc } from 'lucide-react';
 import telemetry from '@/lib/telemetry';
-import DiscoveryCard from './DiscoveryCard';
+import DiscoveryCard from '@/app/patch/[handle]/components/DiscoveryCard';
 import { DiscoveredItem } from '@/types/discovered-content';
 
 // Design tokens from Carrot standards

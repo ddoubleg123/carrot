@@ -86,6 +86,14 @@ carrot/.env.local
 **/*private-key*
 **/*firebase-adminsdk*
 
+# Firebase web config (local only; do not commit)
+techpulse/chat/api/firebase.config.js
+
+# General local secret config patterns
+**/*.local.js
+**/*.secrets.js
+**/*.secret.js
+
 # Temporarily ignore root package.json to force Railway Docker build
 package.json
 # Allow package.json inside techpulse/ for local dev server

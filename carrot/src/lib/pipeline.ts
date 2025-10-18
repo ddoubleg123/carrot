@@ -191,9 +191,17 @@ async function callSDXLBase(params: { prompt: string; negative: string; seed: nu
   const startMs = Date.now();
   
   // Use existing VAST AI URL setup
-  const vastAiUrl = process.env.VAST_AI_URL || 'http://localhost:30401';
+  const vastAiUrl = process.env.VAST_AI_URL || 'http://localhost:7860';
   
   try {
+    console.log('[SDXL Base] Calling VAST AI at:', vastAiUrl);
+    console.log('[SDXL Base] Request payload:', {
+      prompt: params.prompt.substring(0, 100) + '...',
+      steps: 35,
+      width: 1024,
+      height: 1024
+    });
+    
     const response = await fetch(`${vastAiUrl}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -212,18 +220,31 @@ async function callSDXLBase(params: { prompt: string; negative: string; seed: nu
       signal: AbortSignal.timeout(90000),
     });
 
+    console.log('[SDXL Base] Response status:', response.status);
+    console.log('[SDXL Base] Response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      throw new Error(`SDXL API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('[SDXL Base] Error response body:', errorText);
+      throw new Error(`VAST AI returned ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('[SDXL Base] Response data keys:', Object.keys(data));
     
+    if (data.detail) {
+      console.error('[SDXL Base] API returned detail error:', data.detail);
+      throw new Error(`VAST AI error: ${JSON.stringify(data.detail)}`);
+    }
+    
+    // The API returns "image" not "image_base64", and it already includes the data:image/png;base64, prefix
     return {
-      image: data.image_base64 ? `data:image/png;base64,${data.image_base64}` : null,
+      image: data.image || null,
       ms: Date.now() - startMs,
     };
   } catch (error) {
-    console.error('[SDXL Base] Error:', error);
+    console.error('[SDXL Base] Full error:', error);
+    console.error('[SDXL Base] Error message:', error instanceof Error ? error.message : String(error));
     return { error: true, ms: Date.now() - startMs };
   }
 }

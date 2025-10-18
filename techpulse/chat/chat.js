@@ -1,6 +1,6 @@
 import { auth, db, rtdb, storage, serverTimestamp } from './api/firebase.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import { collection, addDoc, query, orderBy, onSnapshot, limit, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { collection, addDoc, query, orderBy, onSnapshot, limit, doc, setDoc, getDoc, updateDoc, startAfter, endBefore, limitToLast, getDocs, arrayUnion, arrayRemove, increment } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 import { ref as rtdbRef, onDisconnect, set as rtdbSet, serverTimestamp as rtdbServerTimestamp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
 import { ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-storage.js";
 
@@ -10,6 +10,7 @@ let currentUser = null;
 let activeRoom = 'general';
 let roomsCache = [];
 let lastReadMap = {};
+let messagesState = { items: [], liveUnsub: null, oldestTs: null, newestDoc: null };
 
 function slugify(name){
   return (name||'')
@@ -18,6 +19,61 @@ function slugify(name){
     .trim()
     .replace(/\s+/g,'-')
     .slice(0,40) || 'room';
+}
+
+// Threads
+let threadUnsub = null; let threadParent = null;
+function openThread(parent){
+  threadParent = parent;
+  const pane = document.getElementById('threadPane');
+  if (!pane) return;
+  pane.style.display='block';
+  const head = document.getElementById('threadHeader'); if (head) head.textContent = 'Thread — ' + (parent.text?.slice(0,40) || parent.fileName || parent.id);
+  const list = document.getElementById('threadMessages'); if (list) list.innerHTML='';
+  const closeBtn = document.getElementById('threadClose'); if (closeBtn) closeBtn.onclick = closeThread;
+  const sendBtn = document.getElementById('threadSend'); if (sendBtn) sendBtn.onclick = sendThreadReply;
+  // subscribe replies
+  if (threadUnsub) threadUnsub();
+  const qRef = query(collection(db,'rooms',activeRoom,'messages',parent.id,'replies'), orderBy('ts','asc'));
+  threadUnsub = onSnapshot(qRef, (snap)=>{
+    const arr=[]; snap.forEach(d=> arr.push({id:d.id, ...d.data()}));
+    list.innerHTML='';
+    arr.forEach(r=>{
+      const el = document.createElement('div'); el.className='msg';
+      const av = document.createElement('div'); av.className='avatar'; av.textContent = (r.initials||'U');
+      const b = document.createElement('div'); b.className='bubble';
+      const n = document.createElement('div'); n.style.fontWeight='600'; n.textContent=r.displayName||r.uid;
+      const t = document.createElement('div'); t.textContent=r.text||'';
+      b.appendChild(n); b.appendChild(t);
+      el.appendChild(av); el.appendChild(b);
+      list.appendChild(el);
+    });
+    list.scrollTop = list.scrollHeight;
+  });
+}
+function closeThread(){ const pane = document.getElementById('threadPane'); if (pane) pane.style.display='none'; if (threadUnsub) threadUnsub(); threadUnsub=null; threadParent=null; }
+async function sendThreadReply(){
+  const input = document.getElementById('threadInput'); if (!input || !threadParent) return; const text = input.value.trim(); if (!text) return;
+  input.value='';
+  const user = currentUser; if (!user) return;
+  await addDoc(collection(db,'rooms',activeRoom,'messages',threadParent.id,'replies'), {
+    uid: user.uid, displayName: user.displayName||'User', photoURL: user.photoURL||'', text, type:'text', ts: serverTimestamp()
+  });
+  await updateDoc(doc(db,'rooms',activeRoom,'messages',threadParent.id), { threadCount: (threadParent.threadCount||0)+1 }).catch(()=>{});
+}
+
+// Reactions
+async function toggleReaction(message, emoji){
+  const user = currentUser; if (!user) return;
+  const docRef = doc(db,'rooms',activeRoom,'messages',message.id,'reactions',emoji);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()){
+    await setDoc(docRef, { count: 1, users: [user.uid] }, { merge:true });
+    return;
+  }
+  const data = snap.data(); const users = data.users||[]; const has = users.includes(user.uid);
+  const nextUsers = has ? users.filter(u=>u!==user.uid) : [...users, user.uid];
+  await setDoc(docRef, { users: nextUsers, count: nextUsers.length }, { merge:true });
 }
 
 // Inline modal state
@@ -104,29 +160,29 @@ function msgEl(m) {
   body.className = 'bubble';
   const name = document.createElement('div');
   name.style.fontWeight = '600';
-  const ts = m.ts && m.ts.seconds ? new Date(m.ts.seconds * 1000) : null;
-  name.textContent = `${m.name || 'User'}${ts ? ' • ' + ts.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}`;
+  name.textContent = m.displayName || m.uid;
   const text = document.createElement('div');
-  if (m.type === 'image' && m.url) {
-    const img = document.createElement('img');
-    img.src = m.url; img.alt = 'attachment'; img.style.maxWidth = '320px'; img.style.borderRadius='10px';
-    text.appendChild(img);
-    if (m.text) { const cap = document.createElement('div'); cap.textContent = m.text; text.appendChild(cap); }
-  } else if (m.type === 'file' && m.url) {
-    const a = document.createElement('a'); a.href = m.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = m.text || 'Download file';
-    text.appendChild(a);
-  } else {
-    text.textContent = m.text || '';
-  }
+  text.textContent = m.text || (m.url ? (m.type==='image' ? 'Image' : (m.fileName||'File')) : '');
   body.appendChild(name);
   body.appendChild(text);
+  // actions bar
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const replyBtn = document.createElement('button'); replyBtn.className='chip'; replyBtn.textContent='Reply';
+  replyBtn.onclick = (e)=>{ e.stopPropagation(); openThread(m); };
+  const rxBtn = document.createElement('button'); rxBtn.className='chip'; rxBtn.textContent=':+1:'; rxBtn.onclick=(e)=>{ e.stopPropagation(); toggleReaction(m,'👍'); };
+  actions.appendChild(replyBtn); actions.appendChild(rxBtn);
   d.appendChild(av);
   d.appendChild(body);
+  d.appendChild(actions);
+  d.onclick = ()=> openThread(m);
   return d;
 }
 
 function autoScroll(list){
-  list.scrollTop = list.scrollHeight;
+  try{
+    list.scrollTop = list.scrollHeight;
+  }catch{}
 }
 
 async function ensureDefaultRooms(uid){
@@ -193,43 +249,75 @@ function renderRooms(rooms, user){
 let unsubMessages = null;
 function subscribeMessages(user){
   const list = document.getElementById('chatMessages');
-  if (unsubMessages) unsubMessages();
-  const qRef = query(collection(db, 'rooms', activeRoom, 'messages'), orderBy('ts','desc'), limit(100));
-  unsubMessages = onSnapshot(qRef, (snap)=>{
-    const arr=[]; snap.forEach(d=> arr.push({id:d.id, ...d.data()}));
-    arr.sort((a,b)=> (a.ts?.seconds||0)-(b.ts?.seconds||0));
-    list.innerHTML='';
-    // unread separator
-    const lastRead = lastReadMap[activeRoom]?.lastReadAt;
-    let sepInserted = false;
-    for (let i=0;i<arr.length;i++){
-      const m = arr[i];
-      const prev = arr[i-1];
-      const next = arr[i+1];
-      const author = m.uid;
-      const tsMs = m.ts?.seconds? m.ts.seconds*1000 : 0;
-      const prevSame = prev && prev.uid===author && (tsMs - (prev.ts?.seconds? prev.ts.seconds*1000:0) <= 5*60*1000);
-      const nextSame = next && next.uid===author && (((next.ts?.seconds? next.ts.seconds*1000:0) - tsMs) <= 5*60*1000);
-      const classes = ['msg'];
-      if (author===user.uid) classes.push('self');
-      if (!prevSame && nextSame) classes.push('first');
-      else if (prevSame && nextSame) classes.push('middle');
-      else if (prevSame && !nextSame) classes.push('last');
-      else classes.push('first','last');
-      // unread separator insertion once when crossing lastRead
-      if (!sepInserted && lastRead && tsMs > ((lastRead.toMillis? lastRead.toMillis(): lastRead.seconds*1000))) {
-        const sep = document.createElement('div'); sep.className='unread-sep'; sep.textContent='New';
-        list.appendChild(sep); sepInserted = true;
-      }
-      const el = msgEl(m);
-      el.className = classes.join(' ');
-      list.appendChild(el);
-    }
-    autoScroll(list);
+  // Clean previous
+  if (messagesState.liveUnsub) messagesState.liveUnsub();
+  messagesState = { items: [], liveUnsub: null, oldestTs: null, newestDoc: null };
+  list.innerHTML='';
+  // Live tail: last 50
+  const liveRef = query(collection(db,'rooms',activeRoom,'messages'), orderBy('ts','desc'), limit(50));
+  messagesState.liveUnsub = onSnapshot(liveRef, (snap)=>{
+    const docs = snap.docs.slice().reverse(); // ascending
+    messagesState.items = docs.map(d=> ({ id:d.id, _doc:d, ...d.data() }));
+    messagesState.oldestTs = docs[0]?.data()?.ts || null;
+    messagesState.newestDoc = docs[docs.length-1] || null;
+    renderMessages(list, user);
   });
+  // Attach scroll listener for older
+  list.onscroll = async ()=>{
+    if (list.scrollTop < 80 && messagesState.oldestTs) {
+      await loadOlderMessages(list, user);
+    }
+  };
 }
 
-let typingTimeout = null;
+function renderMessages(list, user){
+  const anchored = (list.scrollHeight - list.clientHeight - list.scrollTop) < 60;
+  list.innerHTML='';
+  const arr = messagesState.items;
+  const lastRead = lastReadMap[activeRoom]?.lastReadAt;
+  let sepInserted = false;
+  for (let i=0;i<arr.length;i++){
+    const m = arr[i];
+    const prev = arr[i-1];
+    const next = arr[i+1];
+    const author = m.uid;
+    const tsMs = m.ts?.seconds? m.ts.seconds*1000 : 0;
+    const prevSame = prev && prev.uid===author && (tsMs - (prev.ts?.seconds? prev.ts.seconds*1000:0) <= 5*60*1000);
+    const nextSame = next && next.uid===author && (((next.ts?.seconds? next.ts.seconds*1000:0) - tsMs) <= 5*60*1000);
+    const classes = ['msg'];
+    if (author===user.uid) classes.push('self');
+    if (!prevSame && nextSame) classes.push('first');
+    else if (prevSame && nextSame) classes.push('middle');
+    else if (prevSame && !nextSame) classes.push('last');
+    else classes.push('first','last');
+    if (!sepInserted && lastRead && tsMs > ((lastRead.toMillis? lastRead.toMillis(): lastRead.seconds*1000))) {
+      const sep = document.createElement('div'); sep.className='unread-sep'; sep.textContent='New';
+      list.appendChild(sep); sepInserted = true;
+    }
+    const el = msgEl(m);
+    el.className = classes.join(' ');
+    list.appendChild(el);
+  }
+  if (anchored) autoScroll(list);
+}
+
+async function loadOlderMessages(list, user){
+  list.onscroll = null; // debounce
+  const prevHeight = list.scrollHeight;
+  const qOlder = query(collection(db,'rooms',activeRoom,'messages'), orderBy('ts','asc'), endBefore(messagesState.oldestTs), limitToLast(50));
+  const olderSnap = await getDocs(qOlder).catch(()=>null);
+  if (olderSnap && !olderSnap.empty){
+    const older = olderSnap.docs.map(d=> ({ id:d.id, _doc:d, ...d.data() }));
+    messagesState.items = [...older, ...messagesState.items];
+    messagesState.oldestTs = older[0]?.ts || messagesState.oldestTs;
+    renderMessages(list, user);
+    // preserve scroll position
+    const newHeight = list.scrollHeight;
+    list.scrollTop = newHeight - prevHeight + list.scrollTop;
+  }
+  setTimeout(()=>{ list.onscroll = async ()=>{ if (list.scrollTop < 80 && messagesState.oldestTs) await loadOlderMessages(list, user); }; }, 250);
+}
+
 let unsubTyping = null;
 function subscribeTyping(user){
   const typingEl = document.getElementById('typing');

@@ -39,8 +39,8 @@ try {
     $sshProcess = Start-Process -FilePath "ssh" -ArgumentList @(
         "-f", "-N", 
         "-L", "7860:localhost:7860", 
-        "-p", "45583", 
-        "root@171.247.185.4"
+        "-p", "30400", 
+        "root@111.59.36.106"
     ) -PassThru -WindowStyle Hidden
     
     Start-Sleep -Seconds 3
@@ -83,7 +83,7 @@ try {
     Write-Host "   1. Make sure SSH is installed (Windows 10+ includes OpenSSH)" -ForegroundColor White
     Write-Host "   2. Check if Vast.ai instance is running" -ForegroundColor White
     Write-Host "   3. Verify the IP address and port in the script" -ForegroundColor White
-    Write-Host "   4. Try running: ssh -p 45583 root@171.247.185.4" -ForegroundColor White
+    Write-Host "   4. Try running: ssh -p 30400 root@111.59.36.106" -ForegroundColor White
 }
 
 Write-Host ""
