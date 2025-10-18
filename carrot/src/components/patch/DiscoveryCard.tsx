@@ -124,8 +124,6 @@ export default function DiscoveryCard({
   return (
     <Card 
       className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Hero Image */}
       <div className="aspect-[16/9] overflow-hidden rounded-t-2xl relative">
