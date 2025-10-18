@@ -84,22 +84,3 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Export the cache for use in other APIs
-export function isContentRejected(url: string, patchId: string): boolean {
-  const key = `${patchId}:${url}`
-  return rejectedContentCache.has(key)
-}
-
-export function markContentRejected(url: string, patchId: string, reason: string) {
-  const key = `${patchId}:${url}`
-  const existing = rejectedContentCache.get(key)
-  
-  rejectedContentCache.set(key, {
-    url,
-    reason,
-    patchId,
-    rejectedAt: new Date(),
-    attempts: (existing?.attempts || 0) + 1
-  })
-}
-
