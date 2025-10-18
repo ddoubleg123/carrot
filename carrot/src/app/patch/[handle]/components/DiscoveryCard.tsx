@@ -159,24 +159,25 @@ export default function DiscoveryCard({
         </div>
 
         {/* Post Action Bar */}
-        <PostActionBar
-          className="mt-3 pt-3 border-t border-gray-100"
-          postId={id}
-          stats={{
-            likes: 0,
-            comments: 0,
-            reposts: 0
-          }}
-          permalink={url}
-          onComment={() => {
-            // TODO: Open comments
-          }}
-          onShareExternal={(shareUrl) => {
-            if (navigator.clipboard) {
-              navigator.clipboard.writeText(shareUrl)
-            }
-          }}
-        />
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <PostActionBar
+            postId={id}
+            stats={{
+              likes: 0,
+              comments: 0,
+              reposts: 0
+            }}
+            permalink={url}
+            onComment={() => {
+              // TODO: Open comments
+            }}
+            onShareExternal={(shareUrl) => {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(shareUrl)
+              }
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
   )
