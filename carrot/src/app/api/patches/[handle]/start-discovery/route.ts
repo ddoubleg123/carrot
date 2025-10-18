@@ -169,38 +169,58 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to parse search results' }, { status: 500 });
     }
 
-    // Save discovered content to database
+    // Process discovered content one-by-one
+    // NEW FLOW: Verify relevance → Generate image → THEN save to DB
     const savedItems = [];
+    const rejectedItems = [];
+    
     for (const item of discoveredItems) {
       try {
-        // Create a discoveredContent record for each discovered item
-        const discoveredContent = await prisma.discoveredContent.create({
-          data: {
-            patchId: patch.id,
-            type: item.type || 'article',
+        console.log('[Start Discovery] Processing item:', item.title);
+        
+        // STEP 1: Verify relevance (use DeepSeek score)
+        const relevanceScore = item.relevance_score || 0;
+        if (relevanceScore < 0.7) {
+          console.log('[Start Discovery] ❌ Item rejected (low relevance):', item.title, `Score: ${relevanceScore}`);
+          rejectedItems.push({
+            url: item.url,
             title: item.title,
-            content: item.description || '',
-            sourceUrl: item.url,
-            relevanceScore: item.relevance_score || 0.8,
-            tags: patch.tags.slice(0, 3), // Use patch tags
-            status: 'pending'
-          }
-        });
-
-        // Trigger AI image generation for this item
-        try {
-          console.log('[Start Discovery] Triggering AI image generation for:', discoveredContent.title);
+            reason: 'low_relevance',
+            score: relevanceScore
+          });
           
-          // Call the AI image generation API
+          // Log rejection to prevent future attempts
+          fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/dev/rejected-content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: item.url,
+              patchId: patch.id,
+              reason: `Low relevance score: ${relevanceScore}`
+            })
+          }).catch(() => {}); // Don't fail if logging fails
+          
+          continue; // Skip this item
+        }
+        
+        console.log('[Start Discovery] ✅ Item passed relevance check:', item.title, `Score: ${relevanceScore}`);
+        
+        // STEP 2: Generate AI image BEFORE saving to database
+        let aiImageUrl = null;
+        let aiImageSource = 'fallback';
+        
+        try {
+          console.log('[Start Discovery] Generating AI image for:', item.title);
+          
           const aiImageResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/ai/generate-hero-image`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              title: discoveredContent.title,
-              summary: discoveredContent.content || item.description || '',
-              contentType: discoveredContent.type,
+              title: item.title,
+              summary: item.description || '',
+              contentType: item.type,
               artisticStyle: 'photorealistic',
               enableHiresFix: false
             })
@@ -209,54 +229,92 @@ export async function POST(
           if (aiImageResponse.ok) {
             const aiImageData = await aiImageResponse.json();
             if (aiImageData.success && aiImageData.imageUrl) {
-              // Update the discoveredContent with the AI-generated image
-              await prisma.discoveredContent.update({
-                where: { id: discoveredContent.id },
-                data: {
-                  mediaAssets: {
-                    heroImage: {
-                      url: aiImageData.imageUrl,
-                      source: 'ai-generated',
-                      license: 'generated'
-                    }
-                  }
-                }
-              });
-              console.log('[Start Discovery] ✅ AI image generated successfully for:', discoveredContent.id);
+              aiImageUrl = aiImageData.imageUrl;
+              aiImageSource = 'ai-generated';
+              console.log('[Start Discovery] ✅ AI image generated successfully');
+            } else {
+              console.warn('[Start Discovery] ⚠️ AI image generation returned no image');
             }
           } else {
-            console.warn('[Start Discovery] AI image generation failed for:', discoveredContent.id, aiImageResponse.status);
+            console.warn('[Start Discovery] ⚠️ AI image generation failed:', aiImageResponse.status);
           }
         } catch (aiImageError) {
-          console.warn('[Start Discovery] AI image generation error for:', discoveredContent.id, aiImageError);
-          // Don't fail the whole discovery if AI image generation fails
+          console.warn('[Start Discovery] ⚠️ AI image generation error:', aiImageError);
         }
         
-        // Also trigger hero enrichment for fallback
-        try {
-          console.log('[Start Discovery] Triggering hero enrichment for:', discoveredContent.sourceUrl);
-          
-          // Call the hero enrichment API
-          const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/internal/enrich/${discoveredContent.id}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: discoveredContent.sourceUrl,
-              type: discoveredContent.type
-            })
+        // If AI image failed, try fallback enrichment
+        if (!aiImageUrl) {
+          try {
+            console.log('[Start Discovery] Trying fallback enrichment for image...');
+            
+            // Use the enrichment API as fallback
+            const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/media/fallback-image`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: item.url,
+                title: item.title,
+                type: item.type
+              })
+            });
+            
+            if (enrichResponse.ok) {
+              const enrichData = await enrichResponse.json();
+              aiImageUrl = enrichData.imageUrl || enrichData.url;
+              aiImageSource = 'fallback';
+              console.log('[Start Discovery] ✅ Fallback image obtained');
+            }
+          } catch (fallbackError) {
+            console.warn('[Start Discovery] ⚠️ Fallback image failed:', fallbackError);
+          }
+        }
+        
+        // If still no image, skip this item
+        if (!aiImageUrl) {
+          console.log('[Start Discovery] ❌ Item rejected (no image):', item.title);
+          rejectedItems.push({
+            url: item.url,
+            title: item.title,
+            reason: 'no_image',
+            score: relevanceScore
           });
           
-          if (enrichResponse.ok) {
-            console.log('[Start Discovery] Hero enrichment successful for:', discoveredContent.id);
-          } else {
-            console.warn('[Start Discovery] Hero enrichment failed for:', discoveredContent.id, enrichResponse.status);
-          }
-        } catch (enrichError) {
-          console.warn('[Start Discovery] Hero enrichment error for:', discoveredContent.id, enrichError);
-          // Don't fail the whole discovery if hero enrichment fails
+          // Log rejection
+          fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/dev/rejected-content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: item.url,
+              patchId: patch.id,
+              reason: 'Failed to generate image'
+            })
+          }).catch(() => {});
+          
+          continue; // Skip this item
         }
+        
+        // STEP 3: ONLY NOW save to database with status: 'ready'
+        const discoveredContent = await prisma.discoveredContent.create({
+          data: {
+            patchId: patch.id,
+            type: item.type || 'article',
+            title: item.title,
+            content: item.description || '',
+            sourceUrl: item.url,
+            relevanceScore: relevanceScore,
+            tags: patch.tags.slice(0, 3),
+            status: 'ready', // ← READY because it passed all checks!
+            mediaAssets: {
+              heroImage: {
+                url: aiImageUrl,
+                source: aiImageSource,
+                license: 'generated'
+              }
+            }
+          }
+        });
+        
+        console.log('[Start Discovery] ✅ Item saved with image:', discoveredContent.id);
 
         savedItems.push({
           id: discoveredContent.id,
@@ -265,21 +323,35 @@ export async function POST(
           type: discoveredContent.type,
           description: discoveredContent.content,
           relevanceScore: discoveredContent.relevanceScore,
-          status: discoveredContent.status
+          status: discoveredContent.status,
+          imageUrl: aiImageUrl
         });
-      } catch (dbError) {
-        console.error('[Start Discovery] Failed to save item:', item.title, dbError);
-        // Continue with other items even if one fails
+        
+      } catch (itemError) {
+        console.error('[Start Discovery] Failed to process item:', item.title, itemError);
+        rejectedItems.push({
+          url: item.url,
+          title: item.title,
+          reason: 'processing_error',
+          error: itemError instanceof Error ? itemError.message : String(itemError)
+        });
       }
     }
 
-    console.log('[Start Discovery] Saved items:', savedItems.length);
+    console.log('[Start Discovery] Summary:', {
+      discovered: discoveredItems.length,
+      saved: savedItems.length,
+      rejected: rejectedItems.length
+    });
 
     return NextResponse.json({
       success: true,
       message: `Started content discovery for "${patch.name}"`,
-      itemsFound: savedItems.length,
-      items: savedItems
+      itemsDiscovered: discoveredItems.length,
+      itemsSaved: savedItems.length,
+      itemsRejected: rejectedItems.length,
+      items: savedItems,
+      rejections: rejectedItems.map(r => ({ title: r.title, reason: r.reason }))
     });
 
   } catch (error) {
