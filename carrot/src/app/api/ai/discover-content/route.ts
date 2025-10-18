@@ -169,6 +169,45 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
             status: 'pending'
           }
         });
+        
+        // Trigger AI image generation for this item (in background)
+        fetch(`${new URL(req.url).origin}/api/ai/generate-hero-image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: stored.title,
+            summary: stored.content,
+            contentType: stored.type,
+            artisticStyle: 'photorealistic',
+            enableHiresFix: false
+          })
+        }).then(async (response) => {
+          if (response.ok) {
+            const aiImageData = await response.json();
+            if (aiImageData.success && aiImageData.imageUrl) {
+              // Update the discoveredContent with the AI-generated image
+              await prisma.discoveredContent.update({
+                where: { id: stored.id },
+                data: {
+                  mediaAssets: {
+                    heroImage: {
+                      url: aiImageData.imageUrl,
+                      source: 'ai-generated',
+                      license: 'generated'
+                    }
+                  }
+                }
+              });
+              console.log('[Discover Content] ✅ AI image generated for:', stored.id);
+            }
+          }
+        }).catch(error => {
+          console.error('[Discover Content] AI image generation failed:', error);
+          // Don't fail the discovery if AI image generation fails
+        });
+        
         storedContent.push(stored);
       } catch (error) {
         console.error('Failed to store discovered content:', error);

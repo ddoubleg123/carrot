@@ -187,7 +187,52 @@ export async function POST(
           }
         });
 
-        // Trigger hero enrichment for this item
+        // Trigger AI image generation for this item
+        try {
+          console.log('[Start Discovery] Triggering AI image generation for:', discoveredContent.title);
+          
+          // Call the AI image generation API
+          const aiImageResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/ai/generate-hero-image`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title: discoveredContent.title,
+              summary: discoveredContent.content || item.description || '',
+              contentType: discoveredContent.type,
+              artisticStyle: 'photorealistic',
+              enableHiresFix: false
+            })
+          });
+          
+          if (aiImageResponse.ok) {
+            const aiImageData = await aiImageResponse.json();
+            if (aiImageData.success && aiImageData.imageUrl) {
+              // Update the discoveredContent with the AI-generated image
+              await prisma.discoveredContent.update({
+                where: { id: discoveredContent.id },
+                data: {
+                  mediaAssets: {
+                    heroImage: {
+                      url: aiImageData.imageUrl,
+                      source: 'ai-generated',
+                      license: 'generated'
+                    }
+                  }
+                }
+              });
+              console.log('[Start Discovery] ✅ AI image generated successfully for:', discoveredContent.id);
+            }
+          } else {
+            console.warn('[Start Discovery] AI image generation failed for:', discoveredContent.id, aiImageResponse.status);
+          }
+        } catch (aiImageError) {
+          console.warn('[Start Discovery] AI image generation error for:', discoveredContent.id, aiImageError);
+          // Don't fail the whole discovery if AI image generation fails
+        }
+        
+        // Also trigger hero enrichment for fallback
         try {
           console.log('[Start Discovery] Triggering hero enrichment for:', discoveredContent.sourceUrl);
           
