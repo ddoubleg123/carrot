@@ -9,6 +9,11 @@ export async function POST(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   console.log('[Start Discovery] POST endpoint called');
+  
+  // Check if SSE streaming is requested
+  const url = new URL(request.url)
+  const isStreaming = url.searchParams.get('stream') === 'true'
+  
   try {
     const session = await auth();
     console.log('[Start Discovery] Session check:', session ? 'Found' : 'Not found');
@@ -17,7 +22,7 @@ export async function POST(
     }
 
     const { handle } = await params;
-    const body = await request.json();
+    const body = await request.json().catch(() => ({ action: 'start_deepseek_search' }));
     const { action } = body;
 
     if (action !== 'start_deepseek_search') {
@@ -169,8 +174,145 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to parse search results' }, { status: 500 });
     }
 
-    // Process discovered content one-by-one
-    // NEW FLOW: Verify relevance → Generate image → THEN save to DB
+    // If streaming, create SSE stream
+    if (isStreaming) {
+      const stream = new TransformStream()
+      const writer = stream.writable.getWriter()
+      const encoder = new TextEncoder()
+      
+      const sendEvent = (event: string, data: any) => {
+        writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+      }
+      
+      // Process in background
+      ;(async () => {
+        try {
+          sendEvent('state', { phase: 'searching' })
+          sendEvent('heartbeat', {})
+          
+          // ... rest of processing will be here
+          const savedItems: any[] = []
+          const rejectedItems: any[] = []
+          
+          sendEvent('found', { count: discoveredItems.length })
+          sendEvent('state', { phase: 'processing' })
+          
+          // Process items one by one
+          for (let i = 0; i < discoveredItems.length; i++) {
+            const item = discoveredItems[i]
+            
+            try {
+              sendEvent('progress', { done: i, total: discoveredItems.length })
+              
+              // Verify relevance
+              const relevanceScore = item.relevance_score || 0
+              if (relevanceScore < 0.7) {
+                console.log('[Start Discovery] ❌ Rejected (low relevance):', item.title)
+                rejectedItems.push({ url: item.url, title: item.title, reason: 'low_relevance' })
+                continue
+              }
+              
+              // Generate AI image
+              console.log('[Start Discovery] Generating AI image for:', item.title)
+              const aiImageResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/ai/generate-hero-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: item.title,
+                  summary: item.description || '',
+                  contentType: item.type,
+                  artisticStyle: 'photorealistic',
+                  enableHiresFix: false
+                })
+              })
+              
+              let aiImageUrl = null
+              let aiImageSource = 'fallback'
+              
+              if (aiImageResponse.ok) {
+                const aiImageData = await aiImageResponse.json()
+                if (aiImageData.success && aiImageData.imageUrl) {
+                  aiImageUrl = aiImageData.imageUrl
+                  aiImageSource = 'ai-generated'
+                }
+              }
+              
+              if (!aiImageUrl) {
+                console.log('[Start Discovery] ❌ Rejected (no image):', item.title)
+                rejectedItems.push({ url: item.url, title: item.title, reason: 'no_image' })
+                continue
+              }
+              
+              // Save to database
+              const discoveredContent = await prisma.discoveredContent.create({
+                data: {
+                  patchId: patch.id,
+                  type: item.type || 'article',
+                  title: item.title,
+                  content: item.description || '',
+                  sourceUrl: item.url,
+                  relevanceScore: relevanceScore,
+                  tags: patch.tags.slice(0, 3),
+                  status: 'ready',
+                  mediaAssets: {
+                    heroImage: {
+                      url: aiImageUrl,
+                      source: aiImageSource,
+                      license: 'generated'
+                    }
+                  }
+                }
+              })
+              
+              // Send item-ready event
+              sendEvent('item-ready', {
+                id: discoveredContent.id,
+                title: discoveredContent.title,
+                type: discoveredContent.type,
+                url: discoveredContent.sourceUrl,
+                canonicalUrl: discoveredContent.sourceUrl,
+                content: { summary150: discoveredContent.content },
+                media: { hero: aiImageUrl },
+                meta: {
+                  sourceDomain: item.url ? new URL(item.url).hostname : null,
+                  publishDate: new Date().toISOString()
+                },
+                relevanceScore: discoveredContent.relevanceScore,
+                status: 'ready',
+                createdAt: discoveredContent.createdAt.toISOString()
+              })
+              
+              savedItems.push(discoveredContent)
+              
+            } catch (itemError) {
+              console.error('[Start Discovery] Error processing item:', item.title, itemError)
+              rejectedItems.push({ url: item.url, title: item.title, reason: 'processing_error' })
+            }
+          }
+          
+          // Send complete event
+          sendEvent('complete', { done: savedItems.length, rejected: rejectedItems.length })
+          sendEvent('state', { phase: 'completed' })
+          
+        } catch (error) {
+          console.error('[Start Discovery] Stream error:', error)
+          sendEvent('error', { message: error instanceof Error ? error.message : 'Unknown error' })
+          sendEvent('state', { phase: 'error' })
+        } finally {
+          writer.close()
+        }
+      })()
+      
+      return new Response(stream.readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        }
+      })
+    }
+    
+    // Non-streaming fallback (original flow)
     const savedItems = [];
     const rejectedItems = [];
     

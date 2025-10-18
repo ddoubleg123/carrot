@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ExternalLink, Clock, User, Calendar, MessageCircle, Bookmark, Play, FileText, Image as ImageIcon, Globe } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Play, FileText, Image as ImageIcon, Globe } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { DiscoveredItem } from '@/types/discovered-content';
+import PostActionBar from '@/components/post/PostActionBar';
 
 // Design tokens
 const COLORS = {
@@ -19,30 +18,26 @@ const COLORS = {
 
 interface DiscoveryCardProps {
   item: DiscoveredItem;
-  onAttach?: (type: 'timeline' | 'fact' | 'source') => void;
-  onDiscuss?: () => void;
-  onSave?: () => void;
+  onOpenModal?: (item: DiscoveredItem) => void;
 }
 
 export default function DiscoveryCard({
   item,
-  onAttach,
-  onDiscuss,
-  onSave
+  onOpenModal
 }: DiscoveryCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false)
   
   const {
     id,
     title,
     type,
     url,
-    matchPct,
-    status,
     media,
     content,
     meta
   } = item;
+  
+  const displayTitle = (item as any).displayTitle || title;
 
   // Get hero image with fallback
   const getHeroImage = () => {
