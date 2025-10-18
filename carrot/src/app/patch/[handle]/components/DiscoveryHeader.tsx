@@ -43,7 +43,7 @@ export default function DiscoveryHeader({
         return (
           <Button
             onClick={onStart}
-            variant="default"
+            variant="primary"
             className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
           >
             <Play className="w-4 h-4 mr-2" />
@@ -68,7 +68,7 @@ export default function DiscoveryHeader({
         return (
           <Button
             onClick={onResume}
-            variant="default"
+            variant="primary"
             className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
           >
             <Play className="w-4 h-4 mr-2" />
@@ -81,7 +81,7 @@ export default function DiscoveryHeader({
         return (
           <Button
             onClick={onRestart}
-            variant="default"
+            variant="primary"
             className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
           >
             <RotateCw className="w-4 h-4 mr-2" />
