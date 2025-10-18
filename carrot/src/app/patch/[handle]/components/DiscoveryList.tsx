@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Filter, SortAsc } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import DiscoveryHeader from './DiscoveryHeader'
 import DiscoveryCard from './DiscoveryCard'
 import { useDiscoveryStream } from '../hooks/useDiscoveryStream'
