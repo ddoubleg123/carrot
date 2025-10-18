@@ -19,7 +19,7 @@ interface DiscoveryHeaderProps {
 const HELPER_TEXT: Record<DiscoveryPhase, string> = {
   idle: 'Ready to discover content',
   searching: 'Searching for content…',
-  processing: 'Streaming items as they're ready',
+  processing: 'Streaming items as they are ready',
   paused: 'Paused — resume when ready',
   completed: 'Discovery complete',
   error: 'An error occurred'
