@@ -1,0 +1,207 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { DiscoveredItem } from '@/types/discovered-content'
+
+export type DiscoveryPhase = 'idle' | 'searching' | 'processing' | 'paused' | 'error'
+
+interface UseDiscoveryStreamSingleProps {
+  patchHandle: string
+}
+
+export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSingleProps) {
+  const [state, setState] = useState<DiscoveryPhase>('idle')
+  const [items, setItems] = useState<DiscoveredItem[]>([])
+  const [statusText, setStatusText] = useState('Ready to discover content')
+  const [lastItemTitle, setLastItemTitle] = useState<string | null>(null)
+  const [sessionCount, setSessionCount] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [live, setLive] = useState(false)
+  
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  // Upsert item (dedupe by canonicalUrl)
+  const upsertItem = useCallback((newItem: DiscoveredItem) => {
+    setItems(prev => {
+      const key = newItem.canonicalUrl || newItem.id
+      const existingIndex = prev.findIndex(
+        item => (item.canonicalUrl || item.id) === key
+      )
+      
+      if (existingIndex >= 0) {
+        const updated = [...prev]
+        updated[existingIndex] = newItem
+        return updated
+      }
+      
+      // Prepend new item
+      return [newItem, ...prev]
+    })
+  }, [])
+
+  // Start discovery
+  const start = useCallback(() => {
+    console.log('[Discovery] Starting single-item discovery')
+    
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
+    
+    // Reset state
+    setState('searching')
+    setStatusText('Searching…')
+    setError(null)
+    setLive(true)
+    setSessionCount(0)
+    setLastItemTitle(null)
+    
+    // Create EventSource
+    const streamUrl = `/api/patches/${patchHandle}/discovery/stream?mode=single&batch=10`
+    const eventSource = new EventSource(streamUrl)
+    eventSourceRef.current = eventSource
+    
+    eventSource.addEventListener('discovery:start', () => {
+      setState('searching')
+      setStatusText('Searching…')
+    })
+    
+    eventSource.addEventListener('discovery:searching', () => {
+      setStatusText('Searching for content…')
+    })
+    
+    eventSource.addEventListener('discovery:candidate', (e) => {
+      const data = JSON.parse(e.data)
+      setStatusText(`Found candidate from ${data.sourceDomain}`)
+    })
+    
+    eventSource.addEventListener('discovery:fetching', (e) => {
+      const data = JSON.parse(e.data)
+      setStatusText('Fetching content…')
+    })
+    
+    eventSource.addEventListener('discovery:imagizing:start', () => {
+      setStatusText('Generating image…')
+    })
+    
+    eventSource.addEventListener('discovery:saved', (e) => {
+      const data = JSON.parse(e.data)
+      const item = data.item
+      
+      upsertItem(item)
+      setLastItemTitle(item.title)
+      setStatusText(`Item added: ${item.title.substring(0, 40)}...`)
+      setState('processing')
+    })
+    
+    eventSource.addEventListener('discovery:imagizing:update', (e) => {
+      const data = JSON.parse(e.data)
+      // Update hero for item silently
+      setItems(prev => prev.map(item => 
+        item.id === data.itemId 
+          ? { ...item, media: { ...item.media, hero: data.hero } }
+          : item
+      ))
+    })
+    
+    eventSource.addEventListener('discovery:cycle', (e) => {
+      const data = JSON.parse(e.data)
+      setSessionCount(data.count)
+    })
+    
+    eventSource.addEventListener('discovery:error', (e) => {
+      const data = JSON.parse(e.data)
+      console.warn('[Discovery] Error:', data.message)
+      // Don't stop on errors, just log them
+    })
+    
+    eventSource.addEventListener('discovery:complete', () => {
+      setState('idle')
+      setStatusText('Discovery complete')
+      setLive(false)
+      eventSource.close()
+      eventSourceRef.current = null
+    })
+    
+    eventSource.onerror = () => {
+      console.error('[Discovery] Connection lost')
+      setStatusText('Paused (connection lost)')
+      setState('paused')
+      setLive(false)
+      eventSource.close()
+      eventSourceRef.current = null
+    }
+    
+    eventSource.addEventListener('heartbeat', () => {
+      // Just acknowledge
+    })
+    
+  }, [patchHandle, upsertItem])
+
+  // Pause discovery
+  const pause = useCallback(async () => {
+    console.log('[Discovery] Pausing')
+    
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    
+    setState('paused')
+    setStatusText('Paused — resume when ready')
+    setLive(false)
+    
+    // Call control API
+    await fetch(`/api/patches/${patchHandle}/discovery/control?action=pause`, {
+      method: 'POST'
+    }).catch(() => {})
+    
+  }, [patchHandle])
+
+  // Resume discovery
+  const resume = useCallback(() => {
+    console.log('[Discovery] Resuming')
+    start()
+  }, [start])
+
+  // Refresh items
+  const refresh = useCallback(async () => {
+    console.log('[Discovery] Refreshing items')
+    
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.items && Array.isArray(data.items)) {
+          setItems(data.items)
+        }
+      }
+    } catch (err) {
+      console.error('[Discovery] Refresh error:', err)
+    }
+  }, [patchHandle])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
+    }
+  }, [])
+
+  return {
+    start,
+    pause,
+    resume,
+    refresh,
+    state,
+    live,
+    items,
+    statusText,
+    lastItemTitle,
+    sessionCount,
+    error
+  }
+}
+
