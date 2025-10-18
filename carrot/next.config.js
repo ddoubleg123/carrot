@@ -143,8 +143,19 @@ const nextConfig = {
   },
   async headers() {
     return [
+      // Static assets - aggressive caching (Next.js handles Content-Type automatically)
       {
-        source: '/(.*)',
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          }
+        ]
+      },
+      // HTML pages and API routes - CSP and security headers  
+      {
+        source: '/((?!_next/static|_next/image|favicon.ico|robots.txt).*)',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -154,33 +165,19 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://cdn.knightlab.com",
               "font-src 'self' https://cdn.knightlab.com https://fonts.gstatic.com",
               "img-src 'self' data: blob: https://lh3.googleusercontent.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://images.unsplash.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media1.tenor.com https://media2.tenor.com https://media3.tenor.com https://media4.tenor.com https://media5.tenor.com https://cdnjs.cloudflare.com https://ui-avatars.com https://upload.wikimedia.org",
-              // 👇 THE CRITICAL FIX - Allow media sources
               "media-src 'self' blob: data: https://firebasestorage.googleapis.com https://storage.googleapis.com https://*.firebasestorage.app https://commondatastorage.googleapis.com https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media0.giphy.com https://media1.giphy.com https://media2.giphy.com https://media3.giphy.com https://media4.giphy.com https://media5.giphy.com https://www.soundhelix.com",
               "connect-src 'self' blob: https://*.googleapis.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://api.giphy.com https://tenor.googleapis.com https://huggingface.co https://*.huggingface.co https://cdn-lfs.huggingface.co https://cdn.knightlab.com",
               "frame-ancestors 'self'"
             ].join('; ')
           },
-              {
-                key: 'Cache-Control',
-                value: 'public, max-age=31536000, immutable'
-              },
-              // Use HTTP/1.1 compatible headers to avoid protocol errors
-              {
-                key: 'Connection',
-                value: 'keep-alive'
-              },
-              {
-                key: 'Keep-Alive',
-                value: 'timeout=5, max=1000'
-              },
-              {
-                key: 'X-Content-Type-Options',
-                value: 'nosniff'
-              },
-              {
-                key: 'X-Frame-Options',
-                value: 'SAMEORIGIN'
-              }
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN'
+          }
         ]
       }
     ];
