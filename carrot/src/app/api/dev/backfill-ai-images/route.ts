@@ -28,30 +28,27 @@ export async function POST(request: NextRequest) {
     // Get discovered content that needs AI images
     const discoveredContent = await prisma.discoveredContent.findMany({
       where: {
-        patchId: patch.id,
-        ...(forceRegenerate ? {} : {
-          OR: [
-            { mediaAssets: null },
-            { mediaAssets: { equals: {} } },
-            { 
-              mediaAssets: { 
-                path: ['hero'], 
-                equals: null 
-              } 
-            }
-          ]
-        })
+        patchId: patch.id
       },
       take: limit,
       orderBy: { createdAt: 'desc' }
     })
+    
+    // Filter items that need images (if not forcing regeneration)
+    const itemsToProcess = forceRegenerate 
+      ? discoveredContent
+      : discoveredContent.filter(item => {
+          if (!item.mediaAssets) return true
+          const assets = item.mediaAssets as any
+          return !assets.heroImage || !assets.heroImage.url
+        })
 
-    console.log(`[Backfill AI Images] Found ${discoveredContent.length} items to process`)
+    console.log(`[Backfill AI Images] Found ${itemsToProcess.length} items to process`)
 
     const results = []
     const errors = []
 
-    for (const item of discoveredContent) {
+    for (const item of itemsToProcess) {
       try {
         console.log(`[Backfill AI Images] Processing: ${item.title}`)
         
