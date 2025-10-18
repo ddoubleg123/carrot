@@ -661,9 +661,10 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
             <DiscoveryCard
               key={item.id || Math.random()}
               item={item}
-              onAttach={(type) => handleAttach(item.id, type)}
-              onDiscuss={() => handleDiscuss(item.id)}
-              onSave={() => handleSave(item.id)}
+              onOpenModal={(selectedItem) => {
+                // TODO: Implement modal
+                console.log('[Discovery] Open modal for:', selectedItem.title)
+              }}
             />
           );
         })}
