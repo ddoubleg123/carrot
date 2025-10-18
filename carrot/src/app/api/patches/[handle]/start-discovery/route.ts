@@ -264,22 +264,29 @@ export async function POST(
                 }
               })
               
-              // Send item-ready event
+              // Send item-ready event with complete DiscoveredItem format
               sendEvent('item-ready', {
                 id: discoveredContent.id,
+                type: discoveredContent.type as 'article'|'video'|'pdf'|'image'|'text',
                 title: discoveredContent.title,
-                type: discoveredContent.type,
-                url: discoveredContent.sourceUrl,
+                displayTitle: discoveredContent.title,
+                url: discoveredContent.sourceUrl || '',
                 canonicalUrl: discoveredContent.sourceUrl,
-                content: { summary150: discoveredContent.content },
-                media: { hero: aiImageUrl },
-                meta: {
-                  sourceDomain: item.url ? new URL(item.url).hostname : null,
-                  publishDate: new Date().toISOString()
+                status: 'ready' as const,
+                media: {
+                  hero: aiImageUrl,
+                  source: aiImageSource as 'og'|'oembed'|'inline'|'video'|'pdf'|'image'|'generated',
+                  license: 'generated' as const
                 },
-                relevanceScore: discoveredContent.relevanceScore,
-                status: 'ready',
-                createdAt: discoveredContent.createdAt.toISOString()
+                content: {
+                  summary150: (discoveredContent.content || '').substring(0, 180),
+                  keyPoints: [],
+                  readingTimeMin: Math.ceil((discoveredContent.content || '').length / 1000)
+                },
+                meta: {
+                  sourceDomain: item.url ? new URL(item.url).hostname : 'unknown',
+                  publishDate: new Date().toISOString()
+                }
               })
               
               savedItems.push(discoveredContent)
