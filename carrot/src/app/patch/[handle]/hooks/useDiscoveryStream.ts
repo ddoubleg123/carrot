@@ -1,21 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { DiscoveredItem } from '@/types/discovered-content'
 
 export type DiscoveryPhase = 'idle' | 'searching' | 'processing' | 'paused' | 'completed' | 'error'
-
-export interface DiscoveredItem {
-  id: string
-  title: string
-  content?: string
-  url?: string
-  canonicalUrl?: string
-  type: string
-  relevanceScore?: number
-  mediaAssets?: any
-  createdAt?: string
-  [key: string]: any
-}
 
 interface UseDiscoveryStreamProps {
   patchId: string
