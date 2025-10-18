@@ -60,14 +60,14 @@ export default function DiscoveryList({ patchId }: DiscoveryListProps) {
     const sorted = [...filtered]
     if (sortBy === 'newest') {
       sorted.sort((a, b) => {
-        const aDate = new Date(a.createdAt || 0).getTime()
-        const bDate = new Date(b.createdAt || 0).getTime()
+        const aDate = new Date((a as any).createdAt || a.meta?.publishDate || 0).getTime()
+        const bDate = new Date((b as any).createdAt || b.meta?.publishDate || 0).getTime()
         return bDate - aDate
       })
     } else if (sortBy === 'relevance') {
-      sorted.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+      sorted.sort((a, b) => ((b as any).relevanceScore || 0) - ((a as any).relevanceScore || 0))
     } else if (sortBy === 'quality') {
-      sorted.sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
+      sorted.sort((a, b) => ((b as any).qualityScore || 0) - ((a as any).qualityScore || 0))
     }
     
     return sorted
