@@ -115,10 +115,10 @@ export default function AIImageBackfill({ patchHandle }: AIImageBackfillProps) {
 
         {/* Action Buttons */}
         <div className="flex gap-2 flex-wrap">
-          <Button 
+          <Button
             onClick={() => triggerBackfill(1, false)}
             disabled={isLoading}
-            variant="default"
+            variant="primary"
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
             Generate 1 Image
