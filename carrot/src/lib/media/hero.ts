@@ -110,16 +110,12 @@ export function pickHero(item: DiscoveredItem): string | null {
   }
   
   // No real media available - will fall back to GeneratedCover
-  console.log('[pickHero] No real media found, triggering AI image generation')
+  console.log('[pickHero] No real media found, will use fallback')
   
-  // Trigger AI image generation asynchronously (don't wait for it)
-  if (item.title && item.content?.summary150) {
-    generateAIHeroImage(item).catch(error => {
-      console.warn('[pickHero] AI image generation failed:', error)
-    })
-  }
+  // DO NOT trigger AI generation from browser - this should be server-side only
+  // AI image generation happens during discovery process on the server
   
-  return null // Still return null for now, AI generation will update the item later
+  return null // Return null to use fallback/placeholder in UI
 }
 
 /**
