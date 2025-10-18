@@ -3,7 +3,7 @@
 // Removed custom card styles - using Tailwind directly
 import { Badge } from '@/components/ui/badge';
 import { Calendar, ExternalLink, MessageSquare, Clock } from 'lucide-react';
-import DiscoveryList from '@/app/(app)/patch/[handle]/components/DiscoveryList';
+import DiscoveryListSingle from '@/app/patch/[handle]/components/DiscoveryListSingle';
 
 interface Fact {
   id: string;
@@ -88,7 +88,7 @@ export default function Overview({ patch }: OverviewProps) {
     <div className="space-y-6 px-6 md:px-10">
       {/* Discovering Content */}
       <div>
-        <DiscoveryList patchHandle={patch.handle} />
+        <DiscoveryListSingle patchHandle={patch.handle} />
       </div>
 
       {/* Key Facts Grid */}
