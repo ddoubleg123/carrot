@@ -661,7 +661,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
             <DiscoveryCard
               key={item.id || Math.random()}
               item={item}
-              onOpenModal={(selectedItem) => {
+              onHeroClick={(selectedItem) => {
                 // TODO: Implement modal
                 console.log('[Discovery] Open modal for:', selectedItem.title)
               }}
