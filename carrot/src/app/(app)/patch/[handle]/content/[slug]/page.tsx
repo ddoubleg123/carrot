@@ -122,7 +122,12 @@ export async function generateMetadata({ params }: ContentPageProps) {
     select: {
       title: true,
       content: true,
-      metadata: true
+      metadata: true,
+      patch: {
+        select: {
+          name: true
+        }
+      }
     }
   });
 
