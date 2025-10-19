@@ -29,4 +29,9 @@ export type DiscoveredItem = {
     author?: string;
     publishDate?: string;     // ISO
   };
+  metadata?: {
+    contentUrl?: string;
+    urlSlug?: string;
+    [key: string]: any;
+  };
 };
