@@ -58,8 +58,8 @@ export default async function ContentPage({ params }: ContentPageProps) {
     qualityScore: content.qualityScore,
     freshnessScore: content.freshnessScore,
     diversityBucket: content.diversityBucket,
-    contentUrl: content.metadata?.contentUrl,
-    urlSlug: content.metadata?.urlSlug
+    contentUrl: (content.metadata as any)?.contentUrl,
+    urlSlug: (content.metadata as any)?.urlSlug
   };
 
   return (
