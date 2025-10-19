@@ -178,11 +178,13 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
     const metadata = item.metadata || {}
     const enrichedContent = item.enrichedContent || {}
     
-    // Debug logging
-    console.log('[Transform] Item metadata:', {
+    // Debug logging - show the full structure
+    console.log('[Transform] Full item structure:', {
       id: item.id,
       title: item.title,
       metadata: item.metadata,
+      metadataType: typeof item.metadata,
+      metadataKeys: item.metadata ? Object.keys(item.metadata) : 'no metadata',
       contentUrl: metadata.contentUrl,
       urlSlug: metadata.urlSlug
     });
