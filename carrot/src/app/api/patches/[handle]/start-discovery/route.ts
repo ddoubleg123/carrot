@@ -6,6 +6,25 @@ import { BatchedLogger } from '@/lib/discovery/logger';
 
 export const runtime = 'nodejs';
 
+// GET handler for SSE streaming (EventSource compatibility)
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ handle: string }> }
+) {
+  console.log('[Start Discovery] GET endpoint called (SSE streaming)');
+  
+  // GET is always streaming
+  const url = new URL(request.url);
+  const modifiedRequest = new Request(request.url, {
+    method: 'POST',
+    headers: request.headers,
+    body: JSON.stringify({ action: 'start_deepseek_search' })
+  });
+  
+  // Reuse POST logic
+  return POST(modifiedRequest, { params });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ handle: string }> }
@@ -14,7 +33,7 @@ export async function POST(
   
   // Check if SSE streaming is requested
   const url = new URL(request.url)
-  const isStreaming = url.searchParams.get('stream') === 'true'
+  const isStreaming = url.searchParams.get('stream') === 'true' || request.method === 'GET'
   
   try {
     const session = await auth();

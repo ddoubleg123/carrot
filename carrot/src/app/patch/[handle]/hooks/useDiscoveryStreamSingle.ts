@@ -56,8 +56,11 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
     setSessionCount(0)
     setLastItemTitle(null)
     
-    // Create EventSource
-    const streamUrl = `/api/patches/${patchHandle}/discovery/stream?mode=single&batch=10`
+    // Create EventSource - use existing working endpoint with stream=true
+    const streamUrl = `/api/patches/${patchHandle}/start-discovery?stream=true`
+    
+    console.log('[Discovery] Opening SSE connection:', streamUrl)
+    
     const eventSource = new EventSource(streamUrl)
     eventSourceRef.current = eventSource
     
