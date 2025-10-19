@@ -290,7 +290,7 @@ export async function POST(
                     content: item.description || '',
                     sourceUrl: item.url,
                     canonicalUrl: canonicalUrl,
-                    relevanceScore: relevanceScore,
+                    relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
                     tags: [],
                     status: 'denied', // 🚀 Mark as denied
                   }
@@ -341,7 +341,7 @@ export async function POST(
                     content: item.description || '',
                     sourceUrl: item.url,
                     canonicalUrl: canonicalUrl,
-                    relevanceScore: relevanceScore,
+                    relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
                     tags: [],
                     status: 'denied', // 🚀 Mark as denied
                   }
@@ -364,7 +364,7 @@ export async function POST(
                   content: item.description || '',
                   sourceUrl: item.url,
                   canonicalUrl: canonicalUrl,
-                  relevanceScore: relevanceScore,
+                  relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
                   tags: patch.tags.slice(0, 3),
                   status: 'ready', // 🚀 Mark as approved
                   mediaAssets: {
@@ -486,7 +486,7 @@ export async function POST(
               content: item.description || '',
               sourceUrl: item.url,
               canonicalUrl: canonicalUrl,
-              relevanceScore: relevanceScore,
+              relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
               tags: [],
               status: 'denied',
             }
@@ -605,7 +605,7 @@ export async function POST(
             content: item.description || '',
             sourceUrl: item.url,
             canonicalUrl: canonicalUrl,
-            relevanceScore: relevanceScore,
+            relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
             tags: patch.tags.slice(0, 3),
             status: 'ready', // ← READY because it passed all checks!
             mediaAssets: {
