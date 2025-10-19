@@ -44,6 +44,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d')
   const [selectedItem, setSelectedItem] = useState<DiscoveredItem | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [visibleItemsCount, setVisibleItemsCount] = useState(6) // Start with 6 items
 
   // Use SSE streaming hook
   const { 
@@ -83,6 +84,15 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       return true
     })
   }, [items])
+  
+  // Lazy loading: only show visible items
+  const visibleItems = deduplicatedItems.slice(0, visibleItemsCount)
+  const hasMoreItems = deduplicatedItems.length > visibleItemsCount
+  
+  // Load more items
+  const handleLoadMore = () => {
+    setVisibleItemsCount(prev => Math.min(prev + 6, deduplicatedItems.length))
+  }
 
   const handleRefresh = () => {
     refresh()
@@ -280,7 +290,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           )}
           
           {/* Then show actual items */}
-           {deduplicatedItems.map((item) => (
+           {visibleItems.map((item) => (
              <DiscoveryCard 
                key={item.canonicalUrl || item.id} 
                item={item}
@@ -288,6 +298,19 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
                patchHandle={patchHandle}
              />
            ))}
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {hasMoreItems && !isLoading && (
+        <div className="flex justify-center mt-8">
+          <Button
+            onClick={handleLoadMore}
+            variant="outline"
+            className="px-8 py-2"
+          >
+            Load More ({deduplicatedItems.length - visibleItemsCount} remaining)
+          </Button>
         </div>
       )}
 

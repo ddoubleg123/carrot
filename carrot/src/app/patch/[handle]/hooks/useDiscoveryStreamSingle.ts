@@ -92,7 +92,9 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
       const data = JSON.parse(e.data)
       const item = data.item
       
-      upsertItem(item)
+      // Transform the item to ensure consistent structure
+      const transformedItem = transformToDiscoveredItem(item)
+      upsertItem(transformedItem)
       setLastItemTitle(item.title)
       setStatusText(`Item added: ${item.title.substring(0, 40)}...`)
       setState('processing')
