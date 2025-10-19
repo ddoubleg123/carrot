@@ -48,18 +48,33 @@ export default async function ContentPage({ params }: ContentPageProps) {
     url: content.sourceUrl || '',
     canonicalUrl: content.canonicalUrl || content.sourceUrl || '',
     type: content.type as 'article' | 'video' | 'pdf' | 'image' | 'text',
-    description: content.content || '',
-    relevanceScore: content.relevanceScore || 0,
-    status: content.status,
-    createdAt: content.createdAt,
-    enrichedContent: content.enrichedContent as any,
-    mediaAssets: content.mediaAssets as any,
-    metadata: content.metadata as any,
-    qualityScore: content.qualityScore,
-    freshnessScore: content.freshnessScore,
-    diversityBucket: content.diversityBucket,
-    contentUrl: (content.metadata as any)?.contentUrl,
-    urlSlug: (content.metadata as any)?.urlSlug
+    status: content.status as 'queued' | 'fetching' | 'enriching' | 'pending_audit' | 'ready' | 'failed',
+    media: {
+      hero: (content.mediaAssets as any)?.hero,
+      gallery: (content.mediaAssets as any)?.gallery || [],
+      videoThumb: (content.mediaAssets as any)?.videoThumb,
+      pdfPreview: (content.mediaAssets as any)?.pdfPreview,
+      blurDataURL: (content.mediaAssets as any)?.blurDataURL,
+      dominant: (content.mediaAssets as any)?.dominant,
+      source: (content.mediaAssets as any)?.source || 'generated',
+      license: (content.mediaAssets as any)?.license || 'generated'
+    },
+    content: {
+      summary150: content.content?.substring(0, 150) || '',
+      keyPoints: (content.enrichedContent as any)?.keyPoints || [],
+      notableQuote: (content.enrichedContent as any)?.notableQuote,
+      readingTimeMin: (content.enrichedContent as any)?.readingTimeMin
+    },
+    meta: {
+      sourceDomain: content.sourceUrl ? new URL(content.sourceUrl).hostname : 'unknown',
+      favicon: (content.metadata as any)?.favicon,
+      author: (content.metadata as any)?.author,
+      publishDate: (content.metadata as any)?.publishDate
+    },
+    metadata: {
+      contentUrl: (content.metadata as any)?.contentUrl,
+      urlSlug: (content.metadata as any)?.urlSlug
+    }
   };
 
   return (
