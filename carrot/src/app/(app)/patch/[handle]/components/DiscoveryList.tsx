@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Search, RefreshCw, Play, Square, Pause } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import ContentModal from './ContentModal'
-import { useDiscoveryStreamSingle } from '../hooks/useDiscoveryStreamSingle'
+import { useDiscoveryStreamSingle } from '@/app/patch/[handle]/hooks/useDiscoveryStreamSingle'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface DiscoveryListProps {

@@ -105,6 +105,23 @@ export async function POST(
       description: patch.description
     });
 
+    // For streaming mode, we'll loop and call DeepSeek ONE item at a time
+    // For non-streaming, keep the batch approach for backward compatibility
+    const batchSize = isStreaming ? 1 : 10;
+    const maxIterations = isStreaming ? 10 : 1;
+    
+    // Get recently discovered titles to avoid duplicates
+    const recentTitles = await prisma.discoveredContent.findMany({
+      where: { patchId: patch.id },
+      select: { title: true, sourceUrl: true },
+      take: 20,
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const avoidanceContext = recentTitles.length > 0 
+      ? `\n\nAVOID these topics (already covered):\n${recentTitles.map(t => `- ${t.title}`).join('\n')}`
+      : '';
+    
     // Call DeepSeek API to search for relevant content
     const deepSeekResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
@@ -117,44 +134,40 @@ export async function POST(
         messages: [
           {
             role: 'system',
-            content: `You are a research assistant that finds high-quality, relevant content about specific topics. 
-            Given a topic name, description, and tags, you should search for and return URLs to authoritative sources, 
-            recent articles, academic papers, videos, and other educational content that would be valuable for learning about this topic.
-            
-            Focus on:
-            - Academic sources and research papers
-            - News articles from reputable sources
-            - Educational videos and documentaries
-            - Government and institutional reports
-            - Expert analysis and commentary
-            
-            Return your findings as a JSON array of objects with this structure:
-            [
-              {
-                "title": "Content title",
-                "url": "https://example.com/article",
-                "type": "article|video|paper|report|news",
-                "description": "Brief description of the content",
-                "relevance_score": 0.95,
-                "source_authority": "high|medium|low"
-              }
-            ]
-            
-            Only return content that is highly relevant (relevance_score > 0.7) and from authoritative sources.`
+            content: isStreaming 
+              ? `You are a research assistant. Find the SINGLE BEST, most recent piece of content.
+                Return ONLY ONE result as a JSON object (not an array):
+                {
+                  "title": "Specific title",
+                  "url": "https://example.com/article",
+                  "type": "article|video|news",
+                  "description": "Brief description",
+                  "relevance_score": 0.95
+                }
+                Focus on authoritative sources and recent content (last 7-14 days preferred).
+                Only return if relevance_score > 0.8.`
+              : `You are a research assistant that finds high-quality, relevant content about specific topics. 
+                Return your findings as a JSON array of objects with relevance_score > 0.7.`
           },
           {
             role: 'user',
-            content: `Find high-quality content about: "${patch.name}"
-            
-            Description: ${patch.description || 'No description provided'}
-            
-            Tags: ${patch.tags.join(', ')}
-            
-            Please search for and return relevant, authoritative content that would help someone learn about this topic.`
+            content: isStreaming
+              ? `Find the SINGLE BEST piece of recent content about: "${patch.name}"
+                
+                Description: ${patch.description || 'No description'}
+                Tags: ${patch.tags.join(', ')}${avoidanceContext}
+                
+                Return ONE result as JSON object (not array).`
+              : `Find high-quality content about: "${patch.name}"
+                
+                Description: ${patch.description || 'No description provided'}
+                Tags: ${patch.tags.join(', ')}
+                
+                Please search for and return relevant, authoritative content.`
           }
         ],
-        temperature: 0.3,
-        max_tokens: 4000
+        temperature: isStreaming ? 0.7 : 0.3,
+        max_tokens: isStreaming ? 500 : 4000
       })
     });
 
