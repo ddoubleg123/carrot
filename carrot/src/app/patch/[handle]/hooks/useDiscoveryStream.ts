@@ -1,275 +1,269 @@
-'use client'
+/**
+ * React Hook for Discovery Stream
+ * 
+ * Consumes SSE stream from discovery API and manages state
+ */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { DiscoveredItem } from '@/types/discovered-content'
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { DiscoveredItem } from '@/types/discovered-content';
 
-export type DiscoveryPhase = 'idle' | 'searching' | 'processing' | 'paused' | 'completed' | 'error'
-
-interface UseDiscoveryStreamProps {
-  patchId: string
-  batchSize?: number
+export interface DiscoveryState {
+  phase: 'idle' | 'searching' | 'processing' | 'paused' | 'completed' | 'error';
+  found: number;
+  total: number;
+  done: number;
+  live: boolean;
+  error?: string;
 }
 
-export function useDiscoveryStream({ patchId, batchSize = 10 }: UseDiscoveryStreamProps) {
-  const [state, setState] = useState<DiscoveryPhase>('idle')
-  const [done, setDone] = useState(0)
-  const [total, setTotal] = useState(0)
-  const [live, setLive] = useState(false)
-  const [items, setItems] = useState<DiscoveredItem[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [autoLoop, setAutoLoop] = useState(false)
+export interface UseDiscoveryStreamOptions {
+  patchHandle: string;
+  batchSize?: number;
+  autoStart?: boolean;
+}
+
+export interface UseDiscoveryStreamReturn {
+  // State
+  state: DiscoveryState;
+  items: DiscoveredItem[];
   
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const lastTimestampRef = useRef<string | null>(null)
+  // Actions
+  start: () => void;
+  pause: () => void;
+  resume: () => void;
+  restart: () => void;
+  refresh: () => void;
+  
+  // Status
+  isConnected: boolean;
+  isRunning: boolean;
+  hasError: boolean;
+}
 
-  // Dedupe and upsert item
-  const upsertItem = useCallback((newItem: DiscoveredItem) => {
-    setItems(prev => {
-      const key = newItem.canonicalUrl || newItem.id
-      const existingIndex = prev.findIndex(
-        item => (item.canonicalUrl || item.id) === key
-      )
-      
-      if (existingIndex >= 0) {
-        const updated = [...prev]
-        updated[existingIndex] = newItem
-        return updated
-      }
-      
-      return [newItem, ...prev]
-    })
-  }, [])
-
-  // Polling fallback
-  const startPolling = useCallback(() => {
-    if (pollingIntervalRef.current) return
-    
-    console.log('[Discovery] Starting polling fallback')
-    
-    pollingIntervalRef.current = setInterval(async () => {
-      try {
-        const url = lastTimestampRef.current
-          ? `/api/patch/${patchId}/discover?since=${lastTimestampRef.current}`
-          : `/api/patch/${patchId}/discover`
-        
-        const response = await fetch(url)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.items && data.items.length > 0) {
-            data.items.forEach((item: DiscoveredItem) => upsertItem(item))
-            lastTimestampRef.current = new Date().toISOString()
-          }
-          
-          if (data.completed) {
-            setState('completed')
-            setLive(false)
-            if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current)
-              pollingIntervalRef.current = null
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[Discovery] Polling error:', err)
-      }
-    }, 5000)
-  }, [patchId, upsertItem])
-
-  const stopPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current)
-      pollingIntervalRef.current = null
-    }
-  }, [])
-
+/**
+ * Hook for consuming discovery SSE stream
+ */
+export function useDiscoveryStream(options: UseDiscoveryStreamOptions): UseDiscoveryStreamReturn {
+  const { patchHandle, batchSize = 10, autoStart = false } = options;
+  
+  // State
+  const [state, setState] = useState<DiscoveryState>({
+    phase: 'idle',
+    found: 0,
+    total: batchSize,
+    done: 0,
+    live: false
+  });
+  
+  const [items, setItems] = useState<DiscoveredItem[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  
+  // Refs
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Start discovery
   const start = useCallback(() => {
-    console.log('[Discovery] Starting discovery stream')
-    
-    // Close existing connection
     if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-    stopPolling()
-    
-    // Reset state
-    setState('searching')
-    setDone(0)
-    setTotal(0)
-    setItems([])
-    setError(null)
-    setLive(true)
-    lastTimestampRef.current = new Date().toISOString()
-    
-    // Check if EventSource is supported
-    if (typeof EventSource === 'undefined') {
-      console.warn('[Discovery] EventSource not supported, using polling fallback')
-      startPolling()
-      return
+      eventSourceRef.current.close();
     }
     
-    // Create SSE connection
-    const streamUrl = `/api/patches/${patchId}/start-discovery?stream=true&batch=${batchSize}`
-    const eventSource = new EventSource(streamUrl)
-    eventSourceRef.current = eventSource
+    const url = `/api/patches/${patchHandle}/discovery/stream?batch=${batchSize}&stream=true`;
+    const eventSource = new EventSource(url);
+    eventSourceRef.current = eventSource;
     
-    eventSource.addEventListener('state', (e) => {
-      const data = JSON.parse(e.data)
-      setState(data.phase)
-      console.log('[Discovery] State:', data.phase)
-    })
+    setIsConnected(true);
+    setHasError(false);
+    setState(prev => ({ ...prev, phase: 'searching', live: true }));
     
-    eventSource.addEventListener('found', (e) => {
-      const data = JSON.parse(e.data)
-      setTotal(data.count)
-      console.log('[Discovery] Found:', data.count, 'items')
-    })
+    // Handle events
+    eventSource.onopen = () => {
+      console.log('[Discovery] SSE connection opened');
+      setIsConnected(true);
+    };
     
-    eventSource.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data)
-      setDone(data.done)
-      setTotal(data.total)
-    })
-    
-    eventSource.addEventListener('item-ready', (e) => {
-      const item = JSON.parse(e.data)
-      upsertItem(item)
-      setDone(prev => prev + 1)
-      console.log('[Discovery] Item ready:', item.title)
-    })
-    
-    eventSource.addEventListener('complete', (e) => {
-      const data = JSON.parse(e.data)
-      setState('completed')
-      setLive(false)
-      setDone(data.done || done)
-      console.log('[Discovery] Complete:', data)
-      
-      eventSource.close()
-      eventSourceRef.current = null
-      
-      // Auto-loop if enabled
-      if (autoLoop) {
-        setTimeout(() => {
-          console.log('[Discovery] Auto-restarting...')
-          start()
-        }, 1500)
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[Discovery] Received message:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing message:', error);
       }
-    })
+    };
     
-    eventSource.addEventListener('error', (e: any) => {
-      const data = e.data ? JSON.parse(e.data) : { message: 'Connection error' }
-      setError(data.message)
-      setState('error')
-      setLive(false)
-      console.error('[Discovery] Error:', data.message)
-      
-      eventSource.close()
-      eventSourceRef.current = null
-      
-      // Fall back to polling
-      console.log('[Discovery] Falling back to polling')
-      startPolling()
-    })
+    eventSource.addEventListener('state', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setState(prev => ({ ...prev, ...data }));
+        console.log('[Discovery] State update:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing state:', error);
+      }
+    });
     
-    eventSource.onerror = () => {
-      console.warn('[Discovery] EventSource connection error, falling back to polling')
-      setState('processing')
-      setLive(false)
-      
-      eventSource.close()
-      eventSourceRef.current = null
-      
-      startPolling()
-    }
+    eventSource.addEventListener('found', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setState(prev => ({ ...prev, found: data.count }));
+        console.log('[Discovery] Found update:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing found:', error);
+      }
+    });
+    
+    eventSource.addEventListener('progress', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setState(prev => ({ ...prev, done: data.done, total: data.total }));
+        console.log('[Discovery] Progress update:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing progress:', error);
+      }
+    });
+    
+    eventSource.addEventListener('item-ready', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const newItem: DiscoveredItem = {
+          id: data.id,
+          type: data.type,
+          title: data.title,
+          displayTitle: data.displayTitle,
+          url: data.url,
+          canonicalUrl: data.canonicalUrl,
+          status: data.status,
+          media: data.media,
+          content: data.content,
+          meta: data.meta
+        };
+        
+        setItems(prev => [newItem, ...prev]);
+        console.log('[Discovery] New item ready:', newItem);
+      } catch (error) {
+        console.error('[Discovery] Error parsing item-ready:', error);
+      }
+    });
+    
+    eventSource.addEventListener('error', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setState(prev => ({ ...prev, phase: 'error', error: data.message }));
+        setHasError(true);
+        console.error('[Discovery] Error event:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing error event:', error);
+      }
+    });
+    
+    eventSource.addEventListener('complete', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setState(prev => ({ ...prev, phase: 'completed', live: false }));
+        console.log('[Discovery] Complete:', data);
+      } catch (error) {
+        console.error('[Discovery] Error parsing complete:', error);
+      }
+    });
     
     eventSource.addEventListener('heartbeat', () => {
-      // Just acknowledge connection is alive
-    })
+      // Keep connection alive
+      console.log('[Discovery] Heartbeat received');
+    });
     
-  }, [patchId, batchSize, autoLoop, done, upsertItem, startPolling, stopPolling])
-
+    eventSource.onerror = (error) => {
+      console.error('[Discovery] SSE error:', error);
+      setIsConnected(false);
+      setHasError(true);
+      
+      // Attempt reconnection
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
+      reconnectTimeoutRef.current = setTimeout(() => {
+        console.log('[Discovery] Attempting reconnection...');
+        start();
+      }, 5000);
+    };
+    
+  }, [patchHandle, batchSize]);
+  
   // Pause discovery
   const pause = useCallback(() => {
-    console.log('[Discovery] Pausing')
-    
     if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
-    stopPolling()
     
-    setState('paused')
-    setLive(false)
-  }, [stopPolling])
-
-  // Resume discovery  
+    setState(prev => ({ ...prev, phase: 'paused', live: false }));
+    setIsConnected(false);
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  }, []);
+  
+  // Resume discovery
   const resume = useCallback(() => {
-    console.log('[Discovery] Resuming')
-    start()
-  }, [start])
-
+    start();
+  }, [start]);
+  
   // Restart discovery
   const restart = useCallback(() => {
-    console.log('[Discovery] Restarting')
-    
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-    stopPolling()
-    
-    setItems([])
-    setDone(0)
-    setTotal(0)
-    setError(null)
-    
-    setTimeout(() => start(), 100)
-  }, [start, stopPolling])
-
+    setItems([]);
+    setState(prev => ({ ...prev, found: 0, done: 0, error: undefined }));
+    setHasError(false);
+    start();
+  }, [start]);
+  
   // Refresh items
   const refresh = useCallback(async () => {
-    console.log('[Discovery] Refreshing items')
-    
     try {
-      const response = await fetch(`/api/patches/${patchId}/discovered-content`)
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content`);
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json();
         if (data.items && Array.isArray(data.items)) {
-          setItems(data.items)
-          console.log('[Discovery] Refreshed:', data.items.length, 'items')
+          setItems(data.items);
         }
       }
-    } catch (err) {
-      console.error('[Discovery] Refresh error:', err)
+    } catch (error) {
+      console.error('[Discovery] Refresh error:', error);
     }
-  }, [patchId])
-
-  // Cleanup on unmount
+  }, [patchHandle]);
+  
+  // Auto-start if enabled
   useEffect(() => {
+    if (autoStart) {
+      start();
+    }
+    
     return () => {
       if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+        eventSourceRef.current.close();
       }
-      stopPolling()
-    }
-  }, [stopPolling])
-
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [autoStart, start]);
+  
+  // Load existing items on mount
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  
   return {
+    state,
+    items,
     start,
     pause,
     resume,
     restart,
     refresh,
-    state,
-    done,
-    total,
-    live,
-    items,
-    error,
-    autoLoop,
-    setAutoLoop
-  }
+    isConnected,
+    isRunning: state.live,
+    hasError
+  };
 }
-

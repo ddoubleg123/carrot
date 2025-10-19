@@ -1,144 +1,147 @@
-'use client'
+/**
+ * Discovery Header Component
+ * 
+ * Shows live status, progress, and controls for discovery process
+ */
 
-import { Button } from '@/components/ui/button'
-import { Play, Pause, RotateCw } from 'lucide-react'
-import { DiscoveryPhase } from '../hooks/useDiscoveryStream'
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Play, Pause, RotateCw, RefreshCw } from 'lucide-react';
+import { DiscoveryState } from '../hooks/useDiscoveryStream';
 
 interface DiscoveryHeaderProps {
-  state: DiscoveryPhase
-  done: number
-  total: number
-  live: boolean
-  onStart: () => void
-  onPause: () => void
-  onResume: () => void
-  onRestart: () => void
-  onRefresh: () => void
+  state: DiscoveryState;
+  onStart: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onRestart: () => void;
+  onRefresh: () => void;
+  isConnected: boolean;
 }
 
-const HELPER_TEXT: Record<DiscoveryPhase, string> = {
-  idle: 'Ready to discover content',
-  searching: 'Searching for content…',
-  processing: 'Streaming items as they are ready',
-  paused: 'Paused — resume when ready',
-  completed: 'Discovery complete',
-  error: 'An error occurred'
-}
-
-export default function DiscoveryHeader({
+export function DiscoveryHeader({
   state,
-  done,
-  total,
-  live,
   onStart,
   onPause,
   onResume,
   onRestart,
-  onRefresh
+  onRefresh,
+  isConnected
 }: DiscoveryHeaderProps) {
+  const getHelperText = () => {
+    switch (state.phase) {
+      case 'searching':
+        return 'Searching for content…';
+      case 'processing':
+        return 'Streaming items as they\'re ready';
+      case 'paused':
+        return 'Paused — resume when ready';
+      case 'completed':
+        return 'Discovery complete';
+      case 'error':
+        return state.error || 'An error occurred';
+      default:
+        return 'Ready to discover content';
+    }
+  };
   
   const getPrimaryButton = () => {
-    switch (state) {
+    switch (state.phase) {
       case 'idle':
         return (
-          <Button
-            onClick={onStart}
-            variant="primary"
-            className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-          >
-            <Play className="w-4 h-4 mr-2" />
+          <Button onClick={onStart} variant="default">
+            <Play className="h-4 w-4 mr-2" />
             Start Discovery
           </Button>
-        )
-      
+        );
       case 'searching':
       case 'processing':
         return (
-          <Button
-            onClick={onPause}
-            variant="outline"
-            className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-          >
-            <Pause className="w-4 h-4 mr-2" />
+          <Button onClick={onPause} variant="outline">
+            <Pause className="h-4 w-4 mr-2" />
             Pause Discovery
           </Button>
-        )
-      
+        );
       case 'paused':
         return (
-          <Button
-            onClick={onResume}
-            variant="primary"
-            className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-          >
-            <Play className="w-4 h-4 mr-2" />
+          <Button onClick={onResume} variant="default">
+            <Play className="h-4 w-4 mr-2" />
             Resume Discovery
           </Button>
-        )
-      
+        );
       case 'completed':
-      case 'error':
         return (
-          <Button
-            onClick={onRestart}
-            variant="primary"
-            className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-          >
-            <RotateCw className="w-4 h-4 mr-2" />
+          <Button onClick={onRestart} variant="default">
+            <RotateCw className="h-4 w-4 mr-2" />
             Restart
           </Button>
-        )
+        );
+      case 'error':
+        return (
+          <Button onClick={onRestart} variant="default">
+            <RotateCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        );
+      default:
+        return null;
     }
-  }
-
-  const showRefresh = state !== 'searching' && state !== 'processing'
-
+  };
+  
   return (
     <div className="mt-6 mb-3">
-      {/* Header Row */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        {/* Left: Title + Live Indicator + Progress */}
         <div className="flex items-center gap-2">
-          <h2 className="text-xl font-semibold text-[#0B0B0F]">
-            Discovering content
-          </h2>
+          <h2 className="text-xl font-semibold">Discovering content</h2>
           
-          {live && (
+          {state.live && (
             <span className="inline-flex items-center gap-1 text-xs rounded-full bg-green-50 text-green-700 px-2 py-1">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               LIVE
             </span>
           )}
           
-          {live && total > 0 && (
-            <span className="text-xs text-slate-600">
-              {done}/{total}
+          {state.live && (
+            <span className="ml-2 text-xs text-slate-600">
+              {state.done}/{state.total || 10}
             </span>
           )}
         </div>
         
-        {/* Right: Controls */}
         <div className="flex items-center gap-2">
-          {showRefresh && (
-            <Button
-              onClick={onRefresh}
-              variant="outline"
-              size="sm"
-              className="focus-visible:ring-2 focus-visible:ring-[#0A5AFF]"
-            >
-              <RotateCw className="w-4 h-4" />
+          {getPrimaryButton()}
+          
+          {state.phase !== 'processing' && (
+            <Button onClick={onRefresh} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
             </Button>
           )}
-          
-          {getPrimaryButton()}
         </div>
       </div>
       
-      {/* Helper Text */}
+      {/* Helper text */}
       <div className="mt-1 mb-3 text-sm text-slate-600">
-        {HELPER_TEXT[state]}
+        {getHelperText()}
       </div>
+      
+      {/* Progress bar */}
+      {state.live && (
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div 
+            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${(state.done / state.total) * 100}%` }}
+          />
+        </div>
+      )}
+      
+      {/* Connection status */}
+      {!isConnected && state.phase !== 'idle' && (
+        <div className="mt-2 text-xs text-amber-600">
+          Reconnecting...
+        </div>
+      )}
     </div>
-  )
+  );
 }
-
