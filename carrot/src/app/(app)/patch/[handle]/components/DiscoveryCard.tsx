@@ -40,11 +40,22 @@ export default function DiscoveryCard({ item, onHeroClick, patchHandle }: Discov
     const contentUrl = item.metadata?.contentUrl;
     const urlSlug = item.metadata?.urlSlug;
     
+    console.log('[DiscoveryCard] Clicked item:', {
+      id: item.id,
+      title: item.title,
+      metadata: item.metadata,
+      contentUrl,
+      urlSlug,
+      patchHandle
+    });
+    
     if (contentUrl && urlSlug && patchHandle) {
       // Navigate to the content URL
+      console.log('[DiscoveryCard] Navigating to:', `/patch/${patchHandle}/content/${urlSlug}`);
       router.push(`/patch/${patchHandle}/content/${urlSlug}`)
     } else if (onHeroClick) {
       // Fallback to modal
+      console.log('[DiscoveryCard] Using fallback modal');
       onHeroClick(item)
     }
   }

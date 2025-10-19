@@ -57,11 +57,11 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
     statusText, 
     lastItemTitle, 
     sessionCount, 
-    error 
+    error,
+    isLoading
   } = useDiscoveryStreamSingle({ patchHandle })
 
   const isDiscoveryActive = live
-  const isLoading = false // SSE handles loading state
 
   const handleHeroClick = (item: DiscoveredItem) => {
     setSelectedItem(item)
@@ -263,8 +263,17 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       )}
 
       {/* Content Grid */}
-      {(deduplicatedItems.length > 0 || isDiscoveryActive) && (
+      {(deduplicatedItems.length > 0 || isDiscoveryActive || isLoading) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Show loading skeleton when loading initial content */}
+          {isLoading && deduplicatedItems.length === 0 && (
+            <>
+              <DiscoveryCardSkeleton />
+              <DiscoveryCardSkeleton />
+              <DiscoveryCardSkeleton />
+              <DiscoveryCardSkeleton />
+            </>
+          )}
           {/* Show loading skeleton FIRST when discovery is active */}
           {isDiscoveryActive && (
             <DiscoveryCardSkeleton />

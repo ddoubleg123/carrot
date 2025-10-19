@@ -12,11 +12,12 @@ interface UseDiscoveryStreamSingleProps {
 export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSingleProps) {
   const [state, setState] = useState<DiscoveryPhase>('idle')
   const [items, setItems] = useState<DiscoveredItem[]>([])
-  const [statusText, setStatusText] = useState('Ready to discover content')
+  const [statusText, setStatusText] = useState('Loading content...')
   const [lastItemTitle, setLastItemTitle] = useState<string | null>(null)
   const [sessionCount, setSessionCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   
   const eventSourceRef = useRef<EventSource | null>(null)
 
@@ -200,6 +201,10 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
         sourceDomain: metadata.sourceDomain || (item.url ? new URL(item.url).hostname : 'unknown'),
         author: metadata.author,
         publishDate: metadata.publishDate || item.createdAt
+      },
+      metadata: {
+        contentUrl: metadata.contentUrl,
+        urlSlug: metadata.urlSlug
       }
     }
   }, [])
@@ -207,6 +212,8 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
   // Refresh items
   const refresh = useCallback(async () => {
     console.log('[Discovery] Refreshing items')
+    setIsLoading(true)
+    setStatusText('Loading content...')
     
     try {
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content`)
@@ -216,10 +223,14 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
           const transformedItems = data.items.map(transformToDiscoveredItem)
           setItems(transformedItems)
           console.log('[Discovery] Loaded', transformedItems.length, 'existing items')
+          setStatusText(transformedItems.length > 0 ? 'Ready to discover content' : 'No content yet')
         }
       }
     } catch (err) {
       console.error('[Discovery] Refresh error:', err)
+      setStatusText('Error loading content')
+    } finally {
+      setIsLoading(false)
     }
   }, [patchHandle, transformToDiscoveredItem])
 
@@ -248,7 +259,8 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
     statusText,
     lastItemTitle,
     sessionCount,
-    error
+    error,
+    isLoading
   }
 }
 
