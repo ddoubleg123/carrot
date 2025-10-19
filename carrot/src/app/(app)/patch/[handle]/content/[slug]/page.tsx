@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import ContentModal from '@/components/patch/ContentModal';
+import ContentModal from '../components/ContentModal';
 
 interface ContentPageProps {
   params: Promise<{
