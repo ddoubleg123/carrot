@@ -1,7 +1,7 @@
 'use client';
 
 // Removed custom card styles - using Tailwind directly
-import DiscoveryListSingle from '@/app/patch/[handle]/components/DiscoveryListSingle';
+import DiscoveryList from '@/app/(app)/patch/[handle]/components/DiscoveryList';
 
 
 
@@ -28,7 +28,7 @@ export default function Overview({ patch }: OverviewProps) {
     <div className="space-y-6 px-6 md:px-10">
       {/* Discovering Content */}
       <div>
-        <DiscoveryListSingle patchHandle={patch.handle} />
+        <DiscoveryList patchHandle={patch.handle} />
       </div>
 
 
