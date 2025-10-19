@@ -5,8 +5,6 @@
  * Tracks performance metrics for monitoring
  */
 
-import { DiscoveryRedis } from './redis';
-
 export interface LogBatch {
   type: 'duplicate' | 'error' | 'success' | 'skip';
   message: string;
@@ -267,14 +265,12 @@ export class MetricsTracker {
   }
   
   /**
-   * Save metrics to Redis
+   * Save metrics to Redis (disabled - no Redis dependency)
    */
   async saveMetrics(): Promise<void> {
-    try {
-      await DiscoveryRedis.updateMetrics(this.groupId, this.metrics);
-    } catch (error) {
-      console.error('[Metrics] Error saving metrics:', error);
-    }
+    // Redis removed - metrics only printed to console
+    // Future: could save to database if needed
+    console.log('[Metrics] Metrics saved to console');
   }
   
   /**
