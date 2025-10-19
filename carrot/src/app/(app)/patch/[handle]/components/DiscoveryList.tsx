@@ -271,13 +271,14 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           )}
           
           {/* Then show actual items */}
-          {deduplicatedItems.map((item) => (
-            <DiscoveryCard 
-              key={item.canonicalUrl || item.id} 
-              item={item}
-              onHeroClick={handleHeroClick}
-            />
-          ))}
+           {deduplicatedItems.map((item) => (
+             <DiscoveryCard 
+               key={item.canonicalUrl || item.id} 
+               item={item}
+               onHeroClick={handleHeroClick}
+               patchHandle={patchHandle}
+             />
+           ))}
         </div>
       )}
 

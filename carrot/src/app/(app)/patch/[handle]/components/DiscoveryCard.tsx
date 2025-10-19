@@ -7,10 +7,12 @@ import { pickHero, getDominantColor } from '@/lib/media/hero'
 import { DiscoveredItem } from '@/types/discovered-content'
 import GeneratedCover from './GeneratedCover'
 import PostActionBar from '@/components/post/PostActionBar'
+import { useRouter } from 'next/navigation'
 
 interface DiscoveryCardProps {
   item: DiscoveredItem
   onHeroClick?: (item: DiscoveredItem) => void
+  patchHandle?: string
 }
 
 
@@ -27,10 +29,25 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps) {
+export default function DiscoveryCard({ item, onHeroClick, patchHandle }: DiscoveryCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
+  const router = useRouter()
   const hero = useMemo(() => pickHero(item), [item.id, item.media])
   const dominantColor = useMemo(() => getDominantColor(item), [item.media?.dominant])
+  
+  // Handle card click - navigate to content URL
+  const handleCardClick = () => {
+    const contentUrl = item.metadata?.contentUrl;
+    const urlSlug = item.metadata?.urlSlug;
+    
+    if (contentUrl && urlSlug && patchHandle) {
+      // Navigate to the content URL
+      router.push(`/patch/${patchHandle}/content/${urlSlug}`)
+    } else if (onHeroClick) {
+      // Fallback to modal
+      onHeroClick(item)
+    }
+  }
   
   // Handle failed status with error micro
   if (item.status === 'failed') {
@@ -57,14 +74,14 @@ export default function DiscoveryCard({ item, onHeroClick }: DiscoveryCardProps)
   return (
     <div 
       className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2"
-      onClick={() => onHeroClick?.(item)}
+      onClick={handleCardClick}
       role="button"
       tabIndex={0}
       aria-label={`Open ${item.displayTitle || item.title}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onHeroClick?.(item);
+          handleCardClick();
         }
       }}
     >

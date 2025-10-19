@@ -9,8 +9,8 @@ let processedCount = 0;
 let successCount = 0;
 let failedCount = 0;
 
-async function generateRealAIImage(item) {
-  console.log(`\n🎨 Generating REAL AI image for: ${item.title}`);
+async function generateHighQualityAIImage(item) {
+  console.log(`\n🎨 Generating HIGH-QUALITY AI image for: ${item.title}`);
   console.log(`   📝 Content: ${(item.content || '').substring(0, 100)}...`);
   
   try {
@@ -23,7 +23,7 @@ async function generateRealAIImage(item) {
         title: item.title,
         summary: item.content || '',
         contentType: item.type || 'article',
-        artisticStyle: 'photorealistic',
+        artisticStyle: 'hyperrealistic', // Better for facial quality
         enableHiresFix: true, // Enable HD for better quality
         patchTheme: 'sports' // Chicago Bulls theme
       })
@@ -40,12 +40,16 @@ async function generateRealAIImage(item) {
     
     if (data.success && data.imageUrl) {
       console.log(`   ✅ Generated AI image: ${data.imageUrl.substring(0, 80)}...`);
+      console.log(`   🎨 Model: ${data.model || 'SDXL'}`);
+      console.log(`   🔧 Features: ${JSON.stringify(data.featuresApplied || {})}`);
+      
       return {
         url: data.imageUrl,
         source: 'ai-generated',
         license: 'generated',
         model: data.model || 'SDXL',
-        features: data.featuresApplied || {}
+        features: data.featuresApplied || {},
+        generatedAt: new Date().toISOString()
       };
     } else {
       console.error('   ❌ No image URL returned');
@@ -71,7 +75,7 @@ async function updateItemWithAIImage(itemId, aiImage) {
           license: aiImage.license,
           model: aiImage.model,
           features: aiImage.features,
-          generatedAt: new Date().toISOString()
+          generatedAt: aiImage.generatedAt
         }
       }
     });
@@ -83,9 +87,9 @@ async function updateItemWithAIImage(itemId, aiImage) {
   }
 }
 
-async function generateAIImagesOneByOne() {
-  console.log('🚀 Starting One-by-One AI Image Generation');
-  console.log('=' .repeat(60));
+async function replaceAllWithAIImages() {
+  console.log('🚀 Replacing ALL Non-AI Images with High-Quality AI Images');
+  console.log('=' .repeat(70));
 
   // Find the patch
   const patch = await prisma.patch.findUnique({
@@ -101,11 +105,11 @@ async function generateAIImagesOneByOne() {
   console.log(`✅ Found patch: ${patch.name}`);
   console.log(`   ID: ${patch.id}\n`);
 
-  // Get content items that need AI images (only placeholders/question marks)
+  // Get all content items for this patch
   const allContent = await prisma.discoveredContent.findMany({
     where: { 
       patchId: patch.id,
-      status: 'ready' // Only process approved items
+      status: 'ready' // Only approved items
     },
     select: {
       id: true,
@@ -115,26 +119,23 @@ async function generateAIImagesOneByOne() {
       mediaAssets: true,
       createdAt: true
     },
-    orderBy: { createdAt: 'desc' } // Start with newest items first
+    orderBy: { createdAt: 'desc' }
   });
 
-  // Filter to only items with placeholder/question mark images
+  // Filter to items that need AI images (exclude items that already have AI-generated images)
   const itemsNeedingAIImages = allContent.filter(item => {
     const heroUrl = item.mediaAssets?.hero;
     if (!heroUrl) return true; // No hero image at all
     
-    // Check if it's a placeholder/question mark image
-    return heroUrl.includes('Question_mark') || 
-           heroUrl.includes('ui-avatars.com') ||
-           heroUrl.includes('placeholder') ||
-           heroUrl.includes('fallback');
+    // Keep items that are NOT AI-generated (base64 data URLs)
+    return !heroUrl.startsWith('data:image/');
   });
 
-  console.log(`📊 Found ${allContent.length} total items`);
+  console.log(`📊 Total items: ${allContent.length}`);
   console.log(`🎯 Items needing AI images: ${itemsNeedingAIImages.length}\n`);
 
   if (itemsNeedingAIImages.length === 0) {
-    console.log('✅ All items already have AI images! No work needed.');
+    console.log('✅ All items already have AI-generated images! No work needed.');
     await prisma.$disconnect();
     return;
   }
@@ -148,7 +149,7 @@ async function generateAIImagesOneByOne() {
     console.log('=' .repeat(60));
 
     // Generate AI image
-    const aiImage = await generateRealAIImage(item);
+    const aiImage = await generateHighQualityAIImage(item);
     
     if (aiImage) {
       // Update database with AI image
@@ -168,19 +169,19 @@ async function generateAIImagesOneByOne() {
 
     // Wait between requests to avoid rate limiting
     if (i < itemsNeedingAIImages.length - 1) {
-      console.log('⏳ Waiting 3 seconds before next item...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('⏳ Waiting 4 seconds before next item...');
+      await new Promise(resolve => setTimeout(resolve, 4000));
     }
   }
 
-  console.log('\n' + '=' .repeat(60));
-  console.log('📊 AI Image Generation Complete!');
-  console.log('=' .repeat(60));
+  console.log('\n' + '=' .repeat(70));
+  console.log('📊 AI Image Replacement Complete!');
+  console.log('=' .repeat(70));
   console.log(`   ✅ Success: ${successCount}`);
   console.log(`   ❌ Failed: ${failedCount}`);
   console.log(`   📈 Total: ${processedCount}`);
   console.log(`   🎯 Success Rate: ${Math.round((successCount / processedCount) * 100)}%`);
-  console.log('=' .repeat(60));
+  console.log('=' .repeat(70));
 
   await prisma.$disconnect();
 }
@@ -194,4 +195,4 @@ process.on('SIGINT', async () => {
 });
 
 // Run the script
-generateAIImagesOneByOne().catch(console.error);
+replaceAllWithAIImages().catch(console.error);
