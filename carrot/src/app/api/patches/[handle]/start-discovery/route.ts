@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
+import { canonicalize } from '@/lib/discovery/canonicalization';
+import { BatchedLogger } from '@/lib/discovery/logger';
 
 export const runtime = 'nodejs';
 
@@ -190,7 +192,10 @@ export async function POST(
           sendEvent('state', { phase: 'searching' })
           sendEvent('heartbeat', {})
           
-          // ... rest of processing will be here
+          // Initialize batched logger for duplicate tracking
+          const duplicateLogger = new BatchedLogger(30000) // Flush every 30s
+          let duplicateCount = 0
+          
           const savedItems: any[] = []
           const rejectedItems: any[] = []
           
@@ -204,7 +209,28 @@ export async function POST(
             try {
               sendEvent('progress', { done: i, total: discoveredItems.length })
               
-              // Verify relevance
+              // STEP 1: Canonicalize URL
+              const canonicalResult = await canonicalize(item.url)
+              const canonicalUrl = canonicalResult.canonicalUrl
+              
+              // STEP 2: Check for duplicates (by URL and canonical URL)
+              const existing = await prisma.discoveredContent.findFirst({
+                where: {
+                  patchId: patch.id,
+                  OR: [
+                    { sourceUrl: item.url },
+                    { canonicalUrl: canonicalUrl }
+                  ]
+                }
+              })
+
+              if (existing) {
+                duplicateLogger.logDuplicate(item.url, 'A', 'deepseek')
+                duplicateCount++
+                continue
+              }
+              
+              // STEP 3: Verify relevance
               const relevanceScore = item.relevance_score || 0
               if (relevanceScore < 0.7) {
                 console.log('[Start Discovery] ❌ Rejected (low relevance):', item.title)
@@ -243,7 +269,7 @@ export async function POST(
                 continue
               }
               
-              // Save to database
+              // Save to database with canonicalUrl for better duplicate detection
               const discoveredContent = await prisma.discoveredContent.create({
                 data: {
                   patchId: patch.id,
@@ -251,6 +277,7 @@ export async function POST(
                   title: item.title,
                   content: item.description || '',
                   sourceUrl: item.url,
+                  canonicalUrl: canonicalUrl,
                   relevanceScore: relevanceScore,
                   tags: patch.tags.slice(0, 3),
                   status: 'ready',
@@ -297,8 +324,22 @@ export async function POST(
             }
           }
           
+          // Flush batched logs and send final summary
+          duplicateLogger.flush()
+          
+          console.log(`[Start Discovery] Processing complete:`, {
+            saved: savedItems.length,
+            rejected: rejectedItems.length,
+            duplicates: duplicateCount,
+            total: discoveredItems.length
+          })
+          
           // Send complete event
-          sendEvent('complete', { done: savedItems.length, rejected: rejectedItems.length })
+          sendEvent('complete', { 
+            done: savedItems.length, 
+            rejected: rejectedItems.length,
+            duplicates: duplicateCount
+          })
           sendEvent('state', { phase: 'completed' })
           
         } catch (error) {
@@ -320,6 +361,8 @@ export async function POST(
     }
     
     // Non-streaming fallback (original flow)
+    const duplicateLogger = new BatchedLogger(30000) // Flush every 30s
+    let duplicateCount = 0
     const savedItems = [];
     const rejectedItems = [];
     
@@ -327,7 +370,28 @@ export async function POST(
       try {
         console.log('[Start Discovery] Processing item:', item.title);
         
-        // STEP 1: Verify relevance (use DeepSeek score)
+        // STEP 1: Canonicalize URL
+        const canonicalResult = await canonicalize(item.url)
+        const canonicalUrl = canonicalResult.canonicalUrl
+        
+        // STEP 2: Check for duplicates
+        const existing = await prisma.discoveredContent.findFirst({
+          where: {
+            patchId: patch.id,
+            OR: [
+              { sourceUrl: item.url },
+              { canonicalUrl: canonicalUrl }
+            ]
+          }
+        })
+
+        if (existing) {
+          duplicateLogger.logDuplicate(item.url, 'A', 'deepseek')
+          duplicateCount++
+          continue
+        }
+        
+        // STEP 3: Verify relevance (use DeepSeek score)
         const relevanceScore = item.relevance_score || 0;
         if (relevanceScore < 0.7) {
           console.log('[Start Discovery] ❌ Item rejected (low relevance):', item.title, `Score: ${relevanceScore}`);
@@ -450,6 +514,7 @@ export async function POST(
             title: item.title,
             content: item.description || '',
             sourceUrl: item.url,
+            canonicalUrl: canonicalUrl,
             relevanceScore: relevanceScore,
             tags: patch.tags.slice(0, 3),
             status: 'ready', // ← READY because it passed all checks!
@@ -487,10 +552,14 @@ export async function POST(
       }
     }
 
+    // Flush batched logs
+    duplicateLogger.flush()
+    
     console.log('[Start Discovery] Summary:', {
       discovered: discoveredItems.length,
       saved: savedItems.length,
-      rejected: rejectedItems.length
+      rejected: rejectedItems.length,
+      duplicates: duplicateCount
     });
 
     return NextResponse.json({
@@ -499,6 +568,7 @@ export async function POST(
       itemsDiscovered: discoveredItems.length,
       itemsSaved: savedItems.length,
       itemsRejected: rejectedItems.length,
+      itemsDuplicate: duplicateCount,
       items: savedItems,
       rejections: rejectedItems.map(r => ({ title: r.title, reason: r.reason }))
     });
