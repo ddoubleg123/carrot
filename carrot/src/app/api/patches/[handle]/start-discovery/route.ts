@@ -110,13 +110,36 @@ export async function POST(
     const batchSize = isStreaming ? 1 : 10;
     const maxIterations = isStreaming ? 10 : 1;
     
-    // Get recently discovered titles to avoid duplicates
-    const recentTitles = await prisma.discoveredContent.findMany({
+    // 🚀 OPTIMIZATION: Build URL cache of ALL processed URLs (approved + denied)
+    // This prevents re-processing the same URLs through DeepSeek
+    const processedUrls = await prisma.discoveredContent.findMany({
       where: { patchId: patch.id },
-      select: { title: true, sourceUrl: true },
-      take: 20,
-      orderBy: { createdAt: 'desc' }
+      select: { 
+        sourceUrl: true, 
+        canonicalUrl: true,
+        title: true,
+        status: true 
+      }
     });
+    
+    // Create URL cache for fast lookups (both original and canonical)
+    const urlCache = new Set<string>();
+    processedUrls.forEach(item => {
+      if (item.sourceUrl) urlCache.add(item.sourceUrl);
+      if (item.canonicalUrl) urlCache.add(item.canonicalUrl);
+    });
+    
+    console.log('[Start Discovery] 🗄️ URL Cache built:', {
+      totalProcessed: processedUrls.length,
+      approved: processedUrls.filter(p => p.status === 'ready').length,
+      denied: processedUrls.filter(p => p.status === 'denied' || p.status === 'rejected').length,
+      cacheSize: urlCache.size
+    });
+    
+    // Build avoidance context for DeepSeek (recent titles only, not all URLs)
+    const recentTitles = processedUrls
+      .filter(p => p.status === 'ready')
+      .slice(0, 20);
     
     const avoidanceContext = recentTitles.length > 0 
       ? `\n\nAVOID these topics (already covered):\n${recentTitles.map(t => `- ${t.title}`).join('\n')}`
@@ -241,31 +264,42 @@ export async function POST(
             try {
               sendEvent('progress', { done: i, total: discoveredItems.length })
               
-              // STEP 1: Canonicalize URL
+              // 🚀 STEP 1: Canonicalize URL FIRST (before any other checks)
               const canonicalResult = await canonicalize(item.url)
               const canonicalUrl = canonicalResult.canonicalUrl
               
-              // STEP 2: Check for duplicates (by URL and canonical URL)
-              const existing = await prisma.discoveredContent.findFirst({
-                where: {
-                  patchId: patch.id,
-                  OR: [
-                    { sourceUrl: item.url },
-                    { canonicalUrl: canonicalUrl }
-                  ]
-                }
-              })
-
-              if (existing) {
-                duplicateLogger.logDuplicate(item.url, 'A', 'deepseek')
+              // 🚀 STEP 2: Check URL cache IMMEDIATELY (no DB query needed)
+              if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
+                console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
+                duplicateLogger.logDuplicate(item.url, 'cache', 'deepseek')
                 duplicateCount++
                 continue
               }
               
-              // STEP 3: Verify relevance
+              // 🚀 STEP 3: Verify relevance BEFORE generating image
               const relevanceScore = item.relevance_score || 0
               if (relevanceScore < 0.7) {
                 console.log('[Start Discovery] ❌ Rejected (low relevance):', item.title)
+                
+                // Save denied URL to database so we never check it again
+                await prisma.discoveredContent.create({
+                  data: {
+                    patchId: patch.id,
+                    type: item.type || 'article',
+                    title: item.title || 'Untitled',
+                    content: item.description || '',
+                    sourceUrl: item.url,
+                    canonicalUrl: canonicalUrl,
+                    relevanceScore: relevanceScore,
+                    tags: [],
+                    status: 'denied', // 🚀 Mark as denied
+                  }
+                })
+                
+                // Add to cache immediately
+                urlCache.add(item.url)
+                urlCache.add(canonicalUrl)
+                
                 rejectedItems.push({ url: item.url, title: item.title, reason: 'low_relevance' })
                 continue
               }
@@ -297,11 +331,31 @@ export async function POST(
               
               if (!aiImageUrl) {
                 console.log('[Start Discovery] ❌ Rejected (no image):', item.title)
+                
+                // Save denied URL to database so we never check it again
+                await prisma.discoveredContent.create({
+                  data: {
+                    patchId: patch.id,
+                    type: item.type || 'article',
+                    title: item.title || 'Untitled',
+                    content: item.description || '',
+                    sourceUrl: item.url,
+                    canonicalUrl: canonicalUrl,
+                    relevanceScore: relevanceScore,
+                    tags: [],
+                    status: 'denied', // 🚀 Mark as denied
+                  }
+                })
+                
+                // Add to cache immediately
+                urlCache.add(item.url)
+                urlCache.add(canonicalUrl)
+                
                 rejectedItems.push({ url: item.url, title: item.title, reason: 'no_image' })
                 continue
               }
               
-              // Save to database with canonicalUrl for better duplicate detection
+              // 🚀 Save to database with status='ready' (approved)
               const discoveredContent = await prisma.discoveredContent.create({
                 data: {
                   patchId: patch.id,
@@ -312,7 +366,7 @@ export async function POST(
                   canonicalUrl: canonicalUrl,
                   relevanceScore: relevanceScore,
                   tags: patch.tags.slice(0, 3),
-                  status: 'ready',
+                  status: 'ready', // 🚀 Mark as approved
                   mediaAssets: {
                     heroImage: {
                       url: aiImageUrl,
@@ -322,6 +376,10 @@ export async function POST(
                   }
                 }
               })
+              
+              // 🚀 Add approved URL to cache immediately
+              urlCache.add(item.url)
+              urlCache.add(canonicalUrl)
               
               // Send item-ready event with complete DiscoveredItem format
               sendEvent('item-ready', {
@@ -402,48 +460,48 @@ export async function POST(
       try {
         console.log('[Start Discovery] Processing item:', item.title);
         
-        // STEP 1: Canonicalize URL
+        // 🚀 STEP 1: Canonicalize URL FIRST
         const canonicalResult = await canonicalize(item.url)
         const canonicalUrl = canonicalResult.canonicalUrl
         
-        // STEP 2: Check for duplicates
-        const existing = await prisma.discoveredContent.findFirst({
-          where: {
-            patchId: patch.id,
-            OR: [
-              { sourceUrl: item.url },
-              { canonicalUrl: canonicalUrl }
-            ]
-          }
-        })
-
-        if (existing) {
-          duplicateLogger.logDuplicate(item.url, 'A', 'deepseek')
+        // 🚀 STEP 2: Check URL cache IMMEDIATELY
+        if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
+          console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
+          duplicateLogger.logDuplicate(item.url, 'cache', 'deepseek')
           duplicateCount++
           continue
         }
         
-        // STEP 3: Verify relevance (use DeepSeek score)
+        // 🚀 STEP 3: Verify relevance BEFORE generating image
         const relevanceScore = item.relevance_score || 0;
         if (relevanceScore < 0.7) {
           console.log('[Start Discovery] ❌ Item rejected (low relevance):', item.title, `Score: ${relevanceScore}`);
+          
+          // Save denied URL to database
+          await prisma.discoveredContent.create({
+            data: {
+              patchId: patch.id,
+              type: item.type || 'article',
+              title: item.title || 'Untitled',
+              content: item.description || '',
+              sourceUrl: item.url,
+              canonicalUrl: canonicalUrl,
+              relevanceScore: relevanceScore,
+              tags: [],
+              status: 'denied',
+            }
+          })
+          
+          // Add to cache immediately
+          urlCache.add(item.url)
+          urlCache.add(canonicalUrl)
+          
           rejectedItems.push({
             url: item.url,
             title: item.title,
             reason: 'low_relevance',
             score: relevanceScore
           });
-          
-          // Log rejection to prevent future attempts
-          fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/dev/rejected-content`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: item.url,
-              patchId: patch.id,
-              reason: `Low relevance score: ${relevanceScore}`
-            })
-          }).catch(() => {}); // Don't fail if logging fails
           
           continue; // Skip this item
         }
@@ -559,6 +617,10 @@ export async function POST(
             }
           }
         });
+        
+        // 🚀 Add approved URL to cache immediately
+        urlCache.add(item.url)
+        urlCache.add(canonicalUrl)
         
         console.log('[Start Discovery] ✅ Item saved with image:', discoveredContent.id);
 
