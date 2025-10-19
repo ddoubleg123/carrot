@@ -8,6 +8,9 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const { searchParams } = new URL(req.url)
+  const limit = parseInt(searchParams.get('limit') || '6')
+  const offset = parseInt(searchParams.get('offset') || '0')
   try {
     console.log('[Discovered Content] ===== API CALLED =====');
     const t0 = Date.now();
@@ -32,11 +35,15 @@ export async function GET(
     const [sources, discoveredContentData] = await Promise.all([
       prisma.source.findMany({
         where: { patchId: patch.id },
-        orderBy: [{ createdAt: 'desc' }]
+        orderBy: [{ createdAt: 'desc' }],
+        skip: offset,
+        take: limit
       }),
       prisma.discoveredContent.findMany({
         where: { patchId: patch.id },
-        orderBy: [{ createdAt: 'desc' }]
+        orderBy: [{ createdAt: 'desc' }],
+        skip: offset,
+        take: limit
       })
     ]);
     const t3 = Date.now();
@@ -90,8 +97,8 @@ export async function GET(
       diversityBucket: item.diversityBucket
     }));
 
-    // Combine and deduplicate by URL
-    const allItems = [...sourceItems, ...enrichedItems];
+    // Combine and deduplicate - prioritize discoveredContent over sources
+    const allItems = [...enrichedItems, ...sourceItems]; // Put discoveredContent first
     const uniqueItems = allItems.reduce((acc, item) => {
       const key = item.url || item.id;
       if (!acc.has(key)) {
