@@ -271,7 +271,7 @@ export async function POST(
               // 🚀 STEP 2: Check URL cache IMMEDIATELY (no DB query needed)
               if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
                 console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
-                duplicateLogger.logDuplicate(item.url, 'cache', 'deepseek')
+                duplicateLogger.logDuplicate(item.url, 'A', 'cache')
                 duplicateCount++
                 continue
               }
@@ -467,7 +467,7 @@ export async function POST(
         // 🚀 STEP 2: Check URL cache IMMEDIATELY
         if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
           console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
-          duplicateLogger.logDuplicate(item.url, 'cache', 'deepseek')
+          duplicateLogger.logDuplicate(item.url, 'A', 'cache')
           duplicateCount++
           continue
         }
