@@ -114,10 +114,10 @@ export default function RightRail({
   };
 
   return (
-    <div className="space-y-6 w-full max-w-sm">
-      {/* Fixed container bleeding v4 - strict width constraints */}
+    <div className="space-y-6 w-full max-w-sm min-w-0">
+      {/* Fixed container bleeding v5 - strict width constraints with min-width */}
       {/* Followers & AI Agents Card */}
-      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full max-w-sm overflow-hidden">
+      <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full max-w-sm min-w-0 overflow-hidden">
         <div className="space-y-6">
           {/* Followers Section */}
           <div>
@@ -252,7 +252,7 @@ export default function RightRail({
 
       {/* Update Cadence Info (Optional) */}
       {connectedAgents.length > 0 && (
-        <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full max-w-sm overflow-hidden">
+        <div className="rounded-2xl border border-[#E6E8EC] bg-white shadow-sm p-4 w-full max-w-sm min-w-0 overflow-hidden">
           <div className="grid grid-cols-[24px_1fr] items-start gap-x-3 mb-3">
             <div className="flex items-center justify-center">
               <Activity className="w-5 h-5 text-slate-600" />

@@ -152,7 +152,7 @@ export default async function PatchPage({
           <div className="max-w-7xl mx-auto px-6 md:px-10">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
               {/* Main Content Area */}
-              <div className="max-w-[880px]">
+              <div className="max-w-[880px] min-w-0">
                 <PatchTabs activeTab={activeTab} patch={patch}>
                   {activeTab === 'overview' && <Overview patch={patch} />}
                   {activeTab === 'documents' && <DocumentsView patch={patch} />}
@@ -163,7 +163,7 @@ export default async function PatchPage({
               </div>
 
               {/* Right Rail */}
-              <div className="w-[320px] shrink-0">
+              <div className="w-[320px] shrink-0 min-w-0">
                 <RightRail
                   patch={patch}
                   followers={actualFollowers}

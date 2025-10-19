@@ -127,16 +127,19 @@ export async function GET(
               continue
             }
 
-            // STEP 3: Check for duplicates
+            // STEP 3: Check for duplicates (by URL and canonical URL)
             const existing = await prisma.discoveredContent.findFirst({
               where: {
                 patchId: patch.id,
-                sourceUrl: candidate.url
+                OR: [
+                  { sourceUrl: candidate.url },
+                  { canonicalUrl: candidate.url }
+                ]
               }
             })
 
             if (existing) {
-              sendEvent('discovery:error', { stage: 'duplicate', message: 'Item already exists' })
+              console.log(`[Discovery] Skipping duplicate: ${candidate.url}`)
               continue
             }
 
