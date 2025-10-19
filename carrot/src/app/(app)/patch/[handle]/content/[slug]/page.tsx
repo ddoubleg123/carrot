@@ -12,16 +12,20 @@ interface ContentPageProps {
 export default async function ContentPage({ params }: ContentPageProps) {
   const { handle, slug } = await params;
 
-  // Find the content by URL slug in metadata
-  const content = await prisma.discoveredContent.findFirst({
+  // Find the patch first
+  const patch = await prisma.patch.findUnique({
+    where: { handle },
+    select: { id: true, name: true, handle: true, description: true, tags: true }
+  });
+
+  if (!patch) {
+    notFound();
+  }
+
+  // Find all content for this patch and filter by slug
+  const allContent = await prisma.discoveredContent.findMany({
     where: {
-      metadata: {
-        path: ['urlSlug'],
-        equals: slug
-      },
-      patch: {
-        handle: handle
-      },
+      patchId: patch.id,
       status: 'ready'
     },
     include: {
@@ -35,6 +39,12 @@ export default async function ContentPage({ params }: ContentPageProps) {
         }
       }
     }
+  });
+
+  // Find content with matching urlSlug
+  const content = allContent.find(item => {
+    const metadata = item.metadata as any;
+    return metadata?.urlSlug === slug;
   });
 
   if (!content) {
@@ -91,26 +101,35 @@ export default async function ContentPage({ params }: ContentPageProps) {
 export async function generateMetadata({ params }: ContentPageProps) {
   const { handle, slug } = await params;
   
-  const content = await prisma.discoveredContent.findFirst({
+  // Find the patch first
+  const patch = await prisma.patch.findUnique({
+    where: { handle },
+    select: { id: true, name: true }
+  });
+
+  if (!patch) {
+    return {
+      title: 'Content Not Found',
+    };
+  }
+
+  // Find all content for this patch and filter by slug
+  const allContent = await prisma.discoveredContent.findMany({
     where: {
-      metadata: {
-        path: ['urlSlug'],
-        equals: slug
-      },
-      patch: {
-        handle: handle
-      },
+      patchId: patch.id,
       status: 'ready'
     },
     select: {
       title: true,
       content: true,
-      patch: {
-        select: {
-          name: true
-        }
-      }
+      metadata: true
     }
+  });
+
+  // Find content with matching urlSlug
+  const content = allContent.find(item => {
+    const metadata = item.metadata as any;
+    return metadata?.urlSlug === slug;
   });
 
   if (!content) {
