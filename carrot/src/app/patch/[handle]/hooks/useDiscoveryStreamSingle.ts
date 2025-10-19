@@ -164,6 +164,43 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
     start()
   }, [start])
 
+  // Transform API data to DiscoveredItem format
+  const transformToDiscoveredItem = useCallback((item: any): DiscoveredItem => {
+    // Extract media assets
+    const mediaAssets = item.mediaAssets || {}
+    const heroImage = mediaAssets.hero || mediaAssets.heroImage
+    
+    // Extract metadata
+    const metadata = item.metadata || {}
+    const enrichedContent = item.enrichedContent || {}
+    
+    return {
+      id: item.id,
+      type: item.type || 'article',
+      title: item.title || 'Untitled',
+      displayTitle: item.title,
+      url: item.url || item.sourceUrl || '',
+      canonicalUrl: item.canonicalUrl,
+      matchPct: item.relevanceScore,
+      status: item.status === 'ready' ? 'ready' : 'pending_audit',
+      media: {
+        hero: heroImage,
+        source: mediaAssets.source || 'generated',
+        license: mediaAssets.license || 'generated'
+      },
+      content: {
+        summary150: enrichedContent.summary || item.description || '',
+        keyPoints: enrichedContent.keyPoints || [],
+        readingTimeMin: enrichedContent.readingTimeMin
+      },
+      meta: {
+        sourceDomain: metadata.sourceDomain || (item.url ? new URL(item.url).hostname : 'unknown'),
+        author: metadata.author,
+        publishDate: metadata.publishDate || item.createdAt
+      }
+    }
+  }, [])
+
   // Refresh items
   const refresh = useCallback(async () => {
     console.log('[Discovery] Refreshing items')
@@ -173,13 +210,20 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
       if (response.ok) {
         const data = await response.json()
         if (data.items && Array.isArray(data.items)) {
-          setItems(data.items)
+          const transformedItems = data.items.map(transformToDiscoveredItem)
+          setItems(transformedItems)
+          console.log('[Discovery] Loaded', transformedItems.length, 'existing items')
         }
       }
     } catch (err) {
       console.error('[Discovery] Refresh error:', err)
     }
-  }, [patchHandle])
+  }, [patchHandle, transformToDiscoveredItem])
+
+  // Load existing content on mount
+  useEffect(() => {
+    refresh()
+  }, [refresh])
 
   // Cleanup on unmount
   useEffect(() => {

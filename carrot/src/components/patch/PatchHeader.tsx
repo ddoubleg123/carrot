@@ -56,6 +56,12 @@ export default function PatchHeader({
     // TODO: Implement optimistic join functionality
   };
 
+  const handleLeave = () => {
+    // Optimistic leave with toast
+    console.log('Leave clicked');
+    // TODO: Implement optimistic leave functionality
+  };
+
   
 
   const handleSettings = () => {
@@ -189,15 +195,12 @@ export default function PatchHeader({
             {/* Right side: Actions - CONSISTENT WIDTH BUTTONS */}
             <div className="flex flex-col gap-2 flex-shrink-0 items-start">
         <Button
-          onClick={isMember ? () => {} : handleJoin}
-          variant={isMember ? "outline" : "secondary"}
-          className={isMember 
-            ? "border-white/30 text-white hover:bg-white/10 bg-transparent px-4 py-2 flex items-center gap-3 w-24 justify-center" 
-            : "bg-white text-[#FF6A00] hover:bg-white/90 px-4 py-2 flex items-center gap-3 w-24 justify-center"
-          }
+          onClick={isMember ? handleLeave : handleJoin}
+          variant="ghost"
+          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-24 justify-center"
         >
           <Users className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">{isMember ? 'Joined' : 'Join'}</span>
+          <span className="text-sm font-medium">{isMember ? 'Leave Group' : 'Join Group'}</span>
         </Button>
         
         <Button
