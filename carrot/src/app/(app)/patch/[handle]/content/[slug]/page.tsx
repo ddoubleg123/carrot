@@ -83,7 +83,6 @@ export default async function ContentPage({ params }: ContentPageProps) {
         item={discoveredItem}
         isOpen={true}
         onClose={() => window.history.back()}
-        patchHandle={handle}
       />
     </div>
   );
