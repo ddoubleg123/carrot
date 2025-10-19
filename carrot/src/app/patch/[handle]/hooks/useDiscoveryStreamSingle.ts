@@ -172,6 +172,8 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
 
   // Transform API data to DiscoveredItem format
   const transformToDiscoveredItem = useCallback((item: any): DiscoveredItem => {
+    console.log('[Transform] TRANSFORMATION CALLED for item:', item.id, item.title)
+    
     // Extract media assets
     const mediaAssets = item.mediaAssets || {}
     const heroImage = mediaAssets.hero || mediaAssets.heroImage
@@ -232,7 +234,9 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content`)
       if (response.ok) {
         const data = await response.json()
+        console.log('[Discovery] API Response:', data)
         if (data.items && Array.isArray(data.items)) {
+          console.log('[Discovery] About to transform', data.items.length, 'items')
           const transformedItems = data.items.map(transformToDiscoveredItem)
           setItems(transformedItems)
           console.log('[Discovery] Loaded', transformedItems.length, 'existing items')

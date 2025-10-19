@@ -97,9 +97,9 @@ export async function GET(
       if (!acc.has(key)) {
         acc.set(key, item);
       } else {
-        // Prefer enriched content over legacy
+        // Prefer items with metadata (URL data) over legacy items
         const existing = acc.get(key);
-        if (item.enrichedContent && !existing?.enrichedContent) {
+        if (item.metadata && !existing?.metadata) {
           acc.set(key, item);
         }
       }
