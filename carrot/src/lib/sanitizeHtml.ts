@@ -2,43 +2,25 @@
  * HTML sanitization utilities
  */
 
-// Simple HTML sanitizer - in production, use a library like DOMPurify
+// Simple HTML sanitizer - regex-based for Node.js compatibility
 export function sanitizeHtml(html: string): string {
-  // Create a temporary DOM parser
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  
   // Remove potentially dangerous elements
-  const dangerousElements = doc.querySelectorAll('script, style, iframe, object, embed, form, input, button')
-  dangerousElements.forEach(el => el.remove())
+  let cleanHtml = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed[^>]*>[\s\S]*?<\/embed>/gi, '')
+    .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
+    .replace(/<input[^>]*>/gi, '')
+    .replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '')
   
-  // Remove attributes that could be dangerous
-  const allElements = doc.querySelectorAll('*')
-  allElements.forEach(el => {
-    // Remove event handlers and dangerous attributes
-    const dangerousAttrs = [
-      'onclick', 'onload', 'onerror', 'onmouseover', 'onfocus', 'onblur',
-      'onchange', 'onsubmit', 'onreset', 'onselect', 'onkeydown', 'onkeyup',
-      'onkeypress', 'onmousedown', 'onmouseup', 'onmousemove', 'onmouseout',
-      'style', 'class', 'id'
-    ]
-    
-    dangerousAttrs.forEach(attr => {
-      el.removeAttribute(attr)
-    })
-    
-    // Keep only safe attributes
-    const safeAttrs = ['href', 'src', 'alt', 'title', 'target', 'rel']
-    const attrs = Array.from(el.attributes)
-    attrs.forEach(attr => {
-      if (!safeAttrs.includes(attr.name)) {
-        el.removeAttribute(attr.name)
-      }
-    })
-  })
-  
-  // Clean up the HTML
-  let cleanHtml = doc.body.innerHTML
+  // Remove dangerous attributes
+  cleanHtml = cleanHtml
+    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '') // Remove event handlers
+    .replace(/\s+style\s*=\s*["'][^"']*["']/gi, '') // Remove style attributes
+    .replace(/\s+class\s*=\s*["'][^"']*["']/gi, '') // Remove class attributes
+    .replace(/\s+id\s*=\s*["'][^"']*["']/gi, '') // Remove id attributes
   
   // Remove empty paragraphs and divs
   cleanHtml = cleanHtml.replace(/<p>\s*<\/p>/g, '')
@@ -52,14 +34,14 @@ export function sanitizeHtml(html: string): string {
 
 // Extract plain text from HTML
 export function extractTextFromHtml(html: string): string {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  
-  // Remove script and style elements
-  const scripts = doc.querySelectorAll('script, style, noscript')
-  scripts.forEach(el => el.remove())
-  
-  return doc.body.textContent || ''
+  // Remove HTML tags and get plain text
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // Truncate HTML content to a specific word count

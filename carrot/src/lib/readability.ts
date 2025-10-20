@@ -16,70 +16,68 @@ interface ReadabilityResult {
 
 // Simple readability implementation
 export function extractReadableContent(html: string, url?: string): ReadabilityResult {
-  // Create a temporary DOM parser
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
+  // Simple regex-based extraction (works in Node.js)
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
   
-  // Remove script and style elements
-  const scripts = doc.querySelectorAll('script, style, noscript')
-  scripts.forEach(el => el.remove())
+  // Remove script and style tags
+  let cleanHtml = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
   
-  // Try to find the main content area
+  // Try to find main content area
   const contentSelectors = [
-    'article',
-    '[role="main"]',
-    '.post-content',
-    '.entry-content',
-    '.content',
-    '.article-content',
-    'main',
-    '.main-content'
+    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    /<main[^>]*>([\s\S]*?)<\/main>/i,
+    /<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i
   ]
   
-  let contentElement = null
+  let content = ''
   for (const selector of contentSelectors) {
-    contentElement = doc.querySelector(selector)
-    if (contentElement) break
+    const match = cleanHtml.match(selector)
+    if (match && match[1]) {
+      content = match[1]
+      break
+    }
   }
   
-  // Fallback to body if no content area found
-  if (!contentElement) {
-    contentElement = doc.body
+  // Fallback to body content
+  if (!content) {
+    const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+    content = bodyMatch ? bodyMatch[1] : cleanHtml
   }
   
-  // Extract title
-  const title = doc.querySelector('title')?.textContent || 
-                doc.querySelector('h1')?.textContent || 
-                'Untitled'
-  
-  // Extract content text
-  const textContent = contentElement?.textContent || ''
-  const content = contentElement?.innerHTML || ''
+  // Extract text content (remove HTML tags)
+  const textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
   
   // Generate excerpt (first 200 words)
   const words = textContent.split(/\s+/).slice(0, 200)
   const excerpt = words.join(' ') + (words.length === 200 ? '...' : '')
   
   // Extract metadata
-  const byline = doc.querySelector('[rel="author"]')?.textContent ||
-                 doc.querySelector('.author')?.textContent ||
-                 doc.querySelector('[data-author]')?.getAttribute('data-author')
+  const bylineMatch = html.match(/<meta[^>]*name="author"[^>]*content="([^"]*)"[^>]*>/i) ||
+                     html.match(/<span[^>]*class="[^"]*author[^"]*"[^>]*>([^<]+)<\/span>/i)
+  const byline = bylineMatch ? bylineMatch[1].trim() : undefined
   
-  const siteName = doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content') ||
-                   doc.querySelector('meta[name="application-name"]')?.getAttribute('content')
+  const siteNameMatch = html.match(/<meta[^>]*property="og:site_name"[^>]*content="([^"]*)"[^>]*>/i)
+  const siteName = siteNameMatch ? siteNameMatch[1].trim() : undefined
   
-  const publishedTime = doc.querySelector('time[datetime]')?.getAttribute('datetime') ||
-                       doc.querySelector('[data-published]')?.getAttribute('data-published')
+  const publishedMatch = html.match(/<time[^>]*datetime="([^"]*)"[^>]*>/i) ||
+                        html.match(/<meta[^>]*property="article:published_time"[^>]*content="([^"]*)"[^>]*>/i)
+  const publishedTime = publishedMatch ? publishedMatch[1].trim() : undefined
   
   return {
-    title: title.trim(),
+    title,
     content: content.trim(),
-    textContent: textContent.trim(),
+    textContent,
     length: textContent.length,
-    excerpt: excerpt.trim(),
-    byline: byline?.trim(),
-    siteName: siteName?.trim(),
-    publishedTime: publishedTime?.trim()
+    excerpt,
+    byline,
+    siteName,
+    publishedTime
   }
 }
 
