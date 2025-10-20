@@ -118,7 +118,7 @@ export async function GET(
         
         if (response.ok) {
           const html = await response.text()
-          const readable = extractReadableContent(html, content.url)
+          const readable = extractReadableContent(html, content.sourceUrl || '')
           
           // Update preview with extracted content
           if (!preview.summary && readable.excerpt) {
