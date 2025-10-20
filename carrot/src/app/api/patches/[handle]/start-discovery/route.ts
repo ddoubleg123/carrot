@@ -323,13 +323,15 @@ export async function POST(
 
               // 🚀 STEP 4: Validate content quality - check if URL actually contains article content
               try {
+                const validationController = new AbortController()
+                const validationTimeout = setTimeout(() => validationController.abort(), 5000)
                 const contentValidation = await fetch(item.url, {
                   method: 'HEAD',
-                  timeout: 5000,
+                  signal: validationController.signal,
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
                   }
-                }).catch(() => null)
+                }).catch(() => null).finally(() => clearTimeout(validationTimeout))
 
                 if (!contentValidation || !contentValidation.ok) {
                   console.log('[Start Discovery] ❌ Rejected (content validation failed):', item.url)
@@ -358,13 +360,15 @@ export async function POST(
                 const contentType = contentValidation.headers.get('content-type') || ''
                 if (contentType.includes('text/html')) {
                   // Quick content check to ensure it's not a generic page
+                  const contentCheckController = new AbortController()
+                  const contentCheckTimeout = setTimeout(() => contentCheckController.abort(), 3000)
                   const contentCheck = await fetch(item.url, {
                     method: 'GET',
-                    timeout: 3000,
+                    signal: contentCheckController.signal,
                     headers: {
                       'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
                     }
-                  }).then(res => res.text()).catch(() => '')
+                  }).then(res => res.text()).catch(() => '').finally(() => clearTimeout(contentCheckTimeout))
 
                   // Check for signs of generic/collection pages
                   const isGenericPage = contentCheck.includes('Collection - ESPN') || 
@@ -405,14 +409,16 @@ export async function POST(
               let enrichedContent = null
               try {
                 console.log('[Start Discovery] 📄 Extracting article content from:', item.url)
+                const extractController = new AbortController()
+                const extractTimeout = setTimeout(() => extractController.abort(), 8000)
                 const contentFetch = await fetch(item.url, {
                   method: 'GET',
-                  timeout: 8000,
+                  signal: extractController.signal,
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)',
                     'Accept': 'text/html'
                   }
-                }).catch(() => null)
+                }).catch(() => null).finally(() => clearTimeout(extractTimeout))
 
                 if (contentFetch && contentFetch.ok) {
                   const html = await contentFetch.text()
