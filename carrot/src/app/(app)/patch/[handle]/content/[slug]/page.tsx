@@ -9,6 +9,9 @@ interface ContentPageProps {
   }>;
 }
 
+// Enable ISR caching for better performance
+export const revalidate = 300; // 5 minutes
+
 export default async function ContentPage({ params }: ContentPageProps) {
   const { handle, slug } = await params;
 
@@ -22,11 +25,15 @@ export default async function ContentPage({ params }: ContentPageProps) {
     notFound();
   }
 
-  // Find all content for this patch and filter by slug
-  const allContent = await prisma.discoveredContent.findMany({
+  // Find content directly by slug using JSON query
+  const content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
-      status: 'ready'
+      status: 'ready',
+      metadata: {
+        path: ['urlSlug'],
+        equals: slug
+      }
     },
     include: {
       patch: {
@@ -39,12 +46,6 @@ export default async function ContentPage({ params }: ContentPageProps) {
         }
       }
     }
-  });
-
-  // Find content with matching urlSlug
-  const content = allContent.find(item => {
-    const metadata = item.metadata as any;
-    return metadata?.urlSlug === slug;
   });
 
   if (!content) {
@@ -107,11 +108,15 @@ export async function generateMetadata({ params }: ContentPageProps) {
     };
   }
 
-  // Find all content for this patch and filter by slug
-  const allContent = await prisma.discoveredContent.findMany({
+  // Find content directly by slug using JSON query
+  const content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
-      status: 'ready'
+      status: 'ready',
+      metadata: {
+        path: ['urlSlug'],
+        equals: slug
+      }
     },
     select: {
       title: true,
@@ -123,12 +128,6 @@ export async function generateMetadata({ params }: ContentPageProps) {
         }
       }
     }
-  });
-
-  // Find content with matching urlSlug
-  const content = allContent.find(item => {
-    const metadata = item.metadata as any;
-    return metadata?.urlSlug === slug;
   });
 
   if (!content) {

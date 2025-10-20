@@ -1,13 +1,16 @@
 import { auth, db, rtdb, storage, serverTimestamp } from './api/firebase.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import { collection, addDoc, query, orderBy, onSnapshot, limit, doc, setDoc, getDoc, updateDoc, startAfter, endBefore, limitToLast, getDocs, arrayUnion, arrayRemove, increment } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { collection, addDoc, query, orderBy, onSnapshot, limit, doc, setDoc, getDoc, updateDoc, startAfter, endBefore, limitToLast, getDocs, arrayUnion, arrayRemove, increment, where } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 import { ref as rtdbRef, onDisconnect, set as rtdbSet, serverTimestamp as rtdbServerTimestamp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
 import { ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-storage.js";
 
 // Firebase initialized via './api/firebase.js'
 
 let currentUser = null;
+// Feed context: room or dm
+let activeFeedType = 'room'; // 'room' | 'dm'
 let activeRoom = 'general';
+let activeDm = null; // dmId when in DM
 let roomsCache = [];
 let lastReadMap = {};
 let messagesState = { items: [], liveUnsub: null, oldestTs: null, newestDoc: null };
@@ -214,14 +217,29 @@ function renderRooms(rooms, user){
   const list = document.getElementById('roomsList');
   if (!list) return;
   list.innerHTML='';
+  // Always render '+ New' tile at top
+  const liNew = document.createElement('li');
+  const btnNew = document.createElement('button');
+  btnNew.id = 'newRoomBtn';
+  btnNew.type = 'button';
+  btnNew.className = 'room-item';
+  btnNew.setAttribute('aria-label','Create channel');
+  btnNew.style.width = '100%';
+  btnNew.style.textAlign = 'left';
+  btnNew.innerHTML = '<span style="opacity:.9">+ New</span>';
+  btnNew.onclick = ()=> openNewRoomModal();
+  liNew.appendChild(btnNew);
+  list.appendChild(liNew);
   rooms.forEach(r => {
     const li = document.createElement('li');
     const a = document.createElement('a');
     a.href = '#';
-    a.className = 'room-item' + (activeRoom===r.id ? ' active' : '');
+    a.className = 'room-item' + (activeFeedType==='room' && activeRoom===r.id ? ' active' : '');
     a.onclick = async (e)=>{
       e.preventDefault();
-      if (activeRoom===r.id) return;
+      activeFeedType = 'room';
+      activeDm = null;
+      if (activeRoom===r.id) { renderRooms(roomsCache, user); subscribeMessages(user); return; }
       activeRoom = r.id;
       const input = document.getElementById('chatInput'); if (input) input.placeholder = `Message #${r.slug || r.id}`;
       await setDoc(doc(db,'userRooms',user.uid,'rooms',r.id), { lastReadAt: serverTimestamp() }, { merge:true }).catch(()=>{});
@@ -254,7 +272,12 @@ function subscribeMessages(user){
   messagesState = { items: [], liveUnsub: null, oldestTs: null, newestDoc: null };
   list.innerHTML='';
   // Live tail: last 50
-  const liveRef = query(collection(db,'rooms',activeRoom,'messages'), orderBy('ts','desc'), limit(50));
+  let liveRef;
+  if (activeFeedType==='dm' && activeDm){
+    liveRef = query(collection(db,'dms',activeDm,'messages'), orderBy('ts','desc'), limit(50));
+  } else {
+    liveRef = query(collection(db,'rooms',activeRoom,'messages'), orderBy('ts','desc'), limit(50));
+  }
   messagesState.liveUnsub = onSnapshot(liveRef, (snap)=>{
     const docs = snap.docs.slice().reverse(); // ascending
     messagesState.items = docs.map(d=> ({ id:d.id, _doc:d, ...d.data() }));
@@ -304,7 +327,8 @@ function renderMessages(list, user){
 async function loadOlderMessages(list, user){
   list.onscroll = null; // debounce
   const prevHeight = list.scrollHeight;
-  const qOlder = query(collection(db,'rooms',activeRoom,'messages'), orderBy('ts','asc'), endBefore(messagesState.oldestTs), limitToLast(50));
+  const baseCol = (activeFeedType==='dm' && activeDm) ? collection(db,'dms',activeDm,'messages') : collection(db,'rooms',activeRoom,'messages');
+  const qOlder = query(baseCol, orderBy('ts','asc'), endBefore(messagesState.oldestTs), limitToLast(50));
   const olderSnap = await getDocs(qOlder).catch(()=>null);
   if (olderSnap && !olderSnap.empty){
     const older = olderSnap.docs.map(d=> ({ id:d.id, _doc:d, ...d.data() }));
@@ -346,21 +370,59 @@ function initComposer(user){
   const input = document.getElementById('chatInput');
   const fileInput = document.getElementById('fileInput');
   const attachBtn = document.getElementById('attachBtn');
+  const emojiBtn = document.getElementById('emojiBtn');
 
   attachBtn.addEventListener('click',()=> fileInput.click());
+  if (emojiBtn) {
+    emojiBtn.addEventListener('click', async () => {
+      // Lazy-load emoji-mart and mount picker near the action bar
+      try{
+        const mod = await import('https://cdn.jsdelivr.net/npm/emoji-mart@latest/dist/browser.js');
+        const Picker = mod.Picker || mod.default.Picker;
+        let pane = document.getElementById('emojiPane');
+        if (!pane){
+          pane = document.createElement('div');
+          pane.id = 'emojiPane';
+          pane.style.position='absolute';
+          pane.style.bottom='84px';
+          pane.style.right='24px';
+          pane.style.zIndex='100';
+          pane.style.background='rgba(17,19,24,0.98)';
+          pane.style.border='1px solid rgba(255,255,255,0.12)';
+          pane.style.borderRadius='12px';
+          document.body.appendChild(pane);
+        } else { pane.innerHTML=''; }
+        const picker = new Picker({ data: await mod.fetchFromCDN(), onEmojiSelect: (e)=>{
+          // Insert at caret
+          const emoji = e.native || e.shortcodes || '';
+          const start = input.selectionStart || input.value.length;
+          const end = input.selectionEnd || input.value.length;
+          input.value = input.value.slice(0,start) + emoji + input.value.slice(end);
+          input.focus();
+          input.selectionStart = input.selectionEnd = start + emoji.length;
+        }});
+        pane.appendChild(picker);
+        const hide = (ev)=>{ if (!pane.contains(ev.target) && ev.target!==emojiBtn){ pane.remove(); document.removeEventListener('mousedown', hide); } };
+        document.addEventListener('mousedown', hide);
+      }catch(_){ /* ignore */ }
+    });
+  }
   fileInput.addEventListener('change', async () => {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
     const name = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'User');
     const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
-    const path = `uploads/${activeRoom}/${currentUser.uid}/${Date.now()}-${f.name}`;
+    const path = activeFeedType==='dm' && activeDm
+      ? `uploads/dms/${activeDm}/${currentUser.uid}/${Date.now()}-${f.name}`
+      : `uploads/${activeRoom}/${currentUser.uid}/${Date.now()}-${f.name}`;
     const ref = sRef(storage, path);
     try{
       await uploadBytes(ref, f);
       const url = await getDownloadURL(ref);
       const type = f.type.startsWith('image/') ? 'image' : 'file';
-      await addDoc(collection(db,'rooms',activeRoom,'messages'), { uid: currentUser.uid, name, initials, url, type, ts: serverTimestamp() });
-    }catch(_){}
+      const targetCol = activeFeedType==='dm' && activeDm ? collection(db,'dms',activeDm,'messages') : collection(db,'rooms',activeRoom,'messages');
+      await addDoc(targetCol, { uid: currentUser.uid, name, initials, url, type, ts: serverTimestamp() });
+    }catch(_){ }
     fileInput.value='';
   });
 
@@ -373,9 +435,13 @@ function initComposer(user){
     const name = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'User');
     const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
     try{
-      await addDoc(collection(db, 'rooms', activeRoom, 'messages'), { uid:currentUser.uid, name, initials, text, ts: serverTimestamp(), type:'text' });
-      await updateDoc(doc(db,'rooms',activeRoom), { lastMessageAt: serverTimestamp() }).catch(()=>{});
-    }catch(_){}
+      if (activeFeedType==='dm' && activeDm){
+        await addDoc(collection(db,'dms',activeDm,'messages'), { uid:currentUser.uid, name, initials, text, ts: serverTimestamp(), type:'text' });
+      } else {
+        await addDoc(collection(db, 'rooms', activeRoom, 'messages'), { uid:currentUser.uid, name, initials, text, ts: serverTimestamp(), type:'text' });
+        await updateDoc(doc(db,'rooms',activeRoom), { lastMessageAt: serverTimestamp() }).catch(()=>{});
+      }
+    }catch(_){ }
   });
 
   input.addEventListener('keydown', (e)=>{
@@ -410,6 +476,26 @@ onAuthStateChanged(auth, async (user) => {
   // Ensure userRooms doc exists
   await setDoc(doc(db,'userRooms',user.uid,'rooms',activeRoom), { lastReadAt: serverTimestamp() }, { merge:true }).catch(()=>{});
 
+  // Load user's DMs list
+  const dmList = document.getElementById('dmList');
+  if (dmList){
+    onSnapshot(collection(db,'userDMs',user.uid,'threads'), (snap)=>{
+      dmList.innerHTML = '';
+      const startLi = document.createElement('li');
+      const startBtn = document.createElement('button');
+      startBtn.id = 'startDmBtn'; startBtn.type='button'; startBtn.className='room-item'; startBtn.style.width='100%'; startBtn.style.textAlign='left'; startBtn.textContent='+DM';
+      startBtn.onclick = ()=> startDmFlow();
+      startLi.appendChild(startBtn); dmList.appendChild(startLi);
+      snap.forEach(d=>{
+        const th = d.data(); const li = document.createElement('li'); const btn = document.createElement('button');
+        btn.className = 'room-item' + (activeFeedType==='dm' && activeDm===d.id ? ' active':''); btn.type='button'; btn.style.width='100%'; btn.style.textAlign='left';
+        btn.textContent = th.otherName ? `@${th.otherName}` : '@direct';
+        btn.onclick = ()=> { activeFeedType='dm'; activeDm=d.id; const inp=document.getElementById('chatInput'); if (inp) inp.placeholder = `Message ${btn.textContent}`; subscribeMessages(user); renderRooms(roomsCache,user); };
+        li.appendChild(btn); dmList.appendChild(li);
+      });
+    });
+  }
+
   initPresence(user);
   initComposer(user);
   bindNewRoomModal(user);
@@ -423,3 +509,23 @@ const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) logoutBtn.addEventListener('click', async () => {
   try { await signOut(auth); window.location.href = '/login/'; } catch(e){}
 });
+
+async function startDmFlow(){
+  const email = (prompt('Start DM with email:')||'').trim().toLowerCase();
+  if (!email) return;
+  // Find user by email in users collection
+  const q = query(collection(db,'users'), where('email','==', email));
+  const snap = await getDocs(q).catch(()=>null);
+  if (!snap || snap.empty){ alert('User not found'); return; }
+  const other = { id: snap.docs[0].id, ...snap.docs[0].data() };
+  const ids = [currentUser.uid, other.id].sort();
+  const dmId = ids.join('_');
+  await setDoc(doc(db,'dms',dmId), { participants: ids, createdAt: serverTimestamp() }, { merge:true });
+  // Per-user thread pointers with display name for convenience
+  await setDoc(doc(db,'userDMs',currentUser.uid,'threads',dmId), { otherUid: other.id, otherName: other.displayName || (other.email||'').split('@')[0] || 'User', createdAt: serverTimestamp() }, { merge:true });
+  const meName = currentUser.displayName || (currentUser.email||'').split('@')[0] || 'User';
+  await setDoc(doc(db,'userDMs',other.id,'threads',dmId), { otherUid: currentUser.uid, otherName: meName, createdAt: serverTimestamp() }, { merge:true });
+  activeFeedType='dm'; activeDm=dmId;
+  const inp=document.getElementById('chatInput'); if (inp) inp.placeholder = `Message @${other.displayName || (other.email||'').split('@')[0]}`;
+  subscribeMessages(currentUser);
+}

@@ -45,3 +45,50 @@ export async function uploadFilesToFirebase(files: File[], basePath: string): Pr
     })
   );
 }
+
+/**
+ * Uploads a Buffer to Firebase Storage and returns its download URL.
+ * For server-side uploads (AI-generated images, etc.)
+ * @param buffer Buffer containing image data
+ * @param filename Filename for the uploaded file
+ * @param contentType MIME type (e.g. 'image/png')
+ */
+export async function uploadToFirebase(
+  buffer: Buffer, 
+  filename: string, 
+  contentType: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    // For server-side uploads, use a public path for AI-generated content
+    const path = `ai-generated/${filename}`;
+    
+    console.log('[uploadToFirebase] Starting upload:', { 
+      path, 
+      contentType, 
+      size: (buffer.length / 1024).toFixed(2) + ' KB'
+    });
+    
+    const storageRef = ref(storage, path);
+    
+    // Upload the buffer with metadata
+    await uploadBytes(storageRef, buffer, {
+      contentType,
+      cacheControl: 'public, max-age=31536000', // Cache for 1 year
+    });
+    
+    const downloadURL = await getDownloadURL(storageRef);
+    
+    console.log('[uploadToFirebase] ✅ Upload successful:', downloadURL);
+    
+    return { 
+      success: true, 
+      url: downloadURL 
+    };
+  } catch (error: any) {
+    console.error('[uploadToFirebase] ❌ Upload failed:', error);
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+}

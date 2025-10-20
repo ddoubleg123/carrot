@@ -29,10 +29,33 @@ service cloud.firestore {
 
     // CHAT ROOMS (Firestore chat)
     function isAdmin() { return isSignedIn() && (request.auth.token.admin == true); }
+    function isTeam() {
+      return isSignedIn() && (
+        request.auth.token.email.matches('.*@techpulse\\.dev$') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    function isSynth() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'synth';
+    }
+    function isMember(roomId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
+    function roleAllowed(room) {
+      return (
+        (room.allowedRoles != null && room.allowedRoles.hasAny(['team']) && isTeam()) ||
+        (room.allowedRoles != null && room.allowedRoles.hasAny(['synth']) && isSynth())
+      );
+    }
 
     match /rooms/{roomId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow read: if isSignedIn() && (
+        resource.data.visibility == 'public' || isMember(roomId) || roleAllowed(resource.data)
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.visibility in ['public','private']
+      );
       // Only admins can change isLocked; others can update benign fields
       allow update: if isSignedIn() && (
         (!('isLocked' in request.resource.data) && !('isLocked' in resource.data)) || isAdmin()
@@ -40,10 +63,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && (
+          resource.data == null ||
+          get(/databases/$(database)/documents/rooms/$(roomId)).data.visibility == 'public' ||
+          isMember(roomId) || roleAllowed(get(/databases/$(database)/documents/rooms/$(roomId)).data)
+        );
         // Create requires timestamp and either text <= 2000 or an attachment url
         allow create: if isSignedIn() && (request.resource.data.ts != null) && (
           (('text' in request.resource.data) && request.resource.data.text.size() <= 2000) || ('url' in request.resource.data)
+        ) && (
+          get(/databases/$(database)/documents/rooms/$(roomId)).data.visibility == 'public' ||
+          isMember(roomId) || roleAllowed(get(/databases/$(database)/documents/rooms/$(roomId)).data)
         );
         // Soft delete by author (setting deletedAt) or admin
         allow update: if isAdmin() || (isSignedIn() && (request.resource.data.deletedAt != null) && (resource.data.uid == request.auth.uid));
@@ -74,6 +104,16 @@ service cloud.firestore {
     // Per-user read markers for unread tracking
     match /userRooms/{uid}/rooms/{rid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Room membership subcollection
+    match /rooms/{roomId}/members/{uid} {
+      allow read: if isSignedIn() && (uid == request.auth.uid || isMember(roomId) || roleAllowed(get(/databases/$(database)/documents/rooms/$(roomId)).data));
+      // Owner can add/remove members: owner is the room creator
+      allow create, delete: if isSignedIn() && (
+        get(/databases/$(database)/documents/rooms/$(roomId)).data.createdBy == request.auth.uid
+      );
+      allow update: if false; // no direct updates
     }
 
     // Unique slug index for rooms: create-only for non-admin (prevents collisions)

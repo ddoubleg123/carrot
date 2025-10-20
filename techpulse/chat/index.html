@@ -32,10 +32,24 @@
     .btns { display:flex; gap:8px; margin-top:8px; }
     .btn { flex:1; border-radius: 10px; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.02); color:#fff; padding: 8px 10px; font-weight:600; }
     .btn:hover, .btn:focus-visible { background: rgba(255,255,255,0.06); outline:none; box-shadow: 0 0 0 2px rgba(10,90,255,0.45); }
+    .channels { position:sticky; top:0; height:100dvh; display:none; flex-direction:column; width: 16rem; border-right:1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); backdrop-filter: blur(6px); }
+    @media (min-width: 768px){ .channels { display:flex; } }
+    .chan-header { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.08); }
+    .chan-title { font-weight:700; letter-spacing:-0.01em; }
+    .chan-subtitle { padding:6px 12px; font-size:12px; color:rgba(255,255,255,0.6); border-top:1px solid rgba(255,255,255,0.08); }
+    .chan-list { list-style:none; margin:0; padding:8px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+    .room-item { display:flex; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:8px 10px; color:rgba(255,255,255,0.9); text-decoration:none; background:transparent; border:1px solid transparent; }
+    .room-item:hover, .room-item:focus-visible { background: rgba(255,255,255,0.06); outline:none; box-shadow: 0 0 0 2px rgba(10,90,255,0.25); }
+    .room-item.active { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); }
+    .unread { margin-left:auto; background:#0A5AFF; color:#001018; font-weight:700; border-radius:999px; font-size:11px; line-height:1; padding:4px 6px; }
     .content { flex:1; }
     .container { margin-inline:auto; max-width: 88rem; padding: 24px 16px; }
     @media (min-width: 768px){ .container { padding: 32px; } }
     iframe { width:100%; height: 70vh; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; background:#111318; }
+    .primary { border:none; border-radius:10px; padding:10px 16px; font-weight:700; background: linear-gradient(180deg, var(--accent), #0A47D5); color:#001018; box-shadow: 0 6px 18px rgba(10,90,255,0.25); }
+    .primary:hover { filter:brightness(1.05); }
+    .actionbar { display:flex; gap:8px; align-items:center; padding:8px 12px; border-top:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+    .iconbtn { display:inline-flex; align-items:center; gap:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.02); color:#fff; padding:8px 10px; }
   </style>
 </head>
 <body>
@@ -99,6 +113,27 @@
           </div>
         </div>
       </aside>
+      <!-- Channels column -->
+      <aside class="channels" role="navigation" aria-label="Channels">
+        <div class="chan-header">
+          <div class="chan-title">Channels</div>
+        </div>
+        <ul id="roomsList" class="chan-list">
+          <li>
+            <button id="newRoomBtn" class="room-item" type="button" aria-label="Create channel" style="width:100%; text-align:left;">
+              <span style="opacity:.9">+ New</span>
+            </button>
+          </li>
+        </ul>
+        <div class="chan-subtitle">Private messaging</div>
+        <ul id="dmList" class="chan-list">
+          <li>
+            <button id="startDmBtn" class="room-item" type="button" aria-label="Start direct message" style="width:100%; text-align:left;">
+              <span style="opacity:.9">+DM</span>
+            </button>
+          </li>
+        </ul>
+      </aside>
 
       <section class="content">
         <div class="container">
@@ -108,11 +143,14 @@
             <div id="chatMessages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px;"></div>
             <div id="typing" class="typing" aria-live="polite"></div>
             <form id="chatForm" style="display:flex; gap:8px; padding:12px; border-top:1px solid rgba(255,255,255,0.08); align-items:center;">
-              <input id="fileInput" type="file" style="display:none" />
-              <button id="attachBtn" type="button" class="btn secondary" title="Attach" aria-label="Attach file">📎</button>
               <input id="chatInput" type="text" placeholder="Message #general" autocomplete="off" style="flex:1; background:rgba(255,255,255,0.06); color:#fff; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px;" />
-              <button type="submit" class="btn" style="min-width:88px;">Send</button>
+              <button type="submit" class="primary">Send</button>
             </form>
+            <div class="actionbar">
+              <input id="fileInput" type="file" style="display:none" />
+              <button id="attachBtn" type="button" class="iconbtn" title="Attach" aria-label="Attach file">📎 Attach</button>
+              <button id="emojiBtn" type="button" class="iconbtn" title="Emoji" aria-label="Insert emoji">😊 Emoji</button>
+            </div>
           </div>
         </div>
       </section>
@@ -127,6 +165,23 @@
       <label for="roomName" style="display:block; font-size:12px; color:rgba(255,255,255,0.7); margin-bottom:6px;">Channel name</label>
       <input id="roomName" class="input" type="text" placeholder="e.g. dev-talk" aria-describedby="slugPreview roomError" />
       <div id="slugPreview" style="margin-top:6px; font-size:12px; color:rgba(255,255,255,0.7);"></div>
+      <div style="display:grid; gap:8px; margin-top:12px;">
+        <label for="visibility" style="font-size:12px; color:rgba(255,255,255,0.7);">Visibility</label>
+        <select id="visibility" class="input" style="background:rgba(255,255,255,0.06); color:#fff; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:8px;">
+          <option value="public">Public (any signed-in user can view)</option>
+          <option value="private">Private (restricted)</option>
+        </select>
+        <div id="rolesRow" style="display:flex; gap:12px; align-items:center;">
+          <label style="display:flex; gap:6px; align-items:center; font-size:12px; color:rgba(255,255,255,0.85);">
+            <input id="roleTeam" type="checkbox" /> Team
+          </label>
+          <label style="display:flex; gap:6px; align-items:center; font-size:12px; color:rgba(255,255,255,0.85);">
+            <input id="roleSynth" type="checkbox" /> Synth
+          </label>
+        </div>
+        <label for="inviteEmails" style="font-size:12px; color:rgba(255,255,255,0.7);">Invite members by email (comma-separated)</label>
+        <input id="inviteEmails" class="input" type="text" placeholder="user1@company.com, user2@gmail.com" />
+      </div>
       <div id="roomError" role="alert" style="margin-top:8px; color:#ffb4b4; font-size:12px; min-height:16px;"></div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
         <button id="cancelNewRoom" class="btn secondary" type="button">Cancel</button>
