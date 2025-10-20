@@ -143,12 +143,12 @@ export async function GET(
             where: { id },
             data: {
               content: {
-                ...content.content,
+                ...contentData,
                 summary150: preview.summary,
                 keyPoints: preview.keyPoints
               },
               metadata: {
-                ...content.metadata,
+                ...metadata,
                 extractedAt: new Date().toISOString(),
                 timeline: preview.timeline,
                 entities: preview.entities
