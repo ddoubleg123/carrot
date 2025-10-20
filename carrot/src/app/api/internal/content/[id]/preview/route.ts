@@ -71,6 +71,8 @@ export async function GET(
     
     // Extract metadata from JSON field
     const metadata = content.metadata as any || {}
+    const mediaAssets = content.mediaAssets as any || {}
+    const contentData = content.content as any || {}
     
     // Build preview data
     const preview: ContentPreview = {
@@ -82,9 +84,9 @@ export async function GET(
         readingTime: metadata.readingTime,
         favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`
       },
-      hero: content.mediaAssets?.hero,
-      summary: content.content?.summary150 || '',
-      keyPoints: content.content?.keyPoints || [],
+      hero: mediaAssets.hero,
+      summary: contentData.summary150 || '',
+      keyPoints: contentData.keyPoints || [],
       excerptHtml: '',
       timeline: [],
       entities: [],
