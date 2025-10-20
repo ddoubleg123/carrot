@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import ContentModal from '../../components/ContentModal'
+import ContentModal from '../[id]/ContentModal'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface ContentPageClientProps {
