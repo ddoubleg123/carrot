@@ -69,15 +69,18 @@ export async function GET(
       return NextResponse.json({ error: 'Content not found' }, { status: 404 })
     }
     
+    // Extract metadata from JSON field
+    const metadata = content.metadata as any || {}
+    
     // Build preview data
     const preview: ContentPreview = {
       title: content.title,
       meta: {
-        sourceDomain: content.meta?.sourceDomain || 'unknown',
-        author: content.meta?.author,
-        publishDate: content.meta?.publishDate,
-        readingTime: content.meta?.readingTime,
-        favicon: `https://www.google.com/s2/favicons?domain=${content.meta?.sourceDomain}&sz=16`
+        sourceDomain: metadata.sourceDomain || 'unknown',
+        author: metadata.author,
+        publishDate: metadata.publishDate,
+        readingTime: metadata.readingTime,
+        favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`
       },
       hero: content.mediaAssets?.hero,
       summary: content.content?.summary150 || '',
@@ -86,12 +89,12 @@ export async function GET(
       timeline: [],
       entities: [],
       source: {
-        domain: content.meta?.sourceDomain || 'unknown',
-        favicon: `https://www.google.com/s2/favicons?domain=${content.meta?.sourceDomain}&sz=16`,
+        domain: metadata.sourceDomain || 'unknown',
+        favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`,
         canonicalUrl: content.url,
-        author: content.meta?.author,
-        publishDate: content.meta?.publishDate,
-        readingTime: content.meta?.readingTime,
+        author: metadata.author,
+        publishDate: metadata.publishDate,
+        readingTime: metadata.readingTime,
         lastVerified: new Date().toISOString()
       },
       actions: {
