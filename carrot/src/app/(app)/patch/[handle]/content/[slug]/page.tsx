@@ -54,10 +54,12 @@ export default async function ContentPage({ params }: ContentPageProps) {
   // Transform to DiscoveredItem format
   const discoveredItem = {
     id: content.id,
+    type: content.type as 'article' | 'video' | 'pdf' | 'image' | 'text',
     title: content.title,
+    displayTitle: content.title,
     url: content.sourceUrl || '',
     canonicalUrl: content.canonicalUrl || content.sourceUrl || '',
-    type: content.type as 'article' | 'video' | 'pdf' | 'image' | 'text',
+    matchPct: content.relevanceScore ? content.relevanceScore / 100 : 0.8,
     status: content.status as 'queued' | 'fetching' | 'enriching' | 'pending_audit' | 'ready' | 'failed',
     media: {
       hero: (content.mediaAssets as any)?.hero,
