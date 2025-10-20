@@ -158,19 +158,36 @@ export async function POST(
           {
             role: 'system',
             content: isStreaming 
-              ? `You are a research assistant. Find the SINGLE BEST, most recent piece of content.
+              ? `You are a research assistant specializing in finding HIGH-QUALITY, authoritative content.
+
+                CRITICAL REQUIREMENTS:
+                - Only return sources from these domains: nba.com, espn.com, bleacherreport.com, theathletic.com, si.com, nytimes.com, washingtonpost.com, cnn.com, bbc.com, reuters.com, ap.org, npr.org, pbs.org, wikipedia.org
+                - URLs must be direct article links, NOT collection pages, category pages, or generic content
+                - Content must be substantive (full articles, not headlines or snippets)
+                - Prefer recent content (last 30 days) but quality over recency
+                - Verify the URL actually contains the article content described
+
                 Return ONLY ONE result as a JSON object (not an array):
                 {
-                  "title": "Specific title",
-                  "url": "https://example.com/article",
+                  "title": "Specific, descriptive article title",
+                  "url": "https://authoritative-domain.com/specific-article-path",
                   "type": "article|video|news",
-                  "description": "Brief description",
+                  "description": "2-3 sentence summary of the actual content",
                   "relevance_score": 0.95
                 }
-                Focus on authoritative sources and recent content (last 7-14 days preferred).
-                Only return if relevance_score > 0.8.`
-              : `You are a research assistant that finds high-quality, relevant content about specific topics. 
-                Return your findings as a JSON array of objects with relevance_score > 0.7.`
+                
+                Only return if relevance_score > 0.8 and you're confident the URL contains the described content.`
+              : `You are a research assistant that finds high-quality, relevant content about specific topics.
+
+                CRITICAL REQUIREMENTS:
+                - Only return sources from these domains: nba.com, espn.com, bleacherreport.com, theathletic.com, si.com, nytimes.com, washingtonpost.com, cnn.com, bbc.com, reuters.com, ap.org, npr.org, pbs.org, wikipedia.org
+                - URLs must be direct article links, NOT collection pages, category pages, or generic content
+                - Content must be substantive (full articles, not headlines or snippets)
+                - Prefer recent content (last 30 days) but quality over recency
+                - Verify the URL actually contains the article content described
+
+                Return your findings as a JSON array of objects with relevance_score > 0.7.
+                Each result must have a direct article URL that contains the described content.`
           },
           {
             role: 'user',
@@ -303,6 +320,150 @@ export async function POST(
                 rejectedItems.push({ url: item.url, title: item.title, reason: 'low_relevance' })
                 continue
               }
+
+              // 🚀 STEP 4: Validate content quality - check if URL actually contains article content
+              try {
+                const contentValidation = await fetch(item.url, {
+                  method: 'HEAD',
+                  timeout: 5000,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
+                  }
+                }).catch(() => null)
+
+                if (!contentValidation || !contentValidation.ok) {
+                  console.log('[Start Discovery] ❌ Rejected (content validation failed):', item.url)
+                  
+                  await prisma.discoveredContent.create({
+                    data: {
+                      patchId: patch.id,
+                      type: item.type || 'article',
+                      title: item.title || 'Untitled',
+                      content: item.description || '',
+                      sourceUrl: item.url,
+                      canonicalUrl: canonicalUrl,
+                      relevanceScore: Math.round(relevanceScore * 100),
+                      tags: [],
+                      status: 'denied',
+                    }
+                  })
+                  
+                  urlCache.add(item.url)
+                  urlCache.add(canonicalUrl)
+                  rejectedItems.push({ url: item.url, title: item.title, reason: 'validation_failed' })
+                  continue
+                }
+
+                // Additional check: ensure it's not a collection/category page
+                const contentType = contentValidation.headers.get('content-type') || ''
+                if (contentType.includes('text/html')) {
+                  // Quick content check to ensure it's not a generic page
+                  const contentCheck = await fetch(item.url, {
+                    method: 'GET',
+                    timeout: 3000,
+                    headers: {
+                      'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
+                    }
+                  }).then(res => res.text()).catch(() => '')
+
+                  // Check for signs of generic/collection pages
+                  const isGenericPage = contentCheck.includes('Collection - ESPN') || 
+                                      contentCheck.includes('category') ||
+                                      contentCheck.includes('browse') ||
+                                      contentCheck.length < 5000 // Too short for real article
+
+                  if (isGenericPage) {
+                    console.log('[Start Discovery] ❌ Rejected (generic/collection page):', item.url)
+                    
+                    await prisma.discoveredContent.create({
+                      data: {
+                        patchId: patch.id,
+                        type: item.type || 'article',
+                        title: item.title || 'Untitled',
+                        content: item.description || '',
+                        sourceUrl: item.url,
+                        canonicalUrl: canonicalUrl,
+                        relevanceScore: Math.round(relevanceScore * 100),
+                        tags: [],
+                        status: 'denied',
+                      }
+                    })
+                    
+                    urlCache.add(item.url)
+                    urlCache.add(canonicalUrl)
+                    rejectedItems.push({ url: item.url, title: item.title, reason: 'generic_page' })
+                    continue
+                  }
+                }
+              } catch (validationError) {
+                console.log('[Start Discovery] ⚠️ Content validation error (proceeding):', validationError)
+                // Continue if validation fails - don't block on network issues
+              }
+
+              // 🚀 STEP 5: Extract actual article content for display in modal
+              let extractedContent = null
+              let enrichedContent = null
+              try {
+                console.log('[Start Discovery] 📄 Extracting article content from:', item.url)
+                const contentFetch = await fetch(item.url, {
+                  method: 'GET',
+                  timeout: 8000,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)',
+                    'Accept': 'text/html'
+                  }
+                }).catch(() => null)
+
+                if (contentFetch && contentFetch.ok) {
+                  const html = await contentFetch.text()
+                  
+                  // Use simple extraction for now (can be enhanced with Readability.js later)
+                  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+                  const descriptionMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i)
+                  
+                  // Extract paragraphs (simple approach)
+                  const paragraphs = html.match(/<p[^>]*>([^<]+)<\/p>/gi) || []
+                  const cleanText = paragraphs.slice(0, 10).map(p => 
+                    p.replace(/<[^>]+>/g, '').trim()
+                  ).filter(t => t.length > 50).join('\n\n')
+
+                  extractedContent = cleanText || item.description || ''
+                  
+                  // Generate key points from first few paragraphs
+                  const keyPoints = paragraphs.slice(0, 5).map(p => 
+                    p.replace(/<[^>]+>/g, '').trim()
+                  ).filter(t => t.length > 30 && t.length < 200).slice(0, 4)
+
+                  enrichedContent = {
+                    summary150: (extractedContent || item.description || '').substring(0, 150),
+                    keyPoints: keyPoints,
+                    readingTimeMin: Math.ceil(extractedContent.length / 1000),
+                    extractedAt: new Date().toISOString()
+                  }
+
+                  console.log('[Start Discovery] ✅ Extracted content:', {
+                    length: extractedContent.length,
+                    keyPoints: keyPoints.length,
+                    readingTime: enrichedContent.readingTimeMin
+                  })
+                } else {
+                  console.log('[Start Discovery] ⚠️ Could not fetch content for extraction, using description')
+                  extractedContent = item.description || ''
+                  enrichedContent = {
+                    summary150: extractedContent.substring(0, 150),
+                    keyPoints: [],
+                    readingTimeMin: 1
+                  }
+                }
+              } catch (extractError) {
+                console.log('[Start Discovery] ⚠️ Content extraction error:', extractError)
+                extractedContent = item.description || ''
+                enrichedContent = {
+                  summary150: extractedContent.substring(0, 150),
+                  keyPoints: [],
+                  readingTimeMin: 1
+                }
+              }
               
               // Generate AI image
               console.log('[Start Discovery] Generating AI image for:', item.title)
@@ -355,24 +516,30 @@ export async function POST(
                 continue
               }
               
-              // 🚀 Save to database with status='ready' (approved)
+              // 🚀 Save to database with status='ready' (approved) + extracted content
               const discoveredContent = await prisma.discoveredContent.create({
                 data: {
                   patchId: patch.id,
                   type: item.type || 'article',
                   title: item.title,
-                  content: item.description || '',
+                  content: extractedContent || item.description || '',
                   sourceUrl: item.url,
                   canonicalUrl: canonicalUrl,
                   relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
                   tags: patch.tags.slice(0, 3),
                   status: 'ready', // 🚀 Mark as approved
+                  enrichedContent: enrichedContent || {},
                   mediaAssets: {
                     heroImage: {
                       url: aiImageUrl,
                       source: aiImageSource,
                       license: 'generated'
                     }
+                  },
+                  metadata: {
+                    sourceDomain: new URL(item.url).hostname,
+                    urlSlug: `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`,
+                    contentUrl: `/patch/${handle}/content/${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`
                   }
                 }
               })
@@ -381,7 +548,7 @@ export async function POST(
               urlCache.add(item.url)
               urlCache.add(canonicalUrl)
               
-              // Send item-ready event with complete DiscoveredItem format
+              // Send item-ready event with complete DiscoveredItem format including enriched content
               sendEvent('item-ready', {
                 id: discoveredContent.id,
                 type: discoveredContent.type as 'article'|'video'|'pdf'|'image'|'text',
@@ -396,13 +563,17 @@ export async function POST(
                   license: 'generated' as const
                 },
                 content: {
-                  summary150: (discoveredContent.content || '').substring(0, 180),
-                  keyPoints: [],
-                  readingTimeMin: Math.ceil((discoveredContent.content || '').length / 1000)
+                  summary150: enrichedContent?.summary150 || (discoveredContent.content || '').substring(0, 150),
+                  keyPoints: enrichedContent?.keyPoints || [],
+                  readingTimeMin: enrichedContent?.readingTimeMin || Math.ceil((discoveredContent.content || '').length / 1000)
                 },
                 meta: {
                   sourceDomain: item.url ? new URL(item.url).hostname : 'unknown',
                   publishDate: new Date().toISOString()
+                },
+                metadata: {
+                  urlSlug: (discoveredContent.metadata as any)?.urlSlug,
+                  contentUrl: (discoveredContent.metadata as any)?.contentUrl
                 }
               })
               
