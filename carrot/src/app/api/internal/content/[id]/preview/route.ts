@@ -93,15 +93,15 @@ export async function GET(
       source: {
         domain: metadata.sourceDomain || 'unknown',
         favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`,
-        canonicalUrl: content.url,
+        canonicalUrl: content.sourceUrl || '',
         author: metadata.author,
         publishDate: metadata.publishDate,
         readingTime: metadata.readingTime,
         lastVerified: new Date().toISOString()
       },
       actions: {
-        openOriginal: content.url,
-        copyLink: content.url
+        openOriginal: content.sourceUrl || '',
+        copyLink: content.sourceUrl || ''
       }
     }
     
@@ -111,7 +111,7 @@ export async function GET(
         console.log(`[ContentPreview] Extracting content for ${id}`)
         
         // Fetch the original content
-        const response = await fetchWithProxy(content.url, {
+        const response = await fetchWithProxy(content.sourceUrl || '', {
           timeout: 10000,
           userAgent: 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
         })
