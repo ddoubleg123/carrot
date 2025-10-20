@@ -113,7 +113,44 @@ export async function GET(
       return acc;
     }, new Map());
 
-    const discoveredContent = Array.from(uniqueItems.values());
+    let discoveredContent = Array.from(uniqueItems.values());
+
+    // Server-side link verification gate: only include items whose source verifies (<400)
+    try {
+      const proto = (req.headers as any).get?.('x-forwarded-proto') || 'https'
+      const host = (req.headers as any).get?.('host')
+      const baseUrl = host ? `${proto}://${host}` : ''
+
+      const verifyOne = async (item: any) => {
+        const url = item.canonicalUrl || item.url
+        if (!url) return { ok: false, item }
+
+        // If item already has lastVerifiedStatus in metadata, respect it fast-path
+        const lastVerified = (item.metadata as any)?.lastVerifiedStatus
+        if (typeof lastVerified === 'number') {
+          return { ok: lastVerified < 400, item }
+        }
+
+        try {
+          const verifyRes = await fetch(`${baseUrl}/api/internal/links/verify?url=${encodeURIComponent(url)}`, {
+            method: 'GET',
+            // keep tight server timeout
+            headers: { 'Accept': 'application/json' },
+          })
+          if (!verifyRes.ok) return { ok: false, item }
+          const data = await verifyRes.json()
+          return { ok: !!data?.ok, item, status: data?.status }
+        } catch {
+          return { ok: false, item }
+        }
+      }
+
+      const verified = await Promise.all(discoveredContent.map(verifyOne))
+      discoveredContent = verified.filter(v => v.ok).map(v => v.item)
+    } catch (e) {
+      // If verification fails for any reason, fall back to original list (do not break endpoint)
+      try { console.warn('[Discovered Content] verification gate failed:', (e as any)?.message) } catch {}
+    }
 
     const res = NextResponse.json({
       success: true,

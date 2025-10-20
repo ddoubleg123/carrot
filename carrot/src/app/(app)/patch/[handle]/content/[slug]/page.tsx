@@ -52,6 +52,18 @@ export default async function ContentPage({ params }: ContentPageProps) {
     notFound();
   }
 
+  // Server-side guard: verify source before rendering. If broken, 404 the page.
+  try {
+    const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(content.sourceUrl || '')}`
+    const res = await fetch(verifyUrl, { cache: 'no-store' })
+    if (res.ok) {
+      const data = await res.json()
+      if (!data?.ok) {
+        notFound()
+      }
+    }
+  } catch {}
+
   // Transform to DiscoveredItem format
   const discoveredItem = {
     id: content.id,
