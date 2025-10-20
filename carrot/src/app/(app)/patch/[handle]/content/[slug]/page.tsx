@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import ContentModal from '../../components/ContentModal';
+import ContentPageClient from './ContentPageClient';
 
 interface ContentPageProps {
   params: Promise<{
@@ -89,15 +89,7 @@ export default async function ContentPage({ params }: ContentPageProps) {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <ContentModal 
-        item={discoveredItem}
-        isOpen={true}
-        onClose={() => window.history.back()}
-      />
-    </div>
-  );
+  return <ContentPageClient item={discoveredItem} />;
 }
 
 export async function generateMetadata({ params }: ContentPageProps) {
