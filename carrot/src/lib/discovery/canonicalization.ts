@@ -28,6 +28,13 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     let currentUrl = rawUrl;
     redirectChain.push(currentUrl);
     
+    // Handle relative URLs by resolving them against Wikipedia base
+    if (currentUrl.startsWith('./') || currentUrl.startsWith('../') || (!currentUrl.startsWith('http'))) {
+      // This is likely a Wikipedia relative URL, resolve it against Wikipedia base
+      currentUrl = `https://en.wikipedia.org${currentUrl.startsWith('/') ? '' : '/'}${currentUrl}`;
+      redirectChain.push(currentUrl);
+    }
+    
     // Follow one redirect hop
     const redirectResult = await followRedirect(currentUrl);
     if (redirectResult.redirected && redirectResult.finalUrl) {
@@ -68,12 +75,19 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     
   } catch (error) {
     console.warn(`[Canonicalization] Failed to canonicalize URL: ${rawUrl}`, error);
+    
+    // Handle relative URLs in fallback case
+    let fallbackUrl = rawUrl;
+    if (rawUrl.startsWith('./') || rawUrl.startsWith('../') || (!rawUrl.startsWith('http'))) {
+      fallbackUrl = `https://en.wikipedia.org${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+    }
+    
     // Return original URL as fallback
     return {
-      canonicalUrl: rawUrl,
+      canonicalUrl: fallbackUrl,
       originalUrl,
       redirectChain,
-      finalDomain: new URL(rawUrl).hostname
+      finalDomain: fallbackUrl.startsWith('http') ? new URL(fallbackUrl).hostname : 'unknown'
     };
   }
 }
