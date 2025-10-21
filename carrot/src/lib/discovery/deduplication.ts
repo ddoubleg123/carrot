@@ -245,12 +245,12 @@ export class DeduplicationChecker {
   /**
    * Generate content fingerprint for storage
    */
-  generateFingerprint(
+  async generateFingerprint(
     url: string,
     title: string,
     content: string
-  ): ContentFingerprint {
-    const canonical = canonicalize(url)
+  ): Promise<ContentFingerprint> {
+    const canonical = await canonicalize(url)
     const simHash = SimHash.generate(content)
     const titleHash = this.hashTitle(title)
     
@@ -258,7 +258,7 @@ export class DeduplicationChecker {
       canonicalUrl: canonical.canonicalUrl,
       simHash,
       titleHash,
-      domain: canonical.domain,
+      domain: canonical.finalDomain,
       contentLength: content.length
     }
   }
