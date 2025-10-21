@@ -98,7 +98,7 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
       })
       
       if (result.ok) {
-        window.open(result.finalUrl || preview.meta.canonicalUrl, '_blank', 'noopener')
+        window.open(result.finalUrl || preview.source.url, '_blank', 'noopener')
       } else {
         if (result.archivedUrl) {
           setShowArchivePrompt(true)
@@ -110,7 +110,7 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
     } catch (error) {
       console.error('Link verification error:', error)
       // Fallback to direct open
-      window.open(preview.meta.canonicalUrl, '_blank', 'noopener')
+      window.open(preview.source.url, '_blank', 'noopener')
     }
   }
 
