@@ -157,23 +157,90 @@ export async function GET(
 
     // Quality check: ensure minimum content requirements
     if (preview.summary.length < 120 || preview.keyPoints.length < 3) {
-      console.log(`[ContentPreview] Re-running summarizer for ${id} - insufficient content`)
+      console.log(`[ContentPreview] Quality gate failed for ${id} - re-running with DeepSeek`)
       
-      // Re-run with stricter prompt (this would call an AI service in production)
-      // For now, we'll use the existing content but ensure minimum quality
-      if (preview.summary.length < 120) {
-        preview.summary = (content.content || '').substring(0, 240)
-      }
-      
-      if (preview.keyPoints.length < 3) {
-        // Generate key points from content
-        const contentText = content.content || ''
-        const sentences = contentText.split(/[.!?]+/)
-          .map(s => s.trim())
-          .filter(s => s.length > 20 && s.length < 120)
-          .slice(0, 7)
+      try {
+        // Import enrichment utilities
+        const { enrichContentWithDeepSeek, enrichContentFallback } = await import('@/lib/summarize/enrichContent')
         
-        preview.keyPoints = sentences.slice(0, 7)
+        // Get article text for enrichment
+        let articleText = content.content || ''
+        
+        // If we don't have good content, try to fetch it
+        if (articleText.length < 500 && content.sourceUrl) {
+          try {
+            const fetchResponse = await fetchWithProxy(content.sourceUrl, { timeout: 8000 })
+            if (fetchResponse.ok) {
+              const html = await fetchResponse.text()
+              const readable = extractReadableContent(html, content.sourceUrl)
+              articleText = readable.textContent
+            }
+          } catch (fetchError) {
+            console.warn(`[ContentPreview] Could not fetch source for enrichment:`, fetchError)
+          }
+        }
+        
+        // Try DeepSeek enrichment with retry
+        const patchTags = content.patch?.tags || []
+        const enrichmentResult = await enrichContentWithDeepSeek(
+          articleText,
+          content.title,
+          content.sourceUrl || '',
+          patchTags
+        )
+        
+        if (enrichmentResult.success && enrichmentResult.data) {
+          console.log(`[ContentPreview] ✅ DeepSeek enrichment successful for ${id}`)
+          preview.summary = enrichmentResult.data.summary
+          preview.keyPoints = enrichmentResult.data.keyFacts.map(f => f.text)
+          preview.context = enrichmentResult.data.context
+          preview.entities = enrichmentResult.data.entities
+          
+          // Update database with AI-enriched content
+          await prisma.discoveredContent.update({
+            where: { id },
+            data: {
+              enrichedContent: {
+                ...enrichedContent,
+                summary150: preview.summary,
+                keyPoints: preview.keyPoints,
+                context: preview.context,
+                aiEnriched: true,
+                enrichedAt: new Date().toISOString()
+              },
+              metadata: {
+                ...metadata,
+                entities: preview.entities
+              }
+            }
+          })
+        } else {
+          console.warn(`[ContentPreview] ⚠️ DeepSeek enrichment failed for ${id}, using fallback`)
+          console.warn(`[ContentPreview] Errors:`, enrichmentResult.errors)
+          
+          // Use fallback enrichment
+          const fallbackData = enrichContentFallback(articleText, content.title)
+          preview.summary = fallbackData.summary
+          preview.keyPoints = fallbackData.keyFacts.map(f => f.text)
+          preview.context = fallbackData.context
+        }
+      } catch (enrichError) {
+        console.error(`[ContentPreview] Error during enrichment for ${id}:`, enrichError)
+        
+        // Last resort fallback
+        if (preview.summary.length < 120) {
+          preview.summary = (content.content || '').substring(0, 240)
+        }
+        
+        if (preview.keyPoints.length < 3) {
+          const contentText = content.content || ''
+          const sentences = contentText.split(/[.!?]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 20 && s.length < 120)
+            .slice(0, 7)
+          
+          preview.keyPoints = sentences.slice(0, 7)
+        }
       }
     }
 
