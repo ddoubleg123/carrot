@@ -4,7 +4,7 @@
  */
 
 import { canonicalize } from './canonicalize'
-import { DeduplicationEngine } from './deduplication'
+import { DeduplicationChecker } from './deduplication'
 import { SearchFrontier } from './frontier'
 import { RelevanceEngine } from './relevance'
 import { DiscoveryEventStream } from './streaming'
@@ -33,7 +33,7 @@ export interface DiscoveryItem {
 }
 
 export class DiscoveryOrchestrator {
-  private deduplication: DeduplicationEngine
+  private deduplication: DeduplicationChecker
   private frontier: SearchFrontier
   private relevance: RelevanceEngine
   private heroPipeline: HeroImagePipeline
@@ -45,7 +45,7 @@ export class DiscoveryOrchestrator {
     private eventStream: DiscoveryEventStream,
     config: Partial<DiscoveryConfig> = {}
   ) {
-    this.deduplication = new DeduplicationEngine(groupId)
+    this.deduplication = new DeduplicationChecker()
     this.frontier = new SearchFrontier()
     this.relevance = new RelevanceEngine()
     this.heroPipeline = new HeroImagePipeline()
@@ -146,9 +146,10 @@ export class DiscoveryOrchestrator {
             
             // Check for duplicates
             const duplicateCheck = await this.deduplication.checkDuplicate(
+              this.groupId,
               canonicalUrl,
-              '', // Content will be fetched later
               '', // Title will be fetched later
+              '', // Content will be fetched later
               domain
             )
             

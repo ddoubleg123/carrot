@@ -36,7 +36,7 @@ export default function ContentPane({ content, isLoading }: ContentPaneProps) {
           summary={content.summary}
           keyPoints={content.keyPoints}
           excerptHtml={content.excerptHtml}
-          entities={content.entities}
+          entities={content.entities?.map(entity => entity.name)}
           timeline={content.timeline}
         />
       </div>
