@@ -86,7 +86,7 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
     if (!preview) return
 
     try {
-      const response = await fetch(`/api/internal/links/verify?url=${encodeURIComponent(preview.meta.canonicalUrl)}`)
+      const response = await fetch(`/api/internal/links/verify?url=${encodeURIComponent(preview.source.url)}`)
       const result = await response.json()
       
       setLinkStatus({
