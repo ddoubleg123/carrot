@@ -1,223 +1,288 @@
 /**
- * Relevance scoring system for discovery content
- * Combines entity matching, keyword analysis, and domain trust
+ * Entity-scoped Relevance Filtering for Discovery
+ * Ensures content is relevant to the group's topic
  */
 
-export interface RelevanceConfig {
+export interface EntityProfile {
   groupId: string
-  entities: string[] // Team names, players, coaches, venues, etc.
-  keywords: string[] // Related terms
-  allowlistDomains: string[] // Trusted domains
-  allowlistPaths: string[] // Trusted path patterns
+  groupName: string
+  primaryEntities: string[]
+  people: string[]
+  places: string[]
+  rivals: string[]
+  keywords: string[]
+  domains: string[]
 }
 
 export interface RelevanceResult {
+  isRelevant: boolean
   score: number
-  passed: boolean
-  breakdown: {
-    entityHits: number
-    keywordHits: number
-    domainTrust: number
-    pathMatch: boolean
-  }
-  reasons: string[]
+  reason?: string
+  matchedEntities: string[]
 }
 
-export interface ContentDocument {
-  title: string
-  text: string
-  url: string
-  domain: string
-  path: string
-  meta?: {
-    description?: string
-    keywords?: string[]
-    author?: string
-  }
-}
-
-/**
- * Score content relevance for a group
- */
-export function scoreRelevance(
-  doc: ContentDocument,
-  config: RelevanceConfig
-): RelevanceResult {
-  const reasons: string[] = []
-  let entityHits = 0
-  let keywordHits = 0
-  let domainTrust = 0
-  let pathMatch = false
+export class RelevanceEngine {
+  private entityProfiles = new Map<string, EntityProfile>()
   
-  // Normalize text for matching
-  const searchText = `${doc.title} ${doc.text} ${doc.meta?.description || ''}`.toLowerCase()
-  
-  // 1. Entity matching (60% weight)
-  const entityMatches = config.entities.filter(entity => {
-    const normalizedEntity = entity.toLowerCase()
-    return searchText.includes(normalizedEntity) || 
-           searchText.includes(normalizedEntity.replace(/\s+/g, ''))
-  })
-  entityHits = entityMatches.length
-  if (entityHits > 0) {
-    reasons.push(`Found ${entityHits} entity matches: ${entityMatches.join(', ')}`)
+  /**
+   * Build entity profile for a group
+   */
+  async buildEntityProfile(groupId: string, groupName: string): Promise<EntityProfile> {
+    // This would typically use NER and knowledge graphs
+    // For now, we'll use predefined profiles for known groups
+    
+    const profile = this.getPredefinedProfile(groupName)
+    this.entityProfiles.set(groupId, profile)
+    return profile
   }
   
-  // 2. Keyword matching (20% weight)
-  const keywordMatches = config.keywords.filter(keyword => {
-    const normalizedKeyword = keyword.toLowerCase()
-    return searchText.includes(normalizedKeyword)
-  })
-  keywordHits = keywordMatches.length
-  if (keywordHits > 0) {
-    reasons.push(`Found ${keywordHits} keyword matches: ${keywordMatches.join(', ')}`)
-  }
-  
-  // 3. Domain trust (20% weight)
-  const domain = doc.domain.toLowerCase()
-  const isAllowlistedDomain = config.allowlistDomains.some(allowed => 
-    domain === allowed.toLowerCase() || domain.endsWith(`.${allowed}`)
-  )
-  
-  if (isAllowlistedDomain) {
-    domainTrust = 1.0
-    reasons.push(`Domain ${domain} is in allowlist`)
-  } else {
-    // Score based on domain reputation
-    domainTrust = getDomainTrustScore(domain)
-    if (domainTrust > 0.5) {
-      reasons.push(`Domain ${domain} has good reputation (${domainTrust.toFixed(2)})`)
+  /**
+   * Check if content is relevant to the group
+   */
+  async checkRelevance(
+    groupId: string,
+    title: string,
+    content: string,
+    domain: string
+  ): Promise<RelevanceResult> {
+    const profile = this.entityProfiles.get(groupId)
+    if (!profile) {
+      return {
+        isRelevant: false,
+        score: 0,
+        reason: 'No entity profile found for group'
+      }
+    }
+    
+    const text = `${title} ${content}`.toLowerCase()
+    const matchedEntities: string[] = []
+    let score = 0
+    
+    // Check for primary entities (highest weight)
+    for (const entity of profile.primaryEntities) {
+      if (text.includes(entity.toLowerCase())) {
+        matchedEntities.push(entity)
+        score += 0.4
+      }
+    }
+    
+    // Check for people (high weight)
+    for (const person of profile.people) {
+      if (text.includes(person.toLowerCase())) {
+        matchedEntities.push(person)
+        score += 0.3
+      }
+    }
+    
+    // Check for places (medium weight)
+    for (const place of profile.places) {
+      if (text.includes(place.toLowerCase())) {
+        matchedEntities.push(place)
+        score += 0.2
+      }
+    }
+    
+    // Check for keywords (medium weight)
+    for (const keyword of profile.keywords) {
+      if (text.includes(keyword.toLowerCase())) {
+        matchedEntities.push(keyword)
+        score += 0.15
+      }
+    }
+    
+    // Check for domain trust (low weight)
+    if (profile.domains.includes(domain)) {
+      score += 0.1
+    }
+    
+    // Penalty for league-general content without group mentions
+    if (this.isLeagueGeneral(text) && !this.hasGroupMention(text, profile)) {
+      score -= 0.3
+    }
+    
+    // Ensure at least one group-specific entity is present
+    const hasGroupMention = profile.primaryEntities.some(entity => 
+      text.includes(entity.toLowerCase())
+    ) || profile.people.some(person => 
+      text.includes(person.toLowerCase())
+    )
+    
+    const isRelevant = score >= 0.3 && hasGroupMention
+    
+    return {
+      isRelevant,
+      score: Math.max(0, Math.min(1, score)),
+      reason: isRelevant ? undefined : 'Insufficient relevance score or missing group mentions',
+      matchedEntities
     }
   }
   
-  // 4. Path matching bonus
-  pathMatch = config.allowlistPaths.some(pattern => {
-    const regex = new RegExp(pattern.replace(/\*/g, '.*'), 'i')
-    return regex.test(doc.path)
-  })
-  
-  if (pathMatch) {
-    reasons.push(`Path ${doc.path} matches allowlist pattern`)
+  /**
+   * Get predefined entity profile for known groups
+   */
+  private getPredefinedProfile(groupName: string): EntityProfile {
+    switch (groupName.toLowerCase()) {
+      case 'chicago bulls':
+        return {
+          groupId: 'chicago-bulls',
+          groupName: 'Chicago Bulls',
+          primaryEntities: [
+            'Chicago Bulls',
+            'Bulls',
+            'CHI',
+            'Madhouse on Madison',
+            'United Center'
+          ],
+          people: [
+            'Michael Jordan',
+            'Scottie Pippen',
+            'Phil Jackson',
+            'Derrick Rose',
+            'Jerry Krause',
+            'Dennis Rodman',
+            'Toni Kukoc',
+            'Steve Kerr',
+            'Horace Grant',
+            'B.J. Armstrong'
+          ],
+          places: [
+            'Chicago',
+            'United Center',
+            'Madison Square Garden',
+            'Los Angeles'
+          ],
+          rivals: [
+            'Detroit Pistons',
+            'New York Knicks',
+            'Utah Jazz',
+            'Miami Heat',
+            'Boston Celtics'
+          ],
+          keywords: [
+            'basketball',
+            'NBA',
+            'championship',
+            'dynasty',
+            'playoffs',
+            'finals',
+            'coach',
+            'roster',
+            'trade',
+            'draft'
+          ],
+          domains: [
+            'nba.com',
+            'espn.com',
+            'sports.yahoo.com',
+            'chicagotribune.com',
+            'chicagosuntimes.com'
+          ]
+        }
+        
+      case 'houston rockets':
+        return {
+          groupId: 'houston-rockets',
+          groupName: 'Houston Rockets',
+          primaryEntities: [
+            'Houston Rockets',
+            'Rockets',
+            'HOU',
+            'Toyota Center'
+          ],
+          people: [
+            'Hakeem Olajuwon',
+            'Yao Ming',
+            'Tracy McGrady',
+            'James Harden',
+            'Chris Paul',
+            'Russell Westbrook',
+            'Rudy Tomjanovich'
+          ],
+          places: [
+            'Houston',
+            'Toyota Center',
+            'Texas'
+          ],
+          rivals: [
+            'Dallas Mavericks',
+            'San Antonio Spurs',
+            'Utah Jazz'
+          ],
+          keywords: [
+            'basketball',
+            'NBA',
+            'championship',
+            'playoffs',
+            'finals'
+          ],
+          domains: [
+            'nba.com',
+            'espn.com',
+            'sports.yahoo.com',
+            'chron.com',
+            'houstonchronicle.com'
+          ]
+        }
+        
+      default:
+        // Generic profile for unknown groups
+        return {
+          groupId: groupName.toLowerCase().replace(/\s+/g, '-'),
+          groupName,
+          primaryEntities: [groupName],
+          people: [],
+          places: [],
+          rivals: [],
+          keywords: [],
+          domains: []
+        }
+    }
   }
   
-  // Calculate final score
-  const entityScore = Math.min(entityHits / Math.max(config.entities.length, 1), 1.0)
-  const keywordScore = Math.min(keywordHits / Math.max(config.keywords.length, 1), 1.0)
-  const pathBonus = pathMatch ? 0.1 : 0
-  
-  const score = (0.6 * entityScore) + (0.2 * keywordScore) + (0.2 * domainTrust) + pathBonus
-  const passed = score >= 0.70
-  
-  if (!passed) {
-    reasons.push(`Score ${score.toFixed(3)} below threshold 0.70`)
-  }
-  
-  return {
-    score,
-    passed,
-    breakdown: {
-      entityHits,
-      keywordHits,
-      domainTrust,
-      pathMatch
-    },
-    reasons
-  }
-}
-
-/**
- * Get domain trust score based on known reputable domains
- */
-function getDomainTrustScore(domain: string): number {
-  const trustedDomains = [
-    'nba.com', 'espn.com', 'sportsnet.ca', 'theathletic.com',
-    'chicagotribune.com', 'chicagosuntimes.com', 'nbcchicago.com',
-    'basketball-reference.com', 'stats.nba.com', 'nba.com',
-    'youtube.com', 'twitter.com', 'instagram.com'
-  ]
-  
-  const sportsDomains = [
-    'sports', 'basketball', 'nba', 'basketball', 'hoops'
-  ]
-  
-  // Exact match for trusted domains
-  if (trustedDomains.includes(domain)) {
-    return 0.9
-  }
-  
-  // Subdomain of trusted domains
-  if (trustedDomains.some(trusted => domain.endsWith(`.${trusted}`))) {
-    return 0.8
-  }
-  
-  // Sports-related domains
-  if (sportsDomains.some(sport => domain.includes(sport))) {
-    return 0.6
-  }
-  
-  // Generic news domains
-  if (domain.includes('news') || domain.includes('tribune') || domain.includes('times')) {
-    return 0.5
-  }
-  
-  // Default trust score
-  return 0.3
-}
-
-/**
- * Extract entities from text using simple keyword matching
- */
-export function extractEntities(text: string, entityList: string[]): string[] {
-  const normalizedText = text.toLowerCase()
-  return entityList.filter(entity => 
-    normalizedText.includes(entity.toLowerCase())
-  )
-}
-
-/**
- * Create relevance config for Chicago Bulls
- */
-export function createBullsRelevanceConfig(): RelevanceConfig {
-  return {
-    groupId: 'chicago-bulls',
-    entities: [
-      'Chicago Bulls', 'Bulls', 'Chicago',
-      'Michael Jordan', 'Jordan', 'MJ',
-      'Scottie Pippen', 'Pippen',
-      'Phil Jackson', 'Jackson',
-      'Dennis Rodman', 'Rodman',
-      'Derrick Rose', 'Rose',
-      'Zach LaVine', 'LaVine',
-      'United Center',
-      'Jerry Reinsdorf',
-      'Artis Gilmore',
-      'Bob Love',
-      'Joakim Noah',
-      'Luol Deng',
-      'Jimmy Butler'
-    ],
-    keywords: [
-      'basketball', 'NBA', 'basketball team', 'professional basketball',
-      'championship', 'playoffs', 'season', 'game', 'score',
-      'coach', 'coaching', 'roster', 'player', 'draft',
-      'trade', 'free agency', 'contract', 'injury'
-    ],
-    allowlistDomains: [
-      'nba.com',
-      'espn.com',
-      'chicagotribune.com',
-      'chicagosuntimes.com',
-      'nbcchicago.com',
-      'basketball-reference.com',
-      'stats.nba.com',
-      'theathletic.com'
-    ],
-    allowlistPaths: [
-      '/nba/team/chi',
-      '/nba/teams/chicago',
-      '/sports/bulls',
-      '/basketball/bulls',
-      '/bulls'
+  /**
+   * Check if content is league-general without group mentions
+   */
+  private isLeagueGeneral(text: string): boolean {
+    const leagueGeneralTerms = [
+      'nba',
+      'basketball',
+      'league',
+      'season',
+      'playoffs',
+      'championship',
+      'finals'
     ]
+    
+    return leagueGeneralTerms.some(term => text.includes(term))
+  }
+  
+  /**
+   * Check if text has group-specific mentions
+   */
+  private hasGroupMention(text: string, profile: EntityProfile): boolean {
+    const allEntities = [
+      ...profile.primaryEntities,
+      ...profile.people,
+      ...profile.places
+    ]
+    
+    return allEntities.some(entity => text.includes(entity.toLowerCase()))
+  }
+  
+  /**
+   * Get entity profile for a group
+   */
+  getEntityProfile(groupId: string): EntityProfile | undefined {
+    return this.entityProfiles.get(groupId)
+  }
+  
+  /**
+   * Update entity profile
+   */
+  updateEntityProfile(groupId: string, profile: Partial<EntityProfile>): void {
+    const existing = this.entityProfiles.get(groupId)
+    if (existing) {
+      this.entityProfiles.set(groupId, { ...existing, ...profile })
+    }
   }
 }

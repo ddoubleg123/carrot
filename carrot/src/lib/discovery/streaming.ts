@@ -128,15 +128,16 @@ export class DiscoveryEventStream {
   /**
    * Send stop event
    */
-  stop(reason?: string): void {
-    this.sendEvent('stop', undefined, reason)
+  stop(): void {
+    this.sendEvent('stop')
+    this.isActive = false
   }
   
   /**
    * Send error event
    */
   error(message: string, details?: any): void {
-    this.sendEvent('error', { details }, message)
+    this.sendEvent('error', details, message)
   }
   
   /**
@@ -144,7 +145,11 @@ export class DiscoveryEventStream {
    */
   close(): void {
     this.isActive = false
-    this.controller.close()
+    try {
+      this.controller.close()
+    } catch (error) {
+      // Stream may already be closed
+    }
   }
   
   /**
@@ -163,139 +168,78 @@ export class DiscoveryEventStream {
 }
 
 /**
- * Create SSE response for discovery streaming
- */
-export function createDiscoveryStream(
-  options: DiscoveryStreamOptions
-): Response {
-  const stream = new ReadableStream({
-    start(controller) {
-      const eventStream = new DiscoveryEventStream(controller)
-      
-      // Send initial start event
-      eventStream.start(options.groupId)
-      
-      // Store stream reference for external control
-      ;(globalThis as any).discoveryStreams = (globalThis as any).discoveryStreams || new Map()
-      ;(globalThis as any).discoveryStreams.set(options.groupId, eventStream)
-      
-      // Set up timeout
-      if (options.timeout) {
-        setTimeout(() => {
-          eventStream.stop('Timeout reached')
-          eventStream.close()
-        }, options.timeout)
-      }
-      
-      // Set up event handler
-      if (options.onEvent) {
-        // This would need to be implemented with a proper event system
-        // For now, we'll handle events in the discovery loop
-      }
-    }
-  })
-  
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    }
-  })
-}
-
-/**
- * Get active stream for a group
- */
-export function getActiveStream(groupId: string): DiscoveryEventStream | null {
-  const streams = (globalThis as any).discoveryStreams
-  return streams?.get(groupId) || null
-}
-
-/**
- * Close stream for a group
- */
-export function closeStream(groupId: string): void {
-  const streams = (globalThis as any).discoveryStreams
-  const stream = streams?.get(groupId)
-  if (stream) {
-    stream.close()
-    streams.delete(groupId)
-  }
-}
-
-/**
  * Discovery state management
  */
-export class DiscoveryState {
-  private static states = new Map<string, {
-    isActive: boolean
-    isPaused: boolean
-    currentItem?: string
-    itemsFound: number
-    startTime: number
-  }>()
+export interface DiscoveryState {
+  isActive: boolean
+  isPaused: boolean
+  currentStatus: string
+  itemsFound: number
+  lastItemTitle?: string
+  error?: string
+}
+
+export class DiscoveryStateManager {
+  private state: DiscoveryState = {
+    isActive: false,
+    isPaused: false,
+    currentStatus: '',
+    itemsFound: 0
+  }
   
-  static start(groupId: string): void {
-    this.states.set(groupId, {
-      isActive: true,
-      isPaused: false,
-      itemsFound: 0,
-      startTime: Date.now()
+  private listeners = new Set<(state: DiscoveryState) => void>()
+  
+  /**
+   * Update state and notify listeners
+   */
+  updateState(updates: Partial<DiscoveryState>): void {
+    this.state = { ...this.state, ...updates }
+    this.notifyListeners()
+  }
+  
+  /**
+   * Get current state
+   */
+  getState(): DiscoveryState {
+    return { ...this.state }
+  }
+  
+  /**
+   * Add state listener
+   */
+  addListener(listener: (state: DiscoveryState) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+  
+  /**
+   * Notify all listeners
+   */
+  private notifyListeners(): void {
+    this.listeners.forEach(listener => {
+      try {
+        listener(this.state)
+      } catch (error) {
+        console.error('Error in state listener:', error)
+      }
     })
   }
   
-  static pause(groupId: string): void {
-    const state = this.states.get(groupId)
-    if (state) {
-      state.isPaused = true
+  /**
+   * Reset state
+   */
+  reset(): void {
+    this.state = {
+      isActive: false,
+      isPaused: false,
+      currentStatus: '',
+      itemsFound: 0
     }
-  }
-  
-  static resume(groupId: string): void {
-    const state = this.states.get(groupId)
-    if (state) {
-      state.isPaused = false
-    }
-  }
-  
-  static stop(groupId: string): void {
-    this.states.delete(groupId)
-  }
-  
-  static isActive(groupId: string): boolean {
-    const state = this.states.get(groupId)
-    return state?.isActive && !state?.isPaused || false
-  }
-  
-  static isPaused(groupId: string): boolean {
-    const state = this.states.get(groupId)
-    return state?.isPaused || false
-  }
-  
-  static incrementItems(groupId: string): void {
-    const state = this.states.get(groupId)
-    if (state) {
-      state.itemsFound++
-    }
-  }
-  
-  static getStats(groupId: string): {
-    isActive: boolean
-    isPaused: boolean
-    itemsFound: number
-    duration: number
-  } | null {
-    const state = this.states.get(groupId)
-    if (!state) return null
-    
-    return {
-      isActive: state.isActive,
-      isPaused: state.isPaused,
-      itemsFound: state.itemsFound,
-      duration: Date.now() - state.startTime
-    }
+    this.notifyListeners()
   }
 }
+
+/**
+ * Global discovery state manager
+ */
+export const discoveryStateManager = new DiscoveryStateManager()

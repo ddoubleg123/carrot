@@ -1,52 +1,57 @@
 'use client'
 
-import useSWR from 'swr'
+import { useState, useEffect } from 'react'
+import { ContentPreview, ContentPreviewResponse } from '@/types/content-preview'
 
-interface ContentPreview {
-  title: string
-  meta: {
-    domain: string
-    favicon: string
-    author?: string
-    publishDate?: string
-    readTime?: number
-    canonicalUrl: string
-    verified: boolean
-  }
-  hero?: string
-  summary: string
-  keyPoints: string[]
-  context?: string
-  excerptHtml?: string
-  entities?: string[]
-  timeline?: Array<{date: string, fact: string}>
+interface UseContentPreviewReturn {
+  data?: ContentPreview
+  isLoading: boolean
+  error?: string
 }
 
-const fetcher = async (url: string): Promise<ContentPreview> => {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch: ${response.statusText}`)
-  }
-  return response.json()
-}
+export function useContentPreview(contentId: string): UseContentPreviewReturn {
+  const [data, setData] = useState<ContentPreview | undefined>()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | undefined>()
 
-export function useContentPreview(contentId: string) {
-  const { data, error, isLoading } = useSWR<ContentPreview>(
-    contentId ? `/api/internal/content/${contentId}/preview` : null,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000, // 5 minutes
-      errorRetryCount: 2,
-      errorRetryInterval: 1000,
+  useEffect(() => {
+    if (!contentId) {
+      setIsLoading(false)
+      return
     }
-  )
+
+    const fetchContent = async () => {
+      try {
+        setIsLoading(true)
+        setError(undefined)
+
+        const response = await fetch(`/api/internal/content/${contentId}/preview`)
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch content: ${response.status}`)
+        }
+
+        const result: ContentPreviewResponse = await response.json()
+        
+        if (result.success && result.data) {
+          setData(result.data)
+        } else {
+          throw new Error(result.error || 'Failed to load content')
+        }
+      } catch (err) {
+        console.error('[useContentPreview] Error:', err)
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchContent()
+  }, [contentId])
 
   return {
     data,
-    error,
     isLoading,
-    isError: !!error
+    error
   }
 }

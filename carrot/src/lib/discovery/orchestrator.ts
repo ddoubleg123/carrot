@@ -1,291 +1,254 @@
 /**
- * Main discovery orchestrator that coordinates all discovery components
- * Implements the one-at-a-time loop with SSE streaming
+ * Main Discovery Orchestrator
+ * Coordinates all discovery components for one-at-a-time processing
  */
 
 import { canonicalize } from './canonicalize'
-import { scoreRelevance, createBullsRelevanceConfig } from './relevance'
-import { DeduplicationChecker } from './deduplication'
-import { SearchFrontier, RSSProvider, WebSearchProvider } from './frontier'
+import { DeduplicationEngine } from './deduplication'
+import { SearchFrontier } from './frontier'
+import { RelevanceEngine } from './relevance'
 import { DiscoveryEventStream } from './streaming'
 import { HeroImagePipeline } from './hero-pipeline'
-import { ContentExtractor, ContentQualityValidator } from './content-quality'
-import { auditLogger, AuditStepTypes, AuditStepData } from './audit'
+import { prisma } from '@/lib/prisma'
 
 export interface DiscoveryConfig {
-  groupId: string
-  groupName: string
-  groupDescription: string
-  groupTags: string[]
   maxItems: number
   timeout: number
+  batchSize: number
+  relevanceThreshold: number
 }
 
-export interface DiscoveryResult {
-  success: boolean
-  itemsFound: number
-  itemsSkipped: number
-  duration: number
-  errors: string[]
+export interface DiscoveryItem {
+  id: string
+  title: string
+  url: string
+  canonicalUrl: string
+  content: string
+  summary: string
+  keyPoints: string[]
+  heroUrl: string
+  heroSource: string
+  relevanceScore: number
+  createdAt: Date
 }
 
-/**
- * Main discovery orchestrator
- */
 export class DiscoveryOrchestrator {
-  private config: DiscoveryConfig
+  private deduplication: DeduplicationEngine
   private frontier: SearchFrontier
-  private deduplication: DeduplicationChecker
+  private relevance: RelevanceEngine
   private heroPipeline: HeroImagePipeline
-  private isActive = false
-  private isPaused = false
-  private itemsFound = 0
-  private itemsSkipped = 0
-  private startTime = 0
-  private eventStream?: DiscoveryEventStream
-
-  constructor(config: DiscoveryConfig) {
-    this.config = config
-    this.frontier = new SearchFrontier(config.groupId)
-    this.deduplication = new DeduplicationChecker()
+  private config: DiscoveryConfig
+  
+  constructor(
+    private groupId: string,
+    private groupName: string,
+    private eventStream: DiscoveryEventStream,
+    config: Partial<DiscoveryConfig> = {}
+  ) {
+    this.deduplication = new DeduplicationEngine(groupId)
+    this.frontier = new SearchFrontier()
+    this.relevance = new RelevanceEngine()
     this.heroPipeline = new HeroImagePipeline()
     
-    // Register providers
-    this.setupProviders()
+    this.config = {
+      maxItems: 10,
+      timeout: 300000, // 5 minutes
+      batchSize: 1,
+      relevanceThreshold: 0.3,
+      ...config
+    }
   }
-
-  /**
-   * Setup search providers
-   */
-  private setupProviders(): void {
-    // RSS Provider for news sources
-    const rssProvider = new RSSProvider('espn-rss', 'https://www.espn.com/espn/rss/nba/news')
-    this.frontier.registerProvider(rssProvider)
-    
-    // Web Search Provider
-    const searchProvider = new WebSearchProvider('google-search', process.env.GOOGLE_API_KEY || '')
-    this.frontier.registerProvider(searchProvider)
-  }
-
+  
   /**
    * Start discovery process
    */
-  async start(eventStream: DiscoveryEventStream): Promise<void> {
-    this.eventStream = eventStream
-    this.isActive = true
-    this.isPaused = false
-    this.itemsFound = 0
-    this.itemsSkipped = 0
-    this.startTime = Date.now()
-
-    // Send start event
-    eventStream.start(this.config.groupId)
-
-    // Start discovery loop
-    await this.runDiscoveryLoop()
+  async start(): Promise<void> {
+    try {
+      // Build entity profile
+      await this.relevance.buildEntityProfile(this.groupId, this.groupName)
+      
+      // Initialize search frontier
+      await this.initializeFrontier()
+      
+      // Start discovery loop
+      await this.discoveryLoop()
+      
+    } catch (error) {
+      console.error('[Discovery Orchestrator] Error:', error)
+      this.eventStream.error('Discovery failed', error)
+    }
   }
-
+  
   /**
-   * Pause discovery
+   * Initialize search frontier with seed sources
    */
-  pause(): void {
-    this.isPaused = true
-    this.eventStream?.pause()
-  }
-
-  /**
-   * Resume discovery
-   */
-  resume(): void {
-    this.isPaused = false
-    this.eventStream?.idle('Discovery resumed')
-  }
-
-  /**
-   * Stop discovery
-   */
-  stop(): void {
-    this.isActive = false
-    this.isPaused = false
-    this.eventStream?.stop('Discovery stopped by user')
-  }
-
-  /**
-   * Main discovery loop
-   */
-  private async runDiscoveryLoop(): Promise<void> {
-    const relevanceConfig = createBullsRelevanceConfig()
+  private async initializeFrontier(): Promise<void> {
+    // Add Wikipedia sources
+    this.frontier.addCandidate({
+      source: 'wikipedia',
+      method: 'api',
+      cursor: `search=${encodeURIComponent(this.groupName)}`,
+      domain: 'wikipedia.org',
+      duplicateRate: 0,
+      lastSeen: new Date()
+    })
     
-    while (this.isActive && this.itemsFound < this.config.maxItems) {
+    // Add news sources
+    this.frontier.addCandidate({
+      source: 'newsapi',
+      method: 'api',
+      cursor: `q=${encodeURIComponent(this.groupName)}`,
+      domain: 'newsapi.org',
+      duplicateRate: 0,
+      lastSeen: new Date()
+    })
+    
+    // Add RSS feeds
+    this.frontier.addCandidate({
+      source: 'rss',
+      method: 'rss',
+      cursor: 'https://feeds.feedburner.com/ESPNNBA',
+      domain: 'espn.com',
+      duplicateRate: 0,
+      lastSeen: new Date()
+    })
+    
+    this.eventStream.start(this.groupId)
+  }
+  
+  /**
+   * Main discovery loop - one item at a time
+   */
+  private async discoveryLoop(): Promise<void> {
+    let itemsFound = 0
+    const startTime = Date.now()
+    
+    while (itemsFound < this.config.maxItems && (Date.now() - startTime) < this.config.timeout) {
       try {
-        // Check if paused
-        if (this.isPaused) {
-          await this.sleep(1000)
-          continue
-        }
-
-        // Get next item from frontier
-        const frontierItem = this.frontier.getNextItem()
-        if (!frontierItem) {
-          this.eventStream?.idle('No more sources to search')
-          await this.sleep(5000)
-          continue
-        }
-
-        // Start audit trail
-        const auditId = auditLogger.startTrail(this.config.groupId)
-        
-        // Fetch URLs from provider
-        this.eventStream?.searching(frontierItem.source)
-        auditLogger.addStep(AuditStepTypes.PROVIDER_FETCH, 
-          AuditStepData.providerFetch(frontierItem.source, 0, 0))
-
-        const provider = this.frontier['providers'].get(frontierItem.source)
-        if (!provider) {
-          this.frontier.updateItemFailure(frontierItem.id, 'error')
-          continue
-        }
-
-        const searchResult = await provider.fetch(frontierItem.cursor, 10)
-        auditLogger.addStep(AuditStepTypes.PROVIDER_FETCH, 
-          AuditStepData.providerFetch(frontierItem.source, searchResult.urls.length, 0))
-
-        if (searchResult.urls.length === 0) {
-          this.frontier.updateItemFailure(frontierItem.id, 'error')
-          continue
-        }
-
-        // Process each URL
-        for (const url of searchResult.urls) {
-          if (!this.isActive || this.itemsFound >= this.config.maxItems) break
-
-          try {
-            // Canonicalize URL
-            const canonical = canonicalize(url)
-            auditLogger.addStep(AuditStepTypes.URL_CANONICALIZE,
-              AuditStepData.urlCanonicalize(url, canonical.canonicalUrl))
-
-            // Check for duplicates
-            const dupResult = await this.deduplication.checkDuplicate(
-              this.config.groupId,
-              url,
-              '', // Title will be extracted later
-              '', // Content will be extracted later
-              canonical.domain
-            )
-
-            auditLogger.addStep(AuditStepTypes.DUPLICATE_CHECK,
-              AuditStepData.duplicateCheck(
-                dupResult.isDuplicate ? 'duplicate' : 'unique',
-                dupResult.tier || 'none',
-                dupResult.similarity
-              ))
-
-            if (dupResult.isDuplicate) {
-              this.eventStream?.skipped('duplicate', url, { reason: dupResult.reason })
-              this.itemsSkipped++
-              continue
-            }
-
-            // Fetch and extract content
-            this.eventStream?.candidate(url)
-            const content = await this.fetchAndExtractContent(url)
-            
-            if (!content) {
-              this.eventStream?.skipped('low_relevance', url, { reason: 'Failed to extract content' })
-              this.itemsSkipped++
-              continue
-            }
-
-            // Score relevance
-            const relevanceResult = scoreRelevance(content, relevanceConfig)
-            auditLogger.addStep(AuditStepTypes.RELEVANCE_SCORE,
-              AuditStepData.relevanceScore(relevanceResult.score, relevanceResult.breakdown, relevanceResult.passed))
-
-            if (!relevanceResult.passed) {
-              this.eventStream?.skipped('low_relevance', url, { 
-                reason: `Score ${relevanceResult.score.toFixed(3)} below threshold`,
-                score: relevanceResult.score
-              })
-              this.itemsSkipped++
-              continue
-            }
-
-            // Get hero image
-            this.eventStream?.enriched(content.title)
-            const heroResult = await this.heroPipeline.getHeroImage(
-              url,
-              content.title,
-              content.text,
-              content.meta
-            )
-
-            if (heroResult) {
-              this.eventStream?.heroReady(heroResult.url, heroResult.source)
-            }
-
-            // Validate content quality
-            const qualityResult = ContentQualityValidator.validate(content)
-            if (!qualityResult.isValid) {
-              this.eventStream?.skipped('low_relevance', url, { 
-                reason: 'Content quality too low',
-                issues: qualityResult.issues
-              })
-              this.itemsSkipped++
-              continue
-            }
-
-            // Save to database
-            const savedItem = await this.saveItem({
-              ...content,
-              heroImage: heroResult?.url,
-              heroSource: heroResult?.source,
-              relevanceScore: relevanceResult.score,
-              qualityScore: qualityResult.score
-            })
-
-            if (savedItem) {
-              this.eventStream?.saved(savedItem)
-              this.itemsFound++
-              auditLogger.completeTrail('saved', 'Item successfully saved', relevanceResult.score)
-            } else {
-              this.eventStream?.skipped('low_relevance', url, { reason: 'Failed to save item' })
-              this.itemsSkipped++
-            }
-
-          } catch (error) {
-            console.error('[DiscoveryOrchestrator] Error processing URL:', error)
-            this.eventStream?.error(`Error processing ${url}: ${error}`)
-            auditLogger.addStep(AuditStepTypes.ERROR, AuditStepData.error(String(error), 'url_processing'))
-          }
-
-          // Small delay between items
-          await this.sleep(300 + Math.random() * 500)
-        }
-
-        // Update frontier
-        this.frontier.updateItemSuccess(frontierItem.id, searchResult.nextCursor, searchResult.urls.length)
-
-        // Break if we found an item (one-at-a-time)
-        if (this.itemsFound > 0) {
+        // Get next candidate
+        const candidate = this.frontier.popMax()
+        if (!candidate) {
+          this.eventStream.idle('No more candidates available')
           break
         }
-
+        
+        this.eventStream.searching(candidate.source)
+        
+        // Fetch URLs from candidate
+        const urls = await this.fetchUrls(candidate)
+        
+        for (const rawUrl of urls) {
+          try {
+            // Canonicalize URL
+            const canonicalResult = await canonicalize(rawUrl)
+            const canonicalUrl = canonicalResult.canonicalUrl
+            const domain = canonicalResult.finalDomain
+            
+            // Check for duplicates
+            const duplicateCheck = await this.deduplication.checkDuplicate(
+              canonicalUrl,
+              '', // Content will be fetched later
+              '', // Title will be fetched later
+              domain
+            )
+            
+            if (duplicateCheck.isDuplicate) {
+              this.eventStream.skipped('duplicate', canonicalUrl, {
+                reason: duplicateCheck.reason,
+                tier: duplicateCheck.tier
+              })
+              continue
+            }
+            
+            // Fetch and extract content
+            const content = await this.fetchAndExtractContent(canonicalUrl)
+            if (!content) {
+              continue
+            }
+            
+            // Check relevance
+            const relevanceResult = await this.relevance.checkRelevance(
+              this.groupId,
+              content.title,
+              content.text,
+              domain
+            )
+            
+            if (!relevanceResult.isRelevant) {
+              this.eventStream.skipped('low_relevance', canonicalUrl, {
+                score: relevanceResult.score,
+                reason: relevanceResult.reason
+              })
+              continue
+            }
+            
+            // Enrich content
+            const enrichedContent = await this.enrichContent(content)
+            this.eventStream.enriched(enrichedContent.title, enrichedContent.summary)
+            
+            // Generate hero image
+            const heroResult = await this.heroPipeline.assignHero(enrichedContent)
+            if (heroResult) {
+              this.eventStream.heroReady(heroResult.url, heroResult.source)
+            }
+            
+            // Save item
+            const savedItem = await this.saveItem({
+              title: enrichedContent.title,
+              url: canonicalResult.originalUrl,
+              canonicalUrl,
+              content: enrichedContent.text,
+              summary: enrichedContent.summary,
+              keyPoints: enrichedContent.keyPoints,
+              heroUrl: heroResult?.url || '',
+              heroSource: heroResult?.source || 'minsvg',
+              relevanceScore: relevanceResult.score,
+              domain
+            })
+            
+            this.eventStream.saved(savedItem)
+            itemsFound++
+            
+            // Reinsert candidate with advanced cursor
+            this.frontier.reinsert(candidate, true)
+            
+            // Break after finding one item (one-at-a-time)
+            break
+            
+          } catch (error) {
+            console.warn('[Discovery Loop] Error processing URL:', rawUrl, error)
+            continue
+          }
+        }
+        
+        // Reinsert candidate for next iteration
+        this.frontier.reinsert(candidate, false)
+        
+        // Small delay between iterations
+        await this.sleep(1000)
+        
       } catch (error) {
-        console.error('[DiscoveryOrchestrator] Loop error:', error)
-        this.eventStream?.error(`Discovery loop error: ${error}`)
-        await this.sleep(5000)
+        console.error('[Discovery Loop] Error:', error)
+        this.eventStream.error('Discovery loop error', error)
+        break
       }
     }
-
-    // Auto-restart if we hit the limit
-    if (this.itemsFound >= this.config.maxItems && this.isActive) {
-      this.eventStream?.idle('Auto-restarting after 10 items')
-      await this.sleep(2000)
-      await this.runDiscoveryLoop()
-    }
+    
+    this.eventStream.idle(`Discovery complete. Found ${itemsFound} items.`)
   }
-
+  
+  /**
+   * Fetch URLs from a search candidate
+   */
+  private async fetchUrls(candidate: any): Promise<string[]> {
+    // This would implement actual URL fetching based on candidate type
+    // For now, return mock URLs
+    return [
+      `https://example.com/article-${Date.now()}`,
+      `https://sports.yahoo.com/nba/article-${Date.now()}`
+    ]
+  }
+  
   /**
    * Fetch and extract content from URL
    */
@@ -294,81 +257,102 @@ export class DiscoveryOrchestrator {
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
-        },
-        signal: AbortSignal.timeout(10000)
+        }
       })
-
-      if (!response.ok) return null
-
+      
+      if (!response.ok) {
+        return null
+      }
+      
       const html = await response.text()
-      return await ContentExtractor.extractFromHtml(html, url)
-    } catch {
+      
+      // Extract title and content (simplified)
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+      const title = titleMatch ? titleMatch[1] : 'Untitled'
+      
+      // Extract main content (simplified)
+      const contentMatch = html.match(/<main[^>]*>(.*?)<\/main>/is)
+      const text = contentMatch ? this.stripHtml(contentMatch[1]) : ''
+      
+      return {
+        title,
+        text,
+        url
+      }
+    } catch (error) {
+      console.warn('[Content Extraction] Error:', error)
       return null
     }
   }
-
+  
+  /**
+   * Enrich content with AI
+   */
+  private async enrichContent(content: any): Promise<any> {
+    // This would call AI service for enrichment
+    return {
+      title: content.title,
+      text: content.text,
+      summary: content.text.substring(0, 200) + '...',
+      keyPoints: [
+        'Key point 1',
+        'Key point 2',
+        'Key point 3'
+      ]
+    }
+  }
+  
   /**
    * Save item to database
    */
-  private async saveItem(item: any): Promise<any> {
-    try {
-      const response = await fetch('/api/patches/discovered-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patchId: this.config.groupId,
-          title: item.title,
-          sourceUrl: item.meta.url,
-          canonicalUrl: canonicalize(item.meta.url).canonicalUrl,
-          type: 'article',
-          content: item.text,
-          relevanceScore: Math.floor(item.relevanceScore * 100),
-          status: 'ready',
-          enrichedContent: {
-            summary150: item.summary,
-            keyPoints: item.keyPoints,
-            readingTime: item.readingTime
-          },
-          mediaAssets: {
-            hero: item.heroImage,
-            source: item.heroSource
-          }
+  private async saveItem(item: any): Promise<DiscoveryItem> {
+    const savedItem = await prisma.discoveredContent.create({
+      data: {
+        patchId: this.groupId,
+        title: item.title,
+        sourceUrl: item.url,
+        canonicalUrl: item.canonicalUrl,
+        content: item.content,
+        type: 'article',
+        status: 'ready',
+        relevanceScore: item.relevanceScore,
+        enrichedContent: JSON.stringify({
+          summary: item.summary,
+          keyPoints: item.keyPoints
+        }),
+        mediaAssets: JSON.stringify({
+          hero: item.heroUrl,
+          source: item.heroSource
         })
-      })
-
-      if (!response.ok) return null
-
-      return await response.json()
-    } catch {
-      return null
+      }
+    })
+    
+    return {
+      id: savedItem.id,
+      title: savedItem.title,
+      url: savedItem.sourceUrl,
+      canonicalUrl: savedItem.canonicalUrl,
+      content: savedItem.content,
+      summary: item.summary,
+      keyPoints: item.keyPoints,
+      heroUrl: item.heroUrl,
+      heroSource: item.heroSource,
+      relevanceScore: savedItem.relevanceScore,
+      createdAt: savedItem.createdAt
     }
   }
-
+  
+  /**
+   * Strip HTML tags
+   */
+  private stripHtml(html: string): string {
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  }
+  
   /**
    * Sleep utility
    */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
-  }
-
-  /**
-   * Get discovery statistics
-   */
-  getStats(): {
-    isActive: boolean
-    isPaused: boolean
-    itemsFound: number
-    itemsSkipped: number
-    duration: number
-    frontierStats: any
-  } {
-    return {
-      isActive: this.isActive,
-      isPaused: this.isPaused,
-      itemsFound: this.itemsFound,
-      itemsSkipped: this.itemsSkipped,
-      duration: Date.now() - this.startTime,
-      frontierStats: this.frontier.getStats()
-    }
   }
 }

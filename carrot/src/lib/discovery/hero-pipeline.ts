@@ -1,15 +1,17 @@
 /**
  * Robust hero image pipeline with multiple fallback strategies
- * Order: og:image → twitter:image → oEmbed → inline images → video frames → generated
+ * Order: AI → Wikimedia → minSVG
  */
 
 export interface HeroImageResult {
   url: string
-  source: 'og' | 'twitter' | 'oembed' | 'inline' | 'video' | 'generated'
+  source: 'ai' | 'wikimedia' | 'minsvg'
   width: number
   height: number
   alt?: string
   proxyUrl?: string
+  dominantColor?: string
+  blurHash?: string
 }
 
 export interface ImageCandidate {
@@ -31,327 +33,237 @@ export class HeroImagePipeline {
   }
   
   /**
-   * Get hero image for content with fallback chain
+   * Assign hero image with fallback chain
    */
-  async getHeroImage(
-    url: string,
-    title: string,
-    content?: string,
-    meta?: Record<string, any>
-  ): Promise<HeroImageResult | null> {
+  async assignHero(item: any): Promise<HeroImageResult> {
+    // 1. Try AI generation first
     try {
-      // 1. Try Open Graph image
-      const ogImage = await this.getOpenGraphImage(url, meta)
-      if (ogImage) return ogImage
+      const aiResult = await this.tryAIGeneration(item)
+      if (aiResult) {
+        return aiResult
+      }
+    } catch (error) {
+      console.warn('[Hero Pipeline] AI generation failed:', error)
+    }
+    
+    // 2. Try Wikimedia fallback
+    try {
+      const wikiResult = await this.tryWikimedia(item)
+      if (wikiResult) {
+        return wikiResult
+      }
+    } catch (error) {
+      console.warn('[Hero Pipeline] Wikimedia fallback failed:', error)
+    }
+    
+    // 3. Ultimate fallback - minimal SVG
+    return this.createMinimalSVG(item)
+  }
+  
+  /**
+   * Try AI image generation
+   */
+  private async tryAIGeneration(item: any): Promise<HeroImageResult | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/ai/generate-hero-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: item.title,
+          description: item.content?.summary150 || item.description,
+          topic: item.metadata?.topic || 'basketball',
+          style: 'editorial'
+        })
+      })
       
-      // 2. Try Twitter Card image
-      const twitterImage = await this.getTwitterImage(url, meta)
-      if (twitterImage) return twitterImage
+      if (!response.ok) {
+        throw new Error(`AI generation failed: ${response.status}`)
+      }
       
-      // 3. Try oEmbed thumbnail
-      const oembedImage = await this.getOEmbedImage(url)
-      if (oembedImage) return oembedImage
+      const data = await response.json()
       
-      // 4. Try inline images from content
-      const inlineImage = await this.getInlineImage(url, content)
-      if (inlineImage) return inlineImage
-      
-      // 5. Try video thumbnail
-      const videoImage = await this.getVideoThumbnail(url)
-      if (videoImage) return videoImage
-      
-      // 6. Generate cover image as last resort
-      const generatedImage = await this.generateCoverImage(title, url)
-      if (generatedImage) return generatedImage
+      if (data.success && data.imageUrl) {
+        return {
+          url: data.imageUrl,
+          source: 'ai',
+          width: 1280,
+          height: 720,
+          alt: `AI generated image for ${item.title}`,
+          dominantColor: data.dominantColor,
+          blurHash: data.blurHash
+        }
+      }
       
       return null
     } catch (error) {
-      console.error('[HeroPipeline] Error getting hero image:', error)
+      console.warn('[Hero Pipeline] AI generation error:', error)
       return null
     }
   }
   
   /**
-   * Extract Open Graph image
+   * Try Wikimedia Commons
    */
-  private async getOpenGraphImage(url: string, meta?: Record<string, any>): Promise<HeroImageResult | null> {
+  private async tryWikimedia(item: any): Promise<HeroImageResult | null> {
     try {
-      const ogImage = meta?.ogImage || meta?.['og:image']
-      if (!ogImage) return null
+      // Extract entity from title for Wikimedia search
+      const entity = this.extractEntityForWikimedia(item.title)
+      if (!entity) return null
       
-      const imageUrl = this.resolveUrl(url, ogImage)
-      const dimensions = await this.getImageDimensions(imageUrl)
-      
-      if (dimensions && dimensions.width >= 400 && dimensions.height >= 225) {
-        return {
-          url: imageUrl,
-          source: 'og',
-          width: dimensions.width,
-          height: dimensions.height,
-          proxyUrl: await this.getProxyUrl(imageUrl)
-        }
-      }
-      
-      return null
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Extract Twitter Card image
-   */
-  private async getTwitterImage(url: string, meta?: Record<string, any>): Promise<HeroImageResult | null> {
-    try {
-      const twitterImage = meta?.twitterImage || meta?.['twitter:image']
-      if (!twitterImage) return null
-      
-      const imageUrl = this.resolveUrl(url, twitterImage)
-      const dimensions = await this.getImageDimensions(imageUrl)
-      
-      if (dimensions && dimensions.width >= 400 && dimensions.height >= 225) {
-        return {
-          url: imageUrl,
-          source: 'twitter',
-          width: dimensions.width,
-          height: dimensions.height,
-          proxyUrl: await this.getProxyUrl(imageUrl)
-        }
-      }
-      
-      return null
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Get oEmbed thumbnail
-   */
-  private async getOEmbedImage(url: string): Promise<HeroImageResult | null> {
-    try {
-      // Try common oEmbed endpoints
-      const oembedEndpoints = [
-        `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}`,
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
-        `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`
-      ]
-      
-      for (const endpoint of oembedEndpoints) {
-        try {
-          const response = await fetch(endpoint, { 
-            signal: AbortSignal.timeout(3000) 
-          })
-          if (!response.ok) continue
-          
-          const data = await response.json()
-          const thumbnailUrl = data.thumbnail_url || data.thumbnail
-          
-          if (thumbnailUrl) {
-            const imageUrl = this.resolveUrl(url, thumbnailUrl)
-            const dimensions = await this.getImageDimensions(imageUrl)
-            
-            if (dimensions && dimensions.width >= 400 && dimensions.height >= 225) {
-              return {
-                url: imageUrl,
-                source: 'oembed',
-                width: dimensions.width,
-                height: dimensions.height,
-                proxyUrl: await this.getProxyUrl(imageUrl)
-              }
-            }
-          }
-        } catch {
-          continue
-        }
-      }
-      
-      return null
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Extract inline images from content
-   */
-  private async getInlineImage(url: string, content?: string): Promise<HeroImageResult | null> {
-    if (!content) return null
-    
-    try {
-      // Find all img tags
-      const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
-      const images: ImageCandidate[] = []
-      
-      let match
-      while ((match = imgRegex.exec(content)) !== null) {
-        const imgUrl = this.resolveUrl(url, match[1])
-        
-        // Get dimensions from width/height attributes
-        const widthMatch = match[0].match(/width=["']?(\d+)["']?/i)
-        const heightMatch = match[0].match(/height=["']?(\d+)["']?/i)
-        const altMatch = match[0].match(/alt=["']([^"']*)["']/i)
-        
-        const width = widthMatch ? parseInt(widthMatch[1]) : 0
-        const height = heightMatch ? parseInt(heightMatch[1]) : 0
-        
-        images.push({
-          url: imgUrl,
-          width,
-          height,
-          alt: altMatch?.[1],
-          source: 'inline'
+      const response = await fetch(`${this.baseUrl}/api/media/wikimedia`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          entity,
+          title: item.title
         })
-      }
-      
-      // Sort by size (prefer larger images)
-      images.sort((a, b) => (b.width * b.height) - (a.width * a.height))
-      
-      // Find the best candidate
-      for (const image of images) {
-        if (image.width >= 800 && image.height >= 450) {
-          const dimensions = await this.getImageDimensions(image.url)
-          if (dimensions) {
-            return {
-              url: image.url,
-              source: 'inline',
-              width: dimensions.width,
-              height: dimensions.height,
-              alt: image.alt,
-              proxyUrl: await this.getProxyUrl(image.url)
-            }
-          }
-        }
-      }
-      
-      return null
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Get video thumbnail
-   */
-  private async getVideoThumbnail(url: string): Promise<HeroImageResult | null> {
-    try {
-      // YouTube thumbnail
-      const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
-      if (youtubeMatch) {
-        const videoId = youtubeMatch[1]
-        const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-        
-        const dimensions = await this.getImageDimensions(thumbnailUrl)
-        if (dimensions) {
-          return {
-            url: thumbnailUrl,
-            source: 'video',
-            width: dimensions.width,
-            height: dimensions.height,
-            proxyUrl: await this.getProxyUrl(thumbnailUrl)
-          }
-        }
-      }
-      
-      return null
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Generate cover image as last resort
-   */
-  private async generateCoverImage(title: string, url: string): Promise<HeroImageResult | null> {
-    try {
-      // This would call the AI image generation API
-      // For now, return a placeholder
-      const domain = new URL(url).hostname
-      const placeholderUrl = `https://via.placeholder.com/1280x720/667eea/ffffff?text=${encodeURIComponent(title.substring(0, 50))}`
-      
-      return {
-        url: placeholderUrl,
-        source: 'generated',
-        width: 1280,
-        height: 720,
-        proxyUrl: await this.getProxyUrl(placeholderUrl)
-      }
-    } catch {
-      return null
-    }
-  }
-  
-  /**
-   * Get image dimensions
-   */
-  private async getImageDimensions(url: string): Promise<{width: number, height: number} | null> {
-    try {
-      const response = await fetch(url, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(3000)
       })
       
-      if (!response.ok) return null
-      
-      const contentType = response.headers.get('content-type')
-      if (!contentType?.startsWith('image/')) return null
-      
-      // Try to get dimensions from headers
-      const contentLength = response.headers.get('content-length')
-      if (contentLength && parseInt(contentLength) > 1000000) { // > 1MB
-        return { width: 1920, height: 1080 } // Assume large image
+      if (!response.ok) {
+        throw new Error(`Wikimedia search failed: ${response.status}`)
       }
       
-      // For now, return default dimensions
-      return { width: 800, height: 450 }
-    } catch {
+      const data = await response.json()
+      
+      if (data.success && data.imageUrl) {
+        return {
+          url: data.imageUrl,
+          source: 'wikimedia',
+          width: data.width || 1280,
+          height: data.height || 720,
+          alt: `Wikimedia image for ${item.title}`,
+          dominantColor: data.dominantColor
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.warn('[Hero Pipeline] Wikimedia error:', error)
       return null
     }
   }
   
   /**
-   * Get proxy URL for image
+   * Create minimal SVG fallback
    */
-  private async getProxyUrl(originalUrl: string): Promise<string> {
-    try {
-      const proxyUrl = `${this.baseUrl}/api/media/proxy?url=${encodeURIComponent(originalUrl)}&w=1280&f=webp&q=80`
-      return proxyUrl
-    } catch {
-      return originalUrl
+  private createMinimalSVG(item: any): HeroImageResult {
+    const colors = this.getColorPalette(item)
+    const gradient = `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`
+    
+    const svg = `
+      <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:${colors[0]};stop-opacity:1" />
+            <stop offset="100%" style="stop-color:${colors[1]};stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grad)" />
+        <text x="50%" y="50%" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="48" font-weight="bold">
+          ${this.truncateTitle(item.title, 30)}
+        </text>
+      </svg>
+    `
+    
+    const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+    
+    return {
+      url: dataUrl,
+      source: 'minsvg',
+      width: 1280,
+      height: 720,
+      alt: `Minimal design for ${item.title}`,
+      dominantColor: colors[0]
     }
   }
   
   /**
-   * Resolve relative URLs
+   * Extract entity for Wikimedia search
    */
-  private resolveUrl(baseUrl: string, relativeUrl: string): string {
+  private extractEntityForWikimedia(title: string): string | null {
+    // Simple entity extraction - could be enhanced with NER
+    const basketballTerms = ['basketball', 'NBA', 'team', 'player', 'coach']
+    const words = title.toLowerCase().split(/\s+/)
+    
+    for (const word of words) {
+      if (basketballTerms.includes(word)) {
+        // Find the team or player name
+        const teamIndex = words.indexOf(word)
+        if (teamIndex > 0) {
+          return words[teamIndex - 1]
+        }
+      }
+    }
+    
+    return null
+  }
+  
+  /**
+   * Get color palette for item
+   */
+  private getColorPalette(item: any): string[] {
+    // Default basketball colors
+    const palettes = [
+      ['#1e3a8a', '#3b82f6'], // Blue
+      ['#dc2626', '#ef4444'], // Red
+      ['#059669', '#10b981'], // Green
+      ['#7c3aed', '#a855f7'], // Purple
+      ['#ea580c', '#f97316']  // Orange
+    ]
+    
+    // Use item hash to pick consistent colors
+    const hash = this.simpleHash(item.id || item.title)
+    return palettes[hash % palettes.length]
+  }
+  
+  /**
+   * Simple hash function
+   */
+  private simpleHash(str: string): number {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32-bit integer
+    }
+    return Math.abs(hash)
+  }
+  
+  /**
+   * Truncate title for display
+   */
+  private truncateTitle(title: string, maxLength: number): string {
+    if (title.length <= maxLength) return title
+    return title.substring(0, maxLength - 3) + '...'
+  }
+  
+  /**
+   * Save hero image to database
+   */
+  async saveHero(itemId: string, heroUrl: string, source: string): Promise<void> {
     try {
-      return new URL(relativeUrl, baseUrl).toString()
-    } catch {
-      return relativeUrl
+      const response = await fetch(`${this.baseUrl}/api/internal/update-hero-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          itemId,
+          heroUrl,
+          source
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to save hero image: ${response.status}`)
+      }
+    } catch (error) {
+      console.error('[Hero Pipeline] Failed to save hero image:', error)
+      throw error
     }
   }
-}
-
-/**
- * Choose best hero image from candidates
- */
-export function chooseBestHero(candidates: ImageCandidate[]): ImageCandidate | null {
-  if (candidates.length === 0) return null
-  
-  // Sort by score (size + aspect ratio)
-  const scored = candidates.map(candidate => {
-    const area = candidate.width * candidate.height
-    const aspectRatio = candidate.width / candidate.height
-    const aspectScore = Math.abs(aspectRatio - 16/9) < 0.5 ? 1 : 0.5 // Prefer 16:9
-    const sizeScore = Math.min(area / (1920 * 1080), 1) // Normalize to 1080p
-    
-    return {
-      ...candidate,
-      score: sizeScore * aspectScore
-    }
-  })
-  
-  scored.sort((a, b) => b.score - a.score)
-  return scored[0]
 }

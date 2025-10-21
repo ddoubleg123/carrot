@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { DiscoveryState } from '@/lib/discovery/streaming'
+import { discoveryStateManager } from '@/lib/discovery/streaming'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +21,7 @@ export async function POST(
     const { handle } = await params
 
     // Pause discovery state
-    DiscoveryState.pause(handle)
+    discoveryStateManager.updateState({ isPaused: true })
 
     return NextResponse.json({
       success: true,

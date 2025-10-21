@@ -1,293 +1,201 @@
 /**
- * Search frontier with priority scoring for discovery
- * Manages multiple sources with cursors and priority-based selection
+ * Smart Search Frontier with Novelty & Diversity Scoring
+ * Prioritizes novel sources and diverse domains
  */
 
-export interface FrontierItem {
-  id: string
+export interface SearchCandidate {
   source: string
   method: string
   cursor: string
   priority: number
-  lastUsed: Date
-  backoffUntil?: Date
+  lastSeen: Date
   duplicateRate: number
-  successRate: number
+  domain: string
 }
 
-export interface SearchResult {
-  urls: string[]
-  nextCursor: string
-  hasMore: boolean
-  metadata?: Record<string, any>
+export interface FrontierConfig {
+  maxCandidates: number
+  noveltyWeight: number
+  diversityWeight: number
+  penaltyWeight: number
+  backoffMultiplier: number
 }
 
-export interface SearchProvider {
-  name: string
-  fetch(cursor: string, limit: number): Promise<SearchResult>
-  canBackoff(item: FrontierItem): boolean
-  getBackoffDuration(item: FrontierItem): number
-}
-
-/**
- * Priority-based search frontier
- */
 export class SearchFrontier {
-  private items: Map<string, FrontierItem> = new Map()
-  private providers: Map<string, SearchProvider> = new Map()
-  private groupId: string
+  private candidates: SearchCandidate[] = []
+  private seenDomains = new Set<string>()
+  private domainCounts = new Map<string, number>()
+  private config: FrontierConfig
   
-  constructor(groupId: string) {
-    this.groupId = groupId
+  constructor(config: Partial<FrontierConfig> = {}) {
+    this.config = {
+      maxCandidates: 50,
+      noveltyWeight: 0.6,
+      diversityWeight: 0.3,
+      penaltyWeight: 0.1,
+      backoffMultiplier: 1.5,
+      ...config
+    }
   }
   
   /**
-   * Register a search provider
+   * Add a new search candidate to the frontier
    */
-  registerProvider(provider: SearchProvider): void {
-    this.providers.set(provider.name, provider)
-  }
-  
-  /**
-   * Add or update a frontier item
-   */
-  addItem(item: Omit<FrontierItem, 'id' | 'lastUsed'>): string {
-    const id = `${item.source}:${item.method}:${item.cursor}`
-    
-    this.items.set(id, {
-      ...item,
-      id,
-      lastUsed: new Date()
-    })
-    
-    return id
-  }
-  
-  /**
-   * Get the highest priority item that's not in backoff
-   */
-  getNextItem(): FrontierItem | null {
-    const now = new Date()
-    const availableItems = Array.from(this.items.values())
-      .filter(item => {
-        // Skip if in backoff
-        if (item.backoffUntil && item.backoffUntil > now) {
-          return false
-        }
-        
-        // Skip if provider can't be used
-        const provider = this.providers.get(item.source)
-        if (!provider || provider.canBackoff(item)) {
-          return false
-        }
-        
-        return true
-      })
-      .sort((a, b) => b.priority - a.priority)
-    
-    return availableItems[0] || null
-  }
-  
-  /**
-   * Update item after successful fetch
-   */
-  updateItemSuccess(id: string, newCursor: string, urlsFound: number): void {
-    const item = this.items.get(id)
-    if (!item) return
-    
-    // Update cursor
-    item.cursor = newCursor
-    item.lastUsed = new Date()
-    
-    // Update success rate (exponential moving average)
-    const alpha = 0.1
-    item.successRate = alpha * (urlsFound > 0 ? 1 : 0) + (1 - alpha) * item.successRate
-    
-    // Recalculate priority
-    item.priority = this.calculatePriority(item)
-    
-    this.items.set(id, item)
-  }
-  
-  /**
-   * Update item after failure (backoff)
-   */
-  updateItemFailure(id: string, reason: 'duplicate' | 'low_relevance' | 'error'): void {
-    const item = this.items.get(id)
-    if (!item) return
-    
-    // Update duplicate rate
-    if (reason === 'duplicate') {
-      const alpha = 0.1
-      item.duplicateRate = alpha * 1 + (1 - alpha) * item.duplicateRate
+  addCandidate(candidate: Omit<SearchCandidate, 'priority'>): void {
+    const priority = this.calculatePriority(candidate)
+    const fullCandidate: SearchCandidate = {
+      ...candidate,
+      priority,
+      lastSeen: new Date()
     }
     
-    // Apply backoff
-    const provider = this.providers.get(item.source)
-    if (provider) {
-      const backoffDuration = provider.getBackoffDuration(item)
-      item.backoffUntil = new Date(Date.now() + backoffDuration)
+    this.candidates.push(fullCandidate)
+    this.seenDomains.add(candidate.domain)
+    this.domainCounts.set(candidate.domain, (this.domainCounts.get(candidate.domain) || 0) + 1)
+    
+    // Keep only top candidates
+    this.candidates.sort((a, b) => b.priority - a.priority)
+    if (this.candidates.length > this.config.maxCandidates) {
+      this.candidates = this.candidates.slice(0, this.config.maxCandidates)
     }
-    
-    // Recalculate priority
-    item.priority = this.calculatePriority(item)
-    
-    this.items.set(id, item)
   }
   
   /**
-   * Calculate priority score for an item
+   * Get the highest priority candidate
    */
-  private calculatePriority(item: FrontierItem): number {
-    const now = new Date()
-    const recencyDays = (now.getTime() - item.lastUsed.getTime()) / (1000 * 60 * 60 * 24)
+  popMax(): SearchCandidate | null {
+    if (this.candidates.length === 0) return null
     
-    // Novelty factor (higher for older items)
-    const novelty = 1 / (1 + recencyDays)
+    const candidate = this.candidates.shift()!
+    return candidate
+  }
+  
+  /**
+   * Reinsert a candidate with updated priority (after processing)
+   */
+  reinsert(candidate: SearchCandidate, advanceCursor: boolean = true): void {
+    if (advanceCursor) {
+      // Advance cursor to next page/position
+      candidate.cursor = this.advanceCursor(candidate.cursor, candidate.method)
+    } else {
+      // Apply backoff penalty
+      candidate.duplicateRate = Math.min(candidate.duplicateRate * this.config.backoffMultiplier, 0.9)
+    }
     
-    // Domain diversity (bonus for sources not used recently)
-    const domainDiversity = item.duplicateRate < 0.5 ? 1 : 0.5
+    candidate.priority = this.calculatePriority(candidate)
+    candidate.lastSeen = new Date()
     
-    // Penalty for high duplicate rate
-    const penalty = item.duplicateRate * 0.5
+    this.candidates.push(candidate)
+    this.candidates.sort((a, b) => b.priority - a.priority)
+  }
+  
+  /**
+   * Calculate priority score for a candidate
+   */
+  private calculatePriority(candidate: SearchCandidate): number {
+    const novelty = this.calculateNovelty(candidate)
+    const diversity = this.calculateDiversity(candidate.domain)
+    const penalty = candidate.duplicateRate
     
-    // Base priority calculation
-    return (0.6 * novelty) + (0.3 * domainDiversity) - (0.1 * penalty)
+    return (
+      this.config.noveltyWeight * novelty +
+      this.config.diversityWeight * diversity -
+      this.config.penaltyWeight * penalty
+    )
+  }
+  
+  /**
+   * Calculate novelty score (higher for newer sources)
+   */
+  private calculateNovelty(candidate: SearchCandidate): number {
+    const daysSinceLastSeen = (Date.now() - candidate.lastSeen.getTime()) / (1000 * 60 * 60 * 24)
+    return 1 / (1 + daysSinceLastSeen)
+  }
+  
+  /**
+   * Calculate diversity score (higher for unseen domains)
+   */
+  private calculateDiversity(domain: string): number {
+    const count = this.domainCounts.get(domain) || 0
+    return 1 / (1 + count)
+  }
+  
+  /**
+   * Advance cursor based on method type
+   */
+  private advanceCursor(currentCursor: string, method: string): string {
+    switch (method) {
+      case 'rss':
+        // For RSS, advance to next page
+        const rssMatch = currentCursor.match(/page=(\d+)/)
+        if (rssMatch) {
+          const page = parseInt(rssMatch[1]) + 1
+          return currentCursor.replace(/page=\d+/, `page=${page}`)
+        }
+        return `${currentCursor}&page=2`
+        
+      case 'api':
+        // For API, advance offset
+        const apiMatch = currentCursor.match(/offset=(\d+)/)
+        if (apiMatch) {
+          const offset = parseInt(apiMatch[1]) + 20
+          return currentCursor.replace(/offset=\d+/, `offset=${offset}`)
+        }
+        return `${currentCursor}&offset=20`
+        
+      case 'search':
+        // For search, advance page
+        const searchMatch = currentCursor.match(/start=(\d+)/)
+        if (searchMatch) {
+          const start = parseInt(searchMatch[1]) + 10
+          return currentCursor.replace(/start=\d+/, `start=${start}`)
+        }
+        return `${currentCursor}&start=10`
+        
+      default:
+        return currentCursor
+    }
   }
   
   /**
    * Get frontier statistics
    */
   getStats(): {
-    totalItems: number
-    availableItems: number
-    backoffItems: number
+    totalCandidates: number
+    uniqueDomains: number
     averagePriority: number
-    topSources: Array<{source: string, count: number, avgPriority: number}>
+    topDomains: Array<{ domain: string; count: number }>
   } {
-    const items = Array.from(this.items.values())
-    const now = new Date()
+    const totalCandidates = this.candidates.length
+    const uniqueDomains = this.seenDomains.size
+    const averagePriority = this.candidates.reduce((sum, c) => sum + c.priority, 0) / totalCandidates
     
-    const availableItems = items.filter(item => 
-      !item.backoffUntil || item.backoffUntil <= now
-    ).length
-    
-    const backoffItems = items.filter(item => 
-      item.backoffUntil && item.backoffUntil > now
-    ).length
-    
-    const averagePriority = items.length > 0 
-      ? items.reduce((sum, item) => sum + item.priority, 0) / items.length 
-      : 0
-    
-    // Group by source
-    const sourceStats = new Map<string, {count: number, totalPriority: number}>()
-    for (const item of items) {
-      const existing = sourceStats.get(item.source) || {count: 0, totalPriority: 0}
-      sourceStats.set(item.source, {
-        count: existing.count + 1,
-        totalPriority: existing.totalPriority + item.priority
-      })
-    }
-    
-    const topSources = Array.from(sourceStats.entries())
-      .map(([source, stats]) => ({
-        source,
-        count: stats.count,
-        avgPriority: stats.totalPriority / stats.count
-      }))
-      .sort((a, b) => b.avgPriority - a.avgPriority)
+    const topDomains = Array.from(this.domainCounts.entries())
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
+      .map(([domain, count]) => ({ domain, count }))
     
     return {
-      totalItems: items.length,
-      availableItems,
-      backoffItems,
+      totalCandidates,
+      uniqueDomains,
       averagePriority,
-      topSources
+      topDomains
     }
   }
   
   /**
-   * Clear all items (useful for testing)
+   * Clear the frontier
    */
   clear(): void {
-    this.items.clear()
+    this.candidates = []
+    this.seenDomains.clear()
+    this.domainCounts.clear()
   }
   
   /**
-   * Get all items (for debugging)
+   * Get all candidates (for debugging)
    */
-  getAllItems(): FrontierItem[] {
-    return Array.from(this.items.values())
-  }
-}
-
-/**
- * RSS/API Provider implementation
- */
-export class RSSProvider implements SearchProvider {
-  name: string
-  private baseUrl: string
-  private lastGuid?: string
-  
-  constructor(name: string, baseUrl: string) {
-    this.name = name
-    this.baseUrl = baseUrl
-  }
-  
-  async fetch(cursor: string, limit: number): Promise<SearchResult> {
-    // Implementation would fetch from RSS feed
-    // For now, return mock data
-    return {
-      urls: [],
-      nextCursor: cursor,
-      hasMore: false
-    }
-  }
-  
-  canBackoff(item: FrontierItem): boolean {
-    return item.duplicateRate > 0.8
-  }
-  
-  getBackoffDuration(item: FrontierItem): number {
-    // Exponential backoff: 1min, 5min, 15min, 1hr
-    const backoffLevel = Math.min(item.duplicateRate * 4, 4)
-    const durations = [60000, 300000, 900000, 3600000] // 1min, 5min, 15min, 1hr
-    return durations[Math.floor(backoffLevel)] || 3600000
-  }
-}
-
-/**
- * Web Search Provider implementation
- */
-export class WebSearchProvider implements SearchProvider {
-  name: string
-  private apiKey: string
-  private searchEngine: string
-  
-  constructor(name: string, apiKey: string, searchEngine: string = 'google') {
-    this.name = name
-    this.apiKey = apiKey
-    this.searchEngine = searchEngine
-  }
-  
-  async fetch(cursor: string, limit: number): Promise<SearchResult> {
-    // Implementation would use search API
-    // For now, return mock data
-    return {
-      urls: [],
-      nextCursor: cursor,
-      hasMore: false
-    }
-  }
-  
-  canBackoff(item: FrontierItem): boolean {
-    return item.duplicateRate > 0.7
-  }
-  
-  getBackoffDuration(item: FrontierItem): number {
-    // Linear backoff for search APIs
-    return Math.min(item.duplicateRate * 300000, 1800000) // Max 30min
+  getAllCandidates(): SearchCandidate[] {
+    return [...this.candidates]
   }
 }
