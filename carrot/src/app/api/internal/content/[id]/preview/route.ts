@@ -66,23 +66,32 @@ export async function GET(
     const enrichedContent = content.enrichedContent as any || {}
     
     // Build preview data
+    const sourceDomain = metadata.sourceDomain || new URL(content.sourceUrl || 'https://unknown.com').hostname.replace('www.', '')
+    
     const preview: ContentPreview = {
+      id: content.id,
       title: content.title,
-      meta: {
-        domain: metadata.sourceDomain || 'unknown',
-        favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`,
-        author: metadata.author,
-        publishDate: metadata.publishDate,
-        readTime: enrichedContent.readingTimeMin || Math.ceil((content.content || '').length / 1000),
-        canonicalUrl: content.sourceUrl || '',
-        verified: true // Will be updated after verification
-      },
-      hero: mediaAssets.heroImage?.url || mediaAssets.hero,
       summary: enrichedContent.summary150 || (content.content || '').substring(0, 150),
       keyPoints: enrichedContent.keyPoints || [],
       excerptHtml: '',
       entities: metadata.entities || [],
-      timeline: metadata.timeline || []
+      timeline: metadata.timeline || [],
+      media: {
+        hero: mediaAssets.heroImage?.url || mediaAssets.hero,
+        dominant: mediaAssets.dominantColor
+      },
+      source: {
+        url: content.sourceUrl || '',
+        domain: sourceDomain,
+        favicon: `https://www.google.com/s2/favicons?domain=${sourceDomain}&sz=16`,
+        title: content.title,
+        verified: true // Will be updated after verification
+      },
+      meta: {
+        author: metadata.author,
+        publishDate: metadata.publishDate,
+        readingTime: enrichedContent.readingTimeMin || Math.ceil((content.content || '').length / 1000)
+      }
     }
     
     // If we don't have enriched content, try to extract it
@@ -135,7 +144,7 @@ export async function GET(
                 ...enrichedContent,
                 summary150: preview.summary,
                 keyPoints: preview.keyPoints,
-                readingTimeMin: preview.meta.readTime
+                readingTimeMin: preview.meta.readingTime
               },
               metadata: {
                 ...metadata,
@@ -247,10 +256,10 @@ export async function GET(
 
     // Verify link status
     try {
-      const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(preview.meta.canonicalUrl)}`)
+      const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(preview.source.url)}`)
       if (verifyResponse.ok) {
         const verifyData = await verifyResponse.json()
-        preview.meta.verified = verifyData.ok
+        preview.source.verified = verifyData.ok
       }
     } catch (error) {
       console.warn(`[ContentPreview] Link verification failed for ${id}:`, error)

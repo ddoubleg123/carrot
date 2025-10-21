@@ -20,7 +20,9 @@ export interface ContentPreview {
   source: {
     url: string
     domain: string
+    favicon?: string
     title?: string
+    verified?: boolean
   }
   meta: {
     author?: string

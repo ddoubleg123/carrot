@@ -197,15 +197,17 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
               {/* Meta Row */}
               <div className="flex items-center gap-4 text-sm text-slate-600 mb-4">
                 <div className="flex items-center gap-2">
-                  <img 
-                    src={preview.meta.favicon} 
-                    alt="" 
-                    className="w-4 h-4"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                  <span>{preview.meta.domain}</span>
+                  {preview.source.favicon && (
+                    <img 
+                      src={preview.source.favicon} 
+                      alt="" 
+                      className="w-4 h-4"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  )}
+                  <span>{preview.source.domain}</span>
                 </div>
                 
                 {preview.meta.author && (
@@ -225,12 +227,12 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
                   </>
                 )}
                 
-                {preview.meta.readTime && (
+                {preview.meta.readingTime && (
                   <>
                     <span>·</span>
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      <span>{preview.meta.readTime} min read</span>
+                      <span>{preview.meta.readingTime} min read</span>
                     </div>
                   </>
                 )}
