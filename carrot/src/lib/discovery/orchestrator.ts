@@ -272,7 +272,7 @@ export class DiscoveryOrchestrator {
       const title = titleMatch ? titleMatch[1] : 'Untitled'
       
       // Extract main content (simplified)
-      const contentMatch = html.match(/<main[^>]*>(.*?)<\/main>/is)
+      const contentMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
       const text = contentMatch ? this.stripHtml(contentMatch[1]) : ''
       
       return {
