@@ -19,6 +19,7 @@ interface ContentPreview {
   hero?: string
   summary: string
   keyPoints: string[]
+  context?: string
   excerptHtml?: string
   entities?: string[]
   timeline?: Array<{date: string, fact: string}>
