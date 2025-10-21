@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import ContentModal from '../[id]/ContentModal'
+import ContentModal from '@/components/content/ContentModal'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface ContentPageClientProps {
@@ -38,12 +38,10 @@ export default function ContentPageClient({ item }: ContentPageClientProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <ContentModal 
-        item={item}
-        isOpen={true}
-        onClose={handleClose}
-      />
-    </div>
+    <ContentModal 
+      contentId={item.id}
+      isOpen={true}
+      onClose={handleClose}
+    />
   )
 }

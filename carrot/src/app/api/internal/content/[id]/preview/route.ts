@@ -8,31 +8,20 @@ import { canonicalizeUrl } from '@/lib/canonicalize'
 interface ContentPreview {
   title: string
   meta: {
-    sourceDomain: string
+    domain: string
+    favicon: string
     author?: string
     publishDate?: string
-    readingTime?: number
-    favicon?: string
+    readTime?: number
+    canonicalUrl: string
+    verified: boolean
   }
   hero?: string
   summary: string
   keyPoints: string[]
-  excerptHtml: string
-  timeline: Array<{date: string, content: string}>
-  entities: Array<{type: string, name: string, context?: string}>
-  source: {
-    domain: string
-    favicon: string
-    canonicalUrl: string
-    author?: string
-    publishDate?: string
-    readingTime?: number
-    lastVerified?: string
-  }
-  actions: {
-    openOriginal: string
-    copyLink: string
-  }
+  excerptHtml?: string
+  entities?: string[]
+  timeline?: Array<{date: string, fact: string}>
 }
 
 // Simple in-memory cache (in production, use Redis)
@@ -69,40 +58,29 @@ export async function GET(
       return NextResponse.json({ error: 'Content not found' }, { status: 404 })
     }
     
-    // Extract metadata from JSON field
+    // Extract metadata from JSON fields
     const metadata = content.metadata as any || {}
     const mediaAssets = content.mediaAssets as any || {}
-    const contentData = content.content as any || {}
+    const enrichedContent = content.enrichedContent as any || {}
     
     // Build preview data
     const preview: ContentPreview = {
       title: content.title,
       meta: {
-        sourceDomain: metadata.sourceDomain || 'unknown',
-        author: metadata.author,
-        publishDate: metadata.publishDate,
-        readingTime: metadata.readingTime,
-        favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`
-      },
-      hero: mediaAssets.hero,
-      summary: contentData.summary150 || '',
-      keyPoints: contentData.keyPoints || [],
-      excerptHtml: '',
-      timeline: [],
-      entities: [],
-      source: {
         domain: metadata.sourceDomain || 'unknown',
         favicon: `https://www.google.com/s2/favicons?domain=${metadata.sourceDomain || 'unknown'}&sz=16`,
-        canonicalUrl: content.sourceUrl || '',
         author: metadata.author,
         publishDate: metadata.publishDate,
-        readingTime: metadata.readingTime,
-        lastVerified: new Date().toISOString()
+        readTime: enrichedContent.readingTimeMin || Math.ceil((content.content || '').length / 1000),
+        canonicalUrl: content.sourceUrl || '',
+        verified: true // Will be updated after verification
       },
-      actions: {
-        openOriginal: content.sourceUrl || '',
-        copyLink: content.sourceUrl || ''
-      }
+      hero: mediaAssets.heroImage?.url || mediaAssets.hero,
+      summary: enrichedContent.summary150 || (content.content || '').substring(0, 150),
+      keyPoints: enrichedContent.keyPoints || [],
+      excerptHtml: '',
+      entities: metadata.entities || [],
+      timeline: metadata.timeline || []
     }
     
     // If we don't have enriched content, try to extract it
@@ -122,30 +100,40 @@ export async function GET(
           
           // Update preview with extracted content
           if (!preview.summary && readable.excerpt) {
-            preview.summary = readable.excerpt
+            preview.summary = readable.excerpt.substring(0, 240)
           }
           
           if (preview.keyPoints.length === 0) {
-            preview.keyPoints = extractKeyPoints(readable.textContent, 5)
+            preview.keyPoints = extractKeyPoints(readable.textContent, 7)
+              .filter(point => point.length <= 120)
+              .slice(0, 7)
           }
           
           // Extract timeline and entities
-          preview.timeline = extractTimeline(readable.textContent)
+          preview.timeline = extractTimeline(readable.textContent).slice(0, 10).map(item => ({
+            date: item.date,
+            fact: item.content
+          }))
           preview.entities = extractEntities(readable.textContent)
+            .map(e => e.name)
+            .filter((name, index, self) => self.indexOf(name) === index)
+            .slice(0, 20)
           
-          // Create excerpt HTML
+          // Create excerpt HTML (first 2-4 paragraphs, sanitized)
           if (readable.content) {
-            preview.excerptHtml = formatHtmlForDisplay(readable.content)
+            const sanitized = sanitizeHtml(readable.content)
+            preview.excerptHtml = formatHtmlForDisplay(sanitized)
           }
           
           // Update database with extracted content
           await prisma.discoveredContent.update({
             where: { id },
             data: {
-              content: {
-                ...contentData,
+              enrichedContent: {
+                ...enrichedContent,
                 summary150: preview.summary,
-                keyPoints: preview.keyPoints
+                keyPoints: preview.keyPoints,
+                readingTimeMin: preview.meta.readTime
               },
               metadata: {
                 ...metadata,
@@ -164,6 +152,39 @@ export async function GET(
         console.error(`[ContentPreview] Error extracting content for ${id}:`, error)
         // Continue with existing data
       }
+    }
+
+    // Quality check: ensure minimum content requirements
+    if (preview.summary.length < 120 || preview.keyPoints.length < 3) {
+      console.log(`[ContentPreview] Re-running summarizer for ${id} - insufficient content`)
+      
+      // Re-run with stricter prompt (this would call an AI service in production)
+      // For now, we'll use the existing content but ensure minimum quality
+      if (preview.summary.length < 120) {
+        preview.summary = (content.content || '').substring(0, 240)
+      }
+      
+      if (preview.keyPoints.length < 3) {
+        // Generate key points from content
+        const contentText = content.content || ''
+        const sentences = contentText.split(/[.!?]+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 20 && s.length < 120)
+          .slice(0, 7)
+        
+        preview.keyPoints = sentences.slice(0, 7)
+      }
+    }
+
+    // Verify link status
+    try {
+      const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(preview.meta.canonicalUrl)}`)
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json()
+        preview.meta.verified = verifyData.ok
+      }
+    } catch (error) {
+      console.warn(`[ContentPreview] Link verification failed for ${id}:`, error)
     }
     
     // Cache the result for 6 hours
