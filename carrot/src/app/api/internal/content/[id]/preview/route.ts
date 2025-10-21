@@ -186,7 +186,11 @@ export async function GET(
           preview.summary = enrichmentResult.data.summary
           preview.keyPoints = enrichmentResult.data.keyFacts.map(f => f.text)
           preview.context = enrichmentResult.data.context
-          preview.entities = enrichmentResult.data.entities
+          // Transform string entities to object format
+          preview.entities = enrichmentResult.data.entities.map(name => ({
+            name,
+            type: 'unknown' // DeepSeek doesn't provide type classification
+          }))
           
           // Update database with AI-enriched content
           await prisma.discoveredContent.update({
