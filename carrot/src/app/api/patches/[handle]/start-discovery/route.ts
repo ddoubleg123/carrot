@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { canonicalize } from '@/lib/discovery/canonicalization';
 import { BatchedLogger } from '@/lib/discovery/logger';
+import { MultiSourceOrchestrator } from '@/lib/discovery/multiSourceOrchestrator';
 
 export const runtime = 'nodejs';
 
@@ -96,19 +97,14 @@ export async function POST(
       }, { status: 500 });
     }
 
-    // Start DeepSeek-powered content discovery
-    console.log('[Start Discovery] Starting DeepSeek search for patch:', {
+    // Start Multi-Source Discovery (Wikipedia + NewsAPI + Citations)
+    console.log('[Start Discovery] Starting multi-source discovery for patch:', {
       patchId: patch.id,
       handle,
       name: patch.name,
       tags: patch.tags,
       description: patch.description
     });
-
-    // For streaming mode, we'll loop and call DeepSeek ONE item at a time
-    // For non-streaming, keep the batch approach for backward compatibility
-    const batchSize = isStreaming ? 1 : 10;
-    const maxIterations = isStreaming ? 10 : 1;
     
     // 🚀 OPTIMIZATION: Build URL cache of ALL processed URLs (approved + denied)
     // This prevents re-processing the same URLs through DeepSeek
@@ -136,117 +132,46 @@ export async function POST(
       cacheSize: urlCache.size
     });
     
-    // Build avoidance context for DeepSeek (recent titles only, not all URLs)
-    const recentTitles = processedUrls
-      .filter(p => p.status === 'ready')
-      .slice(0, 20);
+    // Execute Multi-Source Discovery
+    console.log('[Start Discovery] Initializing Multi-Source Orchestrator...')
+    const orchestrator = new MultiSourceOrchestrator()
     
-    const avoidanceContext = recentTitles.length > 0 
-      ? `\n\nAVOID these topics (already covered):\n${recentTitles.map(t => `- ${t.title}`).join('\n')}`
-      : '';
-    
-    // Call DeepSeek API to search for relevant content
-    const deepSeekResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: isStreaming 
-              ? `You are a research assistant specializing in finding HIGH-QUALITY, authoritative content.
-
-                CRITICAL REQUIREMENTS:
-                - Only return sources from these domains: nba.com, espn.com, bleacherreport.com, theathletic.com, si.com, nytimes.com, washingtonpost.com, cnn.com, bbc.com, reuters.com, ap.org, npr.org, pbs.org, wikipedia.org
-                - URLs must be direct article links, NOT collection pages, category pages, or generic content
-                - Content must be substantive (full articles, not headlines or snippets)
-                - Prefer recent content (last 30 days) but quality over recency
-                - Verify the URL actually contains the article content described
-
-                Return ONLY ONE result as a JSON object (not an array):
-                {
-                  "title": "Specific, descriptive article title",
-                  "url": "https://authoritative-domain.com/specific-article-path",
-                  "type": "article|video|news",
-                  "description": "2-3 sentence summary of the actual content",
-                  "relevance_score": 0.95
-                }
-                
-                Only return if relevance_score > 0.8 and you're confident the URL contains the described content.`
-              : `You are a research assistant that finds high-quality, relevant content about specific topics.
-
-                CRITICAL REQUIREMENTS:
-                - Only return sources from these domains: nba.com, espn.com, bleacherreport.com, theathletic.com, si.com, nytimes.com, washingtonpost.com, cnn.com, bbc.com, reuters.com, ap.org, npr.org, pbs.org, wikipedia.org
-                - URLs must be direct article links, NOT collection pages, category pages, or generic content
-                - Content must be substantive (full articles, not headlines or snippets)
-                - Prefer recent content (last 30 days) but quality over recency
-                - Verify the URL actually contains the article content described
-
-                Return your findings as a JSON array of objects with relevance_score > 0.7.
-                Each result must have a direct article URL that contains the described content.`
-          },
-          {
-            role: 'user',
-            content: isStreaming
-              ? `Find the SINGLE BEST piece of recent content about: "${patch.name}"
-                
-                Description: ${patch.description || 'No description'}
-                Tags: ${patch.tags.join(', ')}${avoidanceContext}
-                
-                Return ONE result as JSON object (not array).`
-              : `Find high-quality content about: "${patch.name}"
-                
-                Description: ${patch.description || 'No description provided'}
-                Tags: ${patch.tags.join(', ')}
-                
-                Please search for and return relevant, authoritative content.`
-          }
-        ],
-        temperature: isStreaming ? 0.7 : 0.3,
-        max_tokens: isStreaming ? 500 : 4000
+    let discoveryResult
+    try {
+      discoveryResult = await orchestrator.discover(
+        patch.name,
+        patch.description || '',
+        patch.tags
+      )
+      
+      console.log('[Start Discovery] ✅ Multi-source discovery complete:', {
+        totalSources: discoveryResult.sources.length,
+        wikipediaPages: discoveryResult.stats.wikipediaPages,
+        wikipediaCitations: discoveryResult.stats.wikipediaCitations,
+        newsArticles: discoveryResult.stats.newsArticles,
+        duplicatesRemoved: discoveryResult.stats.duplicatesRemoved,
+        strategy: discoveryResult.strategy.searchDepth
       })
-    });
-
-    if (!deepSeekResponse.ok) {
-      console.error('[Start Discovery] DeepSeek API error:', {
-        status: deepSeekResponse.status,
-        statusText: deepSeekResponse.statusText,
-        patchId: patch.id,
-        handle,
-        userId: session.user.id,
-        timestamp: new Date().toISOString()
-      });
+    } catch (error: any) {
+      console.error('[Start Discovery] Multi-source orchestrator error:', error)
       return NextResponse.json({ 
-        error: 'Failed to search for content',
-        code: 'DEEPSEEK_API_ERROR',
-        status: deepSeekResponse.status,
+        error: 'Failed to discover content',
+        code: 'ORCHESTRATOR_ERROR',
+        message: error.message,
         patchId: patch.id
       }, { status: 500 });
     }
-
-    const deepSeekData = await deepSeekResponse.json();
-    const content = deepSeekData.choices?.[0]?.message?.content;
-
-    if (!content) {
-      console.error('[Start Discovery] No content returned from DeepSeek');
-      return NextResponse.json({ error: 'No content found' }, { status: 500 });
-    }
-
-    // Parse the JSON response from DeepSeek
-    let discoveredItems;
-    try {
-      // Extract JSON from the response (it might be wrapped in markdown)
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      const jsonString = jsonMatch ? jsonMatch[0] : content;
-      discoveredItems = JSON.parse(jsonString);
-    } catch (parseError) {
-      console.error('[Start Discovery] Failed to parse DeepSeek response:', parseError);
-      return NextResponse.json({ error: 'Failed to parse search results' }, { status: 500 });
-    }
+    
+    // Convert DiscoveredSource format to legacy discoveredItems format for compatibility
+    const discoveredItems = discoveryResult.sources.map(source => ({
+      title: source.title,
+      url: source.url,
+      type: source.type === 'wikipedia' ? 'article' : source.type,
+      description: source.description,
+      relevance_score: source.relevanceScore / 100, // Convert to 0-1 scale
+      source: source.source,
+      metadata: source.metadata
+    }))
 
     // If streaming, create SSE stream
     if (isStreaming) {
