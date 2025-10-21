@@ -100,7 +100,7 @@ export class DiscoveryEventStream {
   /**
    * Send hero ready event
    */
-  heroReady(heroUrl: string, source: 'og' | 'twitter' | 'generated'): void {
+  heroReady(heroUrl: string, source: 'og' | 'twitter' | 'oembed' | 'inline' | 'video' | 'generated'): void {
     this.sendEvent('hero_ready', { heroUrl, source })
   }
   
