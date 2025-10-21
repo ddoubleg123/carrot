@@ -31,77 +31,56 @@ export async function GET(
       return res;
     }
 
-    // 🚀 OPTIMIZATION: Single query with UNION to get all content at once
-    // This reduces database round trips from 2 to 1
+    // Query only DiscoveredContent table (Source table doesn't exist)
     const t3 = Date.now();
-    const allContent = await prisma.$queryRaw`
-      SELECT 
-        'discovered' as source_type,
-        id,
-        title,
-        "sourceUrl" as url,
-        "canonicalUrl",
-        type,
-        content as description,
-        "relevanceScore",
-        status,
-        "createdAt",
-        "enrichedContent",
-        "mediaAssets",
-        metadata,
-        "qualityScore",
-        "freshnessScore",
-        "diversityBucket"
-      FROM "DiscoveredContent" 
-      WHERE "patchId" = ${patch.id} AND status = 'ready'
-      
-      UNION ALL
-      
-      SELECT 
-        'source' as source_type,
-        id,
-        title,
-        url,
-        url as "canonicalUrl",
-        COALESCE(("citeMeta"->>'type')::text, 'article') as type,
-        COALESCE(("citeMeta"->>'description')::text, '') as description,
-        COALESCE(("citeMeta"->>'relevanceScore')::float, 0.8) as "relevanceScore",
-        COALESCE(("citeMeta"->>'status')::text, 'pending_audit') as status,
-        "createdAt",
-        NULL as "enrichedContent",
-        "citeMeta"->'mediaAssets' as "mediaAssets",
-        NULL as metadata,
-        NULL as "qualityScore",
-        NULL as "freshnessScore",
-        NULL as "diversityBucket"
-      FROM "Source" 
-      WHERE "patchId" = ${patch.id}
-      
-      ORDER BY "createdAt" DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+    const allContent = await prisma.discoveredContent.findMany({
+      where: {
+        patchId: patch.id,
+        status: 'ready'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: limit,
+      skip: offset,
+      select: {
+        id: true,
+        title: true,
+        sourceUrl: true,
+        canonicalUrl: true,
+        type: true,
+        content: true,
+        relevanceScore: true,
+        status: true,
+        createdAt: true,
+        enrichedContent: true,
+        mediaAssets: true,
+        metadata: true,
+        qualityScore: true,
+        freshnessScore: true,
+        diversityBucket: true
+      }
+    });
     const t4 = Date.now();
     
     console.log('[Discovered Content] Database query results:', {
       patchId: patch.id,
       handle,
-      totalItems: (allContent as any[]).length,
-      discoveredItems: (allContent as any[]).filter(item => item.source_type === 'discovered').length,
-      sourceItems: (allContent as any[]).filter(item => item.source_type === 'source').length
+      totalItems: allContent.length
     });
 
-    // Transform the unified query results
-    let discoveredContent = (allContent as any[]).map(item => ({
+    // Transform the query results
+    let discoveredContent = allContent.map(item => ({
       id: item.id,
       title: item.title,
-      url: item.url,
+      url: item.sourceUrl,
       canonicalUrl: item.canonicalUrl,
       type: item.type,
-      description: item.description,
+      description: item.content,
       relevanceScore: item.relevanceScore,
       status: item.status,
       createdAt: item.createdAt,
-      // Rich content data (only available for discovered items)
+      // Rich content data
       enrichedContent: item.enrichedContent,
       mediaAssets: item.mediaAssets,
       metadata: item.metadata,
