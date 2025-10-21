@@ -43,7 +43,7 @@ export class SimHash {
     for (const word of words) {
       const wordHash = this.hash(word)
       for (let i = 0; i < this.HASH_BITS; i++) {
-        if (wordHash & (1n << BigInt(i))) {
+        if (wordHash & (BigInt(1) << BigInt(i))) {
           hash[i]++
         } else {
           hash[i]--
@@ -51,10 +51,10 @@ export class SimHash {
       }
     }
     
-    let result = 0n
+    let result = BigInt(0)
     for (let i = 0; i < this.HASH_BITS; i++) {
       if (hash[i] > 0) {
-        result |= (1n << BigInt(i))
+        result |= (BigInt(1) << BigInt(i))
       }
     }
     
@@ -69,9 +69,9 @@ export class SimHash {
     let distance = 0
     let temp = xor
     
-    while (temp > 0n) {
-      distance += Number(temp & 1n)
-      temp >>= 1n
+    while (temp > BigInt(0)) {
+      distance += Number(temp & BigInt(1))
+      temp >>= BigInt(1)
     }
     
     return distance
@@ -86,9 +86,9 @@ export class SimHash {
   }
   
   private static hash(word: string): bigint {
-    let hash = 0n
+    let hash = BigInt(0)
     for (let i = 0; i < word.length; i++) {
-      hash = ((hash << 5n) - hash + BigInt(word.charCodeAt(i))) & 0xffffffffffffffffn
+      hash = ((hash << BigInt(5)) - hash + BigInt(word.charCodeAt(i))) & BigInt('0xffffffffffffffff')
     }
     return hash
   }
