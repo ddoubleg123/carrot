@@ -74,7 +74,9 @@ export async function GET(
       // Extract domain from sourceUrl
       let sourceDomain = 'unknown';
       try {
-        sourceDomain = new URL(item.sourceUrl).hostname.replace('www.', '');
+        if (item.sourceUrl) {
+          sourceDomain = new URL(item.sourceUrl).hostname.replace('www.', '');
+        }
       } catch {}
 
       // Parse enrichedContent if it's a JSON string
