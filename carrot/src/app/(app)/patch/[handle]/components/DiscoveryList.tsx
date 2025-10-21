@@ -107,13 +107,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         <div className="flex items-center gap-2 mb-1">
           <h2 className="text-xl font-semibold text-slate-900">Discovering content</h2>
           
-          {/* LIVE Badge */}
-          {live && (
-            <span className="inline-flex items-center gap-1 text-xs rounded-full bg-green-50 text-green-700 px-2 py-1">
-              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              LIVE
-            </span>
-          )}
+          {/* TODO: Add LIVE badge when discovery is active */}
           
           {/* TODO: Add discovery status display */}
         </div>
@@ -171,7 +165,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         <div className="ml-auto flex items-center gap-2">
           <Button
             onClick={handleToggleDiscovery}
-            variant={live ? "outline" : "primary"}
+            variant="primary"
             size="sm"
             className="flex items-center gap-2"
           >
