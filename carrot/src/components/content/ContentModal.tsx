@@ -283,11 +283,11 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
             {isLoading ? (
               <ContentBlocks.Skeleton />
             ) : preview ? (
-              <ContentBlocks 
+              <ContentBlocks
                 summary={preview.summary}
                 keyPoints={preview.keyPoints}
                 excerptHtml={preview.excerptHtml}
-                entities={preview.entities}
+                entities={preview.entities.map(e => e.name)}
                 timeline={preview.timeline}
               />
             ) : (
