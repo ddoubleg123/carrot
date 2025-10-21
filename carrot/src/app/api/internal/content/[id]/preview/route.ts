@@ -49,7 +49,8 @@ export async function GET(
         patch: {
           select: {
             name: true,
-            handle: true
+            handle: true,
+            tags: true
           }
         }
       }
