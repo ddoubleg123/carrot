@@ -4,26 +4,7 @@ import { extractReadableContent, extractKeyPoints, extractTimeline, extractEntit
 import { sanitizeHtml, formatHtmlForDisplay } from '@/lib/sanitizeHtml'
 import { fetchWithProxy } from '@/lib/fetchProxy'
 import { canonicalizeUrl } from '@/lib/canonicalize'
-
-interface ContentPreview {
-  title: string
-  meta: {
-    domain: string
-    favicon: string
-    author?: string
-    publishDate?: string
-    readTime?: number
-    canonicalUrl: string
-    verified: boolean
-  }
-  hero?: string
-  summary: string
-  keyPoints: string[]
-  context?: string
-  excerptHtml?: string
-  entities?: string[]
-  timeline?: Array<{date: string, fact: string}>
-}
+import { ContentPreview } from '@/types/content-preview'
 
 // Simple in-memory cache (in production, use Redis)
 const previewCache = new Map<string, ContentPreview>()
