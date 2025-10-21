@@ -3,7 +3,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { auth } from '@/auth'
 import { DiscoveryState, closeStream } from '@/lib/discovery/streaming'
 
 export const dynamic = 'force-dynamic'
