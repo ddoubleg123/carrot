@@ -69,25 +69,68 @@ export async function GET(
       totalItems: allContent.length
     });
 
-    // Transform the query results
-    let discoveredContent = allContent.map(item => ({
-      id: item.id,
-      title: item.title,
-      url: item.sourceUrl,
-      canonicalUrl: item.canonicalUrl,
-      type: item.type,
-      description: item.content,
-      relevanceScore: item.relevanceScore,
-      status: item.status,
-      createdAt: item.createdAt,
-      // Rich content data
-      enrichedContent: item.enrichedContent,
-      mediaAssets: item.mediaAssets,
-      metadata: item.metadata,
-      qualityScore: item.qualityScore,
-      freshnessScore: item.freshnessScore,
-      diversityBucket: item.diversityBucket
-    }));
+    // Transform the query results to match DiscoveredItem type
+    let discoveredContent = allContent.map(item => {
+      // Extract domain from sourceUrl
+      let sourceDomain = 'unknown';
+      try {
+        sourceDomain = new URL(item.sourceUrl).hostname.replace('www.', '');
+      } catch {}
+
+      // Parse enrichedContent if it's a JSON string
+      let enrichedData: any = {};
+      if (typeof item.enrichedContent === 'string') {
+        try {
+          enrichedData = JSON.parse(item.enrichedContent);
+        } catch {}
+      } else if (item.enrichedContent) {
+        enrichedData = item.enrichedContent;
+      }
+
+      // Parse mediaAssets if it's a JSON string
+      let mediaData: any = {};
+      if (typeof item.mediaAssets === 'string') {
+        try {
+          mediaData = JSON.parse(item.mediaAssets);
+        } catch {}
+      } else if (item.mediaAssets) {
+        mediaData = item.mediaAssets;
+      }
+
+      return {
+        id: item.id,
+        type: item.type || 'article',
+        title: item.title,
+        displayTitle: enrichedData.displayTitle || item.title,
+        url: item.sourceUrl,
+        canonicalUrl: item.canonicalUrl || item.sourceUrl,
+        matchPct: item.relevanceScore || 0.8,
+        status: item.status,
+        media: {
+          hero: mediaData.hero || mediaData.heroUrl,
+          gallery: mediaData.gallery || [],
+          videoThumb: mediaData.videoThumb,
+          pdfPreview: mediaData.pdfPreview,
+          blurDataURL: mediaData.blurDataURL,
+          dominant: mediaData.dominant || mediaData.dominantColor,
+          source: mediaData.source || 'og',
+          license: mediaData.license || 'source'
+        },
+        content: {
+          summary150: enrichedData.summary || item.content || '',
+          keyPoints: enrichedData.keyPoints || [],
+          notableQuote: enrichedData.notableQuote,
+          readingTimeMin: enrichedData.readingTimeMin || 3
+        },
+        meta: {
+          sourceDomain,
+          favicon: enrichedData.favicon,
+          author: enrichedData.author,
+          publishDate: enrichedData.publishDate || item.createdAt?.toISOString()
+        },
+        metadata: item.metadata || {}
+      };
+    });
 
     // Server-side link verification gate: only include items whose source verifies (<400)
     try {
