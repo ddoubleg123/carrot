@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Search, RefreshCw, Play, Square, Pause } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import ContentModal from './ContentModal'
-import { useDiscoveryStreamSingle } from '@/app/patch/[handle]/hooks/useDiscoveryStreamSingle'
+import { useDiscoveredItems } from '@/app/(app)/patch/[handle]/useDiscoveredItems'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface DiscoveryListProps {
@@ -46,23 +46,20 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [visibleItemsCount, setVisibleItemsCount] = useState(6) // Start with 6 items
 
-  // Use SSE streaming hook
+  // Use discovered items hook
   const { 
-    start, 
-    pause, 
-    resume, 
-    refresh, 
-    state, 
-    live, 
     items, 
-    statusText, 
-    lastItemTitle, 
-    sessionCount, 
-    error,
-    isLoading
-  } = useDiscoveryStreamSingle({ patchHandle })
+    isLoading, 
+    error, 
+    refetch 
+  } = useDiscoveredItems(patchHandle, {
+    status: 'all',
+    type: filterType,
+    sort: sortBy,
+    timeRange
+  })
 
-  const isDiscoveryActive = live
+  const isDiscoveryActive = false // TODO: Implement discovery state tracking
 
   const handleHeroClick = (item: DiscoveredItem) => {
     setSelectedItem(item)
@@ -95,17 +92,12 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   const handleRefresh = () => {
-    refresh()
+    refetch()
   }
 
   const handleToggleDiscovery = () => {
-    if (state === 'idle') {
-      start()
-    } else if (state === 'searching' || state === 'processing') {
-      pause()
-    } else if (state === 'paused') {
-      resume()
-    }
+    // TODO: Implement discovery start/stop
+    console.log('Discovery toggle clicked')
   }
 
   return (
@@ -123,18 +115,8 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             </span>
           )}
           
-          {/* Session counter */}
-          {live && sessionCount > 0 && (
-            <span className="text-xs text-slate-600">
-              {sessionCount} added this session
-            </span>
-          )}
+          {/* TODO: Add discovery status display */}
         </div>
-        
-        {/* Status text */}
-        <p className="mt-1 mb-3 text-sm text-slate-600">
-          {statusText}
-        </p>
       </div>
 
       {/* Filters */}
@@ -193,36 +175,18 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             size="sm"
             className="flex items-center gap-2"
           >
-            {state === 'idle' && (
-              <>
-                <Play className="h-4 w-4" />
-                Start Discovery
-              </>
-            )}
-            {(state === 'searching' || state === 'processing') && (
-              <>
-                <Pause className="h-4 w-4" />
-                Pause Discovery
-              </>
-            )}
-            {state === 'paused' && (
-              <>
-                <Play className="h-4 w-4" />
-                Resume Discovery
-              </>
-            )}
+            <Play className="h-4 w-4" />
+            Start Discovery
           </Button>
           
-          {/* Refresh button (only when not actively discovering) */}
-          {!live && (
-            <Button
-              onClick={handleRefresh}
-              variant="outline"
-              size="sm"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          )}
+          {/* Refresh button */}
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
