@@ -4,6 +4,7 @@ export interface ContentPreview {
   summary: string
   keyPoints: string[]
   excerptHtml: string
+  context?: string
   entities: Array<{
     name: string
     type: string
