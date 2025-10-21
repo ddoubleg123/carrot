@@ -92,7 +92,7 @@ export class SearchFrontier {
   /**
    * Calculate priority score for a candidate
    */
-  private calculatePriority(candidate: SearchCandidate): number {
+  private calculatePriority(candidate: Omit<SearchCandidate, 'priority'> | SearchCandidate): number {
     const novelty = this.calculateNovelty(candidate)
     const diversity = this.calculateDiversity(candidate.domain)
     const penalty = candidate.duplicateRate
@@ -107,8 +107,9 @@ export class SearchFrontier {
   /**
    * Calculate novelty score (higher for newer sources)
    */
-  private calculateNovelty(candidate: SearchCandidate): number {
-    const daysSinceLastSeen = (Date.now() - candidate.lastSeen.getTime()) / (1000 * 60 * 60 * 24)
+  private calculateNovelty(candidate: Omit<SearchCandidate, 'priority'> | SearchCandidate): number {
+    const lastSeen = 'lastSeen' in candidate && candidate.lastSeen ? candidate.lastSeen : new Date()
+    const daysSinceLastSeen = (Date.now() - lastSeen.getTime()) / (1000 * 60 * 60 * 24)
     return 1 / (1 + daysSinceLastSeen)
   }
   
