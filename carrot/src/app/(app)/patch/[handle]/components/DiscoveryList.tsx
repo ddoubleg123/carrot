@@ -219,19 +219,14 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">No items yet</h3>
           <p className="text-slate-600 mb-4">Expand the range to see more content.</p>
-          <Button
-            variant="outline"
-            onClick={handleToggleDiscovery}
-            className="border-[#E6E8EC] hover:bg-slate-50"
-          >
-            <Play className="h-3 w-3 mr-1" />
-            Start discovery
-          </Button>
+          <p className="text-sm text-slate-500">
+            Use the discovery controls above to start finding content.
+          </p>
         </div>
       )}
 
       {/* Content Grid */}
-      {(deduplicatedItems.length > 0 || isDiscoveryActive || isLoading) && (
+      {(deduplicatedItems.length > 0 || state.isActive || isLoading) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Show loading skeleton when loading initial content */}
           {isLoading && deduplicatedItems.length === 0 && (
@@ -243,7 +238,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             </>
           )}
           {/* Show loading skeleton FIRST when discovery is active */}
-          {isDiscoveryActive && (
+          {state.isActive && (
             <DiscoveryCardSkeleton />
           )}
           
