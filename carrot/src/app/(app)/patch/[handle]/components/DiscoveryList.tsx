@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Search, RefreshCw, Play, Square, Pause } from 'lucide-react'
 import DiscoveryCard from './DiscoveryCard'
 import ContentModal from './ContentModal'
-import { useDiscoveredItems } from '@/app/(app)/patch/[handle]/useDiscoveredItems'
+import { useDiscoveryStream } from '@/app/(app)/patch/[handle]/hooks/useDiscoveryStream'
+import DiscoveryControls from './DiscoveryControls'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface DiscoveryListProps {
@@ -46,20 +47,18 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [visibleItemsCount, setVisibleItemsCount] = useState(6) // Start with 6 items
 
-  // Use discovered items hook
+  // Use discovery stream hook
   const { 
+    state,
     items, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useDiscoveredItems(patchHandle, {
-    status: 'all',
-    type: filterType,
-    sort: sortBy,
-    timeRange
-  })
+    start,
+    pause,
+    stop,
+    refresh
+  } = useDiscoveryStream(patchHandle)
 
-  const isDiscoveryActive = false // TODO: Implement discovery state tracking
+  const isLoading = false // Items load immediately via SSE
+  const error = state.error
 
   const handleHeroClick = (item: DiscoveredItem) => {
     setSelectedItem(item)
@@ -92,12 +91,19 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   const handleRefresh = () => {
-    refetch()
+    refresh()
   }
 
-  const handleToggleDiscovery = () => {
-    // TODO: Implement discovery start/stop
-    console.log('Discovery toggle clicked')
+  const handleStart = () => {
+    start()
+  }
+
+  const handlePause = () => {
+    pause()
+  }
+
+  const handleStop = () => {
+    stop()
   }
 
   return (
@@ -161,26 +167,20 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
         </div>
 
-        {/* Discovery Toggle Button */}
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            onClick={handleToggleDiscovery}
-            variant="primary"
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <Play className="h-4 w-4" />
-            Start Discovery
-          </Button>
-          
-          {/* Refresh button */}
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            size="sm"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+        {/* Discovery Controls */}
+        <div className="ml-auto">
+          <DiscoveryControls
+            patchHandle={patchHandle}
+            onStart={handleStart}
+            onPause={handlePause}
+            onStop={handleStop}
+            onRefresh={handleRefresh}
+            isActive={state.isActive}
+            isPaused={state.isPaused}
+            currentStatus={state.currentStatus}
+            itemsFound={state.itemsFound}
+            lastItemTitle={state.lastItemTitle}
+          />
         </div>
       </div>
 
