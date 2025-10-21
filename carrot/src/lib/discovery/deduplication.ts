@@ -161,7 +161,7 @@ export class DeduplicationChecker {
     content: string,
     domain: string
   ): Promise<DeduplicationResult> {
-    const canonical = canonicalize(url)
+    const canonical = await canonicalize(url)
     
     // Tier A: URL-based deduplication
     if (this.seenUrls.has(canonical.canonicalUrl)) {
