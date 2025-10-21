@@ -249,10 +249,10 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
               )}
 
               {/* Compact Hero */}
-              {preview.hero && (
+              {preview.media.hero && (
                 <div className="aspect-[21/9] h-48 md:h-56 rounded-xl overflow-hidden mb-4 relative">
                   <img 
-                    src={preview.hero} 
+                    src={preview.media.hero} 
                     alt="" 
                     className="w-full h-full object-cover"
                   />
