@@ -107,8 +107,9 @@ export async function GET(
             fact: item.content
           }))
           preview.entities = extractEntities(readable.textContent)
-            .map(e => e.name)
-            .filter((name, index, self) => self.indexOf(name) === index)
+            .filter((entity, index, self) => 
+              self.findIndex(e => e.name === entity.name) === index
+            )
             .slice(0, 20)
           
           // Create excerpt HTML (first 2-4 paragraphs, sanitized)
