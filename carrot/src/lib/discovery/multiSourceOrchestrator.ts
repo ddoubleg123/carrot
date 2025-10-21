@@ -159,6 +159,15 @@ export class MultiSourceOrchestrator {
         for (const citation of page.citations) {
           if (!citation.url) continue
 
+          // Skip relative URLs and Wikipedia internal links
+          if (citation.url.startsWith('./') || 
+              citation.url.startsWith('../') || 
+              citation.url.startsWith('/') ||
+              citation.url.includes('wikipedia.org') ||
+              citation.url.startsWith('#')) {
+            continue
+          }
+
           // Canonicalize citation URL
           const citationCanonical = await canonicalize(citation.url)
           
