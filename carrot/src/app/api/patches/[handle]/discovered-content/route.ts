@@ -91,7 +91,7 @@ export async function GET(
     });
 
     // Transform the unified query results
-    const discoveredContent = (allContent as any[]).map(item => ({
+    let discoveredContent = (allContent as any[]).map(item => ({
       id: item.id,
       title: item.title,
       url: item.url,
