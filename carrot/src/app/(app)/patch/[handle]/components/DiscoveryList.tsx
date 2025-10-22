@@ -8,6 +8,8 @@ import DiscoveryCard from './DiscoveryCard'
 import ContentModal from './ContentModal'
 import { useDiscoveryStream } from '@/app/(app)/patch/[handle]/hooks/useDiscoveryStream'
 import DiscoveryControls from './DiscoveryControls'
+import LivePanel from './LivePanel'
+import DiscoverySkeleton from './DiscoverySkeleton'
 import { DiscoveredItem } from '@/types/discovered-content'
 
 interface DiscoveryListProps {
@@ -113,76 +115,83 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         <div className="flex items-center gap-2 mb-1">
           <h2 className="text-xl font-semibold text-slate-900">Discovering content</h2>
           
-          {/* TODO: Add LIVE badge when discovery is active */}
-          
-          {/* TODO: Add discovery status display */}
+          {/* LIVE badge when discovery is active */}
+          {state.isActive && (
+            <Badge className="bg-green-100 text-green-700 border-green-200 animate-pulse">
+              LIVE
+            </Badge>
+          )}
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap mb-6">
-        {/* Type Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-slate-500" />
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-          >
-            <option value="all">All Types</option>
-            <option value="article">Articles</option>
-            <option value="video">Videos</option>
-            <option value="pdf">PDFs</option>
-            <option value="image">Images</option>
-            <option value="text">Text</option>
-          </select>
-        </div>
-
-        {/* Sort Filter */}
-        <div className="flex items-center gap-2">
-          <SortAsc className="h-4 w-4 text-slate-500" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-          >
-            <option value="top">Top</option>
-            <option value="new">New</option>
-          </select>
-        </div>
-
-        {/* Time Range Filter */}
-        <select
-          value={timeRange}
-          onChange={(e) => setTimeRange(e.target.value as any)}
-          className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-        >
-          <option value="7d">7d</option>
-          <option value="30d">30d</option>
-          <option value="all">All</option>
-        </select>
-
-        {/* Results Count */}
-        <div className="text-sm text-slate-600">
-          {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
-        </div>
-
-        {/* Discovery Controls */}
-        <div className="ml-auto">
-          <DiscoveryControls
-            patchHandle={patchHandle}
-            onStart={handleStart}
-            onPause={handlePause}
-            onStop={handleStop}
-            onRefresh={handleRefresh}
+      {/* Main Layout: Live Panel (left) + Content (right) */}
+      <div className="flex gap-6">
+        {/* Live Panel - Left Side */}
+        <div className="w-80 flex-shrink-0">
+          <LivePanel
             isActive={state.isActive}
             isPaused={state.isPaused}
             currentStatus={state.currentStatus}
             itemsFound={state.itemsFound}
             lastItemTitle={state.lastItemTitle}
+            error={state.error}
+            onStart={handleStart}
+            onPause={handlePause}
+            onStop={handleStop}
+            onRefresh={handleRefresh}
           />
         </div>
-      </div>
+
+        {/* Content Area - Right Side */}
+        <div className="flex-1 min-w-0">
+          {/* Filters - Fixed width, no wrapping */}
+          <div className="flex items-center gap-4 flex-nowrap overflow-x-auto mb-6 pb-2">
+            {/* Type Filter */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Filter className="h-4 w-4 text-slate-500" />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+              >
+                <option value="all">All Types</option>
+                <option value="article">Articles</option>
+                <option value="video">Videos</option>
+                <option value="pdf">PDFs</option>
+                <option value="image">Images</option>
+                <option value="text">Text</option>
+              </select>
+            </div>
+
+            {/* Sort Filter */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <SortAsc className="h-4 w-4 text-slate-500" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+              >
+                <option value="top">Top</option>
+                <option value="new">New</option>
+              </select>
+            </div>
+
+            {/* Time Range Filter */}
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value as any)}
+              className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent flex-shrink-0"
+            >
+              <option value="7d">7d</option>
+              <option value="30d">30d</option>
+              <option value="all">All</option>
+            </select>
+
+            {/* Results Count */}
+            <div className="text-sm text-slate-600 flex-shrink-0">
+              {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
+            </div>
+          </div>
 
       {/* Error State */}
       {error && (
@@ -225,34 +234,40 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       )}
 
-      {/* Content Grid */}
-      {(deduplicatedItems.length > 0 || state.isActive || isLoading) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Show loading skeleton when loading initial content */}
-          {isLoading && deduplicatedItems.length === 0 && (
-            <>
-              <DiscoveryCardSkeleton />
-              <DiscoveryCardSkeleton />
-              <DiscoveryCardSkeleton />
-              <DiscoveryCardSkeleton />
-            </>
+          {/* Content Grid */}
+          {(deduplicatedItems.length > 0 || state.isActive || isLoading) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Show skeleton FIRST when discovery is active (morphs into real card) */}
+              {state.isActive && (
+                <DiscoverySkeleton 
+                  isActive={true}
+                  currentStatus={state.currentStatus}
+                />
+              )}
+              
+              {/* Show loading skeletons when loading initial content */}
+              {isLoading && deduplicatedItems.length === 0 && (
+                <>
+                  <DiscoverySkeleton isActive={false} />
+                  <DiscoverySkeleton isActive={false} />
+                  <DiscoverySkeleton isActive={false} />
+                  <DiscoverySkeleton isActive={false} />
+                </>
+              )}
+              
+              {/* Then show actual items */}
+              {visibleItems.map((item) => (
+                <DiscoveryCard 
+                  key={item.canonicalUrl || item.id} 
+                  item={item}
+                  onHeroClick={handleHeroClick}
+                  patchHandle={patchHandle}
+                />
+              ))}
+            </div>
           )}
-          {/* Show loading skeleton FIRST when discovery is active */}
-          {state.isActive && (
-            <DiscoveryCardSkeleton />
-          )}
-          
-          {/* Then show actual items */}
-           {visibleItems.map((item) => (
-             <DiscoveryCard 
-               key={item.canonicalUrl || item.id} 
-               item={item}
-               onHeroClick={handleHeroClick}
-               patchHandle={patchHandle}
-             />
-           ))}
         </div>
-      )}
+      </div>
 
       {/* Load More Button */}
       {hasMoreItems && !isLoading && (

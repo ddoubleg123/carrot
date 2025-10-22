@@ -3,7 +3,9 @@ import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { canonicalize } from '@/lib/discovery/canonicalization';
 import { BatchedLogger } from '@/lib/discovery/logger';
-import { MultiSourceOrchestrator } from '@/lib/discovery/multiSourceOrchestrator';
+import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
+import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
+import { getGroupProfile } from '@/lib/discovery/groupProfiles';
 
 export const runtime = 'nodejs';
 
@@ -97,8 +99,17 @@ export async function POST(
       }, { status: 500 });
     }
 
-    // Start Multi-Source Discovery (Wikipedia + NewsAPI + Citations)
-    console.log('[Start Discovery] Starting multi-source discovery for patch:', {
+    // Check if this is Chicago Bulls group
+    const groupProfile = getGroupProfile('chicago-bulls')
+    if (!groupProfile) {
+      return NextResponse.json({ 
+        error: 'Group profile not found',
+        code: 'GROUP_PROFILE_NOT_FOUND',
+        patchId: patch.id
+      }, { status: 400 });
+    }
+    
+    console.log('[Start Discovery] Starting Bulls-specific discovery for patch:', {
       patchId: patch.id,
       handle,
       name: patch.name,
@@ -107,7 +118,6 @@ export async function POST(
     });
     
     // 🚀 OPTIMIZATION: Build URL cache of ALL processed URLs (approved + denied)
-    // This prevents re-processing the same URLs through DeepSeek
     const processedUrls = await prisma.discoveredContent.findMany({
       where: { patchId: patch.id },
       select: { 
@@ -118,7 +128,7 @@ export async function POST(
       }
     });
     
-    // Create URL cache for fast lookups (both original and canonical)
+    // Create URL cache for fast lookups
     const urlCache = new Set<string>();
     processedUrls.forEach(item => {
       if (item.sourceUrl) urlCache.add(item.sourceUrl);
@@ -132,9 +142,9 @@ export async function POST(
       cacheSize: urlCache.size
     });
     
-    // Execute Multi-Source Discovery
-    console.log('[Start Discovery] Initializing Multi-Source Orchestrator...')
-    const orchestrator = new MultiSourceOrchestrator()
+    // Execute Bulls-Specific Discovery
+    console.log('[Start Discovery] Initializing Bulls Discovery Orchestrator...')
+    const orchestrator = new BullsDiscoveryOrchestrator()
     
     let discoveryResult
     try {
@@ -144,16 +154,15 @@ export async function POST(
         patch.tags
       )
       
-      console.log('[Start Discovery] ✅ Multi-source discovery complete:', {
+      console.log('[Start Discovery] ✅ Bulls discovery complete:', {
         totalSources: discoveryResult.sources.length,
         wikipediaPages: discoveryResult.stats.wikipediaPages,
         wikipediaCitations: discoveryResult.stats.wikipediaCitations,
-        newsArticles: discoveryResult.stats.newsArticles,
         duplicatesRemoved: discoveryResult.stats.duplicatesRemoved,
-        strategy: discoveryResult.strategy.searchDepth
+        relevanceFiltered: discoveryResult.stats.relevanceFiltered
       })
     } catch (error: any) {
-      console.error('[Start Discovery] Multi-source orchestrator error:', error)
+      console.error('[Start Discovery] Bulls orchestrator error:', error)
       return NextResponse.json({ 
         error: 'Failed to discover content',
         code: 'ORCHESTRATOR_ERROR',
@@ -162,16 +171,8 @@ export async function POST(
       }, { status: 500 });
     }
     
-    // Convert DiscoveredSource format to legacy discoveredItems format for compatibility
-    const discoveredItems = discoveryResult.sources.map(source => ({
-      title: source.title,
-      url: source.url,
-      type: source.type === 'wikipedia' ? 'article' : source.type,
-      description: source.description,
-      relevance_score: source.relevanceScore / 100, // Convert to 0-1 scale
-      source: source.source,
-      metadata: source.metadata
-    }))
+    // Convert DiscoveredSource format for one-at-a-time processing
+    const discoveredSources = discoveryResult.sources
 
     // If streaming, create SSE stream
     if (isStreaming) {
@@ -183,354 +184,34 @@ export async function POST(
         writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
       }
       
-      // Process in background
+      // Process in background using one-at-a-time worker
       ;(async () => {
         try {
-          sendEvent('state', { phase: 'searching' })
-          sendEvent('heartbeat', {})
+          sendEvent('state', { phase: 'wikipedia' })
+          sendEvent('wikipedia:start', { count: discoveredSources.length })
           
-          // Initialize batched logger for duplicate tracking
-          const duplicateLogger = new BatchedLogger(30000) // Flush every 30s
-          let duplicateCount = 0
+          // Initialize one-at-a-time worker
+          const worker = new OneAtATimeWorker()
           
-          const savedItems: any[] = []
-          const rejectedItems: any[] = []
+          // Process sources one at a time
+          const result = await worker.processSources(
+            discoveredSources,
+            patch.id,
+            handle,
+            sendEvent
+          )
           
-          sendEvent('found', { count: discoveredItems.length })
-          sendEvent('state', { phase: 'processing' })
-          
-          // Process items one by one
-          for (let i = 0; i < discoveredItems.length; i++) {
-            const item = discoveredItems[i]
-            
-            try {
-              sendEvent('progress', { done: i, total: discoveredItems.length })
-              
-              // 🚀 STEP 1: Canonicalize URL FIRST (before any other checks)
-              const canonicalResult = await canonicalize(item.url)
-              const canonicalUrl = canonicalResult.canonicalUrl
-              
-              // 🚀 STEP 2: Check URL cache IMMEDIATELY (no DB query needed)
-              if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
-                console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
-                duplicateLogger.logDuplicate(item.url, 'A', 'cache')
-                duplicateCount++
-                continue
-              }
-              
-              // 🚀 STEP 3: Verify relevance BEFORE generating image
-              const relevanceScore = item.relevance_score || 0
-              if (relevanceScore < 0.7) {
-                console.log('[Start Discovery] ❌ Rejected (low relevance):', item.title)
-                
-                // Save denied URL to database so we never check it again
-                await prisma.discoveredContent.create({
-                  data: {
-                    patchId: patch.id,
-                    type: item.type || 'article',
-                    title: item.title || 'Untitled',
-                    content: item.description || '',
-                    sourceUrl: item.url,
-                    canonicalUrl: canonicalUrl,
-                    relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
-                    tags: [],
-                    status: 'denied', // 🚀 Mark as denied
-                  }
-                })
-                
-                // Add to cache immediately
-                urlCache.add(item.url)
-                urlCache.add(canonicalUrl)
-                
-                rejectedItems.push({ url: item.url, title: item.title, reason: 'low_relevance' })
-                continue
-              }
-
-              // 🚀 STEP 4: Validate content quality - check if URL actually contains article content
-              try {
-                const validationController = new AbortController()
-                const validationTimeout = setTimeout(() => validationController.abort(), 5000)
-                const contentValidation = await fetch(item.url, {
-                  method: 'HEAD',
-                  signal: validationController.signal,
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
-                  }
-                }).catch(() => null).finally(() => clearTimeout(validationTimeout))
-
-                if (!contentValidation || !contentValidation.ok) {
-                  console.log('[Start Discovery] ❌ Rejected (content validation failed):', item.url)
-                  
-                  await prisma.discoveredContent.create({
-                    data: {
-                      patchId: patch.id,
-                      type: item.type || 'article',
-                      title: item.title || 'Untitled',
-                      content: item.description || '',
-                      sourceUrl: item.url,
-                      canonicalUrl: canonicalUrl,
-                      relevanceScore: Math.round(relevanceScore * 100),
-                      tags: [],
-                      status: 'denied',
-                    }
-                  })
-                  
-                  urlCache.add(item.url)
-                  urlCache.add(canonicalUrl)
-                  rejectedItems.push({ url: item.url, title: item.title, reason: 'validation_failed' })
-                  continue
-                }
-
-                // Additional check: ensure it's not a collection/category page
-                const contentType = contentValidation.headers.get('content-type') || ''
-                if (contentType.includes('text/html')) {
-                  // Quick content check to ensure it's not a generic page
-                  const contentCheckController = new AbortController()
-                  const contentCheckTimeout = setTimeout(() => contentCheckController.abort(), 3000)
-                  const contentCheck = await fetch(item.url, {
-                    method: 'GET',
-                    signal: contentCheckController.signal,
-                    headers: {
-                      'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
-                    }
-                  }).then(res => res.text()).catch(() => '').finally(() => clearTimeout(contentCheckTimeout))
-
-                  // Check for signs of generic/collection pages
-                  const isGenericPage = contentCheck.includes('Collection - ESPN') || 
-                                      contentCheck.includes('category') ||
-                                      contentCheck.includes('browse') ||
-                                      contentCheck.length < 5000 // Too short for real article
-
-                  if (isGenericPage) {
-                    console.log('[Start Discovery] ❌ Rejected (generic/collection page):', item.url)
-                    
-                    await prisma.discoveredContent.create({
-                      data: {
-                        patchId: patch.id,
-                        type: item.type || 'article',
-                        title: item.title || 'Untitled',
-                        content: item.description || '',
-                        sourceUrl: item.url,
-                        canonicalUrl: canonicalUrl,
-                        relevanceScore: Math.round(relevanceScore * 100),
-                        tags: [],
-                        status: 'denied',
-                      }
-                    })
-                    
-                    urlCache.add(item.url)
-                    urlCache.add(canonicalUrl)
-                    rejectedItems.push({ url: item.url, title: item.title, reason: 'generic_page' })
-                    continue
-                  }
-                }
-              } catch (validationError) {
-                console.log('[Start Discovery] ⚠️ Content validation error (proceeding):', validationError)
-                // Continue if validation fails - don't block on network issues
-              }
-
-              // 🚀 STEP 5: Extract actual article content for display in modal
-              let extractedContent = null
-              let enrichedContent = null
-              try {
-                console.log('[Start Discovery] 📄 Extracting article content from:', item.url)
-                const extractController = new AbortController()
-                const extractTimeout = setTimeout(() => extractController.abort(), 8000)
-                const contentFetch = await fetch(item.url, {
-                  method: 'GET',
-                  signal: extractController.signal,
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)',
-                    'Accept': 'text/html'
-                  }
-                }).catch(() => null).finally(() => clearTimeout(extractTimeout))
-
-                if (contentFetch && contentFetch.ok) {
-                  const html = await contentFetch.text()
-                  
-                  // Use simple extraction for now (can be enhanced with Readability.js later)
-                  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-                  const descriptionMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i)
-                  
-                  // Extract paragraphs (simple approach)
-                  const paragraphs = html.match(/<p[^>]*>([^<]+)<\/p>/gi) || []
-                  const cleanText = paragraphs.slice(0, 10).map(p => 
-                    p.replace(/<[^>]+>/g, '').trim()
-                  ).filter(t => t.length > 50).join('\n\n')
-
-                  extractedContent = cleanText || item.description || ''
-                  
-                  // Generate key points from first few paragraphs
-                  const keyPoints = paragraphs.slice(0, 5).map(p => 
-                    p.replace(/<[^>]+>/g, '').trim()
-                  ).filter(t => t.length > 30 && t.length < 200).slice(0, 4)
-
-                  enrichedContent = {
-                    summary150: (extractedContent || item.description || '').substring(0, 150),
-                    keyPoints: keyPoints,
-                    readingTimeMin: Math.ceil(extractedContent.length / 1000),
-                    extractedAt: new Date().toISOString()
-                  }
-
-                  console.log('[Start Discovery] ✅ Extracted content:', {
-                    length: extractedContent.length,
-                    keyPoints: keyPoints.length,
-                    readingTime: enrichedContent.readingTimeMin
-                  })
-                } else {
-                  console.log('[Start Discovery] ⚠️ Could not fetch content for extraction, using description')
-                  extractedContent = item.description || ''
-                  enrichedContent = {
-                    summary150: extractedContent.substring(0, 150),
-                    keyPoints: [],
-                    readingTimeMin: 1
-                  }
-                }
-              } catch (extractError) {
-                console.log('[Start Discovery] ⚠️ Content extraction error:', extractError)
-                extractedContent = item.description || ''
-                enrichedContent = {
-                  summary150: extractedContent.substring(0, 150),
-                  keyPoints: [],
-                  readingTimeMin: 1
-                }
-              }
-              
-              // Generate AI image
-              console.log('[Start Discovery] Generating AI image for:', item.title)
-              const aiImageResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/ai/generate-hero-image`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  title: item.title,
-                  summary: item.description || '',
-                  contentType: item.type,
-                  artisticStyle: 'photorealistic',
-                  enableHiresFix: false
-                })
-              })
-              
-              let aiImageUrl = null
-              let aiImageSource = 'fallback'
-              
-              if (aiImageResponse.ok) {
-                const aiImageData = await aiImageResponse.json()
-                if (aiImageData.success && aiImageData.imageUrl) {
-                  aiImageUrl = aiImageData.imageUrl
-                  aiImageSource = 'ai-generated'
-                }
-              }
-              
-              if (!aiImageUrl) {
-                console.log('[Start Discovery] ❌ Rejected (no image):', item.title)
-                
-                // Save denied URL to database so we never check it again
-                await prisma.discoveredContent.create({
-                  data: {
-                    patchId: patch.id,
-                    type: item.type || 'article',
-                    title: item.title || 'Untitled',
-                    content: item.description || '',
-                    sourceUrl: item.url,
-                    canonicalUrl: canonicalUrl,
-                    relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
-                    tags: [],
-                    status: 'denied', // 🚀 Mark as denied
-                  }
-                })
-                
-                // Add to cache immediately
-                urlCache.add(item.url)
-                urlCache.add(canonicalUrl)
-                
-                rejectedItems.push({ url: item.url, title: item.title, reason: 'no_image' })
-                continue
-              }
-              
-              // 🚀 Save to database with status='ready' (approved) + extracted content
-              const discoveredContent = await prisma.discoveredContent.create({
-                data: {
-                  patchId: patch.id,
-                  type: item.type || 'article',
-                  title: item.title,
-                  content: extractedContent || item.description || '',
-                  sourceUrl: item.url,
-                  canonicalUrl: canonicalUrl,
-                  relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
-                  tags: patch.tags.slice(0, 3),
-                  status: 'ready', // 🚀 Mark as approved
-                  enrichedContent: enrichedContent || {},
-                  mediaAssets: {
-                    heroImage: {
-                      url: aiImageUrl,
-                      source: aiImageSource,
-                      license: 'generated'
-                    }
-                  },
-                  metadata: {
-                    sourceDomain: new URL(item.url).hostname,
-                    urlSlug: `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`,
-                    contentUrl: `/patch/${handle}/content/${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`
-                  }
-                }
-              })
-              
-              // 🚀 Add approved URL to cache immediately
-              urlCache.add(item.url)
-              urlCache.add(canonicalUrl)
-              
-              // Send item-ready event with complete DiscoveredItem format including enriched content
-              sendEvent('item-ready', {
-                id: discoveredContent.id,
-                type: discoveredContent.type as 'article'|'video'|'pdf'|'image'|'text',
-                title: discoveredContent.title,
-                displayTitle: discoveredContent.title,
-                url: discoveredContent.sourceUrl || '',
-                canonicalUrl: discoveredContent.sourceUrl,
-                status: 'ready' as const,
-                media: {
-                  hero: aiImageUrl,
-                  source: aiImageSource as 'og'|'oembed'|'inline'|'video'|'pdf'|'image'|'generated',
-                  license: 'generated' as const
-                },
-                content: {
-                  summary150: enrichedContent?.summary150 || (discoveredContent.content || '').substring(0, 150),
-                  keyPoints: enrichedContent?.keyPoints || [],
-                  readingTimeMin: enrichedContent?.readingTimeMin || Math.ceil((discoveredContent.content || '').length / 1000)
-                },
-                meta: {
-                  sourceDomain: item.url ? new URL(item.url).hostname : 'unknown',
-                  publishDate: new Date().toISOString()
-                },
-                metadata: {
-                  urlSlug: (discoveredContent.metadata as any)?.urlSlug,
-                  contentUrl: (discoveredContent.metadata as any)?.contentUrl
-                }
-              })
-              
-              savedItems.push(discoveredContent)
-              
-            } catch (itemError) {
-              console.error('[Start Discovery] Error processing item:', item.title, itemError)
-              rejectedItems.push({ url: item.url, title: item.title, reason: 'processing_error' })
-            }
-          }
-          
-          // Flush batched logs and send final summary
-          duplicateLogger.flush()
-          
-          console.log(`[Start Discovery] Processing complete:`, {
-            saved: savedItems.length,
-            rejected: rejectedItems.length,
-            duplicates: duplicateCount,
-            total: discoveredItems.length
+          console.log(`[Start Discovery] One-at-a-time processing complete:`, {
+            saved: result.saved,
+            rejected: result.rejected,
+            duplicates: result.duplicates
           })
           
           // Send complete event
           sendEvent('complete', { 
-            done: savedItems.length, 
-            rejected: rejectedItems.length,
-            duplicates: duplicateCount
+            done: result.saved, 
+            rejected: result.rejected,
+            duplicates: result.duplicates
           })
           sendEvent('state', { phase: 'completed' })
           
@@ -552,222 +233,42 @@ export async function POST(
       })
     }
     
-    // Non-streaming fallback (original flow)
-    const duplicateLogger = new BatchedLogger(30000) // Flush every 30s
-    let duplicateCount = 0
-    const savedItems = [];
-    const rejectedItems = [];
+    // Non-streaming fallback using one-at-a-time worker
+    const worker = new OneAtATimeWorker()
     
-    for (const item of discoveredItems) {
-      try {
-        console.log('[Start Discovery] Processing item:', item.title);
-        
-        // 🚀 STEP 1: Canonicalize URL FIRST
-        const canonicalResult = await canonicalize(item.url)
-        const canonicalUrl = canonicalResult.canonicalUrl
-        
-        // 🚀 STEP 2: Check URL cache IMMEDIATELY
-        if (urlCache.has(item.url) || urlCache.has(canonicalUrl)) {
-          console.log('[Start Discovery] ⚡ Skipped (URL in cache):', item.url)
-          duplicateLogger.logDuplicate(item.url, 'A', 'cache')
-          duplicateCount++
-          continue
-        }
-        
-        // 🚀 STEP 3: Verify relevance BEFORE generating image
-        const relevanceScore = item.relevance_score || 0;
-        if (relevanceScore < 0.7) {
-          console.log('[Start Discovery] ❌ Item rejected (low relevance):', item.title, `Score: ${relevanceScore}`);
-          
-          // Save denied URL to database
-          await prisma.discoveredContent.create({
-            data: {
-              patchId: patch.id,
-              type: item.type || 'article',
-              title: item.title || 'Untitled',
-              content: item.description || '',
-              sourceUrl: item.url,
-              canonicalUrl: canonicalUrl,
-              relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
-              tags: [],
-              status: 'denied',
-            }
-          })
-          
-          // Add to cache immediately
-          urlCache.add(item.url)
-          urlCache.add(canonicalUrl)
-          
-          rejectedItems.push({
-            url: item.url,
-            title: item.title,
-            reason: 'low_relevance',
-            score: relevanceScore
-          });
-          
-          continue; // Skip this item
-        }
-        
-        console.log('[Start Discovery] ✅ Item passed relevance check:', item.title, `Score: ${relevanceScore}`);
-        
-        // STEP 2: Generate AI image BEFORE saving to database
-        let aiImageUrl = null;
-        let aiImageSource = 'fallback';
-        
-        try {
-          console.log('[Start Discovery] Generating AI image for:', item.title);
-          
-          const aiImageResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/ai/generate-hero-image`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              title: item.title,
-              summary: item.description || '',
-              contentType: item.type,
-              artisticStyle: 'photorealistic',
-              enableHiresFix: false
-            })
-          });
-          
-          if (aiImageResponse.ok) {
-            const aiImageData = await aiImageResponse.json();
-            if (aiImageData.success && aiImageData.imageUrl) {
-              aiImageUrl = aiImageData.imageUrl;
-              aiImageSource = 'ai-generated';
-              console.log('[Start Discovery] ✅ AI image generated successfully');
-            } else {
-              console.warn('[Start Discovery] ⚠️ AI image generation returned no image');
-            }
-          } else {
-            console.warn('[Start Discovery] ⚠️ AI image generation failed:', aiImageResponse.status);
-          }
-        } catch (aiImageError) {
-          console.warn('[Start Discovery] ⚠️ AI image generation error:', aiImageError);
-        }
-        
-        // If AI image failed, try fallback enrichment
-        if (!aiImageUrl) {
-          try {
-            console.log('[Start Discovery] Trying fallback enrichment for image...');
-            
-            // Use the enrichment API as fallback
-            const enrichResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/media/fallback-image`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                url: item.url,
-                title: item.title,
-                type: item.type
-              })
-            });
-            
-            if (enrichResponse.ok) {
-              const enrichData = await enrichResponse.json();
-              aiImageUrl = enrichData.imageUrl || enrichData.url;
-              aiImageSource = 'fallback';
-              console.log('[Start Discovery] ✅ Fallback image obtained');
-            }
-          } catch (fallbackError) {
-            console.warn('[Start Discovery] ⚠️ Fallback image failed:', fallbackError);
-          }
-        }
-        
-        // If still no image, skip this item
-        if (!aiImageUrl) {
-          console.log('[Start Discovery] ❌ Item rejected (no image):', item.title);
-          rejectedItems.push({
-            url: item.url,
-            title: item.title,
-            reason: 'no_image',
-            score: relevanceScore
-          });
-          
-          // Log rejection
-          fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3005'}/api/dev/rejected-content`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: item.url,
-              patchId: patch.id,
-              reason: 'Failed to generate image'
-            })
-          }).catch(() => {});
-          
-          continue; // Skip this item
-        }
-        
-        // STEP 3: ONLY NOW save to database with status: 'ready'
-        const discoveredContent = await prisma.discoveredContent.create({
-          data: {
-            patchId: patch.id,
-            type: item.type || 'article',
-            title: item.title,
-            content: item.description || '',
-            sourceUrl: item.url,
-            canonicalUrl: canonicalUrl,
-            relevanceScore: Math.round(relevanceScore * 100), // Convert 0.0-1.0 to 0-100
-            tags: patch.tags.slice(0, 3),
-            status: 'ready', // ← READY because it passed all checks!
-            mediaAssets: {
-              heroImage: {
-                url: aiImageUrl,
-                source: aiImageSource,
-                license: 'generated'
-              }
-            }
-          }
-        });
-        
-        // 🚀 Add approved URL to cache immediately
-        urlCache.add(item.url)
-        urlCache.add(canonicalUrl)
-        
-        console.log('[Start Discovery] ✅ Item saved with image:', discoveredContent.id);
+    try {
+      const result = await worker.processSources(
+        discoveredSources,
+        patch.id,
+        handle,
+        (event, data) => console.log(`[Start Discovery] ${event}:`, data)
+      )
+      
+      console.log('[Start Discovery] Non-streaming summary:', {
+        discovered: discoveredSources.length,
+        saved: result.saved,
+        rejected: result.rejected,
+        duplicates: result.duplicates
+      });
 
-        savedItems.push({
-          id: discoveredContent.id,
-          title: discoveredContent.title,
-          url: discoveredContent.sourceUrl,
-          type: discoveredContent.type,
-          description: discoveredContent.content,
-          relevanceScore: discoveredContent.relevanceScore,
-          status: discoveredContent.status,
-          imageUrl: aiImageUrl
-        });
-        
-      } catch (itemError) {
-        console.error('[Start Discovery] Failed to process item:', item.title, itemError);
-        rejectedItems.push({
-          url: item.url,
-          title: item.title,
-          reason: 'processing_error',
-          error: itemError instanceof Error ? itemError.message : String(itemError)
-        });
-      }
+      return NextResponse.json({
+        success: true,
+        message: `Started content discovery for "${patch.name}"`,
+        itemsDiscovered: discoveredSources.length,
+        itemsSaved: result.saved,
+        itemsRejected: result.rejected,
+        itemsDuplicate: result.duplicates,
+        items: [], // Will be populated by SSE in streaming mode
+        rejections: []
+      });
+    } catch (error) {
+      console.error('[Start Discovery] Non-streaming error:', error)
+      return NextResponse.json({
+        success: false,
+        error: 'Discovery failed',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 })
     }
-
-    // Flush batched logs
-    duplicateLogger.flush()
-    
-    console.log('[Start Discovery] Summary:', {
-      discovered: discoveredItems.length,
-      saved: savedItems.length,
-      rejected: rejectedItems.length,
-      duplicates: duplicateCount
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Started content discovery for "${patch.name}"`,
-      itemsDiscovered: discoveredItems.length,
-      itemsSaved: savedItems.length,
-      itemsRejected: rejectedItems.length,
-      itemsDuplicate: duplicateCount,
-      items: savedItems,
-      rejections: rejectedItems.map(r => ({ title: r.title, reason: r.reason }))
-    });
 
   } catch (error) {
     console.error('[Start Discovery] Error:', error);
