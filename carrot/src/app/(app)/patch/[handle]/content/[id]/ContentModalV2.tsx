@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, Share2, Clock, Calendar, AlertTriangle, X } from 'lucide-react'
@@ -182,6 +182,10 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[1400px] w-[92vw] max-h-[90vh] p-0 overflow-hidden">
+        <DialogTitle className="sr-only">Content Modal</DialogTitle>
+        <DialogDescription className="sr-only">
+          View and interact with content from the discovery feed
+        </DialogDescription>
         {/* Header Strip - Taller and more prominent */}
         <div className="relative h-24 md:h-28 bg-gradient-to-r from-slate-900 to-slate-700 text-white">
           {/* Hero Background */}
