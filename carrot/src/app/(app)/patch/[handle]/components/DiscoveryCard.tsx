@@ -12,6 +12,7 @@ interface DiscoveryCardProps {
   item: DiscoveredItem
   onHeroClick?: (item: DiscoveredItem) => void
   patchHandle?: string
+  className?: string
 }
 
 
@@ -28,7 +29,7 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-export default function DiscoveryCard({ item, onHeroClick, patchHandle }: DiscoveryCardProps) {
+export default function DiscoveryCard({ item, onHeroClick, patchHandle, className = "" }: DiscoveryCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const router = useRouter()
   const hero = useMemo(() => pickHero(item), [item.id, item.media])
@@ -83,7 +84,7 @@ export default function DiscoveryCard({ item, onHeroClick, patchHandle }: Discov
   
   return (
     <div 
-      className="rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2"
+      className={`rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2 ${className}`}
       onClick={handleCardClick}
       role="button"
       tabIndex={0}

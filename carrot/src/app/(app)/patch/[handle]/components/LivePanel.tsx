@@ -19,6 +19,7 @@ interface LivePanelProps {
   onPause: () => void
   onStop: () => void
   onRefresh: () => void
+  className?: string
 }
 
 export default function LivePanel({
@@ -31,7 +32,8 @@ export default function LivePanel({
   onStart,
   onPause,
   onStop,
-  onRefresh
+  onRefresh,
+  className = ""
 }: LivePanelProps) {
   const getStatusIcon = () => {
     if (error) return <AlertTriangle className="h-4 w-4 text-red-500" />
@@ -48,7 +50,7 @@ export default function LivePanel({
   }
 
   return (
-    <div className="sticky top-4 space-y-4">
+    <div className={`sticky top-4 space-y-4 ${className}`}>
       {/* Status Card */}
       <div className={`rounded-lg border p-4 ${getStatusColor()}`}>
         <div className="flex items-center gap-2 mb-2">
@@ -78,49 +80,16 @@ export default function LivePanel({
         </div>
       </div>
 
-      {/* Controls */}
+      {/* Controls - Only Start Discovery and Refresh */}
       <div className="space-y-2">
-        {!isActive ? (
-          <Button
-            onClick={onStart}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            size="sm"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Start Discovery
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            {isPaused ? (
-              <Button
-                onClick={onStart}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                size="sm"
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Resume
-              </Button>
-            ) : (
-              <Button
-                onClick={onPause}
-                className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white"
-                size="sm"
-              >
-                <Pause className="h-4 w-4 mr-2" />
-                Pause
-              </Button>
-            )}
-            <Button
-              onClick={onStop}
-              variant="outline"
-              size="sm"
-              className="flex-1"
-            >
-              <Square className="h-4 w-4 mr-2" />
-              Stop
-            </Button>
-          </div>
-        )}
+        <Button
+          onClick={onStart}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+          size="sm"
+        >
+          <Play className="h-4 w-4 mr-2" />
+          {isActive ? (isPaused ? 'Resume Discovery' : 'Live Discovery') : 'Start Discovery'}
+        </Button>
         
         <Button
           onClick={onRefresh}

@@ -9,15 +9,20 @@ interface DiscoverySkeletonProps {
   isActive: boolean
   currentStatus?: string
   className?: string
+  id?: string
 }
 
 export default function DiscoverySkeleton({ 
   isActive, 
   currentStatus = "Discovering...",
-  className = ""
+  className = "",
+  id
 }: DiscoverySkeletonProps) {
   return (
-    <div className={`rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm ${className}`}>
+    <div 
+      id={id}
+      className={`rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm ${className}`}
+    >
       {/* Hero skeleton with pulsing animation */}
       <div className="aspect-[16/9] bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-xl mb-3 animate-pulse relative overflow-hidden">
         {/* Animated shimmer effect */}

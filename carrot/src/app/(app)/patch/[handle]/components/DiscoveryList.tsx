@@ -109,7 +109,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   return (
-    <div className="border-t border-[#E6E8EC] pt-4">
+    <section className="mx-auto max-w-7xl px-4">
       {/* Discovery Header */}
       <div className="mt-6 mb-3">
         <div className="flex items-center gap-2 mb-1">
@@ -124,78 +124,107 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       </div>
 
-      {/* Main Layout: Live Panel (left) + Content (right) */}
-      <div className="flex gap-6">
-        {/* Live Panel - Left Side */}
-        <div className="w-80 flex-shrink-0">
-          <LivePanel
-            isActive={state.isActive}
-            isPaused={state.isPaused}
-            currentStatus={state.currentStatus}
-            itemsFound={state.itemsFound}
-            lastItemTitle={state.lastItemTitle}
-            error={state.error}
-            onStart={handleStart}
-            onPause={handlePause}
-            onStop={handleStop}
-            onRefresh={handleRefresh}
-          />
+      {/* Filters row (fixed/nowrap; keep existing controls) */}
+      <div className="relative z-10 mb-4 flex min-h-[44px] items-center gap-3 overflow-x-auto whitespace-nowrap md:flex-wrap md:overflow-visible">
+        {/* Type Filter */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Filter className="h-4 w-4 text-slate-500" />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as any)}
+            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+          >
+            <option value="all">All Types</option>
+            <option value="article">Articles</option>
+            <option value="video">Videos</option>
+            <option value="pdf">PDFs</option>
+            <option value="image">Images</option>
+            <option value="text">Text</option>
+          </select>
         </div>
 
-        {/* Content Area - Right Side */}
-        <div className="flex-1 min-w-0">
-          {/* Filters - Fixed width, no wrapping */}
-          <div className="flex items-center gap-4 flex-nowrap overflow-x-auto mb-6 pb-2">
-            {/* Type Filter */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Filter className="h-4 w-4 text-slate-500" />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
-                className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-              >
-                <option value="all">All Types</option>
-                <option value="article">Articles</option>
-                <option value="video">Videos</option>
-                <option value="pdf">PDFs</option>
-                <option value="image">Images</option>
-                <option value="text">Text</option>
-              </select>
-            </div>
+        {/* Sort Filter */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <SortAsc className="h-4 w-4 text-slate-500" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+          >
+            <option value="top">Top</option>
+            <option value="new">New</option>
+          </select>
+        </div>
 
-            {/* Sort Filter */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <SortAsc className="h-4 w-4 text-slate-500" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-              >
-                <option value="top">Top</option>
-                <option value="new">New</option>
-              </select>
-            </div>
+        {/* Time Range Filter */}
+        <select
+          value={timeRange}
+          onChange={(e) => setTimeRange(e.target.value as any)}
+          className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent flex-shrink-0"
+        >
+          <option value="7d">7d</option>
+          <option value="30d">30d</option>
+          <option value="all">All</option>
+        </select>
 
-            {/* Time Range Filter */}
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value as any)}
-              className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent flex-shrink-0"
-            >
-              <option value="7d">7d</option>
-              <option value="30d">30d</option>
-              <option value="all">All</option>
-            </select>
+        {/* Results Count */}
+        <div className="text-sm text-slate-600 flex-shrink-0">
+          {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
+        </div>
+      </div>
 
-            {/* Results Count */}
-            <div className="text-sm text-slate-600 flex-shrink-0">
-              {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
-            </div>
-          </div>
+      {/* Two-column grid only */}
+      <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-auto z-0">
+        {/* Row 1 - Live Panel and Skeleton */}
+        <LivePanel
+          className="lg:col-span-1 lg:row-start-1 sticky top-20 self-start"
+          isActive={state.isActive}
+          isPaused={state.isPaused}
+          currentStatus={state.currentStatus}
+          itemsFound={state.itemsFound}
+          lastItemTitle={state.lastItemTitle}
+          error={state.error}
+          onStart={handleStart}
+          onPause={handlePause}
+          onStop={handleStop}
+          onRefresh={handleRefresh}
+        />
+        
+        {/* Discovery Skeleton - morphs into real card */}
+        {state.isActive && (
+          <DiscoverySkeleton
+            id="discovery-skeleton"
+            className="lg:col-span-1 lg:row-start-1 min-w-[340px] w-full"
+            isActive={true}
+            currentStatus={state.currentStatus}
+          />
+        )}
+
+        {/* Rows 2+ : real items */}
+        {visibleItems.map((item) => (
+          <DiscoveryCard 
+            key={item.canonicalUrl || item.id} 
+            item={item}
+            onHeroClick={handleHeroClick}
+            patchHandle={patchHandle}
+            className="min-w-[340px] w-full"
+          />
+        ))}
+
+        {/* Loading skeletons when loading initial content */}
+        {isLoading && deduplicatedItems.length === 0 && (
+          <>
+            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
+            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
+            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
+            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
+          </>
+        )}
+      </div>
 
       {/* Error State */}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 mt-4">
           <div className="flex items-center gap-2 text-red-700">
             <div className="h-2 w-2 rounded-full bg-red-500" />
             <span className="text-sm font-medium">Error loading content</span>
@@ -213,17 +242,8 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       )}
 
-      {/* Loading State */}
-      {isLoading && deduplicatedItems.length === 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <DiscoveryCardSkeleton key={i} />
-          ))}
-        </div>
-      )}
-
       {/* Empty State */}
-      {!isLoading && !error && deduplicatedItems.length === 0 && (
+      {!isLoading && !error && deduplicatedItems.length === 0 && !state.isActive && (
         <div className="text-center py-12">
           <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">No items yet</h3>
@@ -233,41 +253,6 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           </p>
         </div>
       )}
-
-          {/* Content Grid */}
-          {(deduplicatedItems.length > 0 || state.isActive || isLoading) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Show skeleton FIRST when discovery is active (morphs into real card) */}
-              {state.isActive && (
-                <DiscoverySkeleton 
-                  isActive={true}
-                  currentStatus={state.currentStatus}
-                />
-              )}
-              
-              {/* Show loading skeletons when loading initial content */}
-              {isLoading && deduplicatedItems.length === 0 && (
-                <>
-                  <DiscoverySkeleton isActive={false} />
-                  <DiscoverySkeleton isActive={false} />
-                  <DiscoverySkeleton isActive={false} />
-                  <DiscoverySkeleton isActive={false} />
-                </>
-              )}
-              
-              {/* Then show actual items */}
-              {visibleItems.map((item) => (
-                <DiscoveryCard 
-                  key={item.canonicalUrl || item.id} 
-                  item={item}
-                  onHeroClick={handleHeroClick}
-                  patchHandle={patchHandle}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Load More Button */}
       {hasMoreItems && !isLoading && (
