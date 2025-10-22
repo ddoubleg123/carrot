@@ -271,8 +271,7 @@ export class OneAtATimeWorker {
     patchId: string,
     patchHandle: string
   ): Promise<{ id: string }> {
-    const { PrismaClient } = await import('@/lib/prisma')
-    const prisma = new PrismaClient()
+    const { prisma } = await import('@/lib/prisma')
     
     try {
       const savedItem = await prisma.discoveredContent.create({
@@ -308,8 +307,9 @@ export class OneAtATimeWorker {
       
       return { id: savedItem.id }
       
-    } finally {
-      await prisma.$disconnect()
+    } catch (error) {
+      console.error('[OneAtATimeWorker] Database save error:', error)
+      throw error
     }
   }
 
