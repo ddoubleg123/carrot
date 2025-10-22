@@ -273,7 +273,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
       />
-    </div>
+    </section>
   )
 }
 
