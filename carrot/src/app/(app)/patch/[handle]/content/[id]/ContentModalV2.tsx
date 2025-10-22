@@ -63,13 +63,20 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
     if (isOpen && contentId) {
       setIsLoading(true)
       fetch(`/api/internal/content/${contentId}/preview`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+          }
+          return res.json()
+        })
         .then(data => {
+          console.log('[ContentModalV2] Loaded content:', data)
           setContent(data)
           setIsLoading(false)
         })
         .catch(err => {
-          console.error('Failed to load content:', err)
+          console.error('[ContentModalV2] Failed to load content:', err)
+          setContent(null)
           setIsLoading(false)
         })
     }
@@ -186,6 +193,33 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
         <DialogDescription className="sr-only">
           View and interact with content from the discovery feed
         </DialogDescription>
+        
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading content...</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Error State */}
+        {!isLoading && !content && (
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center">
+              <div className="text-red-500 mb-4">⚠️</div>
+              <p className="text-gray-600 mb-4">Failed to load content</p>
+              <Button onClick={onClose} variant="outline">
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Main Content - Only render if content is loaded */}
+        {!isLoading && content && (
+          <>
         {/* Header Strip - Taller and more prominent */}
         <div className="relative h-24 md:h-28 bg-gradient-to-r from-slate-900 to-slate-700 text-white">
           {/* Hero Background */}
@@ -516,6 +550,8 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </DialogContent>
     </Dialog>
