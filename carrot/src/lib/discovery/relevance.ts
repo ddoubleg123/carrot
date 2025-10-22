@@ -50,7 +50,8 @@ export class RelevanceEngine {
       return {
         isRelevant: false,
         score: 0,
-        reason: 'No entity profile found for group'
+        reason: 'No entity profile found for group',
+        matchedEntities: []
       }
     }
     
