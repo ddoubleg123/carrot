@@ -2,6 +2,7 @@ import { SearchCoordinator, type SearchStrategy } from './searchCoordinator'
 import { WikipediaSource, type WikipediaPage, type WikipediaCitation } from './wikipediaSource'
 import { NewsSource, type NewsArticle } from './newsSource'
 import { canonicalize } from './canonicalization'
+import { RelevanceEngine } from './relevance'
 
 export interface DiscoveredSource {
   title: string
@@ -39,6 +40,7 @@ export interface DiscoveryResult {
 export class MultiSourceOrchestrator {
   private seenUrls = new Set<string>()
   private duplicateCount = 0
+  private relevanceEngine = new RelevanceEngine()
 
   /**
    * Execute full multi-source discovery
@@ -82,8 +84,14 @@ export class MultiSourceOrchestrator {
 
     // Step 4: TODO: Add other sources (arXiv, PubMed, etc.)
 
+    // Step 4: Apply relevance filtering
+    console.log('[MultiSourceOrchestrator] Applying relevance filtering...')
+    const relevantSources = await this.filterRelevantSources(allSources, topicName)
+    
     console.log('[MultiSourceOrchestrator] ✅ Discovery complete:', {
       totalSources: allSources.length,
+      relevant: relevantSources.length,
+      filtered: allSources.length - relevantSources.length,
       wikipediaPages: wikipediaPageCount,
       citations: wikipediaCitationCount,
       news: newsArticleCount,
@@ -91,16 +99,55 @@ export class MultiSourceOrchestrator {
     })
 
     return {
-      sources: allSources,
+      sources: relevantSources,
       strategy,
       stats: {
         wikipediaPages: wikipediaPageCount,
         wikipediaCitations: wikipediaCitationCount,
         newsArticles: newsArticleCount,
-        totalSources: allSources.length,
+        totalSources: relevantSources.length,
         duplicatesRemoved: this.duplicateCount
       }
     }
+  }
+
+  /**
+   * Filter sources by relevance to the topic
+   */
+  private async filterRelevantSources(sources: DiscoveredSource[], topicName: string): Promise<DiscoveredSource[]> {
+    console.log(`[MultiSourceOrchestrator] Filtering ${sources.length} sources for relevance to: ${topicName}`)
+    
+    // Build entity profile for the topic
+    await this.relevanceEngine.buildEntityProfile('current-topic', topicName)
+    
+    const relevantSources: DiscoveredSource[] = []
+    
+    for (const source of sources) {
+      try {
+        const relevanceResult = await this.relevanceEngine.checkRelevance(
+          'current-topic',
+          source.title,
+          source.content || source.description,
+          source.metadata.sourceDomain || 'unknown'
+        )
+        
+        if (relevanceResult.isRelevant) {
+          // Update relevance score based on actual relevance check
+          source.relevanceScore = Math.round(relevanceResult.score * 100)
+          relevantSources.push(source)
+          console.log(`[MultiSourceOrchestrator] ✅ Relevant: ${source.title} (score: ${source.relevanceScore})`)
+        } else {
+          console.log(`[MultiSourceOrchestrator] ❌ Filtered out: ${source.title} (${relevanceResult.reason})`)
+        }
+      } catch (error) {
+        console.error(`[MultiSourceOrchestrator] Error checking relevance for ${source.title}:`, error)
+        // Include source if relevance check fails (fail open)
+        relevantSources.push(source)
+      }
+    }
+    
+    console.log(`[MultiSourceOrchestrator] Relevance filtering complete: ${relevantSources.length}/${sources.length} sources passed`)
+    return relevantSources
   }
 
   /**
