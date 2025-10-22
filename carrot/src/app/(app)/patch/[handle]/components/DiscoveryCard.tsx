@@ -1,12 +1,11 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { Clock, ExternalLink } from 'lucide-react'
+import { Clock, ExternalLink, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { pickHero, getDominantColor } from '@/lib/media/hero'
 import { DiscoveredItem } from '@/types/discovered-content'
 import GeneratedCover from './GeneratedCover'
-import PostActionBar from '@/components/post/PostActionBar'
 import { useRouter } from 'next/navigation'
 
 interface DiscoveryCardProps {
@@ -164,19 +163,47 @@ export default function DiscoveryCard({ item, onHeroClick, patchHandle }: Discov
         )}
       </div>
       
-      {/* PostActionBar */}
+      {/* Action Bar - Only 2 buttons as requested */}
       <div 
         className="mt-3 pt-3 border-t border-[#E6E8EC]"
         onClick={(e) => e.stopPropagation()}
       >
-        <PostActionBar
-          postId={item.id}
-          stats={{ likes: 0, comments: 0, reposts: 0, views: 0 }}
-          canTranscribe={false}
-          permalink={item.url}
-          initiallySaved={false}
-          initiallyLiked={false}
-        />
+        <div className="flex gap-2">
+          <Button 
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(item.url, '_blank')
+            }}
+            variant="outline"
+            size="sm"
+            className="flex-1"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />
+            View Source
+          </Button>
+          <Button 
+            onClick={(e) => {
+              e.stopPropagation()
+              if (navigator.share) {
+                navigator.share({
+                  title: item.title,
+                  text: item.content.summary150,
+                  url: item.url,
+                }).catch(console.error)
+              } else {
+                navigator.clipboard.writeText(item.url)
+                  .then(() => alert('Link copied to clipboard!'))
+                  .catch(console.error)
+              }
+            }}
+            variant="outline"
+            size="sm"
+            className="flex-1"
+          >
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </Button>
+        </div>
       </div>
     </div>
   )
