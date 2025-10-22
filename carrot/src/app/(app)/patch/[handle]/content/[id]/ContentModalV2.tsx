@@ -365,11 +365,11 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     </section>
 
                     {/* Key Facts */}
-                    {content.keyFacts && content.keyFacts.length > 0 && (
+                    {content.keyPoints && content.keyPoints.length > 0 && (
                       <section>
                         <h2 className="text-lg font-semibold text-slate-900 mb-3">Key Facts</h2>
                         <div className="space-y-2">
-                          {content.keyFacts.map((fact: string, index: number) => (
+                          {content.keyPoints.map((fact: string, index: number) => (
                             <div key={index} className="flex items-start gap-3">
                               <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
                               <span className="text-slate-700">{fact}</span>
@@ -394,13 +394,13 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                       <section>
                         <h2 className="text-lg font-semibold text-slate-900 mb-3">Related Entities</h2>
                         <div className="flex flex-wrap gap-2">
-                          {content.entities.map((entity: string, index: number) => (
+                          {content.entities.map((entity: any, index: number) => (
                             <Badge 
                               key={index}
                               variant="secondary"
                               className="text-sm bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 cursor-pointer"
                             >
-                              {entity}
+                              {typeof entity === 'string' ? entity : entity?.name || entity}
                             </Badge>
                           ))}
                         </div>
