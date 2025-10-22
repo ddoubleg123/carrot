@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Modal from '@/components/content/Modal'
-import ActionBar from '@/components/content/ActionBar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -338,14 +337,24 @@ export default function ContentModal({ item, isOpen, onClose }: ContentModalProp
                     className="w-full h-full object-cover"
                   />
                   
-                  {/* Action Bar Overlay */}
+                  {/* Action Bar Overlay - Only 2 buttons as requested */}
                   <div className="absolute left-4 bottom-4 z-20">
-                    <ActionBar
-                      variant="overlay"
-                      onAttach={() => console.log('Attach clicked')}
-                      onDiscuss={handleDiscuss}
-                      onShare={handleShare}
-                    />
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={handleOpenOriginal}
+                        className="bg-black/70 hover:bg-black/80 text-white backdrop-blur"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View Source
+                      </Button>
+                      <Button 
+                        onClick={handleShare}
+                        className="bg-black/70 hover:bg-black/80 text-white backdrop-blur"
+                      >
+                        <Share2 className="h-4 w-4 mr-2" />
+                        Share
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -501,14 +510,26 @@ export default function ContentModal({ item, isOpen, onClose }: ContentModalProp
                 </Button>
               </div>
 
-              {/* Inline Action Bar */}
+              {/* Inline Action Bar - Only 2 buttons as requested */}
               <div className="pt-4">
-                <ActionBar
-                  variant="inline"
-                  onAttach={() => console.log('Attach clicked')}
-                  onDiscuss={handleDiscuss}
-                  onShare={handleShare}
-                />
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleOpenOriginal}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Source
+                  </Button>
+                  <Button 
+                    onClick={handleShare}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (
