@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { X, ExternalLink, Copy, Calendar, Clock, User, Globe, AlertTriangle } from 'lucide-react'
+import { X, ExternalLink, Copy, Calendar, Clock, User, Globe, AlertTriangle, Share } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import ActionBar from './ActionBar'
@@ -257,14 +257,24 @@ export default function ContentModal({ contentId, isOpen, onClose }: ContentModa
                     className="w-full h-full object-cover"
                   />
                   
-                  {/* Action Bar Overlay */}
+                  {/* Action Bar Overlay - Only 2 buttons as requested */}
                   <div className="absolute left-4 bottom-4 z-10">
-                    <ActionBar
-                      variant="overlay"
-                      onAttach={() => console.log('Attach clicked')}
-                      onDiscuss={() => console.log('Discuss clicked')}
-                      onShare={() => console.log('Share clicked')}
-                    />
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={handleOpenOriginal}
+                        className="bg-black/70 hover:bg-black/80 text-white backdrop-blur"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View Source
+                      </Button>
+                      <Button 
+                        onClick={() => console.log('Share clicked')}
+                        className="bg-black/70 hover:bg-black/80 text-white backdrop-blur"
+                      >
+                        <Share className="h-4 w-4 mr-2" />
+                        Share
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}

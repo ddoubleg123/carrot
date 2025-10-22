@@ -108,7 +108,7 @@ export class RelevanceEngine {
       text.includes(person.toLowerCase())
     )
     
-    const isRelevant = score >= 0.3 && hasGroupMention
+    const isRelevant = score >= 0.7 && hasGroupMention
     
     return {
       isRelevant,
