@@ -331,14 +331,14 @@ export class DiscoveryOrchestrator {
     return {
       id: savedItem.id,
       title: savedItem.title,
-      url: savedItem.sourceUrl,
-      canonicalUrl: savedItem.canonicalUrl,
-      content: savedItem.content,
+      url: savedItem.sourceUrl || '',
+      canonicalUrl: savedItem.canonicalUrl || '',
+      content: savedItem.content || '',
       summary: item.summary,
       keyPoints: item.keyPoints,
       heroUrl: item.heroUrl,
       heroSource: item.heroSource,
-      relevanceScore: savedItem.relevanceScore,
+      relevanceScore: savedItem.relevanceScore || 0,
       createdAt: savedItem.createdAt
     }
   }
