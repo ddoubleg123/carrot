@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import prisma from '@/lib/prisma'
 
 // Validation schema
 const TrackEventSchema = z.object({
@@ -27,26 +26,15 @@ export async function POST(request: NextRequest) {
     
     const { action, data, timestamp } = validation.data
 
-    console.log(`[Analytics] Tracking event: ${action}`)
+    console.log(`[Analytics] Tracking event: ${action}`, {
+      action,
+      data,
+      timestamp: timestamp || new Date().toISOString()
+    })
 
-    // Store in audit_events table
-    try {
-      await prisma.auditEvent.create({
-        data: {
-          action,
-          data: JSON.stringify(data),
-          timestamp: timestamp ? new Date(timestamp) : new Date(),
-          userId: data.userId || null,
-          postId: data.postId || null,
-          groupId: data.groupId || null
-        }
-      })
-
-      console.log(`[Analytics] ✅ Event tracked: ${action}`)
-    } catch (dbError) {
-      console.warn('[Analytics] Database tracking failed (non-critical):', dbError)
-      // Don't fail the request if database tracking fails
-    }
+    // For now, just log the events to console
+    // In the future, we can add a proper audit table to the database
+    console.log(`[Analytics] ✅ Event tracked: ${action}`)
 
     return NextResponse.json({ success: true })
 
