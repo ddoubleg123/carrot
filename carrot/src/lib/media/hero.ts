@@ -72,7 +72,7 @@ async function updateItemWithHeroImage(itemId: string, heroImageUrl: string): Pr
 
 /**
  * Picks the best available hero image from a DiscoveredItem
- * Prioritizes real media over generated covers
+ * Prioritizes AI → Wikimedia → OG → placeholder
  */
 export function pickHero(item: DiscoveredItem): string | null {
   const media = item.media
@@ -85,12 +85,26 @@ export function pickHero(item: DiscoveredItem): string | null {
     hero: media?.hero,
     videoThumb: media?.videoThumb,
     pdfPreview: media?.pdfPreview,
-    gallery: media?.gallery
+    gallery: media?.gallery,
+    source: media?.source
   })
   
-  // Priority order: hero → videoThumb → pdfPreview → gallery[0]
+  // Priority order: AI → Wiki → OG → videoThumb → pdfPreview → gallery[0]
   if (media?.hero) {
-    console.log('[pickHero] Using hero:', media.hero)
+    // Check if it's AI-generated (preferred)
+    if (media.source === 'ai' || media.license === 'generated') {
+      console.log('[pickHero] Using AI hero:', media.hero)
+      return media.hero
+    }
+    
+    // Check if it's Wikimedia (good fallback)
+    if (media.source === 'wiki') {
+      console.log('[pickHero] Using Wikimedia hero:', media.hero)
+      return media.hero
+    }
+    
+    // Use OG image as last resort
+    console.log('[pickHero] Using OG hero:', media.hero)
     return media.hero
   }
   
@@ -111,9 +125,6 @@ export function pickHero(item: DiscoveredItem): string | null {
   
   // No real media available - will fall back to GeneratedCover
   console.log('[pickHero] No real media found, will use fallback')
-  
-  // DO NOT trigger AI generation from browser - this should be server-side only
-  // AI image generation happens during discovery process on the server
   
   return null // Return null to use fallback/placeholder in UI
 }

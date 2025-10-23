@@ -50,7 +50,7 @@ export default function LivePanel({
   }
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div className={`sticky top-4 space-y-4 ${className}`}>
       {/* Status Card */}
       <div className={`rounded-lg border p-4 ${getStatusColor()}`}>
         <div className="flex items-center gap-2 mb-2">

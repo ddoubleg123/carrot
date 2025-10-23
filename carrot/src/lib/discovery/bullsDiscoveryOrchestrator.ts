@@ -7,6 +7,8 @@ import { GroupProfile, getGroupProfile } from './groupProfiles'
 import { WikipediaParser, WikipediaResult } from './wikipediaParser'
 import { canonicalize } from './canonicalization'
 import { SimHash } from './deduplication'
+import { RelevanceEngine } from './relevance-engine'
+import { ContentQualityPipeline } from '../content/quality-pipeline'
 
 export interface BullsDiscoveryResult {
   sources: DiscoveredSource[]
@@ -42,6 +44,8 @@ export interface DiscoveredSource {
 export class BullsDiscoveryOrchestrator {
   private wikipediaParser = new WikipediaParser()
   private simHash = new SimHash()
+  private relevanceEngine = new RelevanceEngine()
+  private qualityPipeline = new ContentQualityPipeline()
   private seenUrls = new Set<string>()
   private duplicateCount = 0
   private relevanceFiltered = 0
@@ -212,17 +216,21 @@ export class BullsDiscoveryOrchestrator {
     const relevantSources: DiscoveredSource[] = []
     
     for (const source of sources) {
-      // Apply hard relevance gate
-      const relevanceCheck = this.checkRelevance(source, groupProfile)
+      // Use the new RelevanceEngine
+      const relevanceResult = this.relevanceEngine.checkRelevance(
+        source.title,
+        source.content,
+        source.metadata.domain
+      )
       
-      if (relevanceCheck.isRelevant) {
+      if (relevanceResult.isRelevant) {
         // Update relevance score based on actual check
-        source.relevanceScore = Math.round(relevanceCheck.score * 100)
+        source.relevanceScore = Math.round(relevanceResult.score * 100)
         relevantSources.push(source)
         console.log(`[BullsDiscoveryOrchestrator] ✅ Relevant: ${source.title} (score: ${source.relevanceScore})`)
       } else {
         this.relevanceFiltered++
-        console.log(`[BullsDiscoveryOrchestrator] ❌ Filtered out: ${source.title} (${relevanceCheck.reason})`)
+        console.log(`[BullsDiscoveryOrchestrator] ❌ Filtered out: ${source.title} (${relevanceResult.reason})`)
       }
     }
     

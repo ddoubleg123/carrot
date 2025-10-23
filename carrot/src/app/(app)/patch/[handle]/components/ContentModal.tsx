@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { DiscoveredItem } from '@/types/discovered-content'
-import UnifiedContentModal from '@/components/modal/UnifiedContentModal'
+import ContentModalV3 from '@/components/modal/ContentModalV3'
 
 interface ContentModalProps {
   item: DiscoveredItem | null
@@ -12,11 +12,10 @@ interface ContentModalProps {
 
 export default function ContentModal({ item, isOpen, onClose }: ContentModalProps) {
   return (
-    <UnifiedContentModal
+    <ContentModalV3
       item={item}
       isOpen={isOpen}
       onClose={onClose}
-      source="group"
     />
   )
 }

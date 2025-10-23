@@ -109,7 +109,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-4">
+    <section className="w-full">
       {/* Discovery Header */}
       <div className="mt-6 mb-3">
         <div className="flex items-center gap-2 mb-1">
@@ -173,11 +173,11 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       </div>
 
-      {/* Two-column grid only */}
+      {/* Two-column grid only - enforce exactly 2 columns on desktop */}
       <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-auto z-0">
         {/* Row 1 - Live Panel and Skeleton */}
         <LivePanel
-          className="lg:col-span-1 lg:row-start-1 self-start"
+          className="lg:col-span-1 lg:row-start-1 sticky top-20 self-start max-w-sm"
           isActive={state.isActive}
           isPaused={state.isPaused}
           currentStatus={state.currentStatus}
@@ -191,14 +191,12 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         />
         
         {/* Discovery Skeleton - morphs into real card */}
-        {state.isActive && (
-          <DiscoverySkeleton
-            id="discovery-skeleton"
-            className="lg:col-span-1 lg:row-start-1 min-w-[340px] w-full"
-            isActive={true}
-            currentStatus={state.currentStatus}
-          />
-        )}
+        <DiscoverySkeleton
+          id="discovery-skeleton"
+          className="lg:col-span-1 lg:row-start-1 min-w-[340px] w-full"
+          isActive={state.isActive}
+          currentStatus={state.currentStatus}
+        />
 
         {/* Rows 2+ : real items */}
         {visibleItems.map((item) => (

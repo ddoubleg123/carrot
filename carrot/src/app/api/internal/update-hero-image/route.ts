@@ -6,10 +6,9 @@ import { z } from "zod";
 
 // Validation schema
 const UpdateHeroSchema = z.object({
-  itemId: z.string(),
-  patchId: z.string().optional(),
+  postId: z.string(),
   heroUrl: z.string().url(),
-  source: z.enum(['og', 'oembed', 'inline', 'video', 'pdf', 'image', 'ai', 'generated']),
+  mediaSource: z.enum(['ai', 'wiki', 'og']),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional()
 });
@@ -47,33 +46,49 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { itemId, heroUrl, source } = validation.data;
+    const { postId, heroUrl, mediaSource } = validation.data;
 
-    console.log(`[update-hero-image] Updating hero for ${itemId}`);
+    console.log(`[update-hero-image] Updating hero for ${postId}`);
+
+    // Validate heroUrl is accessible and proxy it
+    try {
+      const proxyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/media/proxy?url=${encodeURIComponent(heroUrl)}`);
+      if (!proxyResponse.ok) {
+        return NextResponse.json(
+          { error: "Hero URL is not accessible" },
+          { status: 400 }
+        );
+      }
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Hero URL validation failed" },
+        { status: 400 }
+      );
+    }
 
     // Update in Prisma (primary database)
     try {
       const currentItem = await prisma.discoveredContent.findUnique({
-        where: { id: itemId },
+        where: { id: postId },
         select: { mediaAssets: true }
       });
 
       const currentMediaAssets = (currentItem?.mediaAssets as any) || {};
 
       await prisma.discoveredContent.update({
-        where: { id: itemId },
+        where: { id: postId },
         data: {
           mediaAssets: {
             ...currentMediaAssets,
             hero: heroUrl,
-            source: source,
-            license: source.includes('generated') ? 'generated' : 'source',
+            source: mediaSource,
+            license: mediaSource === 'ai' ? 'generated' : 'source',
             updatedAt: new Date().toISOString()
           }
         }
       });
 
-      console.log(`[update-hero-image] ✅ Updated hero in Prisma for ${itemId}`);
+      console.log(`[update-hero-image] ✅ Updated hero in Prisma for ${postId}`);
     } catch (prismaErr) {
       console.error(`[update-hero-image] Prisma update failed:`, prismaErr);
       return NextResponse.json(
@@ -85,9 +100,9 @@ export async function POST(request: NextRequest) {
     // Optional: Also update in Firebase if available
     if (db) {
       try {
-        const ref = doc(db, "discovered_content", itemId);
-        await updateDoc(ref, { hero: heroUrl, heroSource: source, updatedAt: new Date().toISOString() });
-        console.log(`[update-hero-image] ✅ Updated hero in Firebase for ${itemId}`);
+        const ref = doc(db, "discovered_content", postId);
+        await updateDoc(ref, { hero: heroUrl, heroSource: mediaSource, updatedAt: new Date().toISOString() });
+        console.log(`[update-hero-image] ✅ Updated hero in Firebase for ${postId}`);
       } catch (firebaseErr) {
         console.warn("[update-hero-image] Firebase update failed (non-critical):", firebaseErr);
         // Don't fail the request if Firebase fails - Prisma is primary
