@@ -104,7 +104,7 @@ export async function GET(
         type: item.type || 'article',
         title: item.title,
         displayTitle: enrichedData.displayTitle || item.title,
-        url: item.sourceUrl,
+        url: item.sourceUrl || item.canonicalUrl || '',
         canonicalUrl: item.canonicalUrl || item.sourceUrl,
         matchPct: item.relevanceScore || 0.8,
         status: item.status,

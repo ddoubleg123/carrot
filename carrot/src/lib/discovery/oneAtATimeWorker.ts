@@ -210,7 +210,10 @@ export class OneAtATimeWorker {
       
       const aiResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/ai/generate-hero-image`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+        },
         body: JSON.stringify({
           title: source.title,
           summary: content.substring(0, 200),
@@ -239,7 +242,10 @@ export class OneAtATimeWorker {
       
       const wikimediaResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/media/wikimedia-search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+        },
         body: JSON.stringify({
           query: `${source.title} Chicago Bulls`,
           limit: 5

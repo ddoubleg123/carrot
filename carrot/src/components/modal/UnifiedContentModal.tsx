@@ -163,7 +163,13 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
 
   const handleOpenOriginal = () => {
     if (isDiscovered) {
-      verifyAndOpenLink(item.url)
+      if (item.url) {
+        verifyAndOpenLink(item.url)
+      } else {
+        console.warn('[UnifiedContentModal] No source URL available for item:', item.id)
+        // Show a toast or alert that URL is not available
+        alert('Source URL is not available for this content.')
+      }
     } else {
       // For posts, open the post permalink
       const permalink = `${window.location.origin}/post/${item.id}`
@@ -339,9 +345,11 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
               <div className="mb-6">
                 <Button 
                   onClick={handleOpenOriginal}
-                  className="bg-[#FF6A00] hover:bg-[#E55A00] text-white"
+                  className="bg-[#FF6A00] hover:bg-[#E55A00] text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
                   data-focusable
                   aria-label={isDiscovered ? 'Open original article' : 'View post'}
+                  disabled={isDiscovered && !item.url}
+                  title={isDiscovered && !item.url ? 'Source URL not available' : ''}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   {isDiscovered ? 'Open Original' : 'View Post'}
