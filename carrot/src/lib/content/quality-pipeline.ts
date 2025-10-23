@@ -64,11 +64,11 @@ export class ContentQualityPipeline {
     let cleaned = html
     
     // Remove script and style tags
-    cleaned = cleaned.replace(/<(script|style)[^>]*>.*?<\/\1>/gis, '')
+    cleaned = cleaned.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
     
     // Remove unwanted elements
     for (const selector of unwantedSelectors) {
-      const regex = new RegExp(`<[^>]*class="[^"]*${selector.replace('.', '')}[^"]*"[^>]*>.*?</[^>]*>`, 'gis')
+      const regex = new RegExp(`<[^>]*class="[^"]*${selector.replace('.', '')}[^"]*"[^>]*>[\s\S]*?</[^>]*>`, 'gi')
       cleaned = cleaned.replace(regex, '')
     }
     
