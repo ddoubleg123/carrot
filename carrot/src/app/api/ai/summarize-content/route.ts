@@ -105,7 +105,7 @@ Provide a clean, informative summary with key facts and notable quotes.`
       result = JSON.parse(content)
     } catch (parseError) {
       // If JSON parsing fails, try to extract content manually
-      result = this.extractContentFromText(content)
+      result = extractContentFromText(content)
     }
 
     // Validate result structure
@@ -114,9 +114,9 @@ Provide a clean, informative summary with key facts and notable quotes.`
     }
 
     // Clean and validate content
-    result.summary = this.cleanText(result.summary)
-    result.keyFacts = result.keyFacts.map((fact: string) => this.cleanText(fact))
-    result.notableQuotes = result.notableQuotes?.map((quote: string) => this.cleanText(quote)) || []
+    result.summary = cleanText(result.summary)
+    result.keyFacts = result.keyFacts.map((fact: string) => cleanText(fact))
+    result.notableQuotes = result.notableQuotes?.map((quote: string) => cleanText(quote)) || []
 
     console.log(`[summarize-content] ✅ Successfully processed content for: ${title.substring(0, 50)}`)
 
