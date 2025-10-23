@@ -100,7 +100,7 @@ export class ContentQualityPipeline {
     }
     
     // Fallback to body content
-    const bodyMatch = html.match(/<body[^>]*>(.*?)<\/body>/gis)
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/gi)
     return bodyMatch ? bodyMatch[1] : html
   }
 
