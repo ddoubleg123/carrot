@@ -331,7 +331,7 @@ export default function ContentModalV3({ item, isOpen, onClose }: ContentModalV3
                       {linkStatus && !linkStatus.verified && linkStatus.archivedUrl && (
                         <Button 
                           onClick={() => setShowArchivePrompt(true)} 
-                          variant="link" 
+                          variant="ghost" 
                           className="p-0 h-auto text-blue-600 hover:text-blue-700"
                         >
                           View Archived Version
