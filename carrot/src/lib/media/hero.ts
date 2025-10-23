@@ -89,21 +89,15 @@ export function pickHero(item: DiscoveredItem): string | null {
     source: media?.source
   })
   
-  // Priority order: AI → Wiki → OG → videoThumb → pdfPreview → gallery[0]
+  // Priority order: Generated → OG → videoThumb → pdfPreview → gallery[0]
   if (media?.hero) {
-    // Check if it's AI-generated (preferred)
-    if (media.source === 'ai' || media.license === 'generated') {
-      console.log('[pickHero] Using AI hero:', media.hero)
+    // Check if it's generated (AI or other generated content)
+    if (media.source === 'generated' || media.license === 'generated') {
+      console.log('[pickHero] Using generated hero:', media.hero)
       return media.hero
     }
     
-    // Check if it's Wikimedia (good fallback)
-    if (media.source === 'wiki') {
-      console.log('[pickHero] Using Wikimedia hero:', media.hero)
-      return media.hero
-    }
-    
-    // Use OG image as last resort
+    // Use OG image as fallback
     console.log('[pickHero] Using OG hero:', media.hero)
     return media.hero
   }
