@@ -177,7 +177,7 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-auto z-0">
         {/* Row 1 - Live Panel and Skeleton */}
         <LivePanel
-          className="lg:col-span-1 lg:row-start-1 sticky top-20 self-start"
+          className="lg:col-span-1 lg:row-start-1 self-start"
           isActive={state.isActive}
           isPaused={state.isPaused}
           currentStatus={state.currentStatus}
