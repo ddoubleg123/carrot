@@ -135,9 +135,9 @@ Provide a clean, informative summary with key facts and notable quotes.`
  * Extract content from non-JSON response
  */
 function extractContentFromText(text: string): any {
-  const summaryMatch = text.match(/Summary[:\s]*(.+?)(?=Key Facts|$)/is)
-  const keyFactsMatch = text.match(/Key Facts[:\s]*(.+?)(?=Notable Quotes|$)/is)
-  const quotesMatch = text.match(/Notable Quotes[:\s]*(.+?)$/is)
+  const summaryMatch = text.match(/Summary[:\s]*([\s\S]+?)(?=Key Facts|$)/i)
+  const keyFactsMatch = text.match(/Key Facts[:\s]*([\s\S]+?)(?=Notable Quotes|$)/i)
+  const quotesMatch = text.match(/Notable Quotes[:\s]*([\s\S]+?)$/i)
 
   return {
     summary: summaryMatch?.[1]?.trim() || '',
