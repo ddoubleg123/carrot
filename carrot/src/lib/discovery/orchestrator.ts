@@ -70,15 +70,48 @@ export class DiscoveryOrchestrator {
    * Initialize search frontier with seed sources
    */
   private async initializeFrontier(): Promise<void> {
-    // Add Wikipedia sources
-    this.frontier.addCandidate({
-      source: 'wikipedia',
-      method: 'api',
-      cursor: `search=${encodeURIComponent(this.groupName)}`,
-      domain: 'wikipedia.org',
-      duplicateRate: 0,
-      lastSeen: new Date()
+    // Check what Wikipedia pages we've already discovered
+    const existingWikiPages = await prisma.discoveredContent.findMany({
+      where: {
+        patchId: this.groupId,
+        sourceUrl: {
+          contains: 'wikipedia.org'
+        }
+      },
+      select: {
+        sourceUrl: true,
+        title: true
+      }
     })
+    
+    console.log(`[Initialize Frontier] Found ${existingWikiPages.length} existing Wikipedia pages`)
+    
+    // If we already have the main Wikipedia page, use entity-specific searches
+    if (existingWikiPages.length > 0) {
+      // Progressive Wikipedia strategy: search for specific entities
+      const entitiesToSearch = this.getNextWikipediaEntities(this.groupName, existingWikiPages)
+      
+      for (const entity of entitiesToSearch) {
+        this.frontier.addCandidate({
+          source: 'wikipedia',
+          method: 'api',
+          cursor: `search=${encodeURIComponent(entity)}`,
+          domain: 'wikipedia.org',
+          duplicateRate: 0,
+          lastSeen: new Date()
+        })
+      }
+    } else {
+      // First run: search for the main topic
+      this.frontier.addCandidate({
+        source: 'wikipedia',
+        method: 'api',
+        cursor: `search=${encodeURIComponent(this.groupName)}`,
+        domain: 'wikipedia.org',
+        duplicateRate: 0,
+        lastSeen: new Date()
+      })
+    }
     
     // Add news sources
     this.frontier.addCandidate({
@@ -111,6 +144,36 @@ export class DiscoveryOrchestrator {
     })
     
     this.eventStream.start(this.groupId)
+  }
+  
+  /**
+   * Get next Wikipedia entities to search based on what we already have
+   */
+  private getNextWikipediaEntities(groupName: string, existingPages: any[]): string[] {
+    // For Chicago Bulls, search for key entities
+    const bullsEntities = [
+      'Michael Jordan',
+      'Scottie Pippen',
+      'Dennis Rodman',
+      'Phil Jackson',
+      'Derrick Rose',
+      'United Center',
+      '1995-96 Chicago Bulls season',
+      '1996 NBA Finals',
+      'Chicago Bulls dynasty',
+      'Zach LaVine',
+      'DeMar DeRozan',
+      'Nikola Vučević'
+    ]
+    
+    // Filter out entities we've already found
+    const existingTitles = existingPages.map(p => p.title.toLowerCase())
+    const newEntities = bullsEntities.filter(entity => 
+      !existingTitles.some(title => title.includes(entity.toLowerCase()))
+    )
+    
+    // Return up to 3 new entities to search
+    return newEntities.slice(0, 3)
   }
   
   /**

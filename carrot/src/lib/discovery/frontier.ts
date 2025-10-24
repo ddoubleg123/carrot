@@ -97,7 +97,11 @@ export class SearchFrontier {
     const diversity = this.calculateDiversity(candidate.domain)
     const penalty = candidate.duplicateRate
     
+    // Give citations MUCH higher priority (they're the next step after Wikipedia)
+    const citationBonus = candidate.source === 'citation' ? 10.0 : 0
+    
     return (
+      citationBonus +
       this.config.noveltyWeight * novelty +
       this.config.diversityWeight * diversity -
       this.config.penaltyWeight * penalty
