@@ -214,12 +214,15 @@ export class DiscoveryOrchestrator {
             )
             
             if (duplicateCheck.isDuplicate) {
+              console.log(`[Discovery Loop] ⏭️  Skipping duplicate: ${canonicalUrl} (${duplicateCheck.reason})`)
               this.eventStream.skipped('duplicate', canonicalUrl, {
                 reason: duplicateCheck.reason,
                 tier: duplicateCheck.tier
               })
               continue
             }
+            
+            console.log(`[Discovery Loop] ✅ New URL found: ${canonicalUrl}`)
             
             // Fetch and extract content
             const content = await this.fetchAndExtractContent(canonicalUrl)
@@ -247,10 +250,25 @@ export class DiscoveryOrchestrator {
             const enrichedContent = await this.enrichContent(content)
             this.eventStream.enriched(enrichedContent.title, enrichedContent.summary)
             
-            // Generate hero image
-            const heroResult = await this.heroPipeline.assignHero(enrichedContent)
+            // Generate hero image (with properly structured data)
+            const heroInput = {
+              title: enrichedContent.title,
+              content: {
+                summary150: enrichedContent.summary
+              },
+              metadata: {
+                topic: this.groupName,
+                source: content.url
+              }
+            }
+            
+            console.log(`[Discovery Loop] Calling hero pipeline for: ${enrichedContent.title}`)
+            const heroResult = await this.heroPipeline.assignHero(heroInput)
             if (heroResult) {
+              console.log(`[Discovery Loop] ✅ Hero generated: ${heroResult.source}`)
               this.eventStream.heroReady(heroResult.url, heroResult.source)
+            } else {
+              console.warn(`[Discovery Loop] ❌ No hero image generated for: ${enrichedContent.title}`)
             }
             
             // Save item
@@ -592,16 +610,26 @@ export class DiscoveryOrchestrator {
    * Enrich content with AI
    */
   private async enrichContent(content: any): Promise<any> {
-    // This would call AI service for enrichment
+    console.log(`[Enrich Content] Processing: ${content.title}`)
+    
+    // Extract meaningful key points from the content
+    const sentences = content.text.split(/[.!?]+/).filter((s: string) => s.trim().length > 20)
+    const keyPoints = sentences.slice(0, 5).map((s: string) => s.trim())
+    
+    // Create a better summary (first 150 chars)
+    const summary = content.text.substring(0, 180).trim() + '...'
+    
+    console.log(`[Enrich Content] Created ${keyPoints.length} key points from ${sentences.length} sentences`)
+    
     return {
       title: content.title,
       text: content.text,
-      summary: content.text.substring(0, 200) + '...',
-      keyPoints: [
-        'Key point 1',
-        'Key point 2',
-        'Key point 3'
-      ]
+      summary,
+      keyPoints: keyPoints.length > 0 ? keyPoints : ['No key points available'],
+      metadata: {
+        topic: this.groupName,
+        source: content.url
+      }
     }
   }
   
