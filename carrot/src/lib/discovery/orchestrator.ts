@@ -10,26 +10,13 @@ import { RelevanceEngine } from './relevance'
 import { DiscoveryEventStream } from './streaming'
 import { HeroImagePipeline } from './hero-pipeline'
 import { prisma } from '@/lib/prisma'
+import { DiscoveredItem } from '@/types/discovered-content'
 
 export interface DiscoveryConfig {
   maxItems: number
   timeout: number
   batchSize: number
   relevanceThreshold: number
-}
-
-export interface DiscoveryItem {
-  id: string
-  title: string
-  url: string
-  canonicalUrl: string
-  content: string
-  summary: string
-  keyPoints: string[]
-  heroUrl: string
-  heroSource: string
-  relevanceScore: number
-  createdAt: Date
 }
 
 export class DiscoveryOrchestrator {
@@ -428,7 +415,7 @@ export class DiscoveryOrchestrator {
   /**
    * Save item to database
    */
-  private async saveItem(item: any): Promise<DiscoveryItem> {
+  private async saveItem(item: any): Promise<DiscoveredItem> {
     const savedItem = await prisma.discoveredContent.create({
       data: {
         patchId: this.groupId,
@@ -450,18 +437,31 @@ export class DiscoveryOrchestrator {
       }
     })
     
+    // Return properly formatted DiscoveredItem
     return {
       id: savedItem.id,
+      type: 'article',
       title: savedItem.title,
       url: savedItem.sourceUrl || '',
       canonicalUrl: savedItem.canonicalUrl || '',
-      content: savedItem.content || '',
-      summary: item.summary,
-      keyPoints: item.keyPoints,
-      heroUrl: item.heroUrl,
-      heroSource: item.heroSource,
-      relevanceScore: savedItem.relevanceScore || 0,
-      createdAt: savedItem.createdAt
+      status: 'ready',
+      media: {
+        hero: item.heroUrl,
+        source: item.heroSource,
+        license: item.heroSource === 'ai' ? 'generated' : 'source'
+      },
+      content: {
+        summary150: item.summary,
+        keyPoints: item.keyPoints,
+        readingTimeMin: Math.ceil(item.content.split(' ').length / 200) // ~200 words per minute
+      },
+      meta: {
+        sourceDomain: item.domain,
+        publishDate: savedItem.createdAt.toISOString()
+      },
+      metadata: {
+        relevanceScore: savedItem.relevanceScore || 0
+      }
     }
   }
   
