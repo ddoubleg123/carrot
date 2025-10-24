@@ -147,6 +147,36 @@ export class DiscoveryOrchestrator {
   }
   
   /**
+   * Add more Wikipedia entities when frontier is low
+   */
+  private async addMoreWikipediaEntities(): Promise<void> {
+    const additionalEntities = [
+      'Chicago Bulls roster',
+      'Chicago Bulls coaching staff', 
+      'Chicago Bulls draft picks',
+      'Chicago Bulls trades',
+      'Chicago Bulls championships',
+      'Chicago Bulls records',
+      'Chicago Bulls statistics',
+      'Chicago Bulls arena',
+      'Chicago Bulls ownership',
+      'Chicago Bulls history'
+    ]
+    
+    for (const entity of additionalEntities) {
+      this.frontier.addCandidate({
+        source: 'wikipedia',
+        method: 'api',
+        cursor: `search=${encodeURIComponent(entity)}`,
+        domain: 'wikipedia.org',
+        duplicateRate: 0,
+        lastSeen: new Date()
+      })
+      console.log(`[Discovery Loop] ➕ Added Wikipedia entity: ${entity}`)
+    }
+  }
+
+  /**
    * Get next Wikipedia entities to search based on what we already have
    */
   private getNextWikipediaEntities(groupName: string, existingPages: any[]): string[] {
@@ -202,6 +232,7 @@ export class DiscoveryOrchestrator {
         const urls = await this.fetchUrls(candidate)
         
         let foundItemInThisCandidate = false
+        let processedAnyUrl = false
         
         for (const rawUrl of urls) {
           try {
@@ -225,6 +256,7 @@ export class DiscoveryOrchestrator {
                 reason: duplicateCheck.reason,
                 tier: duplicateCheck.tier
               })
+              processedAnyUrl = true // We processed this URL (even though it was duplicate)
               continue
             }
             
@@ -336,10 +368,18 @@ export class DiscoveryOrchestrator {
           }
         }
         
-        // If we didn't find anything from this candidate, reinsert it
-        if (!foundItemInThisCandidate) {
-          console.log(`[Discovery Loop] No items found from ${candidate.source}, reinserting...`)
+        // Only reinsert if we didn't process any URLs from this candidate
+        if (!processedAnyUrl) {
+          console.log(`[Discovery Loop] No URLs processed from ${candidate.source}, reinserting...`)
           this.frontier.reinsert(candidate, false)
+        } else {
+          console.log(`[Discovery Loop] Processed URLs from ${candidate.source}, not reinserting (candidate exhausted)`)
+        }
+        
+        // If we're stuck with duplicates and have few items, try adding more Wikipedia entities
+        if (itemsFound < 3 && this.frontier.getSize() < 5) {
+          console.log(`[Discovery Loop] 🔄 Low frontier size (${this.frontier.getSize()}), adding more Wikipedia entities...`)
+          await this.addMoreWikipediaEntities()
         }
         
         // Small delay between iterations
