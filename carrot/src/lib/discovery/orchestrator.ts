@@ -377,8 +377,9 @@ export class DiscoveryOrchestrator {
         }
         
         // If we're stuck with duplicates and have few items, try adding more Wikipedia entities
-        if (itemsFound < 3 && this.frontier.getSize() < 5) {
-          console.log(`[Discovery Loop] 🔄 Low frontier size (${this.frontier.getSize()}), adding more Wikipedia entities...`)
+        const frontierSize = this.frontier.getStats().totalCandidates
+        if (itemsFound < 3 && frontierSize < 5) {
+          console.log(`[Discovery Loop] 🔄 Low frontier size (${frontierSize}), adding more Wikipedia entities...`)
           await this.addMoreWikipediaEntities()
         }
         
