@@ -211,6 +211,7 @@ export class DiscoveryOrchestrator {
    */
   private async discoveryLoop(): Promise<void> {
     let itemsFound = 0
+    let consecutiveDuplicates = 0
     const startTime = Date.now()
     
     console.log(`[Discovery Loop] Starting with maxItems=${this.config.maxItems}, timeout=${this.config.timeout}ms`)
@@ -241,24 +242,31 @@ export class DiscoveryOrchestrator {
             const canonicalUrl = canonicalResult.canonicalUrl
             const domain = canonicalResult.finalDomain
             
-            // Check for duplicates
-            const duplicateCheck = await this.deduplication.checkDuplicate(
-              this.groupId,
-              canonicalUrl,
-              '', // Title will be fetched later
-              '', // Content will be fetched later
-              domain
-            )
+            // Check if URL already exists in database
+            const existingItem = await prisma.discoveredContent.findFirst({
+              where: {
+                patchId: this.groupId,
+                OR: [
+                  { canonicalUrl },
+                  { sourceUrl: canonicalUrl }
+                ]
+              },
+              select: { id: true, title: true }
+            })
             
-            if (duplicateCheck.isDuplicate) {
-              console.log(`[Discovery Loop] ⏭️  Skipping duplicate: ${canonicalUrl} (${duplicateCheck.reason})`)
+            if (existingItem) {
+              console.log(`[Discovery Loop] ⏭️  Skipping duplicate: ${canonicalUrl} (Already in database: ${existingItem.title})`)
               this.eventStream.skipped('duplicate', canonicalUrl, {
-                reason: duplicateCheck.reason,
-                tier: duplicateCheck.tier
+                reason: `Already in database: ${existingItem.title}`,
+                tier: 'A'
               })
               processedAnyUrl = true // We processed this URL (even though it was duplicate)
+              consecutiveDuplicates++
               continue
             }
+            
+            // Reset duplicate counter on finding a new item
+            consecutiveDuplicates = 0
             
             console.log(`[Discovery Loop] ✅ New URL found: ${canonicalUrl}`)
             
@@ -376,11 +384,12 @@ export class DiscoveryOrchestrator {
           console.log(`[Discovery Loop] Processed URLs from ${candidate.source}, not reinserting (candidate exhausted)`)
         }
         
-        // If we're stuck with duplicates and have few items, try adding more Wikipedia entities
+        // If we're stuck with duplicates, try adding more Wikipedia entities
         const frontierSize = this.frontier.getStats().totalCandidates
-        if (itemsFound < 3 && frontierSize < 5) {
-          console.log(`[Discovery Loop] 🔄 Low frontier size (${frontierSize}), adding more Wikipedia entities...`)
+        if (consecutiveDuplicates >= 5 || (itemsFound < 3 && frontierSize < 5)) {
+          console.log(`[Discovery Loop] 🔄 Stuck with duplicates (${consecutiveDuplicates} consecutive) or low frontier (${frontierSize}), adding more Wikipedia entities...`)
           await this.addMoreWikipediaEntities()
+          consecutiveDuplicates = 0 // Reset counter after adding new entities
         }
         
         // Small delay between iterations
