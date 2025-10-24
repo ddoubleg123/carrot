@@ -252,12 +252,124 @@ export class DiscoveryOrchestrator {
    * Fetch URLs from a search candidate
    */
   private async fetchUrls(candidate: any): Promise<string[]> {
-    // This would implement actual URL fetching based on candidate type
-    // For now, return mock URLs
-    return [
-      `https://example.com/article-${Date.now()}`,
-      `https://sports.yahoo.com/nba/article-${Date.now()}`
-    ]
+    console.log(`[Discovery Orchestrator] Fetching URLs from ${candidate.source} (method: ${candidate.method})`)
+    
+    try {
+      switch (candidate.source) {
+        case 'wikipedia':
+          return await this.fetchWikipediaUrls(candidate)
+        
+        case 'newsapi':
+          return await this.fetchNewsApiUrls(candidate)
+        
+        case 'rss':
+          return await this.fetchRssUrls(candidate)
+        
+        default:
+          console.warn(`[Discovery Orchestrator] Unknown source: ${candidate.source}`)
+          return []
+      }
+    } catch (error) {
+      console.error(`[Discovery Orchestrator] Error fetching URLs from ${candidate.source}:`, error)
+      return []
+    }
+  }
+  
+  /**
+   * Fetch URLs from Wikipedia
+   */
+  private async fetchWikipediaUrls(candidate: any): Promise<string[]> {
+    try {
+      // Parse the search query from cursor
+      const searchQuery = candidate.cursor.replace('search=', '')
+      const decodedQuery = decodeURIComponent(searchQuery)
+      
+      console.log(`[Discovery Orchestrator] Searching Wikipedia for: ${decodedQuery}`)
+      
+      // Search Wikipedia for pages
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(decodedQuery)}&format=json&srlimit=20&origin=*`
+      
+      const response = await fetch(searchUrl, {
+        headers: {
+          'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Wikipedia API error: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (!data.query || !data.query.search) {
+        console.log(`[Discovery Orchestrator] No Wikipedia results for: ${decodedQuery}`)
+        return []
+      }
+      
+      // Convert page titles to URLs
+      const urls = data.query.search.map((result: any) => {
+        const title = result.title.replace(/ /g, '_')
+        return `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`
+      })
+      
+      console.log(`[Discovery Orchestrator] Found ${urls.length} Wikipedia pages`)
+      
+      return urls
+    } catch (error) {
+      console.error('[Discovery Orchestrator] Wikipedia fetch error:', error)
+      return []
+    }
+  }
+  
+  /**
+   * Fetch URLs from NewsAPI
+   */
+  private async fetchNewsApiUrls(candidate: any): Promise<string[]> {
+    // TODO: Implement NewsAPI integration
+    console.log('[Discovery Orchestrator] NewsAPI integration not yet implemented')
+    return []
+  }
+  
+  /**
+   * Fetch URLs from RSS feeds
+   */
+  private async fetchRssUrls(candidate: any): Promise<string[]> {
+    try {
+      const feedUrl = candidate.cursor
+      console.log(`[Discovery Orchestrator] Fetching RSS feed: ${feedUrl}`)
+      
+      // Use a simple fetch to get the RSS feed
+      const response = await fetch(feedUrl, {
+        headers: {
+          'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`RSS feed error: ${response.status}`)
+      }
+      
+      const text = await response.text()
+      
+      // Simple regex to extract URLs from RSS
+      const urlRegex = /<link>([^<]+)<\/link>/g
+      const urls: string[] = []
+      let match
+      
+      while ((match = urlRegex.exec(text)) !== null) {
+        const url = match[1].trim()
+        if (url && url.startsWith('http')) {
+          urls.push(url)
+        }
+      }
+      
+      console.log(`[Discovery Orchestrator] Found ${urls.length} URLs from RSS feed`)
+      
+      return urls.slice(0, 10) // Limit to 10 URLs per feed
+    } catch (error) {
+      console.error('[Discovery Orchestrator] RSS fetch error:', error)
+      return []
+    }
   }
   
   /**
