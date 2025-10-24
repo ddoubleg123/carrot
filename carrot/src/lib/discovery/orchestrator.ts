@@ -207,6 +207,23 @@ export class DiscoveryOrchestrator {
             this.eventStream.saved(savedItem)
             itemsFound++
             
+            // If this was a Wikipedia page with citations, queue them for discovery
+            if (content.citations && content.citations.length > 0) {
+              console.log(`[Discovery Loop] Found ${content.citations.length} citations to explore`)
+              
+              // Add the first 10 citations to the frontier
+              for (const citationUrl of content.citations.slice(0, 10)) {
+                this.frontier.addCandidate({
+                  source: 'citation',
+                  method: 'http',
+                  cursor: citationUrl,
+                  domain: new URL(citationUrl).hostname,
+                  duplicateRate: 0,
+                  lastSeen: new Date()
+                })
+              }
+            }
+            
             // Reinsert candidate with advanced cursor
             this.frontier.reinsert(candidate, true)
             
@@ -251,6 +268,10 @@ export class DiscoveryOrchestrator {
         
         case 'rss':
           return await this.fetchRssUrls(candidate)
+        
+        case 'citation':
+          // For citations, the cursor is the URL itself
+          return [candidate.cursor]
         
         default:
           console.warn(`[Discovery Orchestrator] Unknown source: ${candidate.source}`)
@@ -364,6 +385,16 @@ export class DiscoveryOrchestrator {
    */
   private async fetchAndExtractContent(url: string): Promise<any> {
     try {
+      console.log(`[Content Extraction] Fetching: ${url}`)
+      
+      // Check if this is a Wikipedia page
+      const isWikipedia = url.includes('wikipedia.org')
+      
+      if (isWikipedia) {
+        return await this.extractWikipediaContent(url)
+      }
+      
+      // For non-Wikipedia pages, use standard extraction
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
@@ -381,18 +412,117 @@ export class DiscoveryOrchestrator {
       const title = titleMatch ? titleMatch[1] : 'Untitled'
       
       // Extract main content (simplified)
-      const contentMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+      const contentMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i) || 
+                          html.match(/<article[^>]*>([\s\S]*?)<\/article>/i) ||
+                          html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
       const text = contentMatch ? this.stripHtml(contentMatch[1]) : ''
+      
+      console.log(`[Content Extraction] Extracted ${text.length} chars from ${url}`)
       
       return {
         title,
-        text,
-        url
+        text: text.substring(0, 5000), // Limit to first 5000 chars
+        url,
+        citations: []
       }
     } catch (error) {
       console.warn('[Content Extraction] Error:', error)
       return null
     }
+  }
+  
+  /**
+   * Extract content from Wikipedia page including citations
+   */
+  private async extractWikipediaContent(url: string): Promise<any> {
+    try {
+      console.log(`[Wikipedia Extraction] Fetching Wikipedia page: ${url}`)
+      
+      // Extract page title from URL
+      const titleMatch = url.match(/\/wiki\/([^#?]+)/)
+      if (!titleMatch) {
+        throw new Error('Invalid Wikipedia URL')
+      }
+      
+      const pageTitle = decodeURIComponent(titleMatch[1].replace(/_/g, ' '))
+      
+      // Use Wikipedia API to get content
+      const apiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=extracts|revisions&rvprop=content&format=json&origin=*`
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Wikipedia API error: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      const pages = data.query?.pages
+      
+      if (!pages) {
+        throw new Error('No Wikipedia page found')
+      }
+      
+      const page = Object.values(pages)[0] as any
+      
+      if (!page || page.missing) {
+        throw new Error('Wikipedia page does not exist')
+      }
+      
+      // Extract plain text content
+      const extract = page.extract || ''
+      const text = this.stripHtml(extract)
+      
+      // Get wiki markup to extract citations
+      const wikiMarkup = page.revisions?.[0]?.['*'] || ''
+      const citations = this.extractWikipediaCitations(wikiMarkup)
+      
+      console.log(`[Wikipedia Extraction] Extracted ${text.length} chars and ${citations.length} citations from ${pageTitle}`)
+      
+      return {
+        title: page.title,
+        text: text.substring(0, 5000), // First 5000 chars
+        url,
+        citations
+      }
+    } catch (error) {
+      console.error('[Wikipedia Extraction] Error:', error)
+      return null
+    }
+  }
+  
+  /**
+   * Extract citation URLs from Wikipedia markup
+   */
+  private extractWikipediaCitations(wikiMarkup: string): string[] {
+    const citations: string[] = []
+    
+    // Match external links in Wikipedia references
+    // Format: {{cite web|url=https://example.com|...}}
+    const citeRegex = /\{\{cite[^}]*\|url=([^\|}\s]+)/gi
+    let match
+    
+    while ((match = citeRegex.exec(wikiMarkup)) !== null) {
+      const url = match[1].trim()
+      if (url.startsWith('http')) {
+        citations.push(url)
+      }
+    }
+    
+    // Also match bare URLs in references section
+    const refRegex = /<ref[^>]*>[\s\S]*?https?:\/\/[^\s<]+/gi
+    while ((match = refRegex.exec(wikiMarkup)) !== null) {
+      const urlMatch = match[0].match(/https?:\/\/[^\s<]+/)
+      if (urlMatch) {
+        citations.push(urlMatch[0])
+      }
+    }
+    
+    // Deduplicate
+    return [...new Set(citations)]
   }
   
   /**
