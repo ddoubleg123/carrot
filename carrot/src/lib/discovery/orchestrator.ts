@@ -183,19 +183,25 @@ export class DiscoveryOrchestrator {
     let itemsFound = 0
     const startTime = Date.now()
     
+    console.log(`[Discovery Loop] Starting with maxItems=${this.config.maxItems}, timeout=${this.config.timeout}ms`)
+    
     while (itemsFound < this.config.maxItems && (Date.now() - startTime) < this.config.timeout) {
       try {
         // Get next candidate
         const candidate = this.frontier.popMax()
         if (!candidate) {
+          console.log(`[Discovery Loop] ❌ No more candidates. Stopping after ${itemsFound} items.`)
           this.eventStream.idle('No more candidates available')
           break
         }
         
+        console.log(`[Discovery Loop] 📍 Processing candidate: ${candidate.source} (priority: ${candidate.priority})`)
         this.eventStream.searching(candidate.source)
         
         // Fetch URLs from candidate
         const urls = await this.fetchUrls(candidate)
+        
+        let foundItemInThisCandidate = false
         
         for (const rawUrl of urls) {
           try {
@@ -287,26 +293,39 @@ export class DiscoveryOrchestrator {
             
             this.eventStream.saved(savedItem)
             itemsFound++
+            foundItemInThisCandidate = true
             
             // If this was a Wikipedia page with citations, queue them for discovery
             if (content.citations && content.citations.length > 0) {
-              console.log(`[Discovery Loop] Found ${content.citations.length} citations to explore`)
+              console.log(`[Discovery Loop] 📚 Found ${content.citations.length} citations to explore`)
               
               // Add the first 10 citations to the frontier
+              let citationsAdded = 0
               for (const citationUrl of content.citations.slice(0, 10)) {
-                this.frontier.addCandidate({
-                  source: 'citation',
-                  method: 'http',
-                  cursor: citationUrl,
-                  domain: new URL(citationUrl).hostname,
-                  duplicateRate: 0,
-                  lastSeen: new Date()
-                })
+                try {
+                  this.frontier.addCandidate({
+                    source: 'citation',
+                    method: 'http',
+                    cursor: citationUrl,
+                    domain: new URL(citationUrl).hostname,
+                    duplicateRate: 0,
+                    lastSeen: new Date()
+                  })
+                  citationsAdded++
+                  console.log(`[Discovery Loop] ➕ Queued citation ${citationsAdded}: ${citationUrl}`)
+                } catch (error) {
+                  console.warn(`[Discovery Loop] Failed to queue citation: ${citationUrl}`, error)
+                }
               }
+              console.log(`[Discovery Loop] ✅ Successfully queued ${citationsAdded} citations for processing`)
+            } else {
+              console.log(`[Discovery Loop] ℹ️  No citations found in this content`)
             }
             
             // Reinsert candidate with advanced cursor
             this.frontier.reinsert(candidate, true)
+            
+            console.log(`[Discovery Loop] ✅ Item ${itemsFound} saved. Continuing to next candidate...`)
             
             // Break after finding one item (one-at-a-time)
             break
@@ -317,11 +336,16 @@ export class DiscoveryOrchestrator {
           }
         }
         
-        // Reinsert candidate for next iteration
-        this.frontier.reinsert(candidate, false)
+        // If we didn't find anything from this candidate, reinsert it
+        if (!foundItemInThisCandidate) {
+          console.log(`[Discovery Loop] No items found from ${candidate.source}, reinserting...`)
+          this.frontier.reinsert(candidate, false)
+        }
         
         // Small delay between iterations
         await this.sleep(1000)
+        
+        console.log(`[Discovery Loop] 🔄 Loop continuing... (${itemsFound}/${this.config.maxItems} items found)`)
         
       } catch (error) {
         console.error('[Discovery Loop] Error:', error)
