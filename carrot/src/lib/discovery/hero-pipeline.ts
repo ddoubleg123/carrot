@@ -65,18 +65,28 @@ export class HeroImagePipeline {
    */
   private async tryAIGeneration(item: any): Promise<HeroImageResult | null> {
     try {
+      console.log(`[Hero Pipeline] Attempting AI generation for: ${item.title}`)
+      
       const response = await fetch(`${this.baseUrl}/api/ai/generate-hero-image`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-internal-key': process.env.INTERNAL_API_KEY || ''
         },
         body: JSON.stringify({
           title: item.title,
           description: item.content?.summary150 || item.description,
           topic: item.metadata?.topic || 'basketball',
-          style: 'editorial'
+          style: 'editorial',
+          artisticStyle: 'photorealistic',
+          enableHiresFix: true,
+          useRefiner: true,
+          useFaceRestoration: true,
+          useRealesrgan: true
         })
       })
+      
+      console.log(`[Hero Pipeline] AI generation response status: ${response.status}`)
       
       if (!response.ok) {
         throw new Error(`AI generation failed: ${response.status}`)
@@ -110,18 +120,26 @@ export class HeroImagePipeline {
     try {
       // Extract entity from title for Wikimedia search
       const entity = this.extractEntityForWikimedia(item.title)
-      if (!entity) return null
+      if (!entity) {
+        console.log(`[Hero Pipeline] No entity found for Wikimedia search in: ${item.title}`)
+        return null
+      }
       
-      const response = await fetch(`${this.baseUrl}/api/media/wikimedia`, {
+      console.log(`[Hero Pipeline] Attempting Wikimedia search for entity: ${entity}`)
+      
+      const response = await fetch(`${this.baseUrl}/api/media/wikimedia-search`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-internal-key': process.env.INTERNAL_API_KEY || ''
         },
         body: JSON.stringify({
-          entity,
-          title: item.title
+          query: `${entity} Chicago Bulls`,
+          limit: 5
         })
       })
+      
+      console.log(`[Hero Pipeline] Wikimedia response status: ${response.status}`)
       
       if (!response.ok) {
         throw new Error(`Wikimedia search failed: ${response.status}`)
@@ -129,17 +147,20 @@ export class HeroImagePipeline {
       
       const data = await response.json()
       
-      if (data.success && data.imageUrl) {
+      // wikimedia-search API returns { images: [{ url, thumbnail, ... }] }
+      if (data.images && data.images.length > 0) {
+        const image = data.images[0]
+        console.log(`[Hero Pipeline] ✅ Found Wikimedia image: ${image.url}`)
         return {
-          url: data.imageUrl,
+          url: image.thumbnail || image.url,
           source: 'wikimedia',
-          width: data.width || 1280,
-          height: data.height || 720,
-          alt: `Wikimedia image for ${item.title}`,
-          dominantColor: data.dominantColor
+          width: 1280,
+          height: 720,
+          alt: `Wikimedia image for ${item.title}`
         }
       }
       
+      console.log(`[Hero Pipeline] No Wikimedia images found`)
       return null
     } catch (error) {
       console.warn('[Hero Pipeline] Wikimedia error:', error)

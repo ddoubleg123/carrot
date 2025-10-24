@@ -54,7 +54,7 @@ export class DiscoveryOrchestrator {
       maxItems: 10,
       timeout: 300000, // 5 minutes
       batchSize: 1,
-      relevanceThreshold: 0.3,
+      relevanceThreshold: 0.7, // Raised from 0.3 to 0.7 for better quality
       ...config
     }
   }
@@ -103,12 +103,22 @@ export class DiscoveryOrchestrator {
       lastSeen: new Date()
     })
     
-    // Add RSS feeds
+    // Add RSS feeds (Bulls-specific)
     this.frontier.addCandidate({
       source: 'rss',
       method: 'rss',
-      cursor: 'https://feeds.feedburner.com/ESPNNBA',
+      cursor: `https://feeds.feedburner.com/ESPN${this.groupName.replace(' ', '')}`, // e.g., ESPNChicagoBulls
       domain: 'espn.com',
+      duplicateRate: 0,
+      lastSeen: new Date()
+    })
+    
+    // Add Bulls-specific Google News RSS
+    this.frontier.addCandidate({
+      source: 'rss',
+      method: 'rss',
+      cursor: `https://news.google.com/rss/search?q=${encodeURIComponent(this.groupName)}&hl=en-US&gl=US&ceid=US:en`,
+      domain: 'news.google.com',
       duplicateRate: 0,
       lastSeen: new Date()
     })
