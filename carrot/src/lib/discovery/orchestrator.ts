@@ -343,6 +343,7 @@ export class DiscoveryOrchestrator {
               content: enrichedContent.text,
               summary: enrichedContent.summary,
               keyPoints: enrichedContent.keyPoints,
+              notableQuotes: enrichedContent.notableQuotes || [],
               heroUrl: heroResult?.url || '',
               heroSource: heroResult?.source || 'minsvg',
               relevanceScore: relevanceResult.score,
@@ -719,25 +720,65 @@ export class DiscoveryOrchestrator {
    * Enrich content with AI
    */
   private async enrichContent(content: any): Promise<any> {
-    console.log(`[Enrich Content] Processing: ${content.title}`)
+    console.log(`[Enrich Content] 🤖 Calling DeepSeek to summarize: ${content.title}`)
     
-    // Extract meaningful key points from the content
-    const sentences = content.text.split(/[.!?]+/).filter((s: string) => s.trim().length > 20)
-    const keyPoints = sentences.slice(0, 5).map((s: string) => s.trim())
-    
-    // Create a better summary (first 150 chars)
-    const summary = content.text.substring(0, 180).trim() + '...'
-    
-    console.log(`[Enrich Content] Created ${keyPoints.length} key points from ${sentences.length} sentences`)
-    
-    return {
-      title: content.title,
-      text: content.text,
-      summary,
-      keyPoints: keyPoints.length > 0 ? keyPoints : ['No key points available'],
-      metadata: {
-        topic: this.groupName,
-        source: content.url
+    try {
+      // Call DeepSeek API to properly summarize content
+      const summarizeResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/ai/summarize-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+        },
+        body: JSON.stringify({
+          text: content.text.substring(0, 5000), // Limit to ~5000 chars for API
+          title: content.title,
+          url: content.url,
+          temperature: 0.2
+        })
+      })
+      
+      if (!summarizeResponse.ok) {
+        console.error(`[Enrich Content] DeepSeek API failed: ${summarizeResponse.status}`)
+        throw new Error('DeepSeek summarization failed')
+      }
+      
+      const deepSeekResult = await summarizeResponse.json()
+      
+      console.log(`[Enrich Content] ✅ DeepSeek processed content:`)
+      console.log(`[Enrich Content]    Summary length: ${deepSeekResult.summary?.length || 0} chars`)
+      console.log(`[Enrich Content]    Key facts: ${deepSeekResult.keyFacts?.length || 0}`)
+      console.log(`[Enrich Content]    Notable quotes: ${deepSeekResult.notableQuotes?.length || 0}`)
+      
+      return {
+        title: content.title,
+        text: content.text,
+        summary: deepSeekResult.summary || content.text.substring(0, 180),
+        keyPoints: deepSeekResult.keyFacts || [],
+        notableQuotes: deepSeekResult.notableQuotes || [],
+        metadata: {
+          topic: this.groupName,
+          source: content.url
+        }
+      }
+      
+    } catch (error) {
+      console.error(`[Enrich Content] ❌ DeepSeek failed, using fallback summarization:`, error)
+      
+      // Fallback to simple extraction if DeepSeek fails
+      const sentences = content.text.split(/[.!?]+/).filter((s: string) => s.trim().length > 20)
+      const keyPoints = sentences.slice(0, 5).map((s: string) => s.trim())
+      const summary = content.text.substring(0, 180).trim() + '...'
+      
+      return {
+        title: content.title,
+        text: content.text,
+        summary,
+        keyPoints: keyPoints.length > 0 ? keyPoints : ['Content summarization unavailable'],
+        metadata: {
+          topic: this.groupName,
+          source: content.url
+        }
       }
     }
   }
@@ -758,7 +799,8 @@ export class DiscoveryOrchestrator {
         relevanceScore: item.relevanceScore,
         enrichedContent: JSON.stringify({
           summary: item.summary,
-          keyPoints: item.keyPoints
+          keyPoints: item.keyPoints,
+          notableQuotes: item.notableQuotes || []
         }),
         mediaAssets: JSON.stringify({
           hero: item.heroUrl,
