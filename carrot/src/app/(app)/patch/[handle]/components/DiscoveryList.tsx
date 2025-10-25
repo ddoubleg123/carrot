@@ -124,79 +124,105 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         </div>
       </div>
 
-      {/* Filters row (fixed/nowrap; keep existing controls) */}
-      <div className="relative z-10 mb-4 flex min-h-[44px] items-center gap-3 overflow-x-auto whitespace-nowrap md:flex-wrap md:overflow-visible">
-        {/* Type Filter */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Filter className="h-4 w-4 text-slate-500" />
+      {/* Filters row + Discovery Controls */}
+      <div className="relative z-10 mb-4 flex min-h-[44px] items-center justify-between gap-4 overflow-x-auto whitespace-nowrap md:overflow-visible">
+        {/* Left: Filters */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Type Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-500" />
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as any)}
+              className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+            >
+              <option value="all">All Types</option>
+              <option value="article">Articles</option>
+              <option value="video">Videos</option>
+              <option value="pdf">PDFs</option>
+              <option value="image">Images</option>
+              <option value="text">Text</option>
+            </select>
+          </div>
+
+          {/* Sort Filter */}
+          <div className="flex items-center gap-2">
+            <SortAsc className="h-4 w-4 text-slate-500" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
+            >
+              <option value="top">Top</option>
+              <option value="new">New</option>
+            </select>
+          </div>
+
+          {/* Time Range Filter */}
           <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value as any)}
             className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
           >
-            <option value="all">All Types</option>
-            <option value="article">Articles</option>
-            <option value="video">Videos</option>
-            <option value="pdf">PDFs</option>
-            <option value="image">Images</option>
-            <option value="text">Text</option>
+            <option value="7d">7d</option>
+            <option value="30d">30d</option>
+            <option value="all">All</option>
           </select>
+
+          {/* Results Count */}
+          <div className="text-sm text-slate-600">
+            {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
+          </div>
         </div>
 
-        {/* Sort Filter */}
+        {/* Right: Discovery Controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <SortAsc className="h-4 w-4 text-slate-500" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent"
-          >
-            <option value="top">Top</option>
-            <option value="new">New</option>
-          </select>
-        </div>
-
-        {/* Time Range Filter */}
-        <select
-          value={timeRange}
-          onChange={(e) => setTimeRange(e.target.value as any)}
-          className="text-sm border border-[#E6E8EC] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#0A5AFF] focus:border-transparent flex-shrink-0"
-        >
-          <option value="7d">7d</option>
-          <option value="30d">30d</option>
-          <option value="all">All</option>
-        </select>
-
-        {/* Results Count */}
-        <div className="text-sm text-slate-600 flex-shrink-0">
-          {isLoading ? 'Loading...' : `${deduplicatedItems.length} items`}
+          {/* Status Badge */}
+          <Badge variant={state.isActive ? 'default' : 'secondary'} className="capitalize">
+            {state.isActive ? (state.isPaused ? 'Paused' : 'Live') : 'Idle'}
+          </Badge>
+          
+          {/* Start/Pause/Stop Buttons */}
+          {!state.isActive ? (
+            <Button onClick={handleStart} size="sm" className="bg-[#FF6A00] hover:bg-[#E55A00] text-white">
+              <Play className="h-4 w-4 mr-1" />
+              Start Discovery
+            </Button>
+          ) : (
+            <>
+              <Button 
+                onClick={state.isPaused ? handleStart : handlePause} 
+                size="sm"
+                variant="outline"
+              >
+                {state.isPaused ? <Play className="h-4 w-4 mr-1" /> : <Pause className="h-4 w-4 mr-1" />}
+                {state.isPaused ? 'Resume' : 'Pause'}
+              </Button>
+              <Button onClick={handleStop} size="sm" variant="outline">
+                <Square className="h-4 w-4 mr-1" />
+                Stop
+              </Button>
+            </>
+          )}
+          
+          {/* Refresh Button */}
+          <Button onClick={handleRefresh} size="sm" variant="ghost">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Two-column grid only - enforce exactly 2 columns on desktop */}
-      <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-auto z-0">
-        {/* Row 1 - Live Panel and Skeleton */}
-        <LivePanel
-          className="lg:col-span-1 lg:row-start-1 sticky top-20 self-start max-w-sm"
-          isActive={state.isActive}
-          isPaused={state.isPaused}
-          currentStatus={state.currentStatus}
-          itemsFound={state.itemsFound}
-          lastItemTitle={state.lastItemTitle}
-          error={state.error}
-          onStart={handleStart}
-          onPause={handlePause}
-          onStop={handleStop}
-          onRefresh={handleRefresh}
-        />
-        
-        {/* Discovery Skeleton - morphs into real card */}
-        <DiscoverySkeleton
-          id="discovery-skeleton"
-          className="lg:col-span-1 lg:row-start-1 min-w-[340px] w-full"
-          isActive={state.isActive}
-          currentStatus={state.currentStatus}
-        />
+      {/* Content grid - ONLY tiles, no controls */}
+      <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-3 gap-6 auto-rows-auto z-0">
+        {/* Discovery Skeleton - only show when active */}
+        {state.isActive && (
+          <DiscoverySkeleton
+            id="discovery-skeleton"
+            className="min-w-[340px] w-full"
+            isActive={state.isActive}
+            currentStatus={state.currentStatus}
+          />
+        )}
 
         {/* Rows 2+ : real items */}
         {visibleItems.map((item) => (
