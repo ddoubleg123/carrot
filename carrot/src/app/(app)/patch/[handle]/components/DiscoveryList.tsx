@@ -213,12 +213,12 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       </div>
 
       {/* Content grid - ONLY tiles, no controls */}
-      <div id="discover-grid" className="grid grid-cols-1 lg:grid-cols-3 gap-6 auto-rows-auto z-0">
+      <div id="discover-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-auto">
         {/* Discovery Skeleton - only show when active */}
         {state.isActive && (
           <DiscoverySkeleton
             id="discovery-skeleton"
-            className="min-w-[340px] w-full"
+            className="w-full"
             isActive={state.isActive}
             currentStatus={state.currentStatus}
           />
@@ -231,17 +231,17 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             item={item}
             onHeroClick={handleHeroClick}
             patchHandle={patchHandle}
-            className="min-w-[340px] w-full"
+            className="w-full"
           />
         ))}
 
         {/* Loading skeletons when loading initial content */}
         {isLoading && deduplicatedItems.length === 0 && (
           <>
-            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
-            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
-            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
-            <DiscoverySkeleton isActive={false} className="min-w-[340px] w-full" />
+            <DiscoverySkeleton isActive={false} className="w-full" />
+            <DiscoverySkeleton isActive={false} className="w-full" />
+            <DiscoverySkeleton isActive={false} className="w-full" />
+            <DiscoverySkeleton isActive={false} className="w-full" />
           </>
         )}
       </div>
