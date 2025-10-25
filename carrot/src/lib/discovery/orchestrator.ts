@@ -35,7 +35,7 @@ export class DiscoveryOrchestrator {
     this.deduplication = new DeduplicationChecker()
     this.frontier = new SearchFrontier()
     this.relevance = new RelevanceEngine()
-    this.heroPipeline = new HeroImagePipeline()
+    this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
     
     this.config = {
       maxItems: 10,
@@ -735,11 +735,17 @@ export class DiscoveryOrchestrator {
     
     try {
       // Call DeepSeek API to properly summarize content
-      const summarizeResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/ai/summarize-content`, {
+      const baseUrl = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'
+      const internalKey = process.env.INTERNAL_API_KEY
+      
+      console.log(`[Enrich Content] Using baseUrl: ${baseUrl}`)
+      console.log(`[Enrich Content] Internal key present: ${!!internalKey}`)
+      
+      const summarizeResponse = await fetch(`${baseUrl}/api/ai/summarize-content`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+          'x-internal-key': internalKey || ''
         },
         body: JSON.stringify({
           text: content.text.substring(0, 5000), // Limit to ~5000 chars for API
