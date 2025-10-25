@@ -135,16 +135,39 @@ export class RelevanceEngine {
             'United Center'
           ],
           people: [
+            // Current roster (2024-25)
+            'Zach LaVine',
+            'DeMar DeRozan',
+            'Nikola Vučević',
+            'Coby White',
+            'Patrick Williams',
+            'Ayo Dosunmu',
+            'Lonzo Ball',
+            'Alex Caruso',
+            // Legendary players
             'Michael Jordan',
             'Scottie Pippen',
-            'Phil Jackson',
-            'Derrick Rose',
-            'Jerry Krause',
             'Dennis Rodman',
+            'Derrick Rose',
             'Toni Kukoc',
             'Steve Kerr',
             'Horace Grant',
-            'B.J. Armstrong'
+            'B.J. Armstrong',
+            'Ron Harper',
+            'Bill Cartwright',
+            'John Paxson',
+            'Luc Longley',
+            // Coaches
+            'Phil Jackson',
+            'Tom Thibodeau',
+            'Fred Hoiberg',
+            'Jim Boylen',
+            'Billy Donovan',
+            // Management
+            'Jerry Krause',
+            'Jerry Reinsdorf',
+            'Artūras Karnišovas',
+            'Marc Eversley'
           ],
           places: [
             'Chicago',

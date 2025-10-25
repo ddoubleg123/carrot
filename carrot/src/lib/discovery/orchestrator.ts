@@ -284,7 +284,12 @@ export class DiscoveryOrchestrator {
               domain
             )
             
+            console.log(`[Discovery Loop] 📊 Relevance check: ${content.title}`)
+            console.log(`[Discovery Loop]    Score: ${relevanceResult.score.toFixed(2)}`)
+            console.log(`[Discovery Loop]    Matched: ${relevanceResult.matchedEntities.join(', ') || 'none'}`)
+            
             if (!relevanceResult.isRelevant) {
+              console.log(`[Discovery Loop] ⏭️  Skipping irrelevant: ${content.title} (score: ${relevanceResult.score.toFixed(2)})`)
               this.eventStream.skipped('low_relevance', canonicalUrl, {
                 score: relevanceResult.score,
                 reason: relevanceResult.reason
@@ -339,9 +344,18 @@ export class DiscoveryOrchestrator {
             if (content.citations && content.citations.length > 0) {
               console.log(`[Discovery Loop] 📚 Found ${content.citations.length} citations to explore`)
               
-              // Add the first 10 citations to the frontier
+              // Pre-filter citations for Bulls relevance
+              const bullsKeywords = ['bulls', 'chicago', 'jordan', 'pippen', 'lavine', 'derozan', 'vucevic']
+              const relevantCitations = content.citations.filter(url => {
+                const urlLower = url.toLowerCase()
+                return bullsKeywords.some(keyword => urlLower.includes(keyword))
+              })
+              
+              console.log(`[Discovery Loop] 🎯 Filtered to ${relevantCitations.length} Bulls-relevant citations (from ${content.citations.length} total)`)
+              
+              // Add up to 10 relevant citations to the frontier
               let citationsAdded = 0
-              for (const citationUrl of content.citations.slice(0, 10)) {
+              for (const citationUrl of relevantCitations.slice(0, 10)) {
                 try {
                   this.frontier.addCandidate({
                     source: 'citation',
@@ -357,7 +371,7 @@ export class DiscoveryOrchestrator {
                   console.warn(`[Discovery Loop] Failed to queue citation: ${citationUrl}`, error)
                 }
               }
-              console.log(`[Discovery Loop] ✅ Successfully queued ${citationsAdded} citations for processing`)
+              console.log(`[Discovery Loop] ✅ Successfully queued ${citationsAdded} Bulls-relevant citations for processing`)
             } else {
               console.log(`[Discovery Loop] ℹ️  No citations found in this content`)
             }
