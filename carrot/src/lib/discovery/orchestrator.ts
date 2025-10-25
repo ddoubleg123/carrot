@@ -273,8 +273,13 @@ export class DiscoveryOrchestrator {
             // Fetch and extract content
             const content = await this.fetchAndExtractContent(canonicalUrl)
             if (!content) {
+              console.warn(`[Discovery Loop] ⚠️  Content extraction failed for: ${canonicalUrl}`)
+              processedAnyUrl = true // Mark as processed so failed URLs don't get reinserted
+              consecutiveDuplicates++
               continue
             }
+            
+            console.log(`[Discovery Loop] ✅ Content extracted: ${content.title} (${content.text.length} chars)`)
             
             // Check relevance
             const relevanceResult = await this.relevance.checkRelevance(
@@ -609,6 +614,12 @@ export class DiscoveryOrchestrator {
       const text = contentMatch ? this.stripHtml(contentMatch[1]) : ''
       
       console.log(`[Content Extraction] Extracted ${text.length} chars from ${url}`)
+      
+      // Reject if content is too short (likely extraction failed)
+      if (text.length < 100) {
+        console.warn(`[Content Extraction] ❌ Content too short (${text.length} chars), likely extraction failed`)
+        return null
+      }
       
       return {
         title,
