@@ -204,18 +204,37 @@ export class HeroImagePipeline {
    * Extract entity for Wikimedia search
    */
   private extractEntityForWikimedia(title: string): string | null {
-    // Simple entity extraction - could be enhanced with NER
-    const basketballTerms = ['basketball', 'NBA', 'team', 'player', 'coach']
-    const words = title.toLowerCase().split(/\s+/)
+    // Enhanced entity extraction for basketball content
+    const titleLower = title.toLowerCase()
     
-    for (const word of words) {
-      if (basketballTerms.includes(word)) {
-        // Find the team or player name
-        const teamIndex = words.indexOf(word)
-        if (teamIndex > 0) {
-          return words[teamIndex - 1]
-        }
+    // Known Bulls players (extract if in title)
+    const bullsPlayers = [
+      'Michael Jordan', 'Scottie Pippen', 'Dennis Rodman', 'Phil Jackson',
+      'Derrick Rose', 'Zach LaVine', 'DeMar DeRozan', 'Nikola Vučević',
+      'Coby White', 'Patrick Williams', 'Lonzo Ball'
+    ]
+    
+    for (const player of bullsPlayers) {
+      if (titleLower.includes(player.toLowerCase())) {
+        return player
       }
+    }
+    
+    // Extract team name
+    if (titleLower.includes('bulls')) {
+      return 'Chicago Bulls'
+    }
+    
+    // Extract first proper noun (capitalized words) as entity
+    const properNouns = title.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g)
+    if (properNouns && properNouns.length > 0) {
+      // Return the first multi-word proper noun (likely a person name)
+      const multiWord = properNouns.find(noun => noun.split(/\s+/).length >= 2)
+      if (multiWord) {
+        return multiWord
+      }
+      // Or just return the first proper noun
+      return properNouns[0]
     }
     
     return null

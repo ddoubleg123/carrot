@@ -59,6 +59,25 @@ export class RelevanceEngine {
     const matchedEntities: string[] = []
     let score = 0
     
+    // FIRST: Check for BLACKLIST terms (hard reject for Bulls group)
+    if (profile.groupName === 'Chicago Bulls') {
+      const blacklistTerms = [
+        'blackhawks', 'hockey', 'nhl', 'stanley cup', 'puck', 'ice hockey',
+        'goalie', 'defenseman', 'forward line', 'power play', 'hat trick'
+      ]
+      
+      for (const term of blacklistTerms) {
+        if (text.includes(term)) {
+          return {
+            isRelevant: false,
+            score: 0,
+            reason: `Rejected: Contains hockey/NHL term "${term}" - this is Chicago BULLS (basketball), not Blackhawks (hockey)`,
+            matchedEntities: []
+          }
+        }
+      }
+    }
+    
     // Check for primary entities (highest weight)
     for (const entity of profile.primaryEntities) {
       if (text.includes(entity.toLowerCase())) {
@@ -101,14 +120,14 @@ export class RelevanceEngine {
       score -= 0.3
     }
     
-    // Ensure at least one group-specific entity is present
-    const hasGroupMention = profile.primaryEntities.some(entity => 
+    // CRITICAL: Must have Bulls-specific entity (not just "Chicago" or "basketball")
+    const hasBullsEntity = profile.primaryEntities.some(entity => 
       text.includes(entity.toLowerCase())
     ) || profile.people.some(person => 
       text.includes(person.toLowerCase())
     )
     
-    const isRelevant = score >= 0.7 && hasGroupMention
+    const isRelevant = score >= 0.7 && hasBullsEntity
     
     return {
       isRelevant,
