@@ -736,36 +736,46 @@ export class DiscoveryOrchestrator {
     try {
       // Call DeepSeek API to properly summarize content
       const baseUrl = process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com'
-      const internalKey = process.env.INTERNAL_API_KEY
       
       console.log(`[Enrich Content] Using baseUrl: ${baseUrl}`)
-      console.log(`[Enrich Content] Internal key present: ${!!internalKey}`)
       
       const summarizeResponse = await fetch(`${baseUrl}/api/ai/summarize-content`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': internalKey || ''
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           text: content.text.substring(0, 5000), // Limit to ~5000 chars for API
           title: content.title,
           url: content.url,
+          groupContext: this.groupName, // Pass "Chicago Bulls" for relevance checking
           temperature: 0.2
         })
       })
       
       if (!summarizeResponse.ok) {
-        console.error(`[Enrich Content] DeepSeek API failed: ${summarizeResponse.status}`)
+        const errorText = await summarizeResponse.text()
+        console.error(`[Enrich Content] Summarize API failed: ${summarizeResponse.status}`)
+        console.error(`[Enrich Content] Error response: ${errorText}`)
+        console.error(`[Enrich Content] Request URL: ${baseUrl}/api/ai/summarize-content`)
         throw new Error('DeepSeek summarization failed')
       }
       
       const deepSeekResult = await summarizeResponse.json()
       
       console.log(`[Enrich Content] ✅ DeepSeek processed content:`)
+      console.log(`[Enrich Content]    Quality Score: ${deepSeekResult.qualityScore || 'N/A'}`)
+      console.log(`[Enrich Content]    Relevance Score: ${deepSeekResult.relevanceScore || 'N/A'}`)
+      console.log(`[Enrich Content]    Is Useful: ${deepSeekResult.isUseful}`)
       console.log(`[Enrich Content]    Summary length: ${deepSeekResult.summary?.length || 0} chars`)
       console.log(`[Enrich Content]    Key facts: ${deepSeekResult.keyFacts?.length || 0}`)
       console.log(`[Enrich Content]    Notable quotes: ${deepSeekResult.notableQuotes?.length || 0}`)
+      
+      // Reject low-quality or irrelevant content
+      if (deepSeekResult.isUseful === false || deepSeekResult.qualityScore < 60) {
+        console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek quality check (score: ${deepSeekResult.qualityScore})`)
+        throw new Error('Content failed quality check')
+      }
       
       return {
         title: content.title,
@@ -773,6 +783,8 @@ export class DiscoveryOrchestrator {
         summary: deepSeekResult.summary || content.text.substring(0, 180),
         keyPoints: deepSeekResult.keyFacts || [],
         notableQuotes: deepSeekResult.notableQuotes || [],
+        qualityScore: deepSeekResult.qualityScore,
+        deepseekRelevanceScore: deepSeekResult.relevanceScore,
         metadata: {
           topic: this.groupName,
           source: content.url

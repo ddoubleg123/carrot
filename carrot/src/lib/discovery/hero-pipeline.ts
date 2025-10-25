@@ -70,8 +70,7 @@ export class HeroImagePipeline {
       const response = await fetch(`${this.baseUrl}/api/ai/generate-hero-image`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           title: item.title,
@@ -130,8 +129,7 @@ export class HeroImagePipeline {
       const response = await fetch(`${this.baseUrl}/api/media/wikimedia-search`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': process.env.INTERNAL_API_KEY || ''
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           query: `${entity} Chicago Bulls`,

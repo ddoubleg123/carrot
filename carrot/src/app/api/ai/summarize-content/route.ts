@@ -6,6 +6,7 @@ const SummarizeContentSchema = z.object({
   text: z.string().min(100),
   title: z.string(),
   url: z.string().url(),
+  groupContext: z.string().optional(), // e.g., "Chicago Bulls"
   temperature: z.number().min(0).max(1).default(0.2)
 })
 
@@ -15,15 +16,6 @@ const SummarizeContentSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    // AUTH: Check for internal key
-    const internalKey = request.headers.get('x-internal-key')
-    if (!internalKey || internalKey !== process.env.INTERNAL_API_KEY) {
-      return NextResponse.json(
-        { error: 'Forbidden: This endpoint is for internal use only' },
-        { status: 403 }
-      )
-    }
-    
     // VALIDATE: Parse and validate request body
     const body = await request.json()
     const validation = SummarizeContentSchema.safeParse(body)
@@ -38,11 +30,11 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const { text, title, url, temperature } = validation.data
+    const { text, title, url, groupContext, temperature } = validation.data
 
     console.log(`[summarize-content] Processing content for: ${title.substring(0, 50)}`)
 
-    // Call DeepSeek API for summarization
+    // Call DeepSeek API for comprehensive content quality analysis
     const deepSeekResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -54,37 +46,46 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are a content summarization expert. Create high-quality summaries and key facts from articles. 
-            
-            Requirements:
-            - Executive Summary: 120-180 words, informative, no filler
-            - Key Facts: 5-8 bullets, each ≤120 chars, stand-alone facts
-            - Notable Quotes: 0-3 literal quotes with citation (source name and year)
-            - No boilerplate, no truncated content, no "..." endings
-            - Focus on factual, informative content
-            
-            Return JSON format:
-            {
-              "summary": "Executive summary text...",
-              "keyFacts": ["Fact 1", "Fact 2", ...],
-              "notableQuotes": ["Quote 1 - Source, Year", ...]
-            }`
+            content: `You are an expert content quality analyst. Your job is to:
+
+1. CLEAN the content: Remove boilerplate, navigation text, ads, cookie banners, "Subscribe..." prompts
+2. FIX grammar and spelling errors
+3. SCORE content quality (0-100): Reject trash, clickbait, or low-value content
+4. VERIFY relevance to the topic: "${groupContext || 'general'}"
+5. CREATE professional summary and key facts
+
+Return VALID JSON only:
+{
+  "qualityScore": 85,
+  "relevanceScore": 92,
+  "isUseful": true,
+  "summary": "120-180 word executive summary with perfect grammar",
+  "keyFacts": ["Fact 1 (clean, complete sentence)", "Fact 2 (no truncation)", ...],
+  "notableQuotes": ["Actual quote from article - Source, Year"],
+  "issues": ["Grammar fixed: ...", "Removed boilerplate: ..."]
+}
+
+REJECT if:
+- Content is < 100 words after cleaning
+- Quality score < 60
+- Relevance score < 50 (for ${groupContext || 'general'} content)
+- Article is just ads/navigation/clickbait`
           },
           {
             role: 'user',
-            content: `Please summarize this article:
+            content: `Analyze and clean this article about "${groupContext || 'general'}":
 
 Title: ${title}
 URL: ${url}
 
-Content:
+Raw Content:
 ${text}
 
-Provide a clean, informative summary with key facts and notable quotes.`
+Return cleaned, scored, relevant content in JSON format.`
           }
         ],
         temperature,
-        max_tokens: 1000
+        max_tokens: 1500
       })
     })
 
