@@ -215,15 +215,33 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
         </DialogDescription>
         
         {/* Content-First Layout */}
-        <div className="flex flex-col lg:flex-row h-full">
+        <div className="flex flex-col lg:flex-row h-[90vh]">
           {/* Left Pane - Content (2/3 width on desktop) */}
-          <div className="flex-1 lg:w-2/3 overflow-y-auto">
+          <div className="flex-1 lg:w-2/3 overflow-y-auto overscroll-contain" style={{ maxHeight: '90vh' }}>
             {/* Header */}
             <div className="p-6 border-b border-slate-200">
               <DialogHeader className="pb-4">
-                <DialogTitle className="text-xl md:text-2xl font-semibold leading-tight text-slate-900">
-                  {isDiscovered ? item.title : `Post by ${item.author.name}`}
-                </DialogTitle>
+                <div className="flex items-start gap-3">
+                  <DialogTitle className="text-xl md:text-2xl font-semibold leading-tight text-slate-900 flex-1">
+                    {isDiscovered ? item.title : `Post by ${item.author.name}`}
+                  </DialogTitle>
+                  
+                  {/* Relevance Score Badge */}
+                  {isDiscovered && item.metadata?.relevanceScore !== undefined && (
+                    <Badge 
+                      variant={item.metadata.relevanceScore >= 0.8 ? 'default' : item.metadata.relevanceScore >= 0.6 ? 'secondary' : 'outline'}
+                      className={`flex-shrink-0 ${
+                        item.metadata.relevanceScore >= 0.8 
+                          ? 'bg-green-100 text-green-800 border-green-200' 
+                          : item.metadata.relevanceScore >= 0.6 
+                          ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                          : 'bg-gray-100 text-gray-600 border-gray-200'
+                      }`}
+                    >
+                      {Math.round(item.metadata.relevanceScore * 100)}% Relevant
+                    </Badge>
+                  )}
+                </div>
               </DialogHeader>
 
               {/* Meta Row */}
@@ -423,7 +441,7 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
           </div>
 
           {/* Right Pane - Comments (1/3 width on desktop) */}
-          <div className="lg:w-1/3 border-l border-slate-200 bg-slate-50">
+          <div className="lg:w-1/3 border-l border-slate-200 bg-slate-50 overflow-y-auto overscroll-contain" style={{ maxHeight: '90vh' }}>
             <div className="p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Comments</h3>
               

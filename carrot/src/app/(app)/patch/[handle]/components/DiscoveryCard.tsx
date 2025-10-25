@@ -101,6 +101,20 @@ export default function DiscoveryCard({ item, onHeroClick, patchHandle, classNam
         className="relative aspect-[16/9] overflow-hidden rounded-xl w-full block"
         style={{ backgroundColor: dominantColor }}
       >
+        {/* Relevance Badge Overlay */}
+        {item.metadata?.relevanceScore !== undefined && item.metadata.relevanceScore >= 0.7 && (
+          <div className="absolute top-2 right-2 z-10">
+            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+              item.metadata.relevanceScore >= 0.9 
+                ? 'bg-green-500 text-white' 
+                : item.metadata.relevanceScore >= 0.8 
+                ? 'bg-blue-500 text-white' 
+                : 'bg-slate-600 text-white'
+            }`}>
+              {Math.round(item.metadata.relevanceScore * 100)}%
+            </div>
+          </div>
+        )}
         {hero ? (
           <img 
             src={hero} 
