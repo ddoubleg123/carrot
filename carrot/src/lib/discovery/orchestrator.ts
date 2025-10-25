@@ -772,9 +772,19 @@ export class DiscoveryOrchestrator {
       console.log(`[Enrich Content]    Notable quotes: ${deepSeekResult.notableQuotes?.length || 0}`)
       
       // Reject low-quality or irrelevant content
-      if (deepSeekResult.isUseful === false || deepSeekResult.qualityScore < 60) {
-        console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek quality check (score: ${deepSeekResult.qualityScore})`)
+      if (deepSeekResult.isUseful === false) {
+        console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek: Not useful`)
+        throw new Error('Content marked as not useful by DeepSeek')
+      }
+      
+      if (deepSeekResult.qualityScore < 60) {
+        console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek: Low quality (${deepSeekResult.qualityScore})`)
         throw new Error('Content failed quality check')
+      }
+      
+      if (deepSeekResult.relevanceScore < 50) {
+        console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek: Low relevance to ${this.groupName} (${deepSeekResult.relevanceScore})`)
+        throw new Error('Content failed relevance check')
       }
       
       return {
@@ -791,10 +801,17 @@ export class DiscoveryOrchestrator {
         }
       }
       
-    } catch (error) {
-      console.error(`[Enrich Content] ❌ DeepSeek failed, using fallback summarization:`, error)
+    } catch (error: any) {
+      console.error(`[Enrich Content] ❌ DeepSeek error:`, error)
       
-      // Fallback to simple extraction if DeepSeek fails
+      // If it's a quality/relevance rejection, propagate it (don't save the content)
+      if (error.message?.includes('quality check') || error.message?.includes('relevance check') || error.message?.includes('not useful')) {
+        console.error(`[Enrich Content] 🚫 Content REJECTED, will not be saved`)
+        throw error // Propagate rejection - content won't be saved
+      }
+      
+      // Only use fallback if it's a network/API error (not a content rejection)
+      console.warn(`[Enrich Content] ⚠️  API error, using fallback summarization`)
       const sentences = content.text.split(/[.!?]+/).filter((s: string) => s.trim().length > 20)
       const keyPoints = sentences.slice(0, 5).map((s: string) => s.trim())
       const summary = content.text.substring(0, 180).trim() + '...'
