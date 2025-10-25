@@ -346,7 +346,7 @@ export class DiscoveryOrchestrator {
               
               // Pre-filter citations for Bulls relevance
               const bullsKeywords = ['bulls', 'chicago', 'jordan', 'pippen', 'lavine', 'derozan', 'vucevic']
-              const relevantCitations = content.citations.filter(url => {
+              const relevantCitations = content.citations.filter((url: string) => {
                 const urlLower = url.toLowerCase()
                 return bullsKeywords.some(keyword => urlLower.includes(keyword))
               })
