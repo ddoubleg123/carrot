@@ -294,8 +294,13 @@ export class DiscoveryOrchestrator {
                 score: relevanceResult.score,
                 reason: relevanceResult.reason
               })
+              processedAnyUrl = true // Mark as processed so it's not reinserted
+              consecutiveDuplicates++ // Count as a "failed" attempt
               continue
             }
+            
+            // Reset consecutive failures on finding relevant content
+            consecutiveDuplicates = 0
             
             // Enrich content
             const enrichedContent = await this.enrichContent(content)
