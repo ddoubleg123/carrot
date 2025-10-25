@@ -38,9 +38,10 @@ export async function GET(
         patchId: patch.id,
         status: 'ready'
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
+      orderBy: [
+        { relevanceScore: 'desc' }, // Most relevant first
+        { createdAt: 'desc' }        // Then by newest
+      ],
       take: limit,
       skip: offset,
       select: {
