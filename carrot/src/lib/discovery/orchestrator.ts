@@ -313,13 +313,21 @@ export class DiscoveryOrchestrator {
               }
             }
             
-            console.log(`[Discovery Loop] Calling hero pipeline for: ${enrichedContent.title}`)
+            console.log(`[Discovery Loop] 🎨 Calling hero pipeline for: ${enrichedContent.title}`)
+            console.log(`[Discovery Loop]    Input:`, {
+              title: heroInput.title,
+              summary: heroInput.content.summary150?.substring(0, 100),
+              topic: heroInput.metadata.topic
+            })
             const heroResult = await this.heroPipeline.assignHero(heroInput)
             if (heroResult) {
-              console.log(`[Discovery Loop] ✅ Hero generated: ${heroResult.source}`)
+              console.log(`[Discovery Loop] ✅ Hero generated successfully:`)
+              console.log(`[Discovery Loop]    Source: ${heroResult.source}`)
+              console.log(`[Discovery Loop]    URL: ${heroResult.url?.substring(0, 100)}...`)
               this.eventStream.heroReady(heroResult.url, heroResult.source)
             } else {
-              console.warn(`[Discovery Loop] ❌ No hero image generated for: ${enrichedContent.title}`)
+              console.error(`[Discovery Loop] ❌ HERO GENERATION FAILED for: ${enrichedContent.title}`)
+              console.error(`[Discovery Loop]    This item will have NO hero image!`)
             }
             
             // Save item
@@ -344,14 +352,22 @@ export class DiscoveryOrchestrator {
             if (content.citations && content.citations.length > 0) {
               console.log(`[Discovery Loop] 📚 Found ${content.citations.length} citations to explore`)
               
-              // Pre-filter citations for Bulls relevance
-              const bullsKeywords = ['bulls', 'chicago', 'jordan', 'pippen', 'lavine', 'derozan', 'vucevic']
+              // Pre-filter citations for Bulls relevance (lenient - include basketball/nba sites)
+              const bullsKeywords = ['bulls', 'chicago', 'jordan', 'pippen', 'lavine', 'derozan', 'vucevic', 'nba', 'basketball', 'espn', 'bleacher']
               const relevantCitations = content.citations.filter((url: string) => {
                 const urlLower = url.toLowerCase()
-                return bullsKeywords.some(keyword => urlLower.includes(keyword))
+                // Allow if it has Bulls keywords OR is from trusted sports domains
+                const hasBullsKeyword = bullsKeywords.some(keyword => urlLower.includes(keyword))
+                const isSportsDomain = urlLower.includes('espn.com') || urlLower.includes('nba.com') || urlLower.includes('chicagotribune') || urlLower.includes('bleacherreport')
+                return hasBullsKeyword || isSportsDomain
               })
               
               console.log(`[Discovery Loop] 🎯 Filtered to ${relevantCitations.length} Bulls-relevant citations (from ${content.citations.length} total)`)
+              
+              // If we got very few relevant citations, add some backup Wikipedia searches
+              if (relevantCitations.length < 5) {
+                console.log(`[Discovery Loop] ⚠️  Only ${relevantCitations.length} relevant citations found, will add more Wikipedia entities`)
+              }
               
               // Add up to 10 relevant citations to the frontier
               let citationsAdded = 0
