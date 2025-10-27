@@ -33,6 +33,7 @@ export async function GET(
         const orchestrator = new DiscoveryOrchestrator(
           patch.id,
           patch.name,
+          handle,
           eventStream
         )
         

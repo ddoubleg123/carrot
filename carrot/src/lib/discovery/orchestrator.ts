@@ -29,6 +29,7 @@ export class DiscoveryOrchestrator {
   constructor(
     private groupId: string,
     private groupName: string,
+    private groupHandle: string,
     private eventStream: DiscoveryEventStream,
     config: Partial<DiscoveryConfig> = {}
   ) {
@@ -867,6 +868,10 @@ export class DiscoveryOrchestrator {
    * Save item to database
    */
   private async saveItem(item: any): Promise<DiscoveredItem> {
+    // Generate URL slug and content URL
+    const urlSlug = `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`
+    const contentUrl = `/patch/${this.groupHandle}/content/${urlSlug}`
+    
     const savedItem = await prisma.discoveredContent.create({
       data: {
         patchId: this.groupId,
@@ -885,6 +890,12 @@ export class DiscoveryOrchestrator {
         mediaAssets: JSON.stringify({
           hero: item.heroUrl,
           source: item.heroSource
+        }),
+        metadata: JSON.stringify({
+          sourceDomain: item.domain,
+          urlSlug: urlSlug,
+          contentUrl: contentUrl,
+          relevanceScore: item.relevanceScore
         })
       }
     })
@@ -912,6 +923,8 @@ export class DiscoveryOrchestrator {
         publishDate: savedItem.createdAt.toISOString()
       },
       metadata: {
+        contentUrl: contentUrl,
+        urlSlug: urlSlug,
         relevanceScore: savedItem.relevanceScore || 0
       }
     }
