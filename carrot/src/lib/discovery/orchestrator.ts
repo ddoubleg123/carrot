@@ -262,6 +262,13 @@ export class DiscoveryOrchestrator {
               })
               processedAnyUrl = true // We processed this URL (even though it was duplicate)
               consecutiveDuplicates++
+              
+              // For citation candidates, don't reinsert since they only have one URL
+              if (candidate.source === 'citation') {
+                console.log(`[Discovery Loop] 🚫 Citation candidate exhausted (duplicate URL), not reinserting`)
+                break // Exit the URL loop since citation candidates only have one URL
+              }
+              
               continue
             }
             
@@ -276,6 +283,13 @@ export class DiscoveryOrchestrator {
               console.warn(`[Discovery Loop] ⚠️  Content extraction failed for: ${canonicalUrl}`)
               processedAnyUrl = true // Mark as processed so failed URLs don't get reinserted
               consecutiveDuplicates++
+              
+              // For citation candidates, don't reinsert since they only have one URL
+              if (candidate.source === 'citation') {
+                console.log(`[Discovery Loop] 🚫 Citation candidate exhausted (content extraction failed), not reinserting`)
+                break // Exit the URL loop since citation candidates only have one URL
+              }
+              
               continue
             }
             
@@ -301,6 +315,13 @@ export class DiscoveryOrchestrator {
               })
               processedAnyUrl = true // Mark as processed so it's not reinserted
               consecutiveDuplicates++ // Count as a "failed" attempt
+              
+              // For citation candidates, don't reinsert since they only have one URL
+              if (candidate.source === 'citation') {
+                console.log(`[Discovery Loop] 🚫 Citation candidate exhausted (irrelevant content), not reinserting`)
+                break // Exit the URL loop since citation candidates only have one URL
+              }
+              
               continue
             }
             
@@ -413,6 +434,17 @@ export class DiscoveryOrchestrator {
             
           } catch (error) {
             console.warn('[Discovery Loop] Error processing URL:', rawUrl, error)
+            
+            // Mark as processed so failed URLs don't get reinserted
+            processedAnyUrl = true
+            consecutiveDuplicates++
+            
+            // For citation candidates, don't reinsert since they only have one URL
+            if (candidate.source === 'citation') {
+              console.log(`[Discovery Loop] 🚫 Citation candidate exhausted (error processing), not reinserting`)
+              break // Exit the URL loop since citation candidates only have one URL
+            }
+            
             continue
           }
         }
@@ -424,6 +456,8 @@ export class DiscoveryOrchestrator {
         } else {
           console.log(`[Discovery Loop] Processed URLs from ${candidate.source}, not reinserting (candidate exhausted)`)
         }
+        
+        console.log(`[Discovery Loop] 🔍 Debug: processedAnyUrl=${processedAnyUrl}, consecutiveDuplicates=${consecutiveDuplicates}`)
         
         // If we're stuck with duplicates, try adding more Wikipedia entities
         const frontierSize = this.frontier.getStats().totalCandidates
