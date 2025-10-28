@@ -231,7 +231,7 @@ export function useDiscoveryStreamSingle({ patchHandle }: UseDiscoveryStreamSing
     setStatusText('Loading content...')
     
     try {
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=6&offset=0`)
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=50&offset=0`)
       if (response.ok) {
         const data = await response.json()
         console.log('[Discovery] API Response:', data)

@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   const { searchParams } = new URL(req.url)
-  const limit = parseInt(searchParams.get('limit') || '6')
+  const limit = parseInt(searchParams.get('limit') || '50')
   const offset = parseInt(searchParams.get('offset') || '0')
   try {
     console.log('[Discovered Content] ===== API CALLED =====');
