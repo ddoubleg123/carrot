@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Wikipedia API integration with citation extraction
  */
 
@@ -65,7 +65,7 @@ export class WikipediaSource {
     }
   }
 
-  /**
+
    * Get a Wikipedia page with full content and citations
    */
   static async getPage(title: string): Promise<WikipediaPage | null> {
@@ -122,7 +122,7 @@ export class WikipediaSource {
         categories
       }
       
-      console.log(`[Wikipedia] ✅ Fetched "${title}" with ${citations.length} citations`)
+      console.log(`[Wikipedia] âœ… Fetched "${title}" with ${citations.length} citations`)
       
       return page
       
@@ -278,8 +278,6 @@ export class WikipediaSource {
     
     return pages
   }
-}
-
 
   /**
    * Extract external references/links from a Wikipedia page (for discovery frontier)
@@ -353,4 +351,4 @@ export class WikipediaSource {
       return []
     }
   }
-
+}
