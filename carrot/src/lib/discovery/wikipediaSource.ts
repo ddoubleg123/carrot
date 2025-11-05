@@ -65,8 +65,6 @@ export class WikipediaSource {
       console.error(`[Wikipedia] Search error for "${query}":`, error)
       return []
     }
-  }
-
 
    * Get a Wikipedia page with full content and citations
    */
