@@ -279,3 +279,78 @@ export class WikipediaSource {
     return pages
   }
 }
+
+
+  /**
+   * Extract external references/links from a Wikipedia page (for discovery frontier)
+   * Returns URLs from citations and external links section
+   */
+  static async getExternalReferences(title: string): Promise<string[]> {
+    try {
+      const page = await this.getPage(title)
+      if (!page) return []
+      
+      const urls: string[] = []
+      const seenUrls = new Set<string>()
+      
+      // Extract URLs from citations
+      for (const citation of page.citations) {
+        if (citation.url && !citation.url.includes('wikipedia.org')) {
+          // Clean URL (remove fragments, normalize)
+          try {
+            const url = new URL(citation.url)
+            url.hash = ''
+            const cleanUrl = url.toString()
+            
+            if (!seenUrls.has(cleanUrl)) {
+              seenUrls.add(cleanUrl)
+              urls.push(cleanUrl)
+            }
+          } catch (e) {
+            // Invalid URL, skip
+            continue
+          }
+        }
+      }
+      
+      console.log([Wikipedia] Found  external references from "")
+      return urls
+      
+    } catch (error: any) {
+      console.error([Wikipedia] Error getting external references for "":, error)
+      return []
+    }
+  }
+
+  /**
+   * Get category pages related to a topic (for discovery)
+   */
+  static async getCategoryPages(categoryName: string, limit: number = 10): Promise<string[]> {
+    try {
+      const categoryUrl = https://en.wikipedia.org/w/api.php?action=query&list=categorymembers&cmtitle=Category:&cmlimit=&format=json
+      
+      const response = await fetch(categoryUrl, {
+        headers: {
+          'User-Agent': 'CarrotApp/1.0 (Educational research platform)'
+        },
+        signal: AbortSignal.timeout(5000)
+      })
+      
+      if (!response.ok) {
+        throw new Error(Category API failed: )
+      }
+      
+      const data = await response.json()
+      const members = data.query?.categorymembers || []
+      
+      const titles = members.map((m: any) => m.title).filter((title: string) => !title.startsWith('Category:'))
+      
+      console.log([Wikipedia] Found  pages in category "")
+      return titles
+      
+    } catch (error: any) {
+      console.error([Wikipedia] Error getting category pages for "":, error)
+      return []
+    }
+  }
+

@@ -297,3 +297,51 @@ export class DeduplicationChecker {
     }
   }
 }
+
+
+import { isSeen, markAsSeen, isNearDuplicate, markContentHash } from '@/lib/redis/discovery'
+
+/**
+ * Enhanced deduplication with Redis support
+ * Uses Redis for persistent seen URLs and content hashes
+ */
+export class EnhancedDeduplicationChecker extends DeduplicationChecker {
+  /**
+   * Check duplicate using Redis (enhanced version)
+   */
+  async checkDuplicateRedis(
+    patchId: string,
+    canonicalUrl: string,
+    contentHash: string
+  ): Promise<{ isDuplicate: boolean, reason: string }> {
+    // Tier A: Redis seen URLs
+    if (await isSeen(patchId, canonicalUrl)) {
+      return {
+        isDuplicate: true,
+        reason: 'URL already seen (Redis)'
+      }
+    }
+    
+    // Tier B: Redis near-duplicate check
+    if (await isNearDuplicate(patchId, contentHash, 4)) {
+      return {
+        isDuplicate: true,
+        reason: 'Near-duplicate content (SimHash)'
+      }
+    }
+    
+    return {
+      isDuplicate: false,
+      reason: 'Unique content'
+    }
+  }
+  
+  /**
+   * Mark as seen and store hash in Redis
+   */
+  async markAsSeenRedis(patchId: string, canonicalUrl: string, contentHash: string): Promise<void> {
+    await markAsSeen(patchId, canonicalUrl, 30)
+    await markContentHash(patchId, contentHash)
+  }
+}
+
