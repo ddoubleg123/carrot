@@ -18,6 +18,26 @@ These documents contain everything needed to continue where the previous session
 
 ---
 
+## 🔍 **Discovery Pipeline**
+
+📁 **Location:** `docs/`
+
+### **Current Implementation Plan:**
+- **`DISCOVERY-IMPLEMENTATION-PLAN.md`** ⭐ **ACTIVE**
+  - Complete redesign specification
+  - Universal discovery engine for all patch types
+  - Fast, verifiable, high-signal results
+  - Detailed implementation phases
+  - Acceptance criteria and testing
+
+### **Archived Documents:**
+- **`DISCOVERY-FLOW-DEBUG.md.archived`** - Old debug guide (superseded)
+- **`DISCOVERY-PROCESS-ANALYSIS.md.archived`** - Old analysis (superseded)
+
+**See:** `DISCOVERY-IMPLEMENTATION-PLAN.md` for the current, authoritative plan.
+
+---
+
 ## 🎨 **SDXL Image Generation**
 
 📁 **Location:** `docs/sdxl/`
@@ -75,6 +95,9 @@ Complete guides for the upgraded SDXL image generation system:
 ### **I want to launch the system:**
 → Read `START-HERE.md` (root)
 
+### **I want to understand Discovery pipeline:**
+→ Read `docs/DISCOVERY-IMPLEMENTATION-PLAN.md`
+
 ### **I want to understand SDXL features:**
 → Browse `docs/sdxl/` folder
 
@@ -90,6 +113,7 @@ Complete guides for the upgraded SDXL image generation system:
 
 | Category | Status | Location |
 |----------|--------|----------|
+| Discovery Pipeline | 📋 Implementation Plan | `docs/DISCOVERY-IMPLEMENTATION-PLAN.md` |
 | Session Handoffs | ✅ Complete | `docs/handoffs/` |
 | SDXL Features | ✅ Complete | `docs/sdxl/` |
 | Getting Started | ✅ Complete | Root |
