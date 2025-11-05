@@ -1,4 +1,6 @@
-﻿/**
+﻿/
+
+*
  * Wikipedia API integration with citation extraction
  */
 
@@ -351,4 +353,5 @@ export class WikipediaSource {
       return []
     }
   }
+}
 }
