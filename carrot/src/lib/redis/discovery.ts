@@ -9,9 +9,7 @@ let redisClient: Redis | null = null
 
 async function getRedisClient() {
   if (!redisClient) {
-    redisClient = new Redis(
-      url: process.env.REDIS_URL || 'redis://localhost:6379'
-    })
+    redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379')
     
   }
   return redisClient
