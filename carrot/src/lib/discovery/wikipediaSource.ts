@@ -353,5 +353,3 @@ export class WikipediaSource {
   }
 
 }
-}
-}
