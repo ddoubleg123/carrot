@@ -104,3 +104,31 @@ body {
 }
 
 @tailwind utilities;
+
+
+/* Fix terminal button overlap - ensure Run button is always clickable */
+.terminal-actions,
+.command-actions,
+.run-button-container,
+button[data-testid="run-button"],
+button[aria-label*="Run"],
+button[aria-label*="run"] {
+  position: relative !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure approval messages don't block buttons */
+.approval-overlay,
+[data-overlay],
+.waiting-for-approval {
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+
+/* Fix Cursor terminal UI overlap */
+.cursor-terminal-container button,
+.cursor-terminal-actions button {
+  z-index: 1001 !important;
+  position: relative !important;
+}
