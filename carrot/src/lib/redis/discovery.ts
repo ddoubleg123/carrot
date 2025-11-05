@@ -3,16 +3,16 @@
  * Manages seen URLs, content hashes, frontier queue, and active runs
  */
 
-import { createClient } from 'redis'
+import Redis from 'ioredis'
 
-let redisClient: ReturnType<typeof createClient> | null = null
+let redisClient: Redis | null = null
 
 async function getRedisClient() {
   if (!redisClient) {
-    redisClient = createClient({
+    redisClient = new Redis(
       url: process.env.REDIS_URL || 'redis://localhost:6379'
     })
-    await redisClient.connect()
+    
   }
   return redisClient
 }
@@ -23,8 +23,8 @@ async function getRedisClient() {
 export async function isSeen(patchId: string, canonicalUrl: string): Promise<boolean> {
   const client = await getRedisClient()
   const key = `seen:patch:${patchId}`
-  const result = await client.sIsMember(key, canonicalUrl)
-  return result
+  const result = await client.sismember(key, canonicalUrl)
+  return result === 1
 }
 
 /**
@@ -33,7 +33,7 @@ export async function isSeen(patchId: string, canonicalUrl: string): Promise<boo
 export async function markAsSeen(patchId: string, canonicalUrl: string, ttlDays: number = 30): Promise<void> {
   const client = await getRedisClient()
   const key = `seen:patch:${patchId}`
-  await client.sAdd(key, canonicalUrl)
+  await client.sadd(key, canonicalUrl)
   await client.expire(key, ttlDays * 24 * 60 * 60)
 }
 
@@ -45,7 +45,7 @@ export async function isNearDuplicate(patchId: string, contentHash: string, thre
   const key = `hashes:patch:${patchId}`
   
   // Get all hashes (last 1k)
-  const hashes = await client.zRange(key, 0, 1000, { REV: true })
+  const hashes = await client.zrevrange(key, 0, 1000)
   
   const hashNum = BigInt(contentHash)
   
@@ -69,12 +69,12 @@ export async function markContentHash(patchId: string, contentHash: string): Pro
   const key = `hashes:patch:${patchId}`
   const timestamp = Date.now()
   
-  await client.zAdd(key, { score: timestamp, value: contentHash })
+  await client.zadd(key, timestamp, contentHash)
   
   // Keep only last 1k entries
-  const count = await client.zCard(key)
+  const count = await client.zcard(key)
   if (count > 1000) {
-    await client.zRemRangeByRank(key, 0, count - 1000)
+    await client.zremrangebyrank(key, 0, count - 1000)
   }
 }
 
@@ -102,12 +102,12 @@ export async function addToFrontier(patchId: string, item: { provider: string, q
   const key = `frontier:patch:${patchId}`
   
   const value = JSON.stringify({ provider: item.provider, query: item.query, cursor: item.cursor })
-  await client.zAdd(key, { score: item.priority, value })
+  await client.zadd(key, item.priority, value)
   
   // Keep only top 2k entries
-  const count = await client.zCard(key)
+  const count = await client.zcard(key)
   if (count > 2000) {
-    await client.zRemRangeByRank(key, 0, count - 2000)
+    await client.zremrangebyrank(key, 0, count - 2000)
   }
 }
 
@@ -118,13 +118,13 @@ export async function popFromFrontier(patchId: string): Promise<{ provider: stri
   const client = await getRedisClient()
   const key = `frontier:patch:${patchId}`
   
-  const results = await client.zRange(key, 0, 0, { REV: true })
+  const results = await client.zrevrange(key, 0, 0)
   if (results.length === 0) {
     return null
   }
   
   const item = JSON.parse(results[0])
-  await client.zRem(key, results[0])
+  await client.zrem(key, results[0])
   
   return item
 }
@@ -135,7 +135,7 @@ export async function popFromFrontier(patchId: string): Promise<{ provider: stri
 export async function setActiveRun(patchId: string, runId: string): Promise<void> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
-  await client.setEx(key, runId, 3600) // 1 hour TTL
+  await client.setex(key, 3600, runId) // 1 hour TTL
 }
 
 /**
@@ -145,7 +145,7 @@ export async function getActiveRun(patchId: string): Promise<string | null> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
   const result = await client.get(key)
-  return result
+  return result === 1
 }
 
 /**
@@ -163,7 +163,7 @@ export async function clearActiveRun(patchId: string): Promise<void> {
 export async function cacheWikiRefs(patchId: string, refs: string[]): Promise<void> {
   const client = await getRedisClient()
   const key = `wiki:refs:${patchId}`
-  await client.setEx(key, JSON.stringify(refs), 24 * 60 * 60) // 24h TTL
+  await client.setex(key, 24 * 60 * 60, JSON.stringify(refs)) // 24h TTL
 }
 
 /**
