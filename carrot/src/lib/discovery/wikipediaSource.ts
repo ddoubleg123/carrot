@@ -1,8 +1,7 @@
-﻿/
-
-*
+﻿/**
  * Wikipedia API integration with citation extraction
  */
+
 
 export interface WikipediaPage {
   title: string
