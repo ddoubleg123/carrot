@@ -22,7 +22,7 @@ export async function isSeen(patchId: string, canonicalUrl: string): Promise<boo
   const client = await getRedisClient()
   const key = `seen:patch:${patchId}`
   const result = await client.sismember(key, canonicalUrl)
-  return result
+  return result === 1
 }
 
 /**
