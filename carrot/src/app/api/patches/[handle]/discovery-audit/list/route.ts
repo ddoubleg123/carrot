@@ -30,7 +30,10 @@ export async function GET(
     if (step) where.step = step
     if (status) where.status = status
     if (provider) where.provider = provider
-    if (decision) where.decision = decision
+    if (decision) {
+      // Decision is stored in decisions JSON, so we'll filter in memory or use a different approach
+      // For now, skip decision filtering at DB level
+    }
 
     // Get runs
     const runs = await prisma.discoveryRun.findMany({
@@ -39,12 +42,21 @@ export async function GET(
       take: 10
     })
 
-    // Get audits
+    // Get audits - use 'ts' field instead of 'createdAt'
     const audits = await prisma.discoveryAudit.findMany({
       where,
-      orderBy: { createdAt: 'asc' },
+      orderBy: { ts: 'asc' },
       take: limit
     })
+
+    // Filter by decision if provided (since it's in JSON)
+    let filteredAudits = audits
+    if (decision) {
+      filteredAudits = audits.filter(audit => {
+        const decisions = audit.decisions as any
+        return decisions?.action === decision
+      })
+    }
 
     // Get selected run metrics
     const selectedRun = runId 
@@ -53,7 +65,7 @@ export async function GET(
 
     return NextResponse.json({
       runs,
-      audits,
+      audits: filteredAudits,
       run: selectedRun ? {
         ...selectedRun,
         metrics: selectedRun.metrics || {}

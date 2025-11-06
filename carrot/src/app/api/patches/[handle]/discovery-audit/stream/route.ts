@@ -22,7 +22,7 @@ export async function GET(
           if (runId) {
             const audits = await prisma.discoveryAudit.findMany({
               where: { runId },
-              orderBy: { createdAt: 'desc' },
+              orderBy: { ts: 'desc' },
               take: 1
             })
             
