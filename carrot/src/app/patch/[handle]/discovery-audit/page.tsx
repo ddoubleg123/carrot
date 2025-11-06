@@ -28,7 +28,7 @@ interface DiscoveryAudit {
 
 export default function DiscoveryAuditPage() {
   const params = useParams()
-  const handle = params.handle as string
+  const handle = params?.handle as string || ''
   
   const [isLive, setIsLive] = useState(false)
   const [selectedRun, setSelectedRun] = useState<DiscoveryRun | null>(null)
@@ -309,3 +309,6 @@ export default function DiscoveryAuditPage() {
     </div>
   )
 }
+
+
+
