@@ -23,7 +23,7 @@ interface DiscoveryAudit {
   step: string
   status: string
   provider: string | null
-  decision: string
+  decisions?: any // JSON field from Prisma
   candidateUrl: string | null
   meta?: any
   error?: any
@@ -32,6 +32,7 @@ interface DiscoveryAudit {
     handle: string
     name?: string
   }
+}
 }
 
 export default function DiscoveryAuditPage() {
@@ -429,3 +430,5 @@ export default function DiscoveryAuditPage() {
     </div>
   )
 }
+
+
