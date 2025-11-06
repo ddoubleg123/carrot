@@ -63,6 +63,7 @@ export class WikipediaSource {
     } catch (error: any) {
       console.error(`[Wikipedia] Search error for "${query}":`, error)
       return []
+  }
     }
   /**
    * Get a Wikipedia page with full content and citations
