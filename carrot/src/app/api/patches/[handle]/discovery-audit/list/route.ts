@@ -14,39 +14,62 @@ export async function GET(
     const status = searchParams.get('status')
     const provider = searchParams.get('provider')
     const decision = searchParams.get('decision')
+    const allPatches = searchParams.get('allPatches') === 'true'
 
-    // Get patch
-    const patch = await prisma.patch.findUnique({
-      where: { handle }
-    })
-
-    if (!patch) {
-      return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
+    // Get patch (optional if allPatches is true)
+    let patch = null
+    if (!allPatches) {
+      patch = await prisma.patch.findUnique({
+        where: { handle }
+      })
+      if (!patch) {
+        return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
+      }
     }
 
-    // Build where clause
-    const where: any = { patchId: patch.id }
+    // Build where clause - if allPatches, don't filter by patchId
+    const where: any = {}
+    if (!allPatches && patch) {
+      where.patchId = patch.id
+    }
     if (runId) where.runId = runId
     if (step) where.step = step
     if (status) where.status = status
     if (provider) where.provider = provider
-    if (decision) {
-      // Decision is stored in decisions JSON, so we'll filter in memory or use a different approach
-      // For now, skip decision filtering at DB level
-    }
 
-    // Get runs
+    // Get runs - show all if allPatches, otherwise just for this patch
+    const runsWhere: any = {}
+    if (!allPatches && patch) {
+      runsWhere.patchId = patch.id
+    }
+    
     const runs = await prisma.discoveryRun.findMany({
-      where: { patchId: patch.id },
+      where: runsWhere,
       orderBy: { startedAt: 'desc' },
-      take: 10
+      take: 50, // Show more runs
+      include: {
+        patch: {
+          select: {
+            handle: true,
+            name: true
+          }
+        }
+      }
     })
 
-    // Get audits - use 'ts' field instead of 'createdAt'
+    // Get audits with patch info
     const audits = await prisma.discoveryAudit.findMany({
       where,
-      orderBy: { ts: 'asc' },
-      take: limit
+      orderBy: { ts: 'desc' }, // Most recent first
+      take: limit,
+      include: {
+        patch: {
+          select: {
+            handle: true,
+            name: true
+          }
+        }
+      }
     })
 
     // Filter by decision if provided (since it's in JSON)
@@ -60,7 +83,17 @@ export async function GET(
 
     // Get selected run metrics
     const selectedRun = runId 
-      ? await prisma.discoveryRun.findUnique({ where: { id: runId } })
+      ? await prisma.discoveryRun.findUnique({ 
+          where: { id: runId },
+          include: {
+            patch: {
+              select: {
+                handle: true,
+                name: true
+              }
+            }
+          }
+        })
       : runs[0]
 
     return NextResponse.json({
@@ -73,8 +106,9 @@ export async function GET(
     })
   } catch (error: any) {
     console.error('[Audit List] Error:', error)
+    console.error('[Audit List] Stack:', error.stack)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error.message || 'Internal server error', stack: process.env.NODE_ENV === 'development' ? error.stack : undefined },
       { status: 500 }
     )
   }
