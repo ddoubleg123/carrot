@@ -22,7 +22,7 @@ export async function isSeen(patchId: string, canonicalUrl: string): Promise<boo
   const client = await getRedisClient()
   const key = `seen:patch:${patchId}`
   const result = await client.sismember(key, canonicalUrl)
-  return result === 1
+  return result
 }
 
 /**
@@ -143,7 +143,7 @@ export async function getActiveRun(patchId: string): Promise<string | null> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
   const result = await client.get(key)
-  return result === 1
+  return result
 }
 
 /**
