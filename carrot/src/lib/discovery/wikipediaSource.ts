@@ -335,7 +335,7 @@ export class WikipediaSource {
       })
       
       if (!response.ok) {
-        throw new Error(Category API failed: )
+        throw new Error(`Category API failed: ${response.status}`)
       }
       
       const data = await response.json()
