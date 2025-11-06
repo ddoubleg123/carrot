@@ -325,7 +325,7 @@ export class WikipediaSource {
    */
   static async getCategoryPages(categoryName: string, limit: number = 10): Promise<string[]> {
     try {
-      const categoryUrl = https://en.wikipedia.org/w/api.php?action=query&list=categorymembers&cmtitle=Category:&cmlimit=&format=json
+      const categoryUrl = `https://en.wikipedia.org/w/api.php?action=query&list=categorymembers&cmtitle=Category:${encodeURIComponent(categoryName)}&cmlimit=${limit}&format=json`
       
       const response = await fetch(categoryUrl, {
         headers: {
