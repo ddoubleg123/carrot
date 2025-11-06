@@ -302,3 +302,107 @@ export class MetricsTracker {
  * Global logger instance
  */
 export const logger = new BatchedLogger();
+
+
+// Discovery Audit Event Bus for SSE
+const auditSubscribers = new Map<string, Set<(event: any) => void>>()
+
+/**
+ * Subscribe to audit events for a patch
+ */
+export function subscribeAudit(patchId: string, callback: (event: any) => void): () => void {
+  if (!auditSubscribers.has(patchId)) {
+    auditSubscribers.set(patchId, new Set())
+  }
+  auditSubscribers.get(patchId)!.add(callback)
+  
+  return () => {
+    const subs = auditSubscribers.get(patchId)
+    if (subs) {
+      subs.delete(callback)
+      if (subs.size === 0) {
+        auditSubscribers.delete(patchId)
+      }
+    }
+  }
+}
+
+/**
+ * Publish audit event to all subscribers
+ */
+function publishAudit(patchId: string, event: any): void {
+  const subs = auditSubscribers.get(patchId)
+  if (subs) {
+    subs.forEach(callback => {
+      try {
+        callback(event)
+      } catch (error) {
+        console.error('[Audit] Error in subscriber:', error)
+      }
+    })
+  }
+}
+
+export interface AuditPayload {
+  runId: string
+  patchId: string
+  step: string
+  status: 'pending' | 'ok' | 'fail'
+  provider?: string
+  query?: string
+  candidateUrl?: string
+  finalUrl?: string
+  http?: any
+  meta?: any
+  rulesHit?: any
+  scores?: any
+  decisions?: any
+  hashes?: any
+  synthesis?: any
+  hero?: any
+  timings?: any
+  error?: any
+}
+
+/**
+ * Audit Emitter - persists to DB and publishes SSE
+ */
+export const audit = {
+  async emit(payload: AuditPayload): Promise<void> {
+    const { prisma } = await import('@/lib/prisma')
+    
+    try {
+      // Persist to database
+      const auditRecord = await prisma.discoveryAudit.create({
+        data: {
+          runId: payload.runId,
+          patchId: payload.patchId,
+          step: payload.step,
+          status: payload.status,
+          provider: payload.provider,
+          query: payload.query,
+          candidateUrl: payload.candidateUrl,
+          finalUrl: payload.finalUrl,
+          http: payload.http,
+          meta: payload.meta,
+          rulesHit: payload.rulesHit,
+          scores: payload.scores,
+          decisions: payload.decisions,
+          hashes: payload.hashes,
+          synthesis: payload.synthesis,
+          hero: payload.hero,
+          timings: payload.timings,
+          error: payload.error
+        }
+      })
+      
+      // Publish SSE event
+      publishAudit(payload.patchId, auditRecord)
+      
+    } catch (error) {
+      console.error('[Audit] Failed to persist audit:', error)
+      // Still publish even if DB fails
+      publishAudit(payload.patchId, { ...payload, ts: new Date() })
+    }
+  }
+}

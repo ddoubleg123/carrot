@@ -1,4 +1,4 @@
-generator client {
+﻿generator client {
   provider = "prisma-client-js"
 }
 
@@ -507,6 +507,8 @@ model Patch {
   followers        Follower[]
   botSubscriptions BotSubscription[]
   discoveredContent DiscoveredContent[]
+    discoveryRuns DiscoveryRun[]
+    discoveryAudits DiscoveryAudit[]
 
   @@index([handle])
   @@index([createdBy])
@@ -777,4 +779,50 @@ model DiscoveredContent {
   @@index([canonicalUrl])
   @@index([relevanceScore])
   @@map("discovered_content")
+}
+
+// Discovery Audit Trail Models
+model DiscoveryRun {
+  id        String   @id @default(cuid())
+  patchId   String   @map("patch_id")
+  startedAt DateTime @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  status    String   // live | completed | aborted | error
+  metrics   Json?    // {timeToFirst, novelRate, dupRate, itemsSaved, ...}
+
+  patch Patch           @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  audits DiscoveryAudit[]
+
+  @@index([patchId, startedAt])
+  @@map("discovery_runs")
+}
+
+model DiscoveryAudit {
+  id           String   @id @default(cuid())
+  runId        String   @map("run_id")
+  patchId      String   @map("patch_id")
+  step         String   // searching|meta|fetch|relevance|quality|dedupe|synthesis|hero|save|error
+  status       String   // pending|ok|fail
+  ts           DateTime @default(now())
+  provider     String?  // rss|wikipedia|official-site|web-search:bing|...
+  query        String?  @db.Text
+  candidateUrl String?  @db.Text @map("candidate_url")
+  finalUrl     String?  @db.Text @map("final_url")
+  http         Json?    // {code, contentType, bytes}
+  meta         Json?    // {title,h1,preview,domain,publishedAt}
+  rulesHit     Json?    @map("rules_hit") // {mustMention:true, primaryPage:false, negativeFilter:false}
+  scores       Json?    // {relevance:0.82, duplicateHitRate:0.12, simhashDistance:7}
+  decisions    Json?    // {reason:"relevance<0.75", action:"drop"} or {reason:"OK", action:"keep"}
+  hashes       Json?    // {contentHash, canonicalUrl}
+  synthesis    Json?    // {whyItMatters, facts[], quotes[], provenance[]}
+  hero         Json?    // {source:"ai|wikimedia|skeleton", url, attribution, durationMs}
+  timings      Json?    // {metaMs, fetchMs, vetMs, synthMs, heroMs, totalMs}
+  error        Json?
+
+  run   DiscoveryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  patch Patch           @relation(fields: [patchId], references: [id], onDelete: Cascade)
+
+  @@index([runId, ts])
+  @@index([patchId])
+  @@map("discovery_audits")
 }
