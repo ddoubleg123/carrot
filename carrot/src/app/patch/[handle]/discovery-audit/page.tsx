@@ -32,10 +32,7 @@ interface DiscoveryAudit {
     handle: string
     name?: string
   }
-}
-}
-
-export default function DiscoveryAuditPage() {
+}\n\nexport default function DiscoveryAuditPage() {
   const params = useParams()
   const handle = (params?.handle as string) || ''
   
@@ -430,5 +427,6 @@ export default function DiscoveryAuditPage() {
     </div>
   )
 }
+
 
 
