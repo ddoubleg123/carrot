@@ -311,11 +311,11 @@ export class WikipediaSource {
         }
       }
       
-      console.log([Wikipedia] Found  external references from "")
+      console.log(`[Wikipedia] Found ${urls.length} external references from "${title}"`)
       return urls
       
     } catch (error: any) {
-      console.error([Wikipedia] Error getting external references for "":, error)
+      console.error(`[Wikipedia] Error getting external references for "${title}":`, error)
       return []
     }
   }
@@ -343,11 +343,11 @@ export class WikipediaSource {
       
       const titles = members.map((m: any) => m.title).filter((title: string) => !title.startsWith('Category:'))
       
-      console.log([Wikipedia] Found  pages in category "")
+      console.log(`[Wikipedia] Found ${titles.length} pages in category "${categoryName}"`)
       return titles
       
     } catch (error: any) {
-      console.error([Wikipedia] Error getting category pages for "":, error)
+      console.error(`[Wikipedia] Error getting category pages for "${categoryName}":`, error)
       return []
     }
   }
