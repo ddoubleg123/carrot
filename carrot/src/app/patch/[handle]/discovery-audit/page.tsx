@@ -26,11 +26,16 @@ interface DiscoveryAudit {
   decisions?: any // JSON field from Prisma
   candidateUrl: string | null
   meta?: any
-  error?: any\n  scores?: any\n  hero?: any\n  synthesis?: any\n  ts: Date | string
+  error?: any
+  scores?: any
+  hero?: any
+  synthesis?: any
+  ts: Date | string
   patch?: {
     handle: string
     name?: string
   }
+}
 }
 
 export default function DiscoveryAuditPage() {
@@ -428,6 +433,7 @@ export default function DiscoveryAuditPage() {
     </div>
   )
 }
+
 
 
 
