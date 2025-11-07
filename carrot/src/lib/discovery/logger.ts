@@ -5,6 +5,8 @@
  * Tracks performance metrics for monitoring
  */
 
+import prisma from '@/lib/prisma'
+
 export interface LogBatch {
   type: 'duplicate' | 'error' | 'success' | 'skip';
   message: string;
@@ -369,8 +371,6 @@ export interface AuditPayload {
  */
 export const audit = {
   async emit(payload: AuditPayload): Promise<void> {
-    const { prisma } = await import('@/lib/prisma')
-    
     try {
       // Persist to database
       const auditRecord = await prisma.discoveryAudit.create({
