@@ -36,7 +36,6 @@ interface DiscoveryAudit {
     name?: string
   }
 }
-}
 
 export default function DiscoveryAuditPage() {
   const params = useParams()
@@ -433,6 +432,8 @@ export default function DiscoveryAuditPage() {
     </div>
   )
 }
+
+
 
 
 
