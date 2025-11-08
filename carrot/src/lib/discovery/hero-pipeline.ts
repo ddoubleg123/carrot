@@ -22,6 +22,13 @@ export interface ImageCandidate {
   source: string
 }
 
+export interface HeroInput {
+  title: string
+  summary?: string
+  topic?: string
+  entity?: string
+}
+
 /**
  * Hero image pipeline with fallback chain
  */
@@ -35,10 +42,10 @@ export class HeroImagePipeline {
   /**
    * Assign hero image with fallback chain
    */
-  async assignHero(item: any): Promise<HeroImageResult> {
+  async assignHero(input: HeroInput): Promise<HeroImageResult> {
     // 1. Try AI generation first
     try {
-      const aiResult = await this.tryAIGeneration(item)
+      const aiResult = await this.tryAIGeneration(input)
       if (aiResult) {
         return aiResult
       }
@@ -48,7 +55,7 @@ export class HeroImagePipeline {
     
     // 2. Try Wikimedia fallback
     try {
-      const wikiResult = await this.tryWikimedia(item)
+      const wikiResult = await this.tryWikimedia(input)
       if (wikiResult) {
         return wikiResult
       }
@@ -57,16 +64,18 @@ export class HeroImagePipeline {
     }
     
     // 3. Ultimate fallback - skeleton SVG
-    return this.createSkeleton(item)
+    return this.createSkeleton(input)
   }
   
   /**
    * Try AI image generation
    */
-  private async tryAIGeneration(item: any): Promise<HeroImageResult | null> {
+  private async tryAIGeneration(item: HeroInput): Promise<HeroImageResult | null> {
     try {
       console.log(`[Hero Pipeline] Attempting AI generation for: ${item.title}`)
       
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5000)
       const response = await fetch(`${this.baseUrl}/api/ai/generate-hero-image`, {
         method: 'POST',
         headers: {
@@ -74,16 +83,17 @@ export class HeroImagePipeline {
         },
         body: JSON.stringify({
           title: item.title,
-          description: item.content?.summary150 || item.description,
-          topic: item.metadata?.topic || 'basketball',
+          description: item.summary,
+          topic: item.topic || item.entity || 'research',
           style: 'editorial',
           artisticStyle: 'photorealistic',
           enableHiresFix: true,
           useRefiner: true,
           useFaceRestoration: true,
           useRealesrgan: true
-        })
-      })
+        }),
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout))
       
       console.log(`[Hero Pipeline] AI generation response status: ${response.status}`)
       
@@ -115,16 +125,21 @@ export class HeroImagePipeline {
   /**
    * Try Wikimedia Commons
    */
-  private async tryWikimedia(item: any): Promise<HeroImageResult | null> {
+  private async tryWikimedia(item: HeroInput): Promise<HeroImageResult | null> {
     try {
       // Extract entity from title for Wikimedia search
-      const entity = this.extractEntityForWikimedia(item.title)
-      if (!entity) {
+      const primaryEntity = item.entity || this.extractEntityForWikimedia(item.title)
+      if (!primaryEntity) {
         console.log(`[Hero Pipeline] No entity found for Wikimedia search in: ${item.title}`)
         return null
       }
+
+      const searchTerms = [primaryEntity]
+      if (item.topic && item.topic !== primaryEntity) {
+        searchTerms.push(item.topic)
+      }
       
-      console.log(`[Hero Pipeline] Attempting Wikimedia search for entity: ${entity}`)
+      console.log(`[Hero Pipeline] Attempting Wikimedia search for entity: ${primaryEntity}`)
       
       const response = await fetch(`${this.baseUrl}/api/media/wikimedia-search`, {
         method: 'POST',
@@ -132,7 +147,7 @@ export class HeroImagePipeline {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query: `${entity} Chicago Bulls`,
+          query: searchTerms.join(' '),
           limit: 5
         })
       })
@@ -169,7 +184,7 @@ export class HeroImagePipeline {
   /**
    * Create skeleton SVG fallback
    */
-  private createSkeleton(item: any): HeroImageResult {
+  private createSkeleton(item: HeroInput): HeroImageResult {
     const colors = this.getColorPalette(item)
     const gradient = `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`
     
@@ -243,7 +258,7 @@ export class HeroImagePipeline {
   /**
    * Get color palette for item
    */
-  private getColorPalette(item: any): string[] {
+  private getColorPalette(item: HeroInput): string[] {
     // Default basketball colors
     const palettes = [
       ['#1e3a8a', '#3b82f6'], // Blue
@@ -254,7 +269,7 @@ export class HeroImagePipeline {
     ]
     
     // Use item hash to pick consistent colors
-    const hash = this.simpleHash(item.id || item.title)
+    const hash = this.simpleHash(item.title)
     return palettes[hash % palettes.length]
   }
   

@@ -5,8 +5,10 @@ import { BatchedLogger } from '@/lib/discovery/logger';
 import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
 import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
-import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
+import { isDiscoveryV21Enabled, isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
 import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
+import { clearFrontier } from '@/lib/redis/discovery';
+import { generateDiscoveryPlan } from '@/lib/discovery/planner';
 
 export const runtime = 'nodejs';
 
@@ -35,7 +37,9 @@ export async function POST(
 ) {
   console.log('[Start Discovery] POST endpoint called');
   const openEvidenceEnabled = isOpenEvidenceV2Enabled();
+  const discoveryV21Enabled = isDiscoveryV21Enabled();
   console.log('[Start Discovery] Feature flag OPEN_EVIDENCE_V2:', openEvidenceEnabled ? 'enabled' : 'disabled');
+  console.log('[Start Discovery] Feature flag DISCOVERY_V21:', discoveryV21Enabled ? 'enabled' : 'disabled');
   
   // Check if SSE streaming is requested
   const url = new URL(request.url)
@@ -64,6 +68,7 @@ export async function POST(
         name: true,
         description: true,
         tags: true,
+        entity: true,
         createdBy: true
       }
     });
@@ -100,6 +105,72 @@ export async function POST(
         code: 'MISSING_API_KEY',
         patchId: patch.id
       }, { status: 500 });
+    }
+
+    if (discoveryV21Enabled) {
+      const run = await (prisma as any).discoveryRun.create({
+        data: {
+          patchId: patch.id,
+          status: 'queued'
+        }
+      })
+
+      await clearFrontier(patch.id)
+
+      const entity = (patch.entity ?? {}) as { name?: string; aliases?: string[]; type?: string }
+      const topicName = entity?.name || patch.name
+      const aliasSet = new Set<string>()
+      if (Array.isArray(entity?.aliases)) {
+        entity.aliases.forEach(value => {
+          if (typeof value === 'string' && value.trim()) {
+            aliasSet.add(value.trim())
+          }
+        })
+      }
+      if (Array.isArray(patch.tags)) {
+        patch.tags.forEach(tag => {
+          if (typeof tag === 'string' && tag.trim()) {
+            aliasSet.add(tag.trim())
+          }
+        })
+      }
+      aliasSet.delete(topicName)
+      const aliases = Array.from(aliasSet)
+
+      try {
+        await generateDiscoveryPlan({
+          topic: topicName,
+          aliases,
+          description: patch.description || '',
+          patchId: patch.id,
+          runId: run.id
+        })
+      } catch (plannerError) {
+        console.error('[Start Discovery] Planner failed', plannerError)
+      }
+
+      runOpenEvidenceEngine({
+        patchId: patch.id,
+        patchHandle: handle,
+        patchName: patch.name,
+        runId: run.id
+      }).catch(async (error) => {
+        console.error('[Start Discovery] Discovery v2.1 engine failed', error)
+        await (prisma as any).discoveryRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'error',
+            metrics: {
+              error: error instanceof Error ? error.message : String(error)
+            }
+          }
+        }).catch(() => undefined)
+      })
+
+      return NextResponse.json({
+        status: 'live',
+        runId: run.id
+      })
     }
 
     if (openEvidenceEnabled) {

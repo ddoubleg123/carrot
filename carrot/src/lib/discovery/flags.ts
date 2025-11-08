@@ -22,3 +22,7 @@ export function isOpenEvidenceV2Enabled(): boolean {
   return normalizeEnvFlag(process.env.OPEN_EVIDENCE_V2)
 }
 
+export function isDiscoveryV21Enabled(): boolean {
+  return normalizeEnvFlag(process.env.DISCOVERY_V21)
+}
+

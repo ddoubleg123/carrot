@@ -98,11 +98,24 @@ function calculateHammingDistance(hash1: bigint, hash2: bigint): number {
 /**
  * Add item to frontier queue
  */
-export async function addToFrontier(patchId: string, item: { provider: string, query: string, cursor: string, priority: number }): Promise<void> {
+export interface FrontierItem {
+  id: string
+  provider: string
+  cursor: string
+  priority: number
+  angle?: string
+  meta?: Record<string, any>
+  payload?: Record<string, any>
+}
+
+export async function addToFrontier(
+  patchId: string,
+  item: FrontierItem
+): Promise<void> {
   const client = await getRedisClient()
   const key = `frontier:patch:${patchId}`
   
-  const value = JSON.stringify({ provider: item.provider, query: item.query, cursor: item.cursor })
+  const value = JSON.stringify(item)
   await client.zadd(key, item.priority, value)
   
   // Keep only top 2k entries
@@ -115,7 +128,7 @@ export async function addToFrontier(patchId: string, item: { provider: string, q
 /**
  * Get highest priority item from frontier
  */
-export async function popFromFrontier(patchId: string): Promise<{ provider: string, query: string, cursor: string } | null> {
+export async function popFromFrontier(patchId: string): Promise<FrontierItem | null> {
   const client = await getRedisClient()
   const key = `frontier:patch:${patchId}`
   
@@ -124,10 +137,21 @@ export async function popFromFrontier(patchId: string): Promise<{ provider: stri
     return null
   }
   
-  const item = JSON.parse(results[0])
+  const item = JSON.parse(results[0]) as FrontierItem
   await client.zrem(key, results[0])
   
   return item
+}
+
+export async function clearFrontier(patchId: string): Promise<void> {
+  const client = await getRedisClient()
+  const key = `frontier:patch:${patchId}`
+  await client.del(key)
+}
+
+export async function frontierSize(patchId: string): Promise<number> {
+  const client = await getRedisClient()
+  return client.zcard(`frontier:patch:${patchId}`)
 }
 
 /**
@@ -220,6 +244,61 @@ export async function getAuditEvents(patchId: string, options: AuditPageOptions 
     nextOffset,
     hasMore
   }
+}
+
+const PLAN_TTL_SECONDS = 60 * 60 // 1 hour
+
+export async function storeDiscoveryPlan(runId: string, plan: any): Promise<void> {
+  const client = await getRedisClient()
+  await client.setex(`plan:run:${runId}`, PLAN_TTL_SECONDS, JSON.stringify(plan))
+}
+
+export async function loadDiscoveryPlan<T = any>(runId: string): Promise<T | null> {
+  const client = await getRedisClient()
+  const raw = await client.get(`plan:run:${runId}`)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch (error) {
+    console.warn('[Redis] Failed to parse discovery plan for run', runId, error)
+    return null
+  }
+}
+
+export async function markAngleCovered(runId: string, angle: string): Promise<void> {
+  const client = await getRedisClient()
+  const key = `plan:run:${runId}:angles`
+  await client.sadd(key, angle)
+  await client.expire(key, PLAN_TTL_SECONDS)
+}
+
+export async function getCoveredAngles(runId: string): Promise<Set<string>> {
+  const client = await getRedisClient()
+  const key = `plan:run:${runId}:angles`
+  const members = await client.smembers(key)
+  return new Set(members)
+}
+
+export async function clearPlan(runId: string): Promise<void> {
+  const client = await getRedisClient()
+  await client.del(`plan:run:${runId}`)
+  await client.del(`plan:run:${runId}:angles`)
+  await client.del(`plan:run:${runId}:contested`)
+}
+
+export async function markContestedCovered(runId: string, claim: string): Promise<void> {
+  if (!claim) return
+  const client = await getRedisClient()
+  const key = `plan:run:${runId}:contested`
+  await client.sadd(key, claim)
+  await client.expire(key, PLAN_TTL_SECONDS)
+}
+
+export async function getContestedCovered(runId: string): Promise<Set<string>> {
+  const client = await getRedisClient()
+  const key = `plan:run:${runId}:contested`
+  const members = await client.smembers(key)
+  return new Set(members)
 }
 
 

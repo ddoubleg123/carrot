@@ -1,221 +1,203 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
-import { Clock, ExternalLink, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { pickHero, getDominantColor } from '@/lib/media/hero'
-import { DiscoveredItem } from '@/types/discovered-content'
-import GeneratedCover from './GeneratedCover'
-import { useRouter } from 'next/navigation'
+import { Badge } from '@/components/ui/badge'
+import { DiscoveryCardPayload } from '@/types/discovery-card'
+import { ExternalLink, Share2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
+import React, { useMemo } from 'react'
 
 interface DiscoveryCardProps {
-  item: DiscoveredItem
-  onHeroClick?: (item: DiscoveredItem) => void
-  patchHandle?: string
-  className?: string
+  item: DiscoveryCardPayload
+  onSelect?: (item: DiscoveryCardPayload) => void
 }
 
+export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
+  const hasHero = Boolean(item.hero?.url)
+  const hero = useMemo(() => item.hero?.url || heroFallback(item.title), [item.hero, item.title])
+  const qualityBadge = useMemo(() => {
+    if (item.qualityScore >= 85) return { label: 'High quality', className: 'bg-emerald-100 text-emerald-700' }
+    if (item.qualityScore >= 70) return { label: 'Good quality', className: 'bg-blue-100 text-blue-700' }
+    return { label: 'Needs review', className: 'bg-amber-100 text-amber-700' }
+  }, [item.qualityScore])
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return ''
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  } catch {
-    return ''
-  }
-}
+  const relevanceBadge = useMemo(() => {
+    if (item.relevanceScore >= 0.9) return { label: 'Highly relevant', className: 'bg-emerald-100 text-emerald-700' }
+    if (item.relevanceScore >= 0.8) return { label: 'Relevant', className: 'bg-blue-100 text-blue-700' }
+    return { label: 'Borderline', className: 'bg-amber-100 text-amber-700' }
+  }, [item.relevanceScore])
 
-export default function DiscoveryCard({ item, onHeroClick, patchHandle, className = "" }: DiscoveryCardProps) {
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const router = useRouter()
-  const hero = useMemo(() => pickHero(item), [item.id, item.media])
-  const dominantColor = useMemo(() => getDominantColor(item), [item.media?.dominant])
-  
-  // Handle card click - navigate to content URL
-  const handleCardClick = () => {
-    const contentUrl = item.metadata?.contentUrl;
-    const urlSlug = item.metadata?.urlSlug;
-    
-    console.log('[DiscoveryCard] Clicked item:', {
-      id: item.id,
-      title: item.title,
-      metadata: item.metadata,
-      contentUrl,
-      urlSlug,
-      patchHandle
-    });
-    
-    if (contentUrl && urlSlug && patchHandle) {
-      // Navigate to the content URL
-      console.log('[DiscoveryCard] Navigating to:', `/patch/${patchHandle}/content/${urlSlug}`);
-      router.push(`/patch/${patchHandle}/content/${urlSlug}`)
-    } else if (onHeroClick) {
-      // Fallback to modal
-      console.log('[DiscoveryCard] Using fallback modal');
-      onHeroClick(item)
+  const handleViewSource = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    if (item.viewSourceOk) {
+      window.open(item.canonicalUrl || item.url, '_blank', 'noopener,noreferrer')
     }
   }
-  
-  // Handle failed status with error micro
-  if (item.status === 'failed') {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-red-700">
-          <div className="h-2 w-2 rounded-full bg-red-500" />
-          <span className="text-sm font-medium">Failed to load content</span>
-        </div>
-        <p className="mt-1 text-sm text-red-600">{item.title}</p>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="mt-2 h-8 text-red-600 border-red-200 hover:bg-red-100"
-          onClick={() => window.open(item.url, '_blank')}
-        >
-          <ExternalLink className="h-3 w-3 mr-1" />
-          Retry
-        </Button>
-      </div>
-    )
+
+  const handleShare = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    const shareUrl = item.canonicalUrl || item.url
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item.title, text: item.whyItMatters, url: shareUrl })
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        alert('Link copied to clipboard')
+      }
+    } catch (error) {
+      console.error('[DiscoveryCard] Share failed', error)
+    }
   }
-  
+
   return (
-    <div 
-      className={`rounded-2xl border border-[#E6E8EC] bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0A5AFF] focus:ring-offset-2 ${className}`}
-      onClick={handleCardClick}
+    <div
       role="button"
       tabIndex={0}
-      aria-label={`Open ${item.displayTitle || item.title}`}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleCardClick();
+      onClick={() => onSelect?.(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect?.(item)
         }
       }}
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
     >
-      {/* Hero Section */}
-      <div
-        className="relative aspect-[16/9] overflow-hidden rounded-xl w-full block"
-        style={{ backgroundColor: dominantColor }}
-      >
-        {/* Relevance Badge Overlay */}
-        {item.metadata?.relevanceScore !== undefined && item.metadata.relevanceScore >= 0.7 && (
-          <div className="absolute top-2 right-2 z-10">
-            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-              item.metadata.relevanceScore >= 0.9 
-                ? 'bg-green-500 text-white' 
-                : item.metadata.relevanceScore >= 0.8 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-slate-600 text-white'
-            }`}>
-              {Math.round(item.metadata.relevanceScore * 100)}%
+      {item.contested && (
+         <div className="flex items-center gap-2 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+           <AlertTriangle className="h-4 w-4" />
+           <div className="flex flex-col gap-1">
+            <span className="font-semibold">
+              Contested{item.contestedClaim ? ` · ${item.contestedClaim}` : ''}
+            </span>
+            <span>{item.contested.note}</span>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {item.contested.supporting && (
+                <a
+                  href={item.contested.supporting}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  Supporting evidence
+                </a>
+              )}
+              {item.contested.counter && (
+                <a
+                  href={item.contested.counter}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  Counter evidence
+                </a>
+              )}
             </div>
-          </div>
-        )}
-        {hero ? (
-          <img 
-            src={hero} 
-            alt="" 
-            loading="lazy" 
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover transition-opacity duration-200"
-            style={{ opacity: imageLoaded ? 1 : 0 }}
-            onLoad={() => setImageLoaded(true)}
+           </div>
+         </div>
+       )}
+
+      <div className="relative aspect-[16/9] w-full overflow-hidden">
+        {hasHero ? (
+          <img
+            src={item.hero?.url}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
           />
         ) : (
-          <GeneratedCover 
-            domain={item.meta.sourceDomain} 
-            type={item.type} 
-            dominant={item.media?.dominant}
-            className="absolute inset-0"
-          />
-        )}
-        
-        {/* Bottom gradient overlay */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
-      </div>
-      
-      {/* Title */}
-      <h3 className="text-base md:text-lg font-semibold leading-6 mt-3 line-clamp-2 text-slate-900">
-        {item.displayTitle || item.title}
-      </h3>
-      
-      {/* Summary */}
-      <p className="text-slate-700 mt-2 line-clamp-3 text-sm leading-relaxed">
-        {item.content.summary150}
-      </p>
-      
-      {/* Meta Row */}
-      <div className="mt-3 text-sm text-slate-600 flex items-center gap-2 min-w-0">
-        {/* Favicon + Domain */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <div className="w-4 h-4 rounded-sm bg-slate-200 flex items-center justify-center text-xs">
-            {item.meta.sourceDomain.charAt(0).toUpperCase()}
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-orange-500 px-6 text-center text-lg font-semibold text-white">
+            {item.title}
           </div>
-          <span className="truncate">{item.meta.sourceDomain}</span>
+        )}
+        <div className="absolute right-3 top-3 flex gap-2">
+          <span className={`rounded-full px-2 py-1 text-xs font-medium ${relevanceBadge.className}`}>
+            {relevanceBadge.label}
+          </span>
+          <span className={`rounded-full px-2 py-1 text-xs font-medium ${qualityBadge.className}`}>
+            {qualityBadge.label}
+          </span>
         </div>
-        
-        {/* Separator */}
-        <span className="text-slate-400">·</span>
-        
-        {/* Date */}
-        {item.meta.publishDate && (
-          <>
-            <span>{formatDate(item.meta.publishDate)}</span>
-            <span className="text-slate-400">·</span>
-          </>
-        )}
-        
-        {/* Reading Time */}
-        {item.content.readingTimeMin && (
-          <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            <span>{item.content.readingTimeMin} min</span>
-          </div>
-        )}
       </div>
-      
-      {/* Action Bar - Only 2 buttons as requested */}
-      <div 
-        className="mt-3 pt-3 border-t border-[#E6E8EC]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex gap-2">
-          <Button 
-            onClick={(e) => {
-              e.stopPropagation()
-              window.open(item.url, '_blank')
-            }}
-            variant="outline"
+
+      <div className="flex flex-1 flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+          <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">{item.domain}</span>
+          {item.sourceType && <Badge variant="secondary" className="bg-blue-50 text-blue-700">{item.sourceType}</Badge>}
+          {typeof item.credibilityTier === 'number' && <Badge variant="secondary">Tier {item.credibilityTier}</Badge>}
+          {item.angle && <Badge variant="outline" className="border-dashed text-slate-700">{item.angle}</Badge>}
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
+          <p className="text-sm text-slate-600">{item.whyItMatters}</p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-slate-800">Key facts</h4>
+            <ul className="space-y-2 text-sm text-slate-700">
+              {item.facts.map((fact) => (
+                <li key={`${item.id}-${fact.label}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{fact.label}</span>
+                  <span>{fact.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {item.quotes.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-slate-800">Quotes</h4>
+              <div className="space-y-2">
+                {item.quotes.map((quote, index) => (
+                  <blockquote
+                    key={`${item.id}-quote-${index}`}
+                    className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+                  >
+                    <p className="italic">“{quote.text}”</p>
+                    <footer className="mt-1 text-xs font-medium text-blue-700">
+                      {quote.speaker ? `${quote.speaker} · ` : ''}
+                      <a href={quote.citation || item.canonicalUrl} target="_blank" rel="noreferrer" className="underline">
+                        citation
+                      </a>
+                    </footer>
+                  </blockquote>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {item.provenance.map((url, index) => (
+            <a
+              key={`${item.id}-prov-${index}`}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-300 hover:text-slate-800"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <LinkIcon className="h-3 w-3" /> Source {index + 1}
+            </a>
+          ))}
+        </div>
+
+        <div className="mt-auto flex gap-3" onClick={(event) => event.stopPropagation()}>
+          <Button
+            variant="default"
             size="sm"
             className="flex-1"
+            disabled={!item.viewSourceOk}
+            title={item.viewSourceOk ? 'View source' : 'Source unavailable'}
+            onClick={handleViewSource}
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
+            <ExternalLink className="mr-2 h-4 w-4" />
             View Source
           </Button>
-          <Button 
-            onClick={(e) => {
-              e.stopPropagation()
-              if (navigator.share) {
-                navigator.share({
-                  title: item.title,
-                  text: item.content.summary150,
-                  url: item.url,
-                }).catch(console.error)
-              } else {
-                navigator.clipboard.writeText(item.url)
-                  .then(() => alert('Link copied to clipboard!'))
-                  .catch(console.error)
-              }
-            }}
-            variant="outline"
-            size="sm"
-            className="flex-1"
-          >
-            <Share2 className="h-4 w-4 mr-2" />
+          <Button variant="outline" size="sm" className="flex-1" onClick={handleShare}>
+            <Share2 className="mr-2 h-4 w-4" />
             Share
           </Button>
         </div>

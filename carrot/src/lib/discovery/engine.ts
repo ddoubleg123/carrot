@@ -2,8 +2,15 @@ import { DiscoveryOrchestrator } from './orchestrator'
 import { DiscoveryEventStream, type DiscoveryEvent } from './streaming'
 import { publishDiscoveryEvent } from './eventBus'
 import { clearActiveRun, setActiveRun } from '@/lib/redis/discovery'
+import { DiscoveryEngineV21 } from './engineV21'
+import { isDiscoveryV21Enabled } from './flags'
 
-const activeRuns = new Map<string, { orchestrator: DiscoveryOrchestrator; eventStream: DiscoveryEventStream; patchId: string }>()
+interface EngineRunner {
+  start(): Promise<void>
+  requestStop(): void
+}
+
+const activeRuns = new Map<string, { runner: EngineRunner; eventStream: DiscoveryEventStream; patchId: string }>()
 
 export interface OpenEvidenceEngineOptions {
   patchId: string
@@ -23,21 +30,17 @@ export async function runOpenEvidenceEngine({
   }
 
   const eventStream = new DiscoveryEventStream(undefined, eventListener)
-  const orchestrator = new DiscoveryOrchestrator(
-    patchId,
-    patchName,
-    patchHandle,
-    eventStream,
-    runId
-  )
+  const runner: EngineRunner = isDiscoveryV21Enabled()
+    ? new DiscoveryEngineV21({ patchId, patchHandle, patchName, runId }, eventStream)
+    : new DiscoveryOrchestrator(patchId, patchName, patchHandle, eventStream, runId)
 
-  activeRuns.set(runId, { orchestrator, eventStream, patchId })
+  activeRuns.set(runId, { runner, eventStream, patchId })
   await setActiveRun(patchId, runId).catch((error) => {
     console.warn('[OpenEvidenceEngine] Failed to record active run in Redis', error)
   })
 
   try {
-    await orchestrator.start()
+    await runner.start()
   } catch (error) {
     publishDiscoveryEvent(runId, {
       type: 'error',
@@ -60,7 +63,7 @@ export function stopOpenEvidenceRun(runId: string): boolean {
     return false
   }
 
-  active.orchestrator.requestStop()
+  active.runner.requestStop()
   return true
 }
 

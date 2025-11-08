@@ -512,12 +512,20 @@ export class DiscoveryOrchestrator {
               summary: heroInput.content.summary150?.substring(0, 100),
               topic: heroInput.metadata.topic
             })
-            const heroResult = await this.heroPipeline.assignHero(heroInput)
+            const heroResult = await this.heroPipeline.assignHero({
+              title: enrichedContent.title,
+              summary: enrichedContent.summary,
+              topic: this.groupName
+            })
             if (heroResult) {
               console.log(`[Discovery Loop] ✅ Hero generated successfully:`)
               console.log(`[Discovery Loop]    Source: ${heroResult.source}`)
               console.log(`[Discovery Loop]    URL: ${heroResult.url?.substring(0, 100)}...`)
               this.eventStream.heroReady(heroResult.url, heroResult.source)
+              await this.emitAudit('hero', 'ok', {
+                candidateUrl: canonicalUrl,
+                meta: { heroSource: heroResult.source }
+              })
             } else {
               console.error(`[Discovery Loop] ❌ HERO GENERATION FAILED for: ${enrichedContent.title}`)
               console.error(`[Discovery Loop]    This item will have NO hero image!`)

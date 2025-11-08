@@ -38,7 +38,8 @@ ALTER TABLE "discovered_content"
   ADD COLUMN IF NOT EXISTS "why_it_matters" TEXT,
   ADD COLUMN IF NOT EXISTS "facts" JSONB,
   ADD COLUMN IF NOT EXISTS "quotes" JSONB,
-  ADD COLUMN IF NOT EXISTS "provenance" JSONB;
+  ADD COLUMN IF NOT EXISTS "provenance" JSONB,
+  ADD COLUMN IF NOT EXISTS "hero" JSONB;
 
 -- Drop legacy canonical URL index if it exists (replaced by unique index)
 DROP INDEX IF EXISTS "discovered_content_canonical_url_idx";
@@ -48,6 +49,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "discovered_content_patch_id_canonical_url_key
   ON "discovered_content" ("patch_id", "canonical_url");
 CREATE INDEX IF NOT EXISTS "discovered_content_content_hash_idx"
   ON "discovered_content" ("content_hash");
+CREATE INDEX IF NOT EXISTS "discovered_content_canonical_url_idx"
+  ON "discovered_content" ("canonical_url");
 
 -- Extend patch metadata to hold entity configuration and whitelisted sources
 ALTER TABLE "patches"

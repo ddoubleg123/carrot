@@ -762,6 +762,7 @@ model DiscoveredContent {
   facts           Json?    @map("facts")
   quotes          Json?    @map("quotes")
   provenance      Json?    @map("provenance")
+  hero            Json?    @map("hero")
   tags            String[]
   status          String   @default("queued") // 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review'
   auditScore      Int?     @map("audit_score") // 1-10, set after DeepSeek audit
@@ -781,6 +782,7 @@ model DiscoveredContent {
   patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
 
   @@index([patchId])
+  @@index([canonicalUrl])
   @@index([type])
   @@index([status])
   @@index([relevanceScore])

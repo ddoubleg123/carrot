@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { DiscoveryCardPayload, DiscoveryContested, DiscoveryFact, DiscoveryHero, DiscoveryQuote } from '@/types/discovery-card'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,12 +55,13 @@ export async function GET(
         relevanceScore: true,
         status: true,
         createdAt: true,
-        enrichedContent: true,
-        mediaAssets: true,
+        whyItMatters: true,
+        facts: true,
+        quotes: true,
+        provenance: true,
+        hero: true,
         metadata: true,
-        qualityScore: true,
-        freshnessScore: true,
-        diversityBucket: true
+        qualityScore: true
       }
     });
     const t4 = Date.now();
@@ -70,70 +72,75 @@ export async function GET(
       totalItems: allContent.length
     });
 
-    // Transform the query results to match DiscoveredItem type
-    let discoveredContent = allContent.map(item => {
-      // Extract domain from sourceUrl
-      let sourceDomain = 'unknown';
+    let discoveredContent: DiscoveryCardPayload[] = allContent.map((item) => {
+      let domain = 'unknown'
+      const primaryUrl = item.canonicalUrl || item.sourceUrl || ''
       try {
-        if (item.sourceUrl) {
-          sourceDomain = new URL(item.sourceUrl).hostname.replace('www.', '');
+        if (primaryUrl) {
+          domain = new URL(primaryUrl).hostname.replace(/^www\./, '')
         }
       } catch {}
 
-      // Parse enrichedContent if it's a JSON string
-      let enrichedData: any = {};
-      if (typeof item.enrichedContent === 'string') {
-        try {
-          enrichedData = JSON.parse(item.enrichedContent);
-        } catch {}
-      } else if (item.enrichedContent) {
-        enrichedData = item.enrichedContent;
+      const parseJson = <T,>(value: any, fallback: T): T => {
+        if (!value) return fallback
+        if (typeof value === 'string') {
+          try {
+            return JSON.parse(value)
+          } catch {
+            return fallback
+          }
+        }
+        return value as T
       }
 
-      // Parse mediaAssets if it's a JSON string
-      let mediaData: any = {};
-      if (typeof item.mediaAssets === 'string') {
-        try {
-          mediaData = JSON.parse(item.mediaAssets);
-        } catch {}
-      } else if (item.mediaAssets) {
-        mediaData = item.mediaAssets;
-      }
+      const factsRaw = parseJson<DiscoveryFact[]>(item.facts, [])
+      const quotesRaw = parseJson<DiscoveryQuote[]>(item.quotes, [])
+      const provenanceRaw = parseJson<string[]>(item.provenance, [])
+      const heroRaw = parseJson<DiscoveryHero | null>(item.hero, null)
+      const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
+
+      const facts: DiscoveryFact[] = factsRaw.map((fact, index) => ({
+        label: fact?.label || `Fact ${index + 1}`,
+        value: fact?.value || '',
+        citation: fact?.citation || primaryUrl
+      })).filter(fact => fact.value)
+
+      const quotes: DiscoveryQuote[] = quotesRaw.slice(0, 3).map((quote) => ({
+        text: quote?.text || '',
+        speaker: quote?.speaker,
+        citation: quote?.citation || primaryUrl
+      })).filter(quote => quote.text)
+
+      const provenance = provenanceRaw.length ? provenanceRaw : [primaryUrl]
+      const contestedValue = metadataRaw?.contested as DiscoveryContested | undefined
+      const contestedClaim = metadataRaw?.contestedClaim || contestedValue?.claim
+      const viewSourceStatus = typeof metadataRaw?.viewSourceStatus === 'number' ? metadataRaw.viewSourceStatus : undefined
 
       return {
         id: item.id,
-        type: item.type || 'article',
         title: item.title,
-        displayTitle: enrichedData.displayTitle || item.title,
-        url: item.sourceUrl || item.canonicalUrl || '',
-        canonicalUrl: item.canonicalUrl || item.sourceUrl,
-        matchPct: item.relevanceScore || 0.8,
-        status: item.status,
-        media: {
-          hero: mediaData.hero || mediaData.heroUrl,
-          gallery: mediaData.gallery || [],
-          videoThumb: mediaData.videoThumb,
-          pdfPreview: mediaData.pdfPreview,
-          blurDataURL: mediaData.blurDataURL,
-          dominant: mediaData.dominant || mediaData.dominantColor,
-          source: mediaData.source || 'og',
-          license: mediaData.license || 'source'
-        },
-        content: {
-          summary150: enrichedData.summary || item.content || '',
-          keyPoints: enrichedData.keyPoints || [],
-          notableQuote: enrichedData.notableQuote,
-          readingTimeMin: enrichedData.readingTimeMin || 3
-        },
-        meta: {
-          sourceDomain,
-          favicon: enrichedData.favicon,
-          author: enrichedData.author,
-          publishDate: enrichedData.publishDate || item.createdAt?.toISOString()
-        },
-        metadata: item.metadata || {}
-      };
-    });
+        url: primaryUrl,
+        canonicalUrl: primaryUrl,
+        domain,
+        sourceType: metadataRaw?.sourceType || item.type || 'article',
+        credibilityTier: metadataRaw?.credibilityTier,
+        angle: metadataRaw?.angle,
+        noveltySignals: metadataRaw?.noveltySignals,
+        expectedInsights: metadataRaw?.expectedInsights,
+        reason: metadataRaw?.reason,
+        whyItMatters: (typeof item.whyItMatters === 'string' && item.whyItMatters.trim()) ? item.whyItMatters.trim() : (metadataRaw?.summary || ''),
+        facts,
+        quotes,
+        provenance,
+        contested: contestedValue && contestedValue.note ? contestedValue : null,
+        contestedClaim: contestedClaim || undefined,
+        hero: heroRaw,
+        relevanceScore: Number(item.relevanceScore ?? 0),
+        qualityScore: Number(item.qualityScore ?? 0),
+        viewSourceOk: viewSourceStatus ? viewSourceStatus < 400 : metadataRaw?.viewSourceOk !== false,
+        savedAt: item.createdAt?.toISOString() || new Date().toISOString()
+      }
+    })
 
     // Server-side link verification gate: only include items whose source verifies (<400)
     try {

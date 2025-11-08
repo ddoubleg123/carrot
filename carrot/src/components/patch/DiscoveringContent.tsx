@@ -1,581 +1,340 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, RefreshCw, AlertCircle, ExternalLink, Filter, SortAsc } from 'lucide-react';
-import telemetry from '@/lib/telemetry';
-import DiscoveryCard from '@/app/(app)/patch/[handle]/components/DiscoveryCard';
-import { DiscoveredItem } from '@/types/discovered-content';
-
-// Design tokens from Carrot standards
-const TOKENS = {
-  colors: {
-    actionOrange: '#FF6A00',
-    civicBlue: '#0A5AFF',
-    ink: '#0B0B0F',
-    slate: '#60646C',
-    line: '#E6E8EC',
-    surface: '#FFFFFF',
-    success: '#10B981',
-    warning: '#F59E0B',
-    danger: '#EF4444',
-  },
-  spacing: {
-    xs: '4px',
-    sm: '8px',
-    md: '12px',
-    lg: '16px',
-    xl: '24px',
-    xxl: '32px',
-  },
-  radii: {
-    sm: '6px',
-    md: '8px',
-    lg: '12px',
-    xl: '16px',
-    xxl: '20px',
-  },
-  motion: {
-    fast: '120ms',
-    normal: '160ms',
-    slow: '180ms',
-  },
-  typography: {
-    h3: '20px',
-    body: '16px',
-    caption: '12px',
-  }
-};
-
-// Using unified DiscoveredItem type from @/types/discovered-content
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DiscoveryCardPayload } from '@/types/discovery-card'
+import { DiscoveryCard } from '@/app/(app)/patch/[handle]/components/DiscoveryCard'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Loader2, Sparkles, RotateCcw, AlertTriangle, Link as LinkIcon } from 'lucide-react'
 
 interface DiscoveringContentProps {
-  patchHandle: string;
+  patchHandle: string
 }
 
-// Transform API data to unified DiscoveredItem format
-const transformToDiscoveredItem = (apiItem: any): DiscoveredItem => {
-  // Extract domain from URL for favicon
-  const getDomain = (url?: string) => {
-    if (!url) return 'unknown';
-    try {
-      return new URL(url).hostname.replace('www.', '');
-    } catch {
-      return 'unknown';
-    }
-  };
+const formatSeconds = (ms?: number) => {
+  if (!ms) return '—'
+  return `${(ms / 1000).toFixed(1)}s`
+}
 
-  return {
-    id: apiItem.id || `item-${Math.random()}`,
-    type: apiItem.type || 'article',
-    title: apiItem.title || 'Untitled',
-    url: apiItem.url || apiItem.sourceUrl || '',
-    matchPct: apiItem.relevanceScore || apiItem.relevance_score || 0.8,
-    status: apiItem.status === 'pending_audit' ? 'pending_audit' : 
-            apiItem.status === 'requires_review' ? 'pending_audit' : 
-            (apiItem.status as any) || 'ready',
-    media: {
-      hero: apiItem.mediaAssets?.hero || 
-            apiItem.enrichedContent?.hero || 
-            `https://ui-avatars.com/api/?name=${encodeURIComponent((apiItem.title || 'Content').substring(0, 30))}&background=FF6A00&color=fff&size=800&format=png&bold=true`,
-      gallery: apiItem.mediaAssets?.gallery || [],
-      videoThumb: apiItem.mediaAssets?.videoThumb,
-      pdfPreview: apiItem.mediaAssets?.pdfPreview
-    },
-    content: {
-      summary150: apiItem.enrichedContent?.summary150 || 
-                  apiItem.description || 
-                  apiItem.content?.substring(0, 150) + '...' || 
-                  'No summary available',
-      keyPoints: apiItem.enrichedContent?.keyPoints || 
-                 apiItem.tags?.slice(0, 5) || 
-                 ['Key information available'],
-      notableQuote: apiItem.enrichedContent?.notableQuote,
-      readingTimeMin: apiItem.metadata?.readingTime || 
-                      apiItem.enrichedContent?.readingTime || 
-                      Math.max(1, Math.floor((apiItem.content?.length || 1000) / 200))
-    },
-    meta: {
-      sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl),
-      author: apiItem.metadata?.author || 
-              apiItem.author || 
-              apiItem.enrichedContent?.author,
-      publishDate: apiItem.metadata?.publishDate || 
-                   apiItem.publishDate || 
-                   apiItem.createdAt
-    }
-  };
-};
+const formatTimestamp = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
 
 type DiscoverySseEvent =
-  | { type: 'start'; data?: { groupId?: string; runId?: string }; message?: string; timestamp: number }
-  | { type: 'searching'; data?: { source?: string }; timestamp: number }
-  | { type: 'candidate'; data?: { url?: string; title?: string }; timestamp: number }
-  | { type: 'enriched'; data?: { title?: string; summary?: string }; timestamp: number }
-  | { type: 'hero_ready'; data?: { heroUrl?: string; source?: string }; timestamp: number }
-  | { type: 'saved'; data?: { item: any }; timestamp: number }
-  | { type: 'idle'; message?: string; timestamp: number }
+  | { type: 'start'; timestamp: number; data?: { runId?: string; groupId?: string } }
+  | { type: 'searching'; timestamp: number; data?: { source?: string } }
+  | { type: 'saved'; timestamp: number; data: { item: DiscoveryCardPayload } }
+  | { type: 'idle'; timestamp: number; message?: string }
   | { type: 'stop'; timestamp: number }
-  | { type: 'error'; data?: any; message?: string; timestamp: number }
-  | { type: 'skipped:duplicate' | 'skipped:low_relevance' | 'skipped:near_dup'; data?: any; timestamp: number };
+  | { type: 'error'; timestamp: number; message?: string; data?: any }
+  | { type: 'skipped:duplicate' | 'skipped:low_relevance' | 'skipped:near_dup'; timestamp: number; data?: any }
 
 export default function DiscoveringContent({ patchHandle }: DiscoveringContentProps) {
-  const [items, setItems] = useState<DiscoveredItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDiscovering, setIsDiscovering] = useState(true);
-  const [firstItemTime, setFirstItemTime] = useState<number | null>(null);
-  const [sortBy, setSortBy] = useState<'relevance' | 'newest' | 'quality'>('relevance');
-  const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'post'>('all');
-  const [runId, setRunId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>('Ready to start discovery');
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [cards, setCards] = useState<DiscoveryCardPayload[]>([])
+  const [statusMessage, setStatusMessage] = useState<string>('Ready to start discovery')
+  const [isDiscovering, setIsDiscovering] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [timeToFirst, setTimeToFirst] = useState<number | undefined>()
+  const [coveredAngles, setCoveredAngles] = useState<Set<string>>(new Set())
+  const [contestedCovered, setContestedCovered] = useState<number>(0)
+  const [selectedCard, setSelectedCard] = useState<DiscoveryCardPayload | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  const addCard = useCallback((card: DiscoveryCardPayload) => {
+    setCards((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === card.id)
+      if (existingIndex !== -1) {
+        const updated = [...prev]
+        updated[existingIndex] = card
+        return updated
+      }
+      return [card, ...prev]
+    })
+  }, [])
+
+  const loadInitial = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=40`, {
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const data = await response.json()
+      if (Array.isArray(data.items)) {
+        setCards(data.items as DiscoveryCardPayload[])
+      }
+    } catch (error) {
+      console.error('[Discovery] Failed to load initial cards', error)
+      setError('Failed to load discovery results. Please try again.')
+    }
+  }, [patchHandle])
+
+  useEffect(() => {
+    loadInitial()
+  }, [loadInitial])
+
+  useEffect(() => {
+    setContestedCovered(cards.filter((item) => Boolean(item.contested)).length)
+  }, [cards])
+
+  useEffect(() => {
+    const source = new EventSource(`/api/patches/${patchHandle}/discovery/stream`)
+    eventSourceRef.current = source
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as DiscoverySseEvent
+        handleSseEvent(payload)
+      } catch (error) {
+        console.error('[Discovery SSE] Failed to parse event', error, event.data)
+      }
+    }
+
+    source.onerror = (event) => {
+      console.error('[Discovery SSE] Error', event)
+      setError('Discovery stream interrupted. Attempting to recover…')
+      setStatusMessage('Connection lost')
+    }
+
+    return () => {
+      source.close()
+      eventSourceRef.current = null
+    }
+  }, [patchHandle])
 
   const handleSseEvent = useCallback((event: DiscoverySseEvent) => {
     switch (event.type) {
       case 'start':
-        setStatusMessage('Discovery engine started…');
-        break;
+        startTimeRef.current = performance.now()
+        setIsDiscovering(true)
+        setStatusMessage('Discovery engine warming up…')
+        setError(null)
+        break
       case 'searching':
-        setStatusMessage(`Searching ${event.data?.source || 'sources'}…`);
-        break;
-      case 'candidate':
-        setStatusMessage(`Evaluating ${event.data?.title || event.data?.url || 'candidate'}…`);
-        break;
-      case 'enriched':
-        setStatusMessage(`Synthesizing ${event.data?.title || 'candidate'}…`);
-        break;
-      case 'hero_ready':
-        setStatusMessage('Hero image ready');
-        break;
-      case 'skipped:duplicate':
-        setStatusMessage('Skipped duplicate candidate');
-        break;
-      case 'skipped:low_relevance':
-        setStatusMessage('Skipped low relevance candidate');
-        break;
-      case 'skipped:near_dup':
-        setStatusMessage('Skipped near-duplicate candidate');
-        break;
+        setIsDiscovering(true)
+        setStatusMessage(`Searching ${event.data?.source || 'sources'}…`)
+        break
       case 'saved':
-        setStatusMessage('Saved new content');
         if (event.data?.item) {
-          const newItem = transformToDiscoveredItem(event.data.item);
-          setItems(prev => [newItem, ...prev]);
-          if (firstItemTime === null) {
-            const now = performance.now();
-            setFirstItemTime(now);
-            telemetry.trackDiscoveryFirstItem(patchHandle, now);
+          addCard(event.data.item)
+          setStatusMessage(event.data.item.contested ? 'Saved contested viewpoint coverage' : `Saved evidence from ${event.data.item.domain}`)
+          if (event.data.item.angle) {
+            setCoveredAngles((prev) => {
+              const next = new Set(prev)
+              next.add(event.data.item.angle as string)
+              return next
+            })
+          }
+          if (!timeToFirst && startTimeRef.current) {
+            setTimeToFirst(performance.now() - startTimeRef.current)
           }
         }
-        break;
+        break
       case 'idle':
-        setStatusMessage(event.message || 'Discovery idle');
-        setIsDiscovering(false);
-        break;
+        setIsDiscovering(false)
+        setStatusMessage(event.message || 'Discovery idle')
+        break
       case 'stop':
-        setStatusMessage('Discovery complete');
-        setIsDiscovering(false);
-        break;
+        setIsDiscovering(false)
+        setStatusMessage('Discovery stopped')
+        break
+      case 'skipped:duplicate':
+        setStatusMessage('Skipped duplicate')
+        break
+      case 'skipped:low_relevance':
+        setStatusMessage('Skipped low relevance source')
+        break
+      case 'skipped:near_dup':
+        setStatusMessage('Skipped near-duplicate')
+        break
       case 'error':
-        console.error('[Discovery SSE] Error event', event);
-        setStatusMessage(event.message || 'Discovery error');
-        setIsDiscovering(false);
-        if (event.data?.error) {
-          setError(`Discovery error: ${event.data.error}`);
-        }
-        break;
+        setIsDiscovering(false)
+        setError(event.message || 'Discovery error encountered.')
+        setStatusMessage('Error encountered')
+        break
       default:
-        break;
+        break
     }
-  }, [firstItemTime, patchHandle]);
+  }, [addCard, timeToFirst])
 
-  const loadDiscoveredContent = useCallback(async () => {
-    try {
-      const cacheBuster = `t=${Date.now()}`;
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${cacheBuster}`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+  const handleRefresh = useCallback(() => {
+    loadInitial()
+  }, [loadInitial])
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawItems = Array.isArray(data?.items) ? data.items : [];
-        const hydrated = rawItems.map(transformToDiscoveredItem);
-        setItems(hydrated);
-        setError(null);
-        setIsDiscovering(Boolean(data?.isActive));
-      } else {
-        if (items.length === 0) {
-          setError('Failed to load discovery results. Please try again.');
-        }
-      }
-    } catch (err) {
-      console.error('[Discovery] Error loading content', err);
-      if (items.length === 0) {
-        setError('Network error while loading discovery results.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [patchHandle, items.length]);
+  const stats = useMemo(() => ({
+    saved: cards.length,
+    anglesCovered: coveredAngles.size,
+    contestedCovered,
+    status: statusMessage,
+    timeToFirst: timeToFirst ? formatSeconds(timeToFirst) : '—'
+  }), [cards.length, coveredAngles.size, contestedCovered, statusMessage, timeToFirst])
 
-  const startEventStream = useCallback((id: string) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
+  const skeletonState = useMemo(() => {
+    if (error) return { message: error, icon: <AlertTriangle className="h-4 w-4 text-amber-600" /> }
+    if (isDiscovering) return { message: 'Processing next source…', icon: <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> }
+    return { message: 'Start discovery to stream new evidence.', icon: <Sparkles className="h-4 w-4 text-slate-400" /> }
+  }, [isDiscovering, error])
 
-    const source = new EventSource(`/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(id)}`);
-    eventSourceRef.current = source;
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <header className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Discovery Live</h2>
+              <p className="text-sm text-slate-600">{stats.status}</p>
+            </div>
+            {isDiscovering && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
+          </header>
 
-    source.onmessage = (evt) => {
-      try {
-        const parsed: DiscoverySseEvent = JSON.parse(evt.data);
-        handleSseEvent(parsed);
-      } catch (err) {
-        console.error('[Discovery SSE] Failed to parse event payload', err, evt.data);
-      }
-    };
+          <div className="mt-4 grid grid-cols-1 gap-4 text-sm text-slate-600">
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Items saved</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">{stats.saved}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Angles covered</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">{stats.anglesCovered}</p>
+              {coveredAngles.size > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {Array.from(coveredAngles).map((angle) => (
+                    <Badge key={angle} variant="outline" className="border-slate-200 text-slate-700">
+                      {angle}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Time to first</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">{stats.timeToFirst}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Contested viewpoints</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">{stats.contestedCovered}</p>
+            </div>
+          </div>
 
-    source.onerror = (err) => {
-      console.error('[Discovery SSE] Stream error', err);
-      setStatusMessage('Discovery stream disconnected');
-      setIsDiscovering(false);
-      source.close();
-      eventSourceRef.current = null;
-    };
-  }, [patchHandle, handleSseEvent]);
+          <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+            <Button variant="ghost" size="sm" onClick={handleRefresh} className="gap-2 text-slate-600">
+              <RotateCcw className="h-4 w-4" /> Refresh
+            </Button>
+            {error && <span className="text-xs text-amber-600">{error}</span>}
+          </div>
+        </div>
 
-  const handleStartDiscovery = useCallback(async () => {
-    console.log('[Discovery] Button clicked - starting discovery for patch:', patchHandle);
-    try {
-      setIsLoading(true);
-      setError(null);
-      setStatusMessage('Starting discovery…');
-
-      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'start_deepseek_search'
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Discovery API error:', response.status, errorData);
-
-        if (response.status === 401) {
-          setError('Please log in to start content discovery.');
-        } else if (response.status === 403) {
-          setError('You don\'t have permission to start discovery for this patch.');
-        } else if (response.status === 404) {
-          setError('Patch not found. Please refresh the page.');
-        } else if (response.status === 500) {
-          setError('Discovery service configuration error. Please check API keys and try again.');
-        } else {
-          setError('Discovery service is temporarily unavailable. Please try again later.');
-        }
-        setStatusMessage('Discovery failed to start');
-        return;
-      }
-
-      const data = await response.json();
-      console.log('[Discovery] API response received:', data);
-
-      if (!data?.runId) {
-        setError('Discovery did not return a run identifier. Please try again.');
-        setStatusMessage('Missing run identifier');
-        return;
-      }
-
-      setRunId(data.runId);
-      setIsDiscovering(true);
-      setStatusMessage('Connecting to live discovery stream...');
-      startEventStream(data.runId);
-      loadDiscoveredContent();
-    } catch (err) {
-      console.error('Error starting discovery:', err);
-      setError('Network error. Please check your connection and try again.');
-      setStatusMessage('Discovery failed to start');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [patchHandle, startEventStream, loadDiscoveredContent]);
-
-  useEffect(() => {
-    telemetry.trackDiscoveryStarted(patchHandle);
-    loadDiscoveredContent();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [patchHandle, loadDiscoveredContent]);
-
-  const handleRetry = () => {
-    setError(null);
-    setIsLoading(true);
-    loadDiscoveredContent();
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'video': return '🎥';
-      case 'document': return '📄';
-      case 'source': return '🔗';
-      default: return '📝';
-    }
-  };
-
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'video': return 'Video';
-      case 'document': return 'Document';
-      case 'source': return 'Source';
-      default: return 'Post';
-    }
-  };
-
-  // Sort and filter items
-  const getSortedAndFilteredItems = () => {
-    let filtered = items.filter(item => {
-      if (filterType === 'all') return true;
-      return item.type === filterType;
-    });
-
-    // Sort items
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'relevance':
-          return (b.matchPct || 0) - (a.matchPct || 0);
-        case 'newest':
-          return new Date(b.meta.publishDate || 0).getTime() - new Date(a.meta.publishDate || 0).getTime();
-        case 'quality':
-          // Use match percentage as quality proxy for now
-          return (b.matchPct || 0) - (a.matchPct || 0);
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  };
-
-  const handleAttach = (itemId: string, type: 'timeline' | 'fact' | 'source') => {
-    console.log(`Attaching item ${itemId} to ${type}`);
-    // TODO: Implement attachment logic
-  };
-
-  const handleDiscuss = (itemId: string) => {
-    console.log(`Opening discussion for item ${itemId}`);
-    // TODO: Implement discussion logic
-  };
-
-  const handleSave = (itemId: string) => {
-    console.log(`Saving item ${itemId}`);
-    // TODO: Implement save logic
-  };
-
-const showSpinner = isDiscovering || (isLoading && items.length === 0);
-
-const skeletonTile = (
-  <div className="relative h-full border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
-    <div className="absolute inset-0 bg-gradient-to-br from-orange-100/60 via-white to-orange-50/60" />
-    <div className="relative p-6 h-full flex flex-col justify-between">
-      <div>
-        <div className="h-48 rounded-xl bg-gray-100 animate-pulse mb-4" />
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-          <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2" />
-          <div className="mt-6 space-y-2">
-            {[1, 2, 3].map(key => (
-              <div key={key} className="flex gap-2 items-start">
-                <span className="w-2 h-2 rounded-full bg-orange-400 mt-1 animate-pulse" />
-                <div className="h-3 bg-gray-200 rounded animate-pulse flex-1" />
-              </div>
-            ))}
+        <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+          <div className="flex flex-col items-center gap-3 text-center">
+            {skeletonState.icon}
+            <p>{skeletonState.message}</p>
           </div>
         </div>
       </div>
-      <div className="text-sm text-gray-500 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-        Preparing next card…
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {cards.map((card) => (
+          <DiscoveryCard key={card.id} item={card} onSelect={setSelectedCard} />
+        ))}
       </div>
+
+      <Dialog open={!!selectedCard} onOpenChange={(open) => !open && setSelectedCard(null)}>
+        <DialogContent className="max-w-4xl">
+          {selectedCard && (
+            <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <div className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold">{selectedCard.title}</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-slate-600">{selectedCard.whyItMatters}</p>
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-800">Facts</h3>
+                  <ul className="space-y-2 text-sm text-slate-700">
+                    {selectedCard.facts.map((fact) => (
+                      <li key={`${selectedCard.id}-modal-${fact.label}`} className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                        <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{fact.label}</span>
+                        <span>{fact.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                {selectedCard.quotes.length > 0 && (
+                  <section className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-800">Quotes</h3>
+                    <div className="space-y-2">
+                      {selectedCard.quotes.map((quote, index) => (
+                        <blockquote key={`${selectedCard.id}-modal-quote-${index}`} className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                          <p className="italic">“{quote.text}”</p>
+                          <footer className="mt-1 text-xs font-medium text-blue-700">
+                            {quote.speaker ? `${quote.speaker} · ` : ''}
+                            <a href={quote.citation || selectedCard.canonicalUrl} target="_blank" rel="noreferrer" className="underline">
+                              citation
+                            </a>
+                          </footer>
+                        </blockquote>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+              <aside className="flex flex-col gap-4 border-t border-slate-200 pt-4 md:border-l md:border-t-0 md:pl-6">
+                <div className="rounded-xl bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Source</p>
+                  <p className="text-sm font-medium text-slate-800">{selectedCard.domain}</p>
+                  <p className="text-xs text-slate-500">Saved {formatTimestamp(selectedCard.savedAt)}</p>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-slate-800">Provenance</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCard.provenance.map((url, idx) => (
+                      <a key={`${selectedCard.id}-modal-prov-${idx}`} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-300 hover:text-slate-800">
+                        <LinkIcon className="h-3 w-3" /> Source {idx + 1}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-slate-800">Scores</h4>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline" className="border-slate-200 text-slate-700">
+                      Relevance {Math.round(selectedCard.relevanceScore * 100)}%
+                    </Badge>
+                    <Badge variant="outline" className="border-slate-200 text-slate-700">
+                      Quality {Math.round(selectedCard.qualityScore)}
+                    </Badge>
+                  </div>
+                </div>
+                {selectedCard.contested && (
+                  <div className="space-y-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide">Contested viewpoint</h4>
+                    {selectedCard.contestedClaim && <p className="text-xs font-medium text-amber-700">{selectedCard.contestedClaim}</p>}
+                    <p>{selectedCard.contested.note}</p>
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      {selectedCard.contested.supporting && (
+                        <a href={selectedCard.contested.supporting} target="_blank" rel="noreferrer" className="underline">
+                          Supporting evidence
+                        </a>
+                      )}
+                      {selectedCard.contested.counter && (
+                        <a href={selectedCard.contested.counter} target="_blank" rel="noreferrer" className="underline">
+                          Counter evidence
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </aside>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
-  </div>
-);
-
-const rightColumnContent = () => {
-  if (showSpinner || isDiscovering) {
-    return skeletonTile;
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="h-full border border-gray-200 rounded-2xl bg-white shadow-sm flex items-center justify-center text-sm text-gray-500">
-        Start discovery to preview the next card.
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full border border-gray-200 rounded-2xl bg-white shadow-sm flex flex-col justify-center items-center text-sm text-gray-500 p-6">
-      <span className="font-medium text-gray-700 mb-1">Discovery idle</span>
-      <span className="text-gray-500 text-center">
-        Launch discovery to stream the next piece of content here in real time.
-      </span>
-    </div>
-  );
-};
-
-const filtersBar = (
-  <div className="flex flex-wrap items-center justify-between gap-3">
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-2">
-        <Filter size={16} className="text-gray-500" />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value as any)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-        >
-          <option value="all">All Types</option>
-          <option value="article">Articles</option>
-          <option value="video">Videos</option>
-          <option value="pdf">PDFs</option>
-          <option value="post">Posts</option>
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <SortAsc size={16} className="text-gray-500" />
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-        >
-          <option value="relevance">Top</option>
-          <option value="newest">Newest</option>
-          <option value="quality">Quality</option>
-        </select>
-      </div>
-    </div>
-    <div className="text-sm text-gray-500">
-      {getSortedAndFilteredItems().length} items
-    </div>
-  </div>
-);
-
-const livePanel = (
-  <div className="p-6 border border-gray-200 rounded-2xl bg-white shadow-sm space-y-4">
-    <div className="flex items-center gap-3">
-      {showSpinner && (
-        <div className="w-5 h-5 rounded-full border-2 border-orange-200 border-t-transparent animate-spin" />
-      )}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900">Discovery Live</h3>
-        <p className={`text-sm ${error ? 'text-red-600' : 'text-gray-500'}`}>
-          {error || statusMessage}
-        </p>
-      </div>
-      {(isDiscovering || showSpinner) && (
-        <span className="ml-auto px-2 py-1 text-xs font-semibold bg-orange-500 text-white rounded-md">
-          LIVE
-        </span>
-      )}
-    </div>
-    <div className="flex items-center gap-3">
-      <button
-        onClick={handleStartDiscovery}
-        disabled={isDiscovering || isLoading}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold shadow hover:bg-orange-600 disabled:opacity-60"
-      >
-        {isDiscovering ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
-        {isDiscovering ? 'Discovery Running…' : 'Start Discovery'}
-      </button>
-      <button
-        onClick={loadDiscoveredContent}
-        className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-      >
-        <RefreshCw size={14} />
-        Refresh
-      </button>
-      {error && (
-        <button
-          onClick={handleRetry}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
-        >
-          <AlertCircle size={14} />
-          Resolve Error
-        </button>
-      )}
-    </div>
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-500">
-      <div>
-        <div className="text-xs uppercase tracking-wide text-gray-400">Items Saved</div>
-        <div className="text-lg font-semibold text-gray-900">{items.length}</div>
-      </div>
-      <div>
-        <div className="text-xs uppercase tracking-wide text-gray-400">Time to First</div>
-        <div className="text-lg font-semibold text-gray-900">
-          {firstItemTime ? `${(firstItemTime / 1000).toFixed(1)}s` : '—'}
-        </div>
-      </div>
-      <div>
-        <div className="text-xs uppercase tracking-wide text-gray-400">Status</div>
-        <div className="text-lg font-semibold text-gray-900">
-          {isDiscovering ? 'Running' : 'Idle'}
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const sortedItems = getSortedAndFilteredItems();
-
-return (
-  <div className="space-y-6">
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {livePanel}
-      {rightColumnContent()}
-    </div>
-
-    {filtersBar}
-
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {sortedItems.map((item, index) => {
-        if (!item || typeof item !== 'object') {
-          console.warn('[Discovery] Invalid item:', item);
-          return null;
-        }
-        return (
-          <DiscoveryCard
-            key={item.id || `discovery-${index}`}
-            item={item}
-            onHeroClick={(selectedItem) => {
-              console.log('[Discovery] Open modal for:', selectedItem.title);
-            }}
-          />
-        );
-      })}
-    </div>
-
-    {sortedItems.length === 0 && (
-      <div className="text-center py-12 border border-dashed border-gray-200 rounded-xl">
-        <Search size={48} className="text-gray-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No content discovered yet</h3>
-        <p className="text-gray-500">
-          {filterType === 'all'
-            ? 'Start discovery to fetch the latest cards for this patch.'
-            : `No ${filterType}s found. Try adjusting the filters.`}
-        </p>
-      </div>
-    )}
-  </div>
-);
+  )
 }
