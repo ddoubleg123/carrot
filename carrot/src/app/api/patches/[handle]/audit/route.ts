@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, context: any) {
     if (items.length === 0 && offset === 0) {
       const fallback = await prisma.discoveryAudit.findMany({
         where: { patchId: patch.id },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { ts: 'desc' },
         take: limit
       })
 
