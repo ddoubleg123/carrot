@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, context: any) {
       return NextResponse.json({ error: 'Missing patch handle' }, { status: 400 })
     }
 
-    const patch = await prisma.patch.findUnique({ where: { handle } })
+    const patch = await prisma.patch.findUnique({ where: { handle }, select: { id: true } })
     if (!patch) {
       return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
     }
@@ -26,7 +26,18 @@ export async function GET(request: NextRequest, context: any) {
     const offset = parseInt(searchParams.get('cursor') ?? '0', 10)
     const limit = parseInt(searchParams.get('limit') ?? '100', 10)
 
-    const { items, nextOffset, hasMore } = await getAuditEvents(patch.id, { offset, limit })
+    let items: any[] = []
+    let nextOffset = offset
+    let hasMore = false
+
+    try {
+      const redisResult = await getAuditEvents(patch.id, { offset, limit })
+      items = redisResult.items
+      nextOffset = redisResult.nextOffset
+      hasMore = redisResult.hasMore
+    } catch (redisError) {
+      console.error('[Audit API] Redis audit fetch failed, falling back to database', redisError)
+    }
 
     if (items.length === 0 && offset === 0) {
       const fallback = await prisma.discoveryAudit.findMany({

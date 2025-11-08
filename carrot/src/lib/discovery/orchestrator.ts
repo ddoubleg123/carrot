@@ -36,6 +36,7 @@ export class DiscoveryOrchestrator {
     duplicates: 0,
     failures: 0
   }
+  private stopRequested = false
   private queuedCanonicalUrls = new Set<string>()
   
   constructor(
@@ -92,6 +93,18 @@ export class DiscoveryOrchestrator {
       // Start discovery loop
       await this.discoveryLoop()
 
+      if (this.stopRequested) {
+        await this.emitAudit('run_complete', 'ok', {
+          meta: { ...this.metrics, stopped: true },
+          decisions: {
+            action: 'stop',
+            reason: 'user_requested_stop'
+          }
+        })
+        await this.finalizeRun('aborted')
+        return
+      }
+
       await this.emitAudit('run_complete', 'ok', {
         meta: this.metrics
       })
@@ -107,7 +120,13 @@ export class DiscoveryOrchestrator {
       this.eventStream.error('Discovery failed', error)
     }
   }
-  
+
+  requestStop(): void {
+    if (this.stopRequested) return
+    this.stopRequested = true
+    this.eventStream.stop()
+  }
+
   /**
    * Initialize search frontier with seed sources
    */
@@ -265,7 +284,10 @@ export class DiscoveryOrchestrator {
     
     console.log(`[Discovery Loop] Starting with maxItems=${this.config.maxItems}, timeout=${this.config.timeout}ms`)
     
-    while (itemsFound < this.config.maxItems && (Date.now() - startTime) < this.config.timeout) {
+    while (!this.stopRequested && itemsFound < this.config.maxItems && (Date.now() - startTime) < this.config.timeout) {
+      if (this.stopRequested) {
+        break
+      }
       try {
         // Get next candidate
         const candidate = this.frontier.popMax()
@@ -274,7 +296,12 @@ export class DiscoveryOrchestrator {
           this.eventStream.idle('No more candidates available')
           break
         }
-        
+ 
+        if (this.stopRequested) {
+          console.log('[Discovery Loop] ⏹️ Stop requested. Exiting before processing candidate.')
+          break
+        }
+
         console.log(`[Discovery Loop] 📍 Processing candidate: ${candidate.source} (priority: ${candidate.priority})`)
         this.metrics.candidatesProcessed++
         await this.emitAudit('frontier_pop', 'pending', {
@@ -323,6 +350,10 @@ export class DiscoveryOrchestrator {
         }
         
         for (const rawUrl of urls) {
+          if (this.stopRequested) {
+            console.log('[Discovery Loop] ⏹️ Stop requested during URL processing. Exiting loop.')
+            break
+          }
           try {
             this.metrics.urlsProcessed++
             await this.emitAudit('candidate', 'pending', {
@@ -656,9 +687,14 @@ export class DiscoveryOrchestrator {
         } else {
           console.log(`[Discovery Loop] Processed URLs from ${candidate.source}, not reinserting (candidate exhausted)`)
         }
-        
+ 
         console.log(`[Discovery Loop] 🔍 Debug: processedAnyUrl=${processedAnyUrl}, consecutiveDuplicates=${consecutiveDuplicates}`)
-        
+ 
+        if (this.stopRequested) {
+          console.log('[Discovery Loop] ⏹️ Stop requested after candidate processing. Breaking out of loop.')
+          break
+        }
+
         // If we're stuck with duplicates, try adding more Wikipedia entities
         const frontierSize = this.frontier.getStats().totalCandidates
         if (consecutiveDuplicates >= 5 || (itemsFound < 3 && frontierSize < 5)) {
@@ -679,7 +715,9 @@ export class DiscoveryOrchestrator {
       }
     }
     
-    this.eventStream.idle(`Discovery complete. Found ${itemsFound} items.`)
+    if (!this.stopRequested) {
+      this.eventStream.idle(`Discovery complete. Found ${itemsFound} items.`)
+    }
   }
   
   /**
@@ -1177,7 +1215,7 @@ export class DiscoveryOrchestrator {
     }
   }
 
-  private async finalizeRun(status: 'completed' | 'error', error?: unknown): Promise<void> {
+  private async finalizeRun(status: 'completed' | 'error' | 'aborted', error?: unknown): Promise<void> {
     try {
       await (prisma as any).discoveryRun.update({
         where: { id: this.runId },
