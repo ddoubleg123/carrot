@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
-import { canonicalize } from '@/lib/discovery/canonicalization';
 import { BatchedLogger } from '@/lib/discovery/logger';
 import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
 import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
+import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
+import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
+import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +35,8 @@ export async function POST(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   console.log('[Start Discovery] POST endpoint called');
+  const openEvidenceEnabled = isOpenEvidenceV2Enabled();
+  console.log('[Start Discovery] Feature flag OPEN_EVIDENCE_V2:', openEvidenceEnabled ? 'enabled' : 'disabled');
   
   // Check if SSE streaming is requested
   const url = new URL(request.url)
@@ -97,6 +101,38 @@ export async function POST(
         code: 'MISSING_API_KEY',
         patchId: patch.id
       }, { status: 500 });
+    }
+
+    if (openEvidenceEnabled) {
+      const run = await (prisma as any).discoveryRun.create({
+        data: {
+          patchId: patch.id,
+          status: 'queued'
+        }
+      })
+
+      runOpenEvidenceEngine({
+        patchId: patch.id,
+        patchHandle: handle,
+        patchName: patch.name,
+        runId: run.id
+      }).catch(async (error) => {
+        console.error('[Start Discovery] Open Evidence engine failed', error)
+        await (prisma as any).discoveryRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'error',
+            metrics: {
+              error: error instanceof Error ? error.message : String(error)
+            }
+          }
+        }).catch(() => undefined)
+      })
+
+      return NextResponse.json({
+        status: 'live',
+        runId: run.id
+      })
     }
 
     // Check if this is Chicago Bulls group

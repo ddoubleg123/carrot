@@ -1,6 +1,9 @@
+import { Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import prisma from '@/lib/prisma';
 import { chooseCanonical } from '@/lib/ingest/canonical';
+import { canonicalizeUrlFast } from '@/lib/discovery/canonicalize';
 import { deepseekAudit } from '@/lib/audit/deepseek';
 import { relevanceScore } from '@/lib/router/relevance';
 import { transcribeWithVosk } from '@/lib/asr/vosk';
@@ -27,7 +30,7 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
     const patchHint = typeof body?.patchHint === 'string' ? body.patchHint : undefined;
     const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl : undefined;
 
-    const canonicalUrl = chooseCanonical(url, undefined) || undefined;
+    const canonicalUrl = canonicalizeUrlFast(chooseCanonical(url, undefined) || url || `generated://${randomUUID()}`);
 
     // Optional: locate a patch by handle if provided
     let patchId: string | undefined;
@@ -37,19 +40,30 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
     }
 
     // Create discovered content
-    const item = await prisma.discoveredContent.create({
-      data: {
-        patchId: patchId || (await fallbackFirstPatchId()),
-        type,
-        title: title || (url ? new URL(url).hostname : 'Untitled'),
-        content: '',
-        relevanceScore: 5,
-        sourceUrl: url,
-        // canonicalUrl omitted here to satisfy current Prisma client types
-        tags: [],
-        status: 'enriching',
-      },
-    });
+    let item;
+    try {
+      item = await prisma.discoveredContent.create({
+        data: {
+          patchId: patchId || (await fallbackFirstPatchId()),
+          type,
+          title: title || (url ? new URL(url).hostname : 'Untitled'),
+          content: '',
+          relevanceScore: 5,
+          sourceUrl: url,
+          canonicalUrl,
+          tags: [],
+          status: 'enriching',
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return NextResponse.json(
+          { ok: false, reason: 'duplicate', canonicalUrl },
+          { status: 200 }
+        );
+      }
+      throw error;
+    }
 
     if (type === 'video' && mediaUrl) {
       // Video path: transcribe with Vosk, polish with DeepSeek, then audit+route

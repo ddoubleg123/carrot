@@ -494,6 +494,8 @@ model Patch {
   createdBy   String   @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  entity      Json?    @map("entity")
+  sourcesWhitelist Json? @map("sources_whitelist")
 
   // Relations
   creator User @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
@@ -752,9 +754,14 @@ model DiscoveredContent {
   type            String   // 'article' | 'video' | 'pdf' | 'post'
   title           String
   content         String   // Legacy field - will be replaced by enrichedContent
-  relevanceScore  Int      @map("relevance_score") // 1-10
+  relevanceScore  Float    @map("relevance_score") @default(0.0)
   sourceUrl       String?  @map("source_url")
-  canonicalUrl    String?  @map("canonical_url")
+  canonicalUrl    String   @map("canonical_url") @db.Text
+  contentHash     String?  @map("content_hash") @db.Text
+  whyItMatters    String?  @map("why_it_matters") @db.Text
+  facts           Json?    @map("facts")
+  quotes          Json?    @map("quotes")
+  provenance      Json?    @map("provenance")
   tags            String[]
   status          String   @default("queued") // 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review'
   auditScore      Int?     @map("audit_score") // 1-10, set after DeepSeek audit
@@ -776,8 +783,9 @@ model DiscoveredContent {
   @@index([patchId])
   @@index([type])
   @@index([status])
-  @@index([canonicalUrl])
   @@index([relevanceScore])
+  @@index([contentHash])
+  @@unique([patchId, canonicalUrl])
   @@map("discovered_content")
 }
 

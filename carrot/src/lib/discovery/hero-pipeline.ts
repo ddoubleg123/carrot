@@ -5,7 +5,7 @@
 
 export interface HeroImageResult {
   url: string
-  source: 'ai' | 'wikimedia' | 'minsvg'
+  source: 'ai' | 'wikimedia' | 'skeleton'
   width: number
   height: number
   alt?: string
@@ -56,8 +56,8 @@ export class HeroImagePipeline {
       console.warn('[Hero Pipeline] Wikimedia fallback failed:', error)
     }
     
-    // 3. Ultimate fallback - minimal SVG
-    return this.createMinimalSVG(item)
+    // 3. Ultimate fallback - skeleton SVG
+    return this.createSkeleton(item)
   }
   
   /**
@@ -167,9 +167,9 @@ export class HeroImagePipeline {
   }
   
   /**
-   * Create minimal SVG fallback
+   * Create skeleton SVG fallback
    */
-  private createMinimalSVG(item: any): HeroImageResult {
+  private createSkeleton(item: any): HeroImageResult {
     const colors = this.getColorPalette(item)
     const gradient = `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`
     
@@ -192,7 +192,7 @@ export class HeroImagePipeline {
     
     return {
       url: dataUrl,
-      source: 'minsvg',
+      source: 'skeleton',
       width: 1280,
       height: 720,
       alt: `Minimal design for ${item.title}`,

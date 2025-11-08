@@ -3,8 +3,9 @@
  * Coordinates all discovery components for one-at-a-time processing
  */
 
-import { canonicalize } from './canonicalize'
-import { DeduplicationChecker } from './deduplication'
+import { Prisma } from '@prisma/client'
+import { canonicalize, canonicalizeUrlFast } from './canonicalize'
+import { DeduplicationChecker, EnhancedDeduplicationChecker, SimHash } from './deduplication'
 import { SearchFrontier } from './frontier'
 import { RelevanceEngine } from './relevance'
 import { DiscoveryEventStream } from './streaming'
@@ -12,6 +13,8 @@ import { HeroImagePipeline } from './hero-pipeline'
 import { audit } from './logger'
 import { prisma } from '@/lib/prisma'
 import { DiscoveredItem } from '@/types/discovered-content'
+import { isOpenEvidenceV2Enabled } from './flags'
+import { isSeen, markAsSeen } from '@/lib/redis/discovery'
 
 export interface DiscoveryConfig {
   maxItems: number
@@ -33,6 +36,7 @@ export class DiscoveryOrchestrator {
     duplicates: 0,
     failures: 0
   }
+  private queuedCanonicalUrls = new Set<string>()
   
   constructor(
     private groupId: string,
@@ -42,7 +46,9 @@ export class DiscoveryOrchestrator {
     private runId: string,
     config: Partial<DiscoveryConfig> = {}
   ) {
-    this.deduplication = new DeduplicationChecker()
+    this.deduplication = isOpenEvidenceV2Enabled()
+      ? new EnhancedDeduplicationChecker()
+      : new DeduplicationChecker()
     this.frontier = new SearchFrontier()
     this.relevance = new RelevanceEngine()
     this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
@@ -348,6 +354,13 @@ export class DiscoveryOrchestrator {
             
             if (existingItem) {
               console.log(`[Discovery Loop] ⏭️  Skipping duplicate: ${canonicalUrl} (Already in database: ${existingItem.title})`)
+              if (isOpenEvidenceV2Enabled()) {
+                try {
+                  await markAsSeen(this.groupId, canonicalUrl, 30)
+                } catch (redisError) {
+                  console.warn('[Discovery Loop] Failed to mark duplicate URL as seen in Redis', redisError)
+                }
+              }
               this.eventStream.skipped('duplicate', canonicalUrl, {
                 reason: `Already in database: ${existingItem.title}`,
                 tier: 'A'
@@ -480,6 +493,31 @@ export class DiscoveryOrchestrator {
             }
             
             // Save item
+            const simHash = SimHash.generate(content.text)
+            if (this.deduplication instanceof EnhancedDeduplicationChecker) {
+              const redisCheck = await this.deduplication.checkDuplicateRedis(this.groupId, canonicalUrl, simHash.toString())
+              if (redisCheck.isDuplicate) {
+                console.log(`[Discovery Loop] ⏭️  Skipping duplicate by Redis: ${redisCheck.reason}`)
+                try {
+                  await markAsSeen(this.groupId, canonicalUrl, 30)
+                } catch (redisError) {
+                  console.warn('[Discovery Loop] Failed to mark Redis duplicate as seen', redisError)
+                }
+                this.metrics.duplicates++
+                await this.emitAudit('duplicate_check', 'fail', {
+                  candidateUrl: canonicalUrl,
+                  provider: candidate.source,
+                  decisions: {
+                    action: 'drop',
+                    reason: redisCheck.reason,
+                    tier: 'redis'
+                  }
+                })
+                this.eventStream.skipped('duplicate', canonicalUrl, { reason: redisCheck.reason })
+                continue
+              }
+            }
+
             const savedItem = await this.saveItem({
               title: enrichedContent.title,
               url: canonicalResult.originalUrl,
@@ -489,13 +527,19 @@ export class DiscoveryOrchestrator {
               keyPoints: enrichedContent.keyPoints,
               notableQuotes: enrichedContent.notableQuotes || [],
               heroUrl: heroResult?.url || '',
-              heroSource: heroResult?.source || 'minsvg',
+              heroSource: heroResult?.source || 'skeleton',
               relevanceScore: relevanceResult.score,
               domain
             })
             
             this.eventStream.saved(savedItem)
             this.metrics.itemsSaved++
+
+            if (this.deduplication instanceof EnhancedDeduplicationChecker) {
+              await this.deduplication.markAsSeenRedis(this.groupId, canonicalUrl, simHash.toString())
+            } else {
+              this.deduplication.markAsSeen(this.groupId, canonicalUrl, enrichedContent.text, domain)
+            }
             await this.emitAudit('save', 'ok', {
               provider: candidate.source,
               candidateUrl: canonicalUrl,
@@ -533,16 +577,38 @@ export class DiscoveryOrchestrator {
               let citationsAdded = 0
               for (const citationUrl of relevantCitations.slice(0, 10)) {
                 try {
+                  const canonicalCitation = await canonicalize(citationUrl)
+                  const canonicalCitationUrl = canonicalCitation.canonicalUrl
+
+                  if (!canonicalCitationUrl) {
+                    continue
+                  }
+
+                  if (this.queuedCanonicalUrls.has(canonicalCitationUrl)) {
+                    continue
+                  }
+
+                  if (isOpenEvidenceV2Enabled()) {
+                    try {
+                      if (await isSeen(this.groupId, canonicalCitationUrl)) {
+                        continue
+                      }
+                    } catch (seenError) {
+                      console.warn('[Discovery Loop] Failed to check Redis seen state for citation', seenError)
+                    }
+                  }
+
                   this.frontier.addCandidate({
                     source: 'citation',
                     method: 'http',
-                    cursor: citationUrl,
-                    domain: new URL(citationUrl).hostname,
+                    cursor: canonicalCitationUrl,
+                    domain: canonicalCitation.finalDomain,
                     duplicateRate: 0,
                     lastSeen: new Date()
                   })
+                  this.queuedCanonicalUrls.add(canonicalCitationUrl)
                   citationsAdded++
-                  console.log(`[Discovery Loop] ➕ Queued citation ${citationsAdded}: ${citationUrl}`)
+                  console.log(`[Discovery Loop] ➕ Queued citation ${citationsAdded}: ${canonicalCitationUrl}`)
                 } catch (error) {
                   console.warn(`[Discovery Loop] Failed to queue citation: ${citationUrl}`, error)
                 }
@@ -647,40 +713,48 @@ export class DiscoveryOrchestrator {
    */
   private async fetchWikipediaUrls(candidate: any): Promise<string[]> {
     try {
-      // Parse the search query from cursor
-      const searchQuery = candidate.cursor.replace('search=', '')
-      const decodedQuery = decodeURIComponent(searchQuery)
-      
-      console.log(`[Discovery Orchestrator] Searching Wikipedia for: ${decodedQuery}`)
-      
-      // Search Wikipedia for pages
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(decodedQuery)}&format=json&srlimit=20&origin=*`
-      
+      const params = new URLSearchParams(candidate.cursor)
+      const searchQuery = params.get('search') || candidate.cursor.replace('search=', '')
+      const offset = parseInt(params.get('offset') ?? '0', 10)
+      const decodedQuery = decodeURIComponent(searchQuery || '')
+
+      console.log(`[Discovery Orchestrator] Searching Wikipedia for: ${decodedQuery} (offset=${offset})`)
+
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(decodedQuery)}&sroffset=${offset}&format=json&srlimit=20&srprop=snippet&origin=*`
+
       const response = await fetch(searchUrl, {
         headers: {
           'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
         }
       })
-      
+
       if (!response.ok) {
         throw new Error(`Wikipedia API error: ${response.status}`)
       }
-      
+
       const data = await response.json()
-      
+
       if (!data.query || !data.query.search) {
         console.log(`[Discovery Orchestrator] No Wikipedia results for: ${decodedQuery}`)
         return []
       }
-      
-      // Convert page titles to URLs
-      const urls = data.query.search.map((result: any) => {
+
+      const urls: string[] = []
+      const seenTitles = new Set<string>()
+
+      for (const result of data.query.search as Array<{ title: string }>) {
+        const normalizedTitle = result.title.toLowerCase()
+        if (seenTitles.has(normalizedTitle)) {
+          continue
+        }
+        seenTitles.add(normalizedTitle)
+
         const title = result.title.replace(/ /g, '_')
-        return `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`
-      })
-      
-      console.log(`[Discovery Orchestrator] Found ${urls.length} Wikipedia pages`)
-      
+        urls.push(`https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`)
+      }
+
+      console.log(`[Discovery Orchestrator] Found ${urls.length} Wikipedia pages (offset=${offset})`)
+
       return urls
     } catch (error) {
       console.error('[Discovery Orchestrator] Wikipedia fetch error:', error)
@@ -1000,61 +1074,74 @@ export class DiscoveryOrchestrator {
     const urlSlug = `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`
     const contentUrl = `/patch/${this.groupHandle}/content/${urlSlug}`
     
-    const savedItem = await prisma.discoveredContent.create({
-      data: {
-        patchId: this.groupId,
-        title: item.title,
-        sourceUrl: item.url,
-        canonicalUrl: item.canonicalUrl,
-        content: item.content,
-        type: 'article',
-        status: 'ready',
-        relevanceScore: item.relevanceScore,
-        enrichedContent: JSON.stringify({
-          summary: item.summary,
-          keyPoints: item.keyPoints,
-          notableQuotes: item.notableQuotes || []
-        }),
-        mediaAssets: JSON.stringify({
-          hero: item.heroUrl,
-          source: item.heroSource
-        }),
-        metadata: JSON.stringify({
-          sourceDomain: item.domain,
-          urlSlug: urlSlug,
-          contentUrl: contentUrl,
-          relevanceScore: item.relevanceScore
-        })
-      }
-    })
+    const canonicalUrl = item.canonicalUrl || canonicalizeUrlFast(item.url)
+
+    try {
+      const savedItem = await prisma.discoveredContent.create({
+        data: {
+          patchId: this.groupId,
+          title: item.title,
+          sourceUrl: item.url,
+          canonicalUrl,
+          content: item.content,
+          type: 'article',
+          status: 'ready',
+          relevanceScore: item.relevanceScore,
+          enrichedContent: JSON.stringify({
+            summary: item.summary,
+            keyPoints: item.keyPoints,
+            notableQuotes: item.notableQuotes || []
+          }),
+          mediaAssets: JSON.stringify({
+            hero: item.heroUrl,
+            source: item.heroSource
+          }),
+          metadata: JSON.stringify({
+            sourceDomain: item.domain,
+            urlSlug: urlSlug,
+            contentUrl: contentUrl,
+            relevanceScore: item.relevanceScore
+          })
+        }
+      })
     
-    // Return properly formatted DiscoveredItem
-    return {
-      id: savedItem.id,
-      type: 'article',
-      title: savedItem.title,
-      url: savedItem.sourceUrl || '',
-      canonicalUrl: savedItem.canonicalUrl || '',
-      status: 'ready',
-      media: {
-        hero: item.heroUrl,
-        source: item.heroSource,
-        license: item.heroSource === 'ai' ? 'generated' : 'source'
-      },
-      content: {
-        summary150: item.summary,
-        keyPoints: item.keyPoints,
-        readingTimeMin: Math.ceil(item.content.split(' ').length / 200) // ~200 words per minute
-      },
-      meta: {
-        sourceDomain: item.domain,
-        publishDate: savedItem.createdAt.toISOString()
-      },
-      metadata: {
-        contentUrl: contentUrl,
-        urlSlug: urlSlug,
-        relevanceScore: savedItem.relevanceScore || 0
+      // Return properly formatted DiscoveredItem
+      return {
+        id: savedItem.id,
+        type: 'article',
+        title: savedItem.title,
+        url: savedItem.sourceUrl || '',
+        canonicalUrl: savedItem.canonicalUrl || '',
+        status: 'ready',
+        media: {
+          hero: item.heroUrl,
+          source: item.heroSource,
+          license: item.heroSource === 'ai' ? 'generated' : 'source'
+        },
+        content: {
+          summary150: item.summary,
+          keyPoints: item.keyPoints,
+          readingTimeMin: Math.ceil(item.content.split(' ').length / 200) // ~200 words per minute
+        },
+        meta: {
+          sourceDomain: item.domain,
+          publishDate: savedItem.createdAt.toISOString()
+        },
+        metadata: {
+          contentUrl: contentUrl,
+          urlSlug: urlSlug,
+          relevanceScore: savedItem.relevanceScore || 0
+        }
       }
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        console.warn('[Discovery Orchestrator] Duplicate canonical URL skipped', {
+          patchId: this.groupId,
+          canonicalUrl
+        })
+        throw new Error('Duplicate discovered content')
+      }
+      throw error
     }
   }
   

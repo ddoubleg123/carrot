@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, RefreshCw, AlertCircle, ExternalLink, Filter, SortAsc } from 'lucide-react';
 import telemetry from '@/lib/telemetry';
 import DiscoveryCard from '@/app/(app)/patch/[handle]/components/DiscoveryCard';
@@ -106,6 +106,18 @@ const transformToDiscoveredItem = (apiItem: any): DiscoveredItem => {
   };
 };
 
+type DiscoverySseEvent =
+  | { type: 'start'; data?: { groupId?: string; runId?: string }; message?: string; timestamp: number }
+  | { type: 'searching'; data?: { source?: string }; timestamp: number }
+  | { type: 'candidate'; data?: { url?: string; title?: string }; timestamp: number }
+  | { type: 'enriched'; data?: { title?: string; summary?: string }; timestamp: number }
+  | { type: 'hero_ready'; data?: { heroUrl?: string; source?: string }; timestamp: number }
+  | { type: 'saved'; data?: { item: any }; timestamp: number }
+  | { type: 'idle'; message?: string; timestamp: number }
+  | { type: 'stop'; timestamp: number }
+  | { type: 'error'; data?: any; message?: string; timestamp: number }
+  | { type: 'skipped:duplicate' | 'skipped:low_relevance' | 'skipped:near_dup'; data?: any; timestamp: number };
+
 export default function DiscoveringContent({ patchHandle }: DiscoveringContentProps) {
   const [items, setItems] = useState<DiscoveredItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,15 +126,44 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [firstItemTime, setFirstItemTime] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<'relevance' | 'newest' | 'quality'>('relevance');
   const [filterType, setFilterType] = useState<'all' | 'article' | 'video' | 'pdf' | 'post'>('all');
+  const [runId, setRunId] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('Ready to start discovery');
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const handleStartDiscovery = async () => {
+  const startEventStream = useCallback((id: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    const source = new EventSource(`/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(id)}`);
+    eventSourceRef.current = source;
+
+    source.onmessage = (evt) => {
+      try {
+        const parsed: DiscoverySseEvent = JSON.parse(evt.data);
+        handleSseEvent(parsed);
+      } catch (err) {
+        console.error('[Discovery SSE] Failed to parse event payload', err, evt.data);
+      }
+    };
+
+    source.onerror = (err) => {
+      console.error('[Discovery SSE] Stream error', err);
+      setStatusMessage('Discovery stream disconnected');
+      setIsDiscovering(false);
+      source.close();
+      eventSourceRef.current = null;
+    };
+  }, [patchHandle, handleSseEvent]);
+
+  const handleStartDiscovery = useCallback(async () => {
     console.log('[Discovery] Button clicked - starting discovery for patch:', patchHandle);
     try {
       setIsLoading(true);
       setError(null);
-      
-      console.log('[Discovery] Making POST request to start-discovery API...');
-      // Call the DeepSeek-powered discovery API
+      setStatusMessage('Starting discovery…');
+
       const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
         method: 'POST',
         headers: {
@@ -132,12 +173,11 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           action: 'start_deepseek_search'
         })
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Discovery API error:', response.status, errorData);
-        
-        // Handle specific error cases
+
         if (response.status === 401) {
           setError('Please log in to start content discovery.');
         } else if (response.status === 403) {
@@ -149,39 +189,94 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         } else {
           setError('Discovery service is temporarily unavailable. Please try again later.');
         }
+        setStatusMessage('Discovery failed to start');
         return;
       }
-      
+
       const data = await response.json();
       console.log('[Discovery] API response received:', data);
-      
-      // Start polling for results
+
+      if (!data?.runId) {
+        setError('Discovery did not return a run identifier. Please try again.');
+        setStatusMessage('Missing run identifier');
+        return;
+      }
+
+      setRunId(data.runId);
       setIsDiscovering(true);
+      setStatusMessage('Connecting to live discovery stream...');
+      startEventStream(data.runId);
       loadDiscoveredContent();
-      
     } catch (err) {
       console.error('Error starting discovery:', err);
       setError('Network error. Please check your connection and try again.');
+      setStatusMessage('Discovery failed to start');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [patchHandle, startEventStream, loadDiscoveredContent]);
 
-  useEffect(() => {
-    telemetry.trackDiscoveryStarted(patchHandle);
-    
-    // Try to load existing content first
-    loadDiscoveredContent();
-    
-    // Set up polling for new content
-    const interval = setInterval(loadDiscoveredContent, 10000); // Reduced frequency
-    return () => clearInterval(interval);
-  }, [patchHandle]);
+  const handleSseEvent = useCallback((event: DiscoverySseEvent) => {
+    switch (event.type) {
+      case 'start':
+        setStatusMessage('Discovery engine started…');
+        break;
+      case 'searching':
+        setStatusMessage(`Searching ${event.data?.source || 'sources'}…`);
+        break;
+      case 'candidate':
+        setStatusMessage(`Evaluating ${event.data?.title || event.data?.url || 'candidate'}…`);
+        break;
+      case 'enriched':
+        setStatusMessage(`Synthesizing ${event.data?.title || 'candidate'}…`);
+        break;
+      case 'hero_ready':
+        setStatusMessage('Hero image ready');
+        break;
+      case 'skipped:duplicate':
+        setStatusMessage('Skipped duplicate candidate');
+        break;
+      case 'skipped:low_relevance':
+        setStatusMessage('Skipped low relevance candidate');
+        break;
+      case 'skipped:near_dup':
+        setStatusMessage('Skipped near-duplicate candidate');
+        break;
+      case 'saved':
+        setStatusMessage('Saved new content');
+        if (event.data?.item) {
+          const newItem = transformToDiscoveredItem(event.data.item);
+          setItems(prev => [newItem, ...prev]);
+          if (firstItemTime === null) {
+            const now = performance.now();
+            setFirstItemTime(now);
+            telemetry.trackDiscoveryFirstItem(patchHandle, now);
+          }
+        }
+        break;
+      case 'idle':
+        setStatusMessage(event.message || 'Discovery idle');
+        setIsDiscovering(false);
+        break;
+      case 'stop':
+        setStatusMessage('Discovery complete');
+        setIsDiscovering(false);
+        break;
+      case 'error':
+        console.error('[Discovery SSE] Error event', event);
+        setStatusMessage(event.message || 'Discovery error');
+        setIsDiscovering(false);
+        if (event.data?.error) {
+          setError(`Discovery error: ${event.data.error}`);
+        }
+        break;
+      default:
+        break;
+    }
+  }, [firstItemTime, patchHandle]);
 
-  const loadDiscoveredContent = async () => {
+  const loadDiscoveredContent = useCallback(async () => {
     try {
-      console.log('[Discovery] Loading discovered content for patch:', patchHandle);
-      // Add cache-busting parameter to force fresh data
       const cacheBuster = `t=${Date.now()}`;
       const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${cacheBuster}`, {
         headers: {
@@ -189,82 +284,40 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           'Pragma': 'no-cache'
         }
       });
-      console.log('[Discovery] API response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
-        console.log('[Discovery] API response data:', data);
-        
-        // Safety check: ensure data.items is an array and transform to unified format
         const rawItems = Array.isArray(data?.items) ? data.items : [];
-        const newItems = rawItems.map(transformToDiscoveredItem);
-        console.log('[Discovery] Processed items:', newItems.length, 'items');
-        
-        // Log when new items are found
-        if (newItems.length > items.length) {
-          console.log(`[Discovery] Found ${newItems.length} items (was ${items.length})`, newItems);
-        }
-        
-        // Track first item discovery
-        if (newItems.length > 0 && items.length === 0 && firstItemTime === null) {
-          const timeToFirstItem = performance.now();
-          setFirstItemTime(timeToFirstItem);
-          telemetry.trackDiscoveryFirstItem(patchHandle, timeToFirstItem);
-          console.log('[Discovery] First item discovered!', newItems[0]);
-        }
-        
-        setItems(newItems);
-        setIsDiscovering(data?.isActive || false);
+        const hydrated = rawItems.map(transformToDiscoveredItem);
+        setItems(hydrated);
         setError(null);
+        setIsDiscovering(Boolean(data?.isActive));
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('[Discovery] API error:', response.status, errorData);
-        console.error('[Discovery] Full error details:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          patchHandle
-        });
-        
-        // Only show error if we don't have any items yet
         if (items.length === 0) {
-          let errorMessage = 'Unknown error';
-          let errorCode = 'UNKNOWN_ERROR';
-          
-          if (response.status === 404) {
-            errorMessage = 'Patch not found. Please refresh the page.';
-            errorCode = 'PATCH_NOT_FOUND';
-          } else if (response.status === 500) {
-            if (errorData.code === 'MISSING_API_KEY') {
-              errorMessage = 'Discovery service is not configured. Please contact support.';
-              errorCode = 'MISSING_API_KEY';
-            } else if (errorData.code === 'DEEPSEEK_API_ERROR') {
-              errorMessage = `Discovery service error (${errorData.status}). Please try again later.`;
-              errorCode = 'DEEPSEEK_API_ERROR';
-            } else {
-              errorMessage = `Server error: ${errorData.details || errorData.error || 'Unknown error'}`;
-              errorCode = 'SERVER_ERROR';
-            }
-          } else {
-            errorMessage = `We couldn't check sources (${response.status}). Retry.`;
-            errorCode = `HTTP_${response.status}`;
-          }
-          
-          setError(errorMessage);
-          telemetry.trackDiscoveryError(patchHandle, `${errorCode}: ${errorMessage}`);
+          setError('Failed to load discovery results. Please try again.');
         }
       }
     } catch (err) {
-      console.error('[Discovery] Error loading content:', err);
-      
-      // Only show error if we don't have any items yet
+      console.error('[Discovery] Error loading content', err);
       if (items.length === 0) {
-        setError('Connection lost. We\'ll keep trying.');
-        telemetry.trackDiscoveryError(patchHandle, 'Network error');
+        setError('Network error while loading discovery results.');
       }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [patchHandle, items.length]);
+
+  useEffect(() => {
+    telemetry.trackDiscoveryStarted(patchHandle);
+    loadDiscoveredContent();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [patchHandle, loadDiscoveredContent]);
 
   const handleRetry = () => {
     setError(null);
@@ -330,365 +383,199 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     // TODO: Implement save logic
   };
 
-  if (isLoading) {
-    return (
-      <div style={{
-        padding: TOKENS.spacing.xl,
-        border: `1px solid ${TOKENS.colors.line}`,
-        borderRadius: TOKENS.radii.lg,
-        background: TOKENS.colors.surface
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.md, marginBottom: TOKENS.spacing.lg }}>
-          <div style={{
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            border: `2px solid ${TOKENS.colors.line}`,
-            borderTopColor: TOKENS.colors.actionOrange,
-            animation: 'spin 1s linear infinite'
-          }} />
-          <h3 style={{
-            fontSize: TOKENS.typography.h3,
-            fontWeight: 600,
-            color: TOKENS.colors.ink,
-            margin: 0
-          }}>
-            Discovering content
-          </h3>
-        </div>
-        <p style={{
-          fontSize: TOKENS.typography.body,
-          color: TOKENS.colors.slate,
-          margin: 0,
-          marginBottom: TOKENS.spacing.lg
-        }}>
-          We're actively finding posts, videos, and drills that match this group. New items will appear here.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: TOKENS.spacing.md }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} style={{
-              padding: TOKENS.spacing.lg,
-              border: `1px solid ${TOKENS.colors.line}`,
-              borderRadius: TOKENS.radii.md,
-              background: '#f9f9f9'
-            }}>
-              <div style={{
-                height: '16px',
-                background: TOKENS.colors.line,
-                borderRadius: TOKENS.radii.sm,
-                marginBottom: TOKENS.spacing.sm,
-                width: '60%'
-              }} />
-              <div style={{
-                height: '12px',
-                background: TOKENS.colors.line,
-                borderRadius: TOKENS.radii.sm,
-                width: '40%'
-              }} />
-            </div>
-          ))}
-        </div>
-        <style jsx>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
+const showSpinner = isDiscovering || (isLoading && items.length === 0);
 
-  if (error) {
-    return (
-      <div style={{
-        padding: TOKENS.spacing.xl,
-        border: `1px solid ${TOKENS.colors.danger}`,
-        borderRadius: TOKENS.radii.lg,
-        background: '#FEF2F2'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.md, marginBottom: TOKENS.spacing.lg }}>
-          <AlertCircle size={24} color={TOKENS.colors.danger} />
-          <h3 style={{
-            fontSize: TOKENS.typography.h3,
-            fontWeight: 600,
-            color: TOKENS.colors.danger,
-            margin: 0
-          }}>
-            Discovery Error
-          </h3>
-        </div>
-        <p style={{
-          fontSize: TOKENS.typography.body,
-          color: TOKENS.colors.danger,
-          margin: 0,
-          marginBottom: TOKENS.spacing.lg
-        }}>
-          {error}
-        </p>
-        {error.includes('configuration error') && (
-          <div style={{
-            padding: TOKENS.spacing.md,
-            background: '#FEF3C7',
-            border: `1px solid ${TOKENS.colors.warning}`,
-            borderRadius: TOKENS.radii.md,
-            marginBottom: TOKENS.spacing.lg
-          }}>
-            <p style={{
-              fontSize: TOKENS.typography.caption,
-              color: TOKENS.colors.warning,
-              margin: 0,
-              fontWeight: 600
-            }}>
-              💡 Setup Required: Add DEEPSEEK_API_KEY to your environment variables
-            </p>
-            <p style={{
-              fontSize: TOKENS.typography.caption,
-              color: TOKENS.colors.slate,
-              margin: 0,
-              marginTop: TOKENS.spacing.xs
-            }}>
-              See DISCOVERY_SETUP_GUIDE.md for detailed instructions
-            </p>
+const skeletonTile = (
+  <div className="relative h-full border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+    <div className="absolute inset-0 bg-gradient-to-br from-orange-100/60 via-white to-orange-50/60" />
+    <div className="relative p-6 h-full flex flex-col justify-between">
+      <div>
+        <div className="h-48 rounded-xl bg-gray-100 animate-pulse mb-4" />
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+          <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2" />
+          <div className="mt-6 space-y-2">
+            {[1, 2, 3].map(key => (
+              <div key={key} className="flex gap-2 items-start">
+                <span className="w-2 h-2 rounded-full bg-orange-400 mt-1 animate-pulse" />
+                <div className="h-3 bg-gray-200 rounded animate-pulse flex-1" />
+              </div>
+            ))}
           </div>
-        )}
-        <button
-          onClick={handleRetry}
-          style={{
-            padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
-            border: 'none',
-            borderRadius: TOKENS.radii.md,
-            background: TOKENS.colors.danger,
-            color: TOKENS.colors.surface,
-            fontSize: TOKENS.typography.body,
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: TOKENS.spacing.sm,
-            transition: `all ${TOKENS.motion.normal} ease-in-out`
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#DC2626';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = TOKENS.colors.danger;
-          }}
-        >
-          <RefreshCw size={16} />
-          Retry
-        </button>
+        </div>
       </div>
-    );
+      <div className="text-sm text-gray-500 flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+        Preparing next card…
+      </div>
+    </div>
+  </div>
+);
+
+const rightColumnContent = () => {
+  if (showSpinner || isDiscovering) {
+    return skeletonTile;
   }
 
-  if (items.length === 0 && !error) {
+  if (items.length === 0) {
     return (
-      <div style={{
-        padding: TOKENS.spacing.xl,
-        border: `1px solid ${TOKENS.colors.line}`,
-        borderRadius: TOKENS.radii.lg,
-        background: TOKENS.colors.surface,
-        textAlign: 'center'
-      }}>
-        <div style={{ marginBottom: TOKENS.spacing.lg }}>
-          <Search size={48} color={TOKENS.colors.slate} />
-        </div>
-        <h3 style={{
-          fontSize: TOKENS.typography.h3,
-          fontWeight: 600,
-          color: TOKENS.colors.ink,
-          margin: 0,
-          marginBottom: TOKENS.spacing.sm
-        }}>
-          Discovery In Process
-        </h3>
-        <p style={{
-          fontSize: TOKENS.typography.body,
-          color: TOKENS.colors.slate,
-          margin: 0,
-          marginBottom: TOKENS.spacing.lg
-        }}>
-          Carrot is searching for relevant content about this group...
-        </p>
-        <div style={{
-          fontSize: TOKENS.typography.caption,
-          color: TOKENS.colors.slate,
-          marginBottom: TOKENS.spacing.lg,
-          fontStyle: 'italic'
-        }}>
-          Items found: {items.length} | Status: {isDiscovering ? 'Searching...' : 'Processing...'}
-        </div>
-        <button
-          onClick={handleStartDiscovery}
-          disabled={isLoading}
-          style={{
-            padding: `${TOKENS.spacing.md} ${TOKENS.spacing.lg}`,
-            border: 'none',
-            borderRadius: TOKENS.radii.md,
-            background: TOKENS.colors.actionOrange,
-            color: TOKENS.colors.surface,
-            fontSize: TOKENS.typography.body,
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: TOKENS.spacing.sm,
-            margin: '0 auto',
-            opacity: isLoading ? 0.7 : 1,
-            cursor: isLoading ? 'not-allowed' : 'pointer'
-          }}
-        >
-          {isLoading ? (
-            <>
-              <div style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '50%',
-                border: `2px solid ${TOKENS.colors.surface}`,
-                borderTopColor: 'transparent',
-                animation: 'spin 1s linear infinite'
-              }} />
-              Starting Discovery...
-            </>
-          ) : (
-            <>
-              <Search size={16} />
-              Start Content Discovery
-            </>
-          )}
-        </button>
-        <style jsx>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+      <div className="h-full border border-gray-200 rounded-2xl bg-white shadow-sm flex items-center justify-center text-sm text-gray-500">
+        Start discovery to preview the next card.
       </div>
     );
   }
 
   return (
-    <div style={{
-      padding: TOKENS.spacing.xl,
-      border: `1px solid ${TOKENS.colors.line}`,
-      borderRadius: TOKENS.radii.lg,
-      background: TOKENS.colors.surface
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: TOKENS.spacing.md, marginBottom: TOKENS.spacing.lg }}>
-        {isDiscovering && (
-          <div style={{
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            border: `2px solid ${TOKENS.colors.line}`,
-            borderTopColor: TOKENS.colors.actionOrange,
-            animation: 'spin 1s linear infinite'
-          }} />
-        )}
-        <h3 style={{
-          fontSize: TOKENS.typography.h3,
-          fontWeight: 600,
-          color: TOKENS.colors.ink,
-          margin: 0
-        }}>
-          Discovering content
-        </h3>
-        {isDiscovering && (
-          <span style={{
-            padding: `${TOKENS.spacing.xs} ${TOKENS.spacing.sm}`,
-            background: TOKENS.colors.actionOrange,
-            color: TOKENS.colors.surface,
-            borderRadius: TOKENS.radii.sm,
-            fontSize: TOKENS.typography.caption,
-            fontWeight: 600
-          }}>
-            LIVE
-          </span>
-        )}
-      </div>
-      
-      <p style={{
-        fontSize: TOKENS.typography.body,
-        color: TOKENS.colors.slate,
-        margin: 0,
-        marginBottom: TOKENS.spacing.lg
-      }}>
-        We're actively finding posts, videos, and drills that match this group. New items will appear here.
-      </p>
-
-      {/* Controls */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-gray-500" />
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as any)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            >
-              <option value="all">All Types</option>
-              <option value="article">Articles</option>
-              <option value="video">Videos</option>
-              <option value="pdf">PDFs</option>
-              <option value="post">Posts</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <SortAsc size={16} className="text-gray-500" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-            >
-              <option value="relevance">Top</option>
-              <option value="newest">Newest</option>
-              <option value="quality">Quality</option>
-            </select>
-          </div>
-        </div>
-        <div className="text-sm text-gray-500">
-          {getSortedAndFilteredItems().length} items
-        </div>
-      </div>
-
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {getSortedAndFilteredItems().map((item) => {
-          // Safety check: ensure item has all required properties
-          if (!item || typeof item !== 'object') {
-            console.warn('[Discovery] Invalid item:', item);
-            return null;
-          }
-          
-          return (
-            <DiscoveryCard
-              key={item.id || Math.random()}
-              item={item}
-              onHeroClick={(selectedItem) => {
-                // TODO: Implement modal
-                console.log('[Discovery] Open modal for:', selectedItem.title)
-              }}
-            />
-          );
-        })}
-      </div>
-
-      {/* Empty State */}
-      {getSortedAndFilteredItems().length === 0 && (
-        <div className="text-center py-12">
-          <Search size={48} className="text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No content found</h3>
-          <p className="text-gray-500">
-            {filterType === 'all' 
-              ? 'No content has been discovered yet. Check back soon!'
-              : `No ${filterType}s found. Try changing the filter.`
-            }
-          </p>
-        </div>
-      )}
-
-      <style jsx>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+    <div className="h-full border border-gray-200 rounded-2xl bg-white shadow-sm flex flex-col justify-center items-center text-sm text-gray-500 p-6">
+      <span className="font-medium text-gray-700 mb-1">Discovery idle</span>
+      <span className="text-gray-500 text-center">
+        Launch discovery to stream the next piece of content here in real time.
+      </span>
     </div>
   );
+};
+
+const filtersBar = (
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-2">
+        <Filter size={16} className="text-gray-500" />
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value as any)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+        >
+          <option value="all">All Types</option>
+          <option value="article">Articles</option>
+          <option value="video">Videos</option>
+          <option value="pdf">PDFs</option>
+          <option value="post">Posts</option>
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <SortAsc size={16} className="text-gray-500" />
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as any)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+        >
+          <option value="relevance">Top</option>
+          <option value="newest">Newest</option>
+          <option value="quality">Quality</option>
+        </select>
+      </div>
+    </div>
+    <div className="text-sm text-gray-500">
+      {getSortedAndFilteredItems().length} items
+    </div>
+  </div>
+);
+
+const livePanel = (
+  <div className="p-6 border border-gray-200 rounded-2xl bg-white shadow-sm space-y-4">
+    <div className="flex items-center gap-3">
+      {showSpinner && (
+        <div className="w-5 h-5 rounded-full border-2 border-orange-200 border-t-transparent animate-spin" />
+      )}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">Discovery Live</h3>
+        <p className={`text-sm ${error ? 'text-red-600' : 'text-gray-500'}`}>
+          {error || statusMessage}
+        </p>
+      </div>
+      {(isDiscovering || showSpinner) && (
+        <span className="ml-auto px-2 py-1 text-xs font-semibold bg-orange-500 text-white rounded-md">
+          LIVE
+        </span>
+      )}
+    </div>
+    <div className="flex items-center gap-3">
+      <button
+        onClick={handleStartDiscovery}
+        disabled={isDiscovering || isLoading}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold shadow hover:bg-orange-600 disabled:opacity-60"
+      >
+        {isDiscovering ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
+        {isDiscovering ? 'Discovery Running…' : 'Start Discovery'}
+      </button>
+      <button
+        onClick={loadDiscoveredContent}
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+      >
+        <RefreshCw size={14} />
+        Refresh
+      </button>
+      {error && (
+        <button
+          onClick={handleRetry}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+        >
+          <AlertCircle size={14} />
+          Resolve Error
+        </button>
+      )}
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-500">
+      <div>
+        <div className="text-xs uppercase tracking-wide text-gray-400">Items Saved</div>
+        <div className="text-lg font-semibold text-gray-900">{items.length}</div>
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wide text-gray-400">Time to First</div>
+        <div className="text-lg font-semibold text-gray-900">
+          {firstItemTime ? `${(firstItemTime / 1000).toFixed(1)}s` : '—'}
+        </div>
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wide text-gray-400">Status</div>
+        <div className="text-lg font-semibold text-gray-900">
+          {isDiscovering ? 'Running' : 'Idle'}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const sortedItems = getSortedAndFilteredItems();
+
+return (
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {livePanel}
+      {rightColumnContent()}
+    </div>
+
+    {filtersBar}
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {sortedItems.map((item, index) => {
+        if (!item || typeof item !== 'object') {
+          console.warn('[Discovery] Invalid item:', item);
+          return null;
+        }
+        return (
+          <DiscoveryCard
+            key={item.id || `discovery-${index}`}
+            item={item}
+            onHeroClick={(selectedItem) => {
+              console.log('[Discovery] Open modal for:', selectedItem.title);
+            }}
+          />
+        );
+      })}
+    </div>
+
+    {sortedItems.length === 0 && (
+      <div className="text-center py-12 border border-dashed border-gray-200 rounded-xl">
+        <Search size={48} className="text-gray-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No content discovered yet</h3>
+        <p className="text-gray-500">
+          {filterType === 'all'
+            ? 'Start discovery to fetch the latest cards for this patch.'
+            : `No ${filterType}s found. Try adjusting the filters.`}
+        </p>
+      </div>
+    )}
+  </div>
+);
 }

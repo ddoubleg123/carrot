@@ -6,6 +6,8 @@
  */
 
 import prisma from '@/lib/prisma'
+import { publishAuditEvent } from './eventBus'
+import { pushAuditEvent } from '@/lib/redis/discovery'
 
 export interface LogBatch {
   type: 'duplicate' | 'error' | 'success' | 'skip';
@@ -307,43 +309,6 @@ export const logger = new BatchedLogger();
 
 
 // Discovery Audit Event Bus for SSE
-const auditSubscribers = new Map<string, Set<(event: any) => void>>()
-
-/**
- * Subscribe to audit events for a patch
- */
-export function subscribeAudit(patchId: string, callback: (event: any) => void): () => void {
-  if (!auditSubscribers.has(patchId)) {
-    auditSubscribers.set(patchId, new Set())
-  }
-  auditSubscribers.get(patchId)!.add(callback)
-  
-  return () => {
-    const subs = auditSubscribers.get(patchId)
-    if (subs) {
-      subs.delete(callback)
-      if (subs.size === 0) {
-        auditSubscribers.delete(patchId)
-      }
-    }
-  }
-}
-
-/**
- * Publish audit event to all subscribers
- */
-function publishAudit(patchId: string, event: any): void {
-  const subs = auditSubscribers.get(patchId)
-  if (subs) {
-    subs.forEach(callback => {
-      try {
-        callback(event)
-      } catch (error) {
-        console.error('[Audit] Error in subscriber:', error)
-      }
-    })
-  }
-}
 
 export interface AuditPayload {
   runId: string
@@ -404,13 +369,24 @@ export const audit = {
       })
 
       // Publish SSE event
-      publishAudit(payload.patchId, auditRecord)
+      publishAuditEvent(payload.patchId, auditRecord)
+      try {
+        await pushAuditEvent(payload.patchId, auditRecord)
+      } catch (redisError) {
+        console.warn('[Audit] Failed to push event to Redis', redisError)
+      }
 
     } catch (error) {
       console.error('[Audit] Failed to persist audit:', error)
       const formattedError = error instanceof Error ? { message: error.message, stack: error.stack } : error
       // Still publish even if DB fails
-      publishAudit(payload.patchId, { ...payload, ts: new Date(), error: formattedError })
+      const fallbackEvent = { ...payload, ts: new Date(), error: formattedError }
+      publishAuditEvent(payload.patchId, fallbackEvent)
+      try {
+        await pushAuditEvent(payload.patchId, fallbackEvent)
+      } catch (redisError) {
+        console.warn('[Audit] Failed to push fallback event to Redis', redisError)
+      }
     }
   }
 }

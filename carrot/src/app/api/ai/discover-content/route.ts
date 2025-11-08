@@ -1,5 +1,7 @@
+import { Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient';
+import { canonicalizeUrlFast } from '@/lib/discovery/canonicalize';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -156,6 +158,14 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
     // Store discovered content in database
     const storedContent = [];
     for (const item of discoveredContent) {
+      const sourceUrl = typeof item.source_url === 'string' ? item.source_url.trim() : '';
+      if (!sourceUrl) {
+        console.warn('[Discover Content] Skipping item without source_url', { title: item.title });
+        continue;
+      }
+
+      const canonicalUrl = canonicalizeUrlFast(sourceUrl);
+
       try {
         const stored = await prisma.discoveredContent.create({
           data: {
@@ -164,7 +174,8 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
             title: item.title,
             content: item.content,
             relevanceScore: item.relevance_score,
-            sourceUrl: item.source_url,
+            sourceUrl,
+            canonicalUrl,
             tags: item.tags,
             status: 'pending'
           }
@@ -210,6 +221,10 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
         
         storedContent.push(stored);
       } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          console.warn('[Discover Content] Duplicate canonical URL skipped', { canonicalUrl, patchId });
+          continue;
+        }
         console.error('Failed to store discovered content:', error);
         // Continue with other items even if one fails
       }

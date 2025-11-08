@@ -132,31 +132,25 @@ export class SearchFrontier {
     switch (method) {
       case 'rss':
         // For RSS, advance to next page
-        const rssMatch = currentCursor.match(/page=(\d+)/)
-        if (rssMatch) {
-          const page = parseInt(rssMatch[1]) + 1
-          return currentCursor.replace(/page=\d+/, `page=${page}`)
-        }
-        return `${currentCursor}&page=2`
-        
+        const rssParams = new URLSearchParams(currentCursor)
+        const currentPage = parseInt(rssParams.get('page') ?? '1', 10)
+        rssParams.set('page', (currentPage + 1).toString())
+        return rssParams.toString()
+
       case 'api':
-        // For API, advance offset
-        const apiMatch = currentCursor.match(/offset=(\d+)/)
-        if (apiMatch) {
-          const offset = parseInt(apiMatch[1]) + 20
-          return currentCursor.replace(/offset=\d+/, `offset=${offset}`)
-        }
-        return `${currentCursor}&offset=20`
-        
+        // For API-style cursors (e.g. Wikipedia search), advance the offset window
+        const apiParams = new URLSearchParams(currentCursor)
+        const currentOffset = parseInt(apiParams.get('offset') ?? '0', 10)
+        apiParams.set('offset', (currentOffset + 20).toString())
+        return apiParams.toString()
+
       case 'search':
         // For search, advance page
-        const searchMatch = currentCursor.match(/start=(\d+)/)
-        if (searchMatch) {
-          const start = parseInt(searchMatch[1]) + 10
-          return currentCursor.replace(/start=\d+/, `start=${start}`)
-        }
-        return `${currentCursor}&start=10`
-        
+        const searchParams = new URLSearchParams(currentCursor)
+        const currentStart = parseInt(searchParams.get('start') ?? '0', 10)
+        searchParams.set('start', (currentStart + 10).toString())
+        return searchParams.toString()
+
       default:
         return currentCursor
     }

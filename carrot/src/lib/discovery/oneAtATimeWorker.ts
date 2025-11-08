@@ -3,9 +3,11 @@
  * Processes sources one by one with proper SSE events and hero image pipeline
  */
 
+import { Prisma } from '@prisma/client'
 import { BullsDiscoveryOrchestrator, DiscoveredSource } from './bullsDiscoveryOrchestrator'
 import { getGroupProfile } from './groupProfiles'
 import { canonicalize } from './canonicalization'
+import { canonicalizeUrlFast } from './canonicalize'
 import { SimHash } from './deduplication'
 
 export interface WorkerState {
@@ -279,15 +281,16 @@ export class OneAtATimeWorker {
   ): Promise<{ id: string }> {
     const { prisma } = await import('@/lib/prisma')
     
+    const canonicalUrl = source.canonicalUrl || canonicalizeUrlFast(source.url)
     try {
       const savedItem = await prisma.discoveredContent.create({
         data: {
           patchId,
           type: source.type,
           title: source.title,
-          content: content,
+          content,
           sourceUrl: source.url,
-          canonicalUrl: source.canonicalUrl,
+          canonicalUrl,
           relevanceScore: source.relevanceScore,
           tags: ['chicago-bulls', 'basketball'],
           status: 'ready',
@@ -314,6 +317,13 @@ export class OneAtATimeWorker {
       return { id: savedItem.id }
       
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        console.warn('[OneAtATimeWorker] Duplicate canonical URL skipped', {
+          patchId,
+          canonicalUrl
+        })
+        throw new Error('Duplicate discovered content')
+      }
       console.error('[OneAtATimeWorker] Database save error:', error)
       throw error
     }

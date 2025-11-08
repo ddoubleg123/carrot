@@ -9,8 +9,11 @@ let redisClient: Redis | null = null
 
 async function getRedisClient() {
   if (!redisClient) {
-    redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379')
-    
+    const url = process.env.REDIS_URL
+    if (!url) {
+      throw new Error('REDIS_URL must be set for discovery redis utilities')
+    }
+    redisClient = new Redis(url)
   }
   return redisClient
 }
@@ -175,6 +178,48 @@ export async function getCachedWikiRefs(patchId: string): Promise<string[] | nul
     return JSON.parse(result)
   }
   return null
+}
+
+export async function pushAuditEvent(patchId: string, event: any, cap: number = 2000): Promise<void> {
+  const client = await getRedisClient()
+  const key = `audit:patch:${patchId}`
+  await client.lpush(key, JSON.stringify(event))
+  if (cap > 0) {
+    await client.ltrim(key, 0, cap - 1)
+  }
+}
+
+export interface AuditPageOptions {
+  offset?: number
+  limit?: number
+}
+
+export async function getAuditEvents(patchId: string, options: AuditPageOptions = {}): Promise<{ items: any[]; nextOffset: number; hasMore: boolean }> {
+  const client = await getRedisClient()
+  const key = `audit:patch:${patchId}`
+  const offset = Math.max(0, options.offset || 0)
+  const limit = Math.max(1, options.limit || 100)
+  const start = offset
+  const stop = offset + limit - 1
+
+  const raw = await client.lrange(key, start, stop)
+  const total = await client.llen(key)
+  const items = raw.map((entry) => {
+    try {
+      return JSON.parse(entry)
+    } catch {
+      return { raw: entry }
+    }
+  })
+
+  const nextOffset = offset + items.length
+  const hasMore = nextOffset < total
+
+  return {
+    items,
+    nextOffset,
+    hasMore
+  }
 }
 
 

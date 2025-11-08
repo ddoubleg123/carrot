@@ -10,6 +10,68 @@ export interface CanonicalizationResult {
   finalDomain: string
 }
 
+const TRACKING_PARAM_REGEX = /^(utm_|icid|ncid|igshid)/i
+const IGNORED_PARAMS = new Set([
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'utm_id',
+  'gclid',
+  'gclsrc',
+  'fbclid',
+  'mc_cid',
+  'mc_eid'
+])
+
+/**
+ * Lightweight, synchronous canonicalization used for fast duplicate checks.
+ * Normalises host casing, strips common tracking params, sorts remaining params,
+ * and removes fragments without performing network I/O.
+ */
+export function canonicalizeUrlFast(rawUrl: string | null | undefined): string {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return ''
+  }
+
+  const trimmed = rawUrl.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  try {
+    const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)
+    const resolved = hasProtocol ? trimmed : `https://${trimmed.replace(/^\/\//, '')}`
+    const url = new URL(resolved)
+
+    url.hash = ''
+    url.hostname = url.hostname.replace(/^www\./, '').toLowerCase()
+
+    const entries: [string, string][] = []
+    url.searchParams.forEach((value, key) => {
+      if (IGNORED_PARAMS.has(key) || TRACKING_PARAM_REGEX.test(key)) {
+        return
+      }
+      entries.push([key, value])
+    })
+
+    entries.sort(([a], [b]) => a.localeCompare(b))
+
+    const search = entries.map(([key, value]) => `${key}=${value}`).join('&')
+    url.search = search
+
+    // Remove default ports
+    if ((url.protocol === 'http:' && url.port === '80') || (url.protocol === 'https:' && url.port === '443')) {
+      url.port = ''
+    }
+
+    return url.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
 export async function canonicalize(rawUrl: string): Promise<CanonicalizationResult> {
   const originalUrl = rawUrl;
   const redirectChain: string[] = [];
@@ -76,33 +138,11 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     }
     
     // Normalize the final URL
-    const url = new URL(currentUrl);
-    
-    // Remove fragment
-    url.hash = '';
-    
-    // Normalize hostname
-    url.hostname = url.hostname.replace(/^www\./, '').toLowerCase();
-    
-    // Remove tracking parameters
-    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'gclsrc'];
-    trackingParams.forEach(param => {
-      url.searchParams.delete(param);
-    });
-    
-    // Sort parameters for consistency
-    const sortedParams = Array.from(url.searchParams.entries())
-      .sort(([a], [b]) => a.localeCompare(b));
-    
-    url.search = sortedParams
-      .map(([key, value]) => `${key}=${value}`)
-      .join('&');
-    
-    const canonicalUrl = url.toString();
-    const finalDomain = url.hostname;
+    const normalizedUrl = canonicalizeUrlFast(currentUrl)
+    const finalDomain = extractDomain(normalizedUrl);
     
     return {
-      canonicalUrl,
+      canonicalUrl: normalizedUrl,
       originalUrl,
       redirectChain,
       finalDomain
@@ -118,11 +158,12 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     }
     
     // Return original URL as fallback
+    const normalizedFallback = canonicalizeUrlFast(fallbackUrl)
     return {
-      canonicalUrl: fallbackUrl,
+      canonicalUrl: normalizedFallback,
       originalUrl,
       redirectChain,
-      finalDomain: fallbackUrl.startsWith('http') ? new URL(fallbackUrl).hostname : 'unknown'
+      finalDomain: normalizedFallback.startsWith('http') ? new URL(normalizedFallback).hostname : 'unknown'
     };
   }
 }

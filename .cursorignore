@@ -20,7 +20,6 @@ carrot/temp/
 # Database files
 *.db
 *.db-*
-prisma
 data/
 
 # Logs - THIS IS HUGE

@@ -36,12 +36,17 @@ export interface DiscoveryStreamOptions {
  * SSE Event Stream for discovery
  */
 export class DiscoveryEventStream {
-  private controller: ReadableStreamDefaultController<Uint8Array>
+  private controller?: ReadableStreamDefaultController<Uint8Array>
   private isActive = true
   private eventCount = 0
+  private listener?: (event: DiscoveryEvent) => void
   
-  constructor(controller: ReadableStreamDefaultController<Uint8Array>) {
+  constructor(
+    controller?: ReadableStreamDefaultController<Uint8Array>,
+    listener?: (event: DiscoveryEvent) => void
+  ) {
     this.controller = controller
+    this.listener = listener
   }
   
   /**
@@ -57,9 +62,13 @@ export class DiscoveryEventStream {
       message
     }
     
-    const eventData = `data: ${JSON.stringify(event)}\n\n`
-    this.controller.enqueue(new TextEncoder().encode(eventData))
+    if (this.controller) {
+      const eventData = `data: ${JSON.stringify(event)}\n\n`
+      this.controller.enqueue(new TextEncoder().encode(eventData))
+    }
+
     this.eventCount++
+    this.listener?.(event)
   }
   
   /**
@@ -100,7 +109,7 @@ export class DiscoveryEventStream {
   /**
    * Send hero ready event
    */
-  heroReady(heroUrl: string, source: 'og' | 'twitter' | 'oembed' | 'inline' | 'video' | 'generated' | 'ai' | 'wikimedia' | 'minsvg'): void {
+  heroReady(heroUrl: string, source: 'og' | 'twitter' | 'oembed' | 'inline' | 'video' | 'generated' | 'ai' | 'wikimedia' | 'skeleton'): void {
     this.sendEvent('hero_ready', { heroUrl, source })
   }
   
@@ -129,8 +138,10 @@ export class DiscoveryEventStream {
    * Send stop event
    */
   stop(): void {
-    this.sendEvent('stop')
-    this.isActive = false
+    if (this.isActive) {
+      this.sendEvent('stop')
+      this.isActive = false
+    }
   }
   
   /**
@@ -146,7 +157,7 @@ export class DiscoveryEventStream {
   close(): void {
     this.isActive = false
     try {
-      this.controller.close()
+      this.controller?.close()
     } catch (error) {
       // Stream may already be closed
     }

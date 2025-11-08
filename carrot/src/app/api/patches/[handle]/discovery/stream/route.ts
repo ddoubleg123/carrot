@@ -6,15 +6,76 @@ import { NextRequest } from 'next/server'
 import { DiscoveryEventStream } from '@/lib/discovery/streaming'
 import { DiscoveryOrchestrator } from '@/lib/discovery/orchestrator'
 import { prisma } from '@/lib/prisma'
+import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags'
+import { subscribeDiscoveryEvents } from '@/lib/discovery/eventBus'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
   const { handle } = await params
+  const openEvidenceEnabled = isOpenEvidenceV2Enabled()
   
   try {
-    // Find the patch
+    if (openEvidenceEnabled) {
+      const runId = request.nextUrl.searchParams.get('runId')
+      if (!runId) {
+        return new Response('runId query parameter is required', { status: 400 })
+      }
+
+      const run = await (prisma as any).discoveryRun.findUnique({
+        where: { id: runId },
+        select: { id: true, patchId: true }
+      })
+
+      if (!run) {
+        return new Response('Discovery run not found', { status: 404 })
+      }
+
+      const patch = await prisma.patch.findUnique({
+        where: { id: run.patchId },
+        select: { id: true, handle: true }
+      })
+
+      if (!patch || patch.handle !== handle) {
+        return new Response('Patch mismatch for discovery run', { status: 403 })
+      }
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder()
+          const unsubscribe = subscribeDiscoveryEvents(runId, (event) => {
+            const payload = `data: ${JSON.stringify(event)}\n\n`
+            try {
+              controller.enqueue(encoder.encode(payload))
+            } catch (error) {
+              console.error('[Discovery Stream] Failed to enqueue SSE payload', error)
+            }
+          })
+
+          request.signal.addEventListener('abort', () => {
+            unsubscribe()
+            try {
+              controller.close()
+            } catch {
+              // ignore
+            }
+          })
+        }
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Cache-Control'
+        }
+      })
+    }
+
+    // Legacy behaviour when feature flag is disabled
     const patch = await prisma.patch.findUnique({
       where: { handle },
       select: { id: true, name: true }
