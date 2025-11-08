@@ -4,7 +4,8 @@ import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Filter, SortAsc, Search, RefreshCw, Play, Square, Pause } from 'lucide-react'
-import DiscoveryCard from './DiscoveryCard'
+import { DiscoveryCard } from './DiscoveryCard'
+import { DiscoveryCardPayload } from '@/types/discovery-card'
 import ContentModal from './ContentModal'
 import { useDiscoveryStream } from '@/app/(app)/patch/[handle]/hooks/useDiscoveryStream'
 import DiscoveryControls from './DiscoveryControls'
@@ -225,15 +226,72 @@ function DiscoveryList({ patchHandle }: DiscoveryListProps) {
         )}
 
         {/* Rows 2+ : real items */}
-        {visibleItems.map((item) => (
-          <DiscoveryCard 
-            key={item.canonicalUrl || item.id} 
-            item={item}
-            onHeroClick={handleHeroClick}
-            patchHandle={patchHandle}
-            className="w-full"
-          />
-        ))}
+        {visibleItems.map((item) => {
+          const canonicalUrl = item.canonicalUrl || item.url
+          const domain = (() => {
+            try {
+              return new URL(canonicalUrl).hostname.replace(/^www\./, '')
+            } catch {
+              return item.meta?.sourceDomain || 'source'
+            }
+          })()
+
+          const facts = (item.content?.keyPoints || []).map((point, index) => ({
+            label: `Key point ${index + 1}`,
+            value: point,
+            citation: canonicalUrl
+          }))
+
+          if (facts.length === 0 && item.content?.summary150) {
+            facts.push({
+              label: 'Summary insight',
+              value: item.content.summary150,
+              citation: canonicalUrl
+            })
+          }
+
+          const quotes = item.content?.notableQuote
+            ? [{ text: item.content.notableQuote, citation: canonicalUrl }]
+            : []
+
+          const heroSource: 'ai' | 'wikimedia' | 'skeleton' | null = item.media?.hero
+            ? item.media.source === 'image'
+              ? 'wikimedia'
+              : 'ai'
+            : null
+
+          const payload: DiscoveryCardPayload = {
+            id: item.id,
+            title: item.displayTitle || item.title,
+            url: item.url,
+            canonicalUrl,
+            domain,
+            sourceType: item.type,
+            credibilityTier: undefined,
+            angle: undefined,
+            noveltySignals: [],
+            expectedInsights: [],
+            reason: undefined,
+            whyItMatters: item.content?.summary150 || '',
+            facts,
+            quotes,
+            provenance: [canonicalUrl],
+            contested: null,
+            hero: heroSource && item.media?.hero ? { url: item.media.hero, source: heroSource } : null,
+            relevanceScore: 0.8,
+            qualityScore: 70,
+            viewSourceOk: true,
+            savedAt: new Date().toISOString()
+          }
+
+          return (
+            <DiscoveryCard
+              key={canonicalUrl || item.id}
+              item={payload}
+              onSelect={() => handleHeroClick(item)}
+            />
+          )
+        })}
 
         {/* Loading skeletons when loading initial content */}
         {isLoading && deduplicatedItems.length === 0 && (

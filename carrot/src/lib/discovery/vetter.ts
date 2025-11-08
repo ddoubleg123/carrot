@@ -95,11 +95,11 @@ function getApiKey(): string {
   return key
 }
 
-function normaliseArray<T>(value: unknown, mapper: (entry: any) => T): T[] {
+function normaliseArray<T>(value: unknown, mapper: (entry: any) => T | null | undefined): T[] {
   if (!Array.isArray(value)) return []
   return value
     .map(mapper)
-    .filter(Boolean)
+    .filter((entry): entry is T => Boolean(entry))
 }
 
 function sanitiseResponsePayload(payload: string): string {

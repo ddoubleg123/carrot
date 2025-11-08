@@ -138,7 +138,7 @@ export default function AuditPage(props: AuditPageProps) {
       if (Array.isArray(data.items)) {
         const mapped = data.items.map(buildRow)
         setRows(mapped)
-        setAnglesCovered(new Set(mapped.map((row) => row.angle).filter(Boolean) as string[]))
+        setAnglesCovered(new Set(mapped.map((row: AuditRow) => row.angle).filter(Boolean) as string[]))
       }
       setError(null)
     } catch (err) {
@@ -212,7 +212,7 @@ export default function AuditPage(props: AuditPageProps) {
           <Button variant="outline" size="sm" onClick={() => loadInitial(handle)} className="gap-2">
             <RefreshCcw className="h-4 w-4" /> Refresh
           </Button>
-          <Button variant="default" size="sm" onClick={handleExport} className="gap-2">
+          <Button variant="primary" size="sm" onClick={handleExport} className="gap-2">
             <ArrowDownToLine className="h-4 w-4" /> Export JSON
           </Button>
         </div>

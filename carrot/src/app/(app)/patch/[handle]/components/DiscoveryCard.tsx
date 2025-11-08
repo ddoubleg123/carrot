@@ -12,8 +12,7 @@ interface DiscoveryCardProps {
 }
 
 export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
-  const hasHero = Boolean(item.hero?.url)
-  const hero = useMemo(() => item.hero?.url || heroFallback(item.title), [item.hero, item.title])
+  const heroUrl = item.hero?.url ?? null
   const qualityBadge = useMemo(() => {
     if (item.qualityScore >= 85) return { label: 'High quality', className: 'bg-emerald-100 text-emerald-700' }
     if (item.qualityScore >= 70) return { label: 'Good quality', className: 'bg-blue-100 text-blue-700' }
@@ -98,9 +97,9 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
        )}
 
       <div className="relative aspect-[16/9] w-full overflow-hidden">
-        {hasHero ? (
+        {heroUrl ? (
           <img
-            src={item.hero?.url}
+            src={heroUrl}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
@@ -186,7 +185,7 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
 
         <div className="mt-auto flex gap-3" onClick={(event) => event.stopPropagation()}>
           <Button
-            variant="default"
+            variant="primary"
             size="sm"
             className="flex-1"
             disabled={!item.viewSourceOk}

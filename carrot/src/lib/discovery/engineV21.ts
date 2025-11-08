@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { canonicalize } from './canonicalize'
 import { DiscoveryEventStream } from './streaming'
 import { audit } from './logger'
@@ -269,11 +270,8 @@ export class DiscoveryEngineV21 {
       this.eventStream.searching('hero')
       const hero = await this.heroPipeline.assignHero({
         title: extracted.title,
-        content: { summary150: synthesis.whyItMatters },
-        metadata: {
-          topic: this.options.patchName,
-          source: canonicalUrl
-        },
+        summary: synthesis.whyItMatters,
+        topic: this.options.patchName,
         entity: this.plan?.topic
       })
 
@@ -287,11 +285,18 @@ export class DiscoveryEngineV21 {
 
       const viewSourceOk = await checkViewSource(canonicalUrl)
 
-      const metadataPayload = {
+      const metadataPayload: Record<string, unknown> = {
         angle,
         credibilityTier: candidate.meta?.credibilityTier,
         viewSourceStatus: viewSourceOk ? 200 : 404,
-        contested: synthesis.contested || null,
+        contested: synthesis.contested
+          ? {
+              note: synthesis.contested.note,
+              supporting: synthesis.contested.supporting,
+              counter: synthesis.contested.counter,
+              claim: synthesis.contested.claim ?? null
+            }
+          : null,
         contestedClaim: contestedClaim || null
       }
 
@@ -307,12 +312,12 @@ export class DiscoveryEngineV21 {
           canonicalUrl,
           contentHash: hashString,
           whyItMatters: synthesis.whyItMatters,
-          facts: synthesis.facts,
-          quotes: synthesis.quotes,
-          provenance: synthesis.provenance,
-          hero: hero ? { url: hero.url, source: hero.source } : null,
+          facts: synthesis.facts as unknown as Prisma.JsonArray,
+          quotes: synthesis.quotes as unknown as Prisma.JsonArray,
+          provenance: synthesis.provenance as unknown as Prisma.JsonArray,
+          hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
           status: viewSourceOk ? 'ready' : 'requires_review',
-          metadata: metadataPayload
+          metadata: metadataPayload as Prisma.JsonObject
         }
       })
 
@@ -535,11 +540,11 @@ export class DiscoveryEngineV21 {
       data: {
         status,
         endedAt: new Date(),
-        metrics: {
+        metrics: ({
           ...auditMeta,
           status,
           error: error ? this.formatError(error) : undefined
-        }
+        } as unknown) as Prisma.JsonObject
       }
     }).catch((updateError) => {
       console.error('[EngineV21] Failed to save run metrics', updateError)

@@ -11,14 +11,14 @@ import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest, context: { params: { handle: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const handle = context.params?.handle
+    const { handle } = await params
     if (!handle) {
       return NextResponse.json({ error: 'Missing patch handle' }, { status: 400 })
     }
