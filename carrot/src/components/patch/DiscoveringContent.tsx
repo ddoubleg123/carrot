@@ -130,6 +130,65 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [statusMessage, setStatusMessage] = useState<string>('Ready to start discovery');
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  const handleSseEvent = useCallback((event: DiscoverySseEvent) => {
+    switch (event.type) {
+      case 'start':
+        setStatusMessage('Discovery engine started…');
+        break;
+      case 'searching':
+        setStatusMessage(`Searching ${event.data?.source || 'sources'}…`);
+        break;
+      case 'candidate':
+        setStatusMessage(`Evaluating ${event.data?.title || event.data?.url || 'candidate'}…`);
+        break;
+      case 'enriched':
+        setStatusMessage(`Synthesizing ${event.data?.title || 'candidate'}…`);
+        break;
+      case 'hero_ready':
+        setStatusMessage('Hero image ready');
+        break;
+      case 'skipped:duplicate':
+        setStatusMessage('Skipped duplicate candidate');
+        break;
+      case 'skipped:low_relevance':
+        setStatusMessage('Skipped low relevance candidate');
+        break;
+      case 'skipped:near_dup':
+        setStatusMessage('Skipped near-duplicate candidate');
+        break;
+      case 'saved':
+        setStatusMessage('Saved new content');
+        if (event.data?.item) {
+          const newItem = transformToDiscoveredItem(event.data.item);
+          setItems(prev => [newItem, ...prev]);
+          if (firstItemTime === null) {
+            const now = performance.now();
+            setFirstItemTime(now);
+            telemetry.trackDiscoveryFirstItem(patchHandle, now);
+          }
+        }
+        break;
+      case 'idle':
+        setStatusMessage(event.message || 'Discovery idle');
+        setIsDiscovering(false);
+        break;
+      case 'stop':
+        setStatusMessage('Discovery complete');
+        setIsDiscovering(false);
+        break;
+      case 'error':
+        console.error('[Discovery SSE] Error event', event);
+        setStatusMessage(event.message || 'Discovery error');
+        setIsDiscovering(false);
+        if (event.data?.error) {
+          setError(`Discovery error: ${event.data.error}`);
+        }
+        break;
+      default:
+        break;
+    }
+  }, [firstItemTime, patchHandle]);
+
   const startEventStream = useCallback((id: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -215,65 +274,6 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       setIsLoading(false);
     }
   }, [patchHandle, startEventStream, loadDiscoveredContent]);
-
-  const handleSseEvent = useCallback((event: DiscoverySseEvent) => {
-    switch (event.type) {
-      case 'start':
-        setStatusMessage('Discovery engine started…');
-        break;
-      case 'searching':
-        setStatusMessage(`Searching ${event.data?.source || 'sources'}…`);
-        break;
-      case 'candidate':
-        setStatusMessage(`Evaluating ${event.data?.title || event.data?.url || 'candidate'}…`);
-        break;
-      case 'enriched':
-        setStatusMessage(`Synthesizing ${event.data?.title || 'candidate'}…`);
-        break;
-      case 'hero_ready':
-        setStatusMessage('Hero image ready');
-        break;
-      case 'skipped:duplicate':
-        setStatusMessage('Skipped duplicate candidate');
-        break;
-      case 'skipped:low_relevance':
-        setStatusMessage('Skipped low relevance candidate');
-        break;
-      case 'skipped:near_dup':
-        setStatusMessage('Skipped near-duplicate candidate');
-        break;
-      case 'saved':
-        setStatusMessage('Saved new content');
-        if (event.data?.item) {
-          const newItem = transformToDiscoveredItem(event.data.item);
-          setItems(prev => [newItem, ...prev]);
-          if (firstItemTime === null) {
-            const now = performance.now();
-            setFirstItemTime(now);
-            telemetry.trackDiscoveryFirstItem(patchHandle, now);
-          }
-        }
-        break;
-      case 'idle':
-        setStatusMessage(event.message || 'Discovery idle');
-        setIsDiscovering(false);
-        break;
-      case 'stop':
-        setStatusMessage('Discovery complete');
-        setIsDiscovering(false);
-        break;
-      case 'error':
-        console.error('[Discovery SSE] Error event', event);
-        setStatusMessage(event.message || 'Discovery error');
-        setIsDiscovering(false);
-        if (event.data?.error) {
-          setError(`Discovery error: ${event.data.error}`);
-        }
-        break;
-      default:
-        break;
-    }
-  }, [firstItemTime, patchHandle]);
 
   const loadDiscoveredContent = useCallback(async () => {
     try {
