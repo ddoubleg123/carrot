@@ -189,6 +189,38 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     }
   }, [firstItemTime, patchHandle]);
 
+  const loadDiscoveredContent = useCallback(async () => {
+    try {
+      const cacheBuster = `t=${Date.now()}`;
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${cacheBuster}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawItems = Array.isArray(data?.items) ? data.items : [];
+        const hydrated = rawItems.map(transformToDiscoveredItem);
+        setItems(hydrated);
+        setError(null);
+        setIsDiscovering(Boolean(data?.isActive));
+      } else {
+        if (items.length === 0) {
+          setError('Failed to load discovery results. Please try again.');
+        }
+      }
+    } catch (err) {
+      console.error('[Discovery] Error loading content', err);
+      if (items.length === 0) {
+        setError('Network error while loading discovery results.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [patchHandle, items.length]);
+
   const startEventStream = useCallback((id: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -274,38 +306,6 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       setIsLoading(false);
     }
   }, [patchHandle, startEventStream, loadDiscoveredContent]);
-
-  const loadDiscoveredContent = useCallback(async () => {
-    try {
-      const cacheBuster = `t=${Date.now()}`;
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?${cacheBuster}`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const rawItems = Array.isArray(data?.items) ? data.items : [];
-        const hydrated = rawItems.map(transformToDiscoveredItem);
-        setItems(hydrated);
-        setError(null);
-        setIsDiscovering(Boolean(data?.isActive));
-      } else {
-        if (items.length === 0) {
-          setError('Failed to load discovery results. Please try again.');
-        }
-      }
-    } catch (err) {
-      console.error('[Discovery] Error loading content', err);
-      if (items.length === 0) {
-        setError('Network error while loading discovery results.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [patchHandle, items.length]);
 
   useEffect(() => {
     telemetry.trackDiscoveryStarted(patchHandle);
