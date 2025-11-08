@@ -7,7 +7,6 @@ import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
 import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
 import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
-import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
 
 export const runtime = 'nodejs';
 
