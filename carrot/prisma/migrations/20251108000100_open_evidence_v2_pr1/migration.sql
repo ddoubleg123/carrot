@@ -6,6 +6,22 @@ UPDATE "discovered_content"
 SET "canonical_url" = COALESCE("canonical_url", "source_url")
 WHERE "canonical_url" IS NULL;
 
+-- Drop all but the newest record for duplicate canonical URLs scoped by patch
+WITH ranked_duplicates AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY "patch_id", "canonical_url"
+      ORDER BY "updated_at" DESC NULLS LAST, "created_at" DESC NULLS LAST, id DESC
+    ) AS row_number
+  FROM "discovered_content"
+  WHERE "canonical_url" IS NOT NULL
+)
+DELETE FROM "discovered_content" dc
+USING ranked_duplicates rd
+WHERE dc.id = rd.id
+  AND rd.row_number > 1;
+
 -- Ensure canonical URL is stored as TEXT and not nullable
 ALTER TABLE "discovered_content"
   ALTER COLUMN "canonical_url" TYPE TEXT,
