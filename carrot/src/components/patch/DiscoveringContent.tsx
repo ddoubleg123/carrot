@@ -6,7 +6,7 @@ import { DiscoveryCard } from '@/app/(app)/patch/[handle]/components/DiscoveryCa
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, Sparkles, RotateCcw, AlertTriangle, Link as LinkIcon } from 'lucide-react'
+import { Loader2, Sparkles, RotateCcw, AlertTriangle, Link as LinkIcon, Play, Square } from 'lucide-react'
 
 interface DiscoveringContentProps {
   patchHandle: string
@@ -43,6 +43,9 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [coveredAngles, setCoveredAngles] = useState<Set<string>>(new Set())
   const [contestedCovered, setContestedCovered] = useState<number>(0)
   const [selectedCard, setSelectedCard] = useState<DiscoveryCardPayload | null>(null)
+  const [runId, setRunId] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
+  const [isStopping, setIsStopping] = useState(false)
   const startTimeRef = useRef<number | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
 
@@ -85,31 +88,6 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     setContestedCovered(cards.filter((item) => Boolean(item.contested)).length)
   }, [cards])
 
-  useEffect(() => {
-    const source = new EventSource(`/api/patches/${patchHandle}/discovery/stream`)
-    eventSourceRef.current = source
-
-    source.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data) as DiscoverySseEvent
-        handleSseEvent(payload)
-      } catch (error) {
-        console.error('[Discovery SSE] Failed to parse event', error, event.data)
-      }
-    }
-
-    source.onerror = (event) => {
-      console.error('[Discovery SSE] Error', event)
-      setError('Discovery stream interrupted. Attempting to recover…')
-      setStatusMessage('Connection lost')
-    }
-
-    return () => {
-      source.close()
-      eventSourceRef.current = null
-    }
-  }, [patchHandle])
-
   const handleSseEvent = useCallback((event: DiscoverySseEvent) => {
     switch (event.type) {
       case 'start':
@@ -144,6 +122,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         break
       case 'stop':
         setIsDiscovering(false)
+        setRunId(null)
         setStatusMessage('Discovery stopped')
         break
       case 'skipped:duplicate':
@@ -165,9 +144,115 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
     }
   }, [addCard, timeToFirst])
 
+  const connectToStream = useCallback((nextRunId: string) => {
+    if (!nextRunId) return
+
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+
+    const source = new EventSource(`/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(nextRunId)}`)
+    eventSourceRef.current = source
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as DiscoverySseEvent
+        handleSseEvent(payload)
+      } catch (error) {
+        console.error('[Discovery SSE] Failed to parse event', error, event.data)
+      }
+    }
+
+    source.onerror = (event) => {
+      console.error('[Discovery SSE] Error', event)
+      setError('Discovery stream interrupted. Attempting to recover…')
+      setStatusMessage('Connection lost')
+    }
+  }, [handleSseEvent, patchHandle])
+
+  useEffect(() => {
+    if (!runId) {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+      return
+    }
+
+    connectToStream(runId)
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+    }
+  }, [connectToStream, runId])
+
   const handleRefresh = useCallback(() => {
     loadInitial()
   }, [loadInitial])
+
+  const handleStartDiscovery = useCallback(async () => {
+    setIsStarting(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start_deepseek_search' })
+      })
+
+      if (!response.ok) {
+        const message = `Failed to start discovery (HTTP ${response.status})`
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      if (!data?.runId) {
+        throw new Error('Discovery start response missing runId')
+      }
+
+      setRunId(data.runId as string)
+      setCards([])
+      setCoveredAngles(new Set())
+      setTimeToFirst(undefined)
+      startTimeRef.current = performance.now()
+      setStatusMessage('Starting discovery…')
+      setIsDiscovering(true)
+    } catch (err) {
+      console.error('[Discovery] Failed to start discovery', err)
+      setError(err instanceof Error ? err.message : 'Failed to start discovery. Please try again.')
+      setStatusMessage('Unable to start discovery')
+    } finally {
+      setIsStarting(false)
+    }
+  }, [patchHandle])
+
+  const handleStopDiscovery = useCallback(async () => {
+    if (!runId) return
+    setIsStopping(true)
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/discovery/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId })
+      })
+
+      if (!response.ok) {
+        const message = `Failed to stop discovery (HTTP ${response.status})`
+        throw new Error(message)
+      }
+
+      setStatusMessage('Stop requested…')
+    } catch (err) {
+      console.error('[Discovery] Failed to stop discovery', err)
+      setError(err instanceof Error ? err.message : 'Failed to stop discovery. Please try again.')
+    } finally {
+      setIsStopping(false)
+    }
+  }, [patchHandle, runId])
 
   const stats = useMemo(() => ({
     saved: cards.length,
@@ -192,7 +277,30 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
               <h2 className="text-lg font-semibold text-slate-900">Discovery Live</h2>
               <p className="text-sm text-slate-600">{stats.status}</p>
             </div>
-            {isDiscovering && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
+            <div className="flex items-center gap-2">
+              {isDiscovering ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStopDiscovery}
+                  disabled={isStopping}
+                  className="flex items-center gap-2"
+                >
+                  {isStopping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleStartDiscovery}
+                  disabled={isStarting}
+                  className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-500"
+                >
+                  {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  Start discovery
+                </Button>
+              )}
+            </div>
           </header>
 
           <div className="mt-4 grid grid-cols-1 gap-4 text-sm text-slate-600">

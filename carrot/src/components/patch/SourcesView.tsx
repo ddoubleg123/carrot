@@ -1,6 +1,6 @@
 'use client';
 
-import ResourcesList from './ResourcesList';
+import DiscoveringContent from './DiscoveringContent';
 
 interface Patch {
   id: string;
@@ -20,10 +20,10 @@ interface SourcesViewProps {
   patchHandle: string;
 }
 
-export default function SourcesView({ patch, patchHandle }: SourcesViewProps) {
+export default function SourcesView({ patch: _patch, patchHandle }: SourcesViewProps) {
   return (
     <div className="px-6 md:px-10">
-      <ResourcesList patch={patch} patchHandle={patchHandle} />
+      <DiscoveringContent patchHandle={patchHandle} />
     </div>
   );
 }
