@@ -4,10 +4,15 @@ import { getAuditEvents } from '@/lib/redis/discovery'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest, context: { params: { handle: string } }) {
+export async function GET(request: NextRequest, context: any) {
   try {
     const searchParams = new URL(request.url).searchParams
-    const handle = context.params?.handle
+    const rawParams = context?.params
+    const handle = typeof rawParams?.handle === 'string'
+      ? rawParams.handle
+      : Array.isArray(rawParams?.handle)
+        ? rawParams.handle[0]
+        : null
 
     if (!handle) {
       return NextResponse.json({ error: 'Missing patch handle' }, { status: 400 })
