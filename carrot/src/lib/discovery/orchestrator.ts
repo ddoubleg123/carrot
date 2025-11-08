@@ -538,7 +538,7 @@ export class DiscoveryOrchestrator {
             if (this.deduplication instanceof EnhancedDeduplicationChecker) {
               await this.deduplication.markAsSeenRedis(this.groupId, canonicalUrl, simHash.toString())
             } else {
-              this.deduplication.markAsSeen(this.groupId, canonicalUrl, enrichedContent.text, domain)
+              this.deduplication.markAsSeen(this.groupId, canonicalUrl, enrichedContent.text, domain, enrichedContent.title)
             }
             await this.emitAudit('save', 'ok', {
               provider: candidate.source,

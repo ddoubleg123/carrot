@@ -151,6 +151,35 @@ export class DeduplicationChecker {
   private recentHashes = new Map<string, bigint[]>() // groupId -> recent hashes
   private recentTitles = new Map<string, Array<{title: string, domain: string, date: Date}>>()
   
+  markAsSeen(
+    groupId: string,
+    canonicalUrl: string,
+    content?: string,
+    domain?: string,
+    title?: string
+  ): void {
+    this.seenUrls.add(canonicalUrl)
+
+    if (content) {
+      const hash = SimHash.generate(content)
+      const hashes = this.recentHashes.get(groupId) || []
+      hashes.push(hash)
+      if (hashes.length > 1000) {
+        hashes.shift()
+      }
+      this.recentHashes.set(groupId, hashes)
+    }
+
+    if (title && domain) {
+      const titles = this.recentTitles.get(groupId) || []
+      titles.push({ title, domain, date: new Date() })
+      if (titles.length > 100) {
+        titles.shift()
+      }
+      this.recentTitles.set(groupId, titles)
+    }
+  }
+  
   /**
    * Check if content is a duplicate using 3-tier system
    */
