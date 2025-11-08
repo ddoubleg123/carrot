@@ -24,6 +24,14 @@ export async function GET(
       return new Response('Patch not found', { status: 404 })
     }
     
+    // Create a discovery run record
+    const run = await (prisma as any).discoveryRun.create({
+      data: {
+        patchId: patch.id,
+        status: 'live'
+      }
+    })
+    
     // Create SSE stream
     const stream = new ReadableStream({
       start(controller) {
@@ -34,7 +42,8 @@ export async function GET(
           patch.id,
           patch.name,
           handle,
-          eventStream
+          eventStream,
+          run.id
         )
         
         // Start discovery in background

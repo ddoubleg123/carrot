@@ -395,14 +395,22 @@ export const audit = {
           error: payload.error
         }
       })
-      
+
+      console.log('[Audit] persisted event', {
+        step: payload.step,
+        status: payload.status,
+        runId: payload.runId,
+        patchId: payload.patchId
+      })
+
       // Publish SSE event
       publishAudit(payload.patchId, auditRecord)
-      
+
     } catch (error) {
       console.error('[Audit] Failed to persist audit:', error)
+      const formattedError = error instanceof Error ? { message: error.message, stack: error.stack } : error
       // Still publish even if DB fails
-      publishAudit(payload.patchId, { ...payload, ts: new Date() })
+      publishAudit(payload.patchId, { ...payload, ts: new Date(), error: formattedError })
     }
   }
 }

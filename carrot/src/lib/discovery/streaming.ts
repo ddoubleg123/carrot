@@ -65,8 +65,8 @@ export class DiscoveryEventStream {
   /**
    * Send start event
    */
-  start(groupId: string): void {
-    this.sendEvent('start', { groupId })
+  start(groupId: string, runId?: string): void {
+    this.sendEvent('start', { groupId, runId })
   }
   
   /**

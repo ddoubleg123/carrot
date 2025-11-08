@@ -9,6 +9,7 @@ import { SearchFrontier } from './frontier'
 import { RelevanceEngine } from './relevance'
 import { DiscoveryEventStream } from './streaming'
 import { HeroImagePipeline } from './hero-pipeline'
+import { audit } from './logger'
 import { prisma } from '@/lib/prisma'
 import { DiscoveredItem } from '@/types/discovered-content'
 
@@ -25,12 +26,20 @@ export class DiscoveryOrchestrator {
   private relevance: RelevanceEngine
   private heroPipeline: HeroImagePipeline
   private config: DiscoveryConfig
+  private metrics = {
+    candidatesProcessed: 0,
+    urlsProcessed: 0,
+    itemsSaved: 0,
+    duplicates: 0,
+    failures: 0
+  }
   
   constructor(
     private groupId: string,
     private groupName: string,
     private groupHandle: string,
     private eventStream: DiscoveryEventStream,
+    private runId: string,
     config: Partial<DiscoveryConfig> = {}
   ) {
     this.deduplication = new DeduplicationChecker()
@@ -51,7 +60,23 @@ export class DiscoveryOrchestrator {
    * Start discovery process
    */
   async start(): Promise<void> {
+    this.eventStream.start(this.groupId, this.runId)
+    await this.emitAudit('run_start', 'pending', {
+      meta: {
+        maxItems: this.config.maxItems,
+        timeoutMs: this.config.timeout
+      }
+    })
+
     try {
+      await (prisma as any).discoveryRun.update({
+        where: { id: this.runId },
+        data: {
+          status: 'live',
+          startedAt: new Date()
+        }
+      }).catch(() => undefined)
+
       // Build entity profile
       await this.relevance.buildEntityProfile(this.groupId, this.groupName)
       
@@ -60,9 +85,19 @@ export class DiscoveryOrchestrator {
       
       // Start discovery loop
       await this.discoveryLoop()
+
+      await this.emitAudit('run_complete', 'ok', {
+        meta: this.metrics
+      })
+      await this.finalizeRun('completed')
       
     } catch (error) {
       console.error('[Discovery Orchestrator] Error:', error)
+      await this.emitAudit('run_complete', 'fail', {
+        error: this.formatError(error),
+        meta: this.metrics
+      })
+      await this.finalizeRun('error', error)
       this.eventStream.error('Discovery failed', error)
     }
   }
@@ -125,13 +160,21 @@ export class DiscoveryOrchestrator {
     })
     
     // Add RSS feeds (Bulls-specific)
-    this.frontier.addCandidate({
-      source: 'rss',
-      method: 'rss',
-      cursor: `https://feeds.feedburner.com/ESPN${this.groupName.replace(' ', '')}`, // e.g., ESPNChicagoBulls
-      domain: 'espn.com',
-      duplicateRate: 0,
-      lastSeen: new Date()
+    const rssFeeds = [
+      'https://www.espn.com/espn/rss/nba/team/_/name/chi/chicago-bulls',
+      'https://www.nba.com/bulls/rss',
+      'https://www.blogabull.com/rss/index.xml'
+    ]
+
+    rssFeeds.forEach((feedUrl) => {
+      this.frontier.addCandidate({
+        source: 'rss',
+        method: 'rss',
+        cursor: feedUrl,
+        domain: new URL(feedUrl).hostname,
+        duplicateRate: 0,
+        lastSeen: new Date()
+      })
     })
     
     // Add Bulls-specific Google News RSS
@@ -144,7 +187,6 @@ export class DiscoveryOrchestrator {
       lastSeen: new Date()
     })
     
-    this.eventStream.start(this.groupId)
   }
   
   /**
@@ -228,20 +270,69 @@ export class DiscoveryOrchestrator {
         }
         
         console.log(`[Discovery Loop] 📍 Processing candidate: ${candidate.source} (priority: ${candidate.priority})`)
+        this.metrics.candidatesProcessed++
+        await this.emitAudit('frontier_pop', 'pending', {
+          provider: candidate.source,
+          query: candidate.cursor,
+          meta: {
+            priority: candidate.priority
+          }
+        })
         this.eventStream.searching(candidate.source)
         
         // Fetch URLs from candidate
-        const urls = await this.fetchUrls(candidate)
-        
+        let urls: string[] = []
+        try {
+          urls = await this.fetchUrls(candidate)
+        } catch (fetchError) {
+          console.warn('[Discovery Loop] Fetch error for candidate:', candidate.source, fetchError)
+          this.metrics.failures++
+          await this.emitAudit('fetch', 'fail', {
+            provider: candidate.source,
+            query: candidate.cursor,
+            error: this.formatError(fetchError)
+          })
+          // Give the loop a moment before continuing with other candidates
+          await this.sleep(500)
+          continue
+        }
+
         let foundItemInThisCandidate = false
         let processedAnyUrl = false
+
+        if (urls.length === 0) {
+          this.metrics.failures++
+          processedAnyUrl = true
+          await this.emitAudit('fetch', 'fail', {
+            provider: candidate.source,
+            query: candidate.cursor,
+            error: { message: 'No URLs returned' }
+          })
+        } else {
+          await this.emitAudit('fetch', 'ok', {
+            provider: candidate.source,
+            query: candidate.cursor,
+            meta: { urlCount: urls.length }
+          })
+        }
         
         for (const rawUrl of urls) {
           try {
+            this.metrics.urlsProcessed++
+            await this.emitAudit('candidate', 'pending', {
+              provider: candidate.source,
+              candidateUrl: rawUrl
+            })
             // Canonicalize URL
             const canonicalResult = await canonicalize(rawUrl)
             const canonicalUrl = canonicalResult.canonicalUrl
             const domain = canonicalResult.finalDomain
+            await this.emitAudit('canonicalize', 'ok', {
+              provider: candidate.source,
+              candidateUrl: rawUrl,
+              finalUrl: canonicalUrl,
+              meta: { domain }
+            })
             
             // Check if URL already exists in database
             const existingItem = await prisma.discoveredContent.findFirst({
@@ -260,6 +351,16 @@ export class DiscoveryOrchestrator {
               this.eventStream.skipped('duplicate', canonicalUrl, {
                 reason: `Already in database: ${existingItem.title}`,
                 tier: 'A'
+              })
+              this.metrics.duplicates++
+              await this.emitAudit('duplicate_check', 'fail', {
+                candidateUrl: canonicalUrl,
+                provider: candidate.source,
+                decisions: {
+                  action: 'drop',
+                  reason: 'duplicate',
+                  existingId: existingItem.id
+                }
               })
               processedAnyUrl = true // We processed this URL (even though it was duplicate)
               consecutiveDuplicates++
@@ -284,6 +385,12 @@ export class DiscoveryOrchestrator {
               console.warn(`[Discovery Loop] ⚠️  Content extraction failed for: ${canonicalUrl}`)
               processedAnyUrl = true // Mark as processed so failed URLs don't get reinserted
               consecutiveDuplicates++
+              this.metrics.failures++
+              await this.emitAudit('content_extract', 'fail', {
+                candidateUrl: canonicalUrl,
+                provider: candidate.source,
+                error: { message: 'Content extraction failed' }
+              })
               
               // For citation candidates, don't reinsert since they only have one URL
               if (candidate.source === 'citation') {
@@ -313,6 +420,16 @@ export class DiscoveryOrchestrator {
               this.eventStream.skipped('low_relevance', canonicalUrl, {
                 score: relevanceResult.score,
                 reason: relevanceResult.reason
+              })
+              this.metrics.failures++
+              await this.emitAudit('relevance', 'fail', {
+                candidateUrl: canonicalUrl,
+                provider: candidate.source,
+                scores: { relevance: relevanceResult.score },
+                decisions: {
+                  action: 'drop',
+                  reason: relevanceResult.reason || 'low_relevance'
+                }
               })
               processedAnyUrl = true // Mark as processed so it's not reinserted
               consecutiveDuplicates++ // Count as a "failed" attempt
@@ -378,6 +495,16 @@ export class DiscoveryOrchestrator {
             })
             
             this.eventStream.saved(savedItem)
+            this.metrics.itemsSaved++
+            await this.emitAudit('save', 'ok', {
+              provider: candidate.source,
+              candidateUrl: canonicalUrl,
+              finalUrl: canonicalUrl,
+              meta: {
+                title: enrichedContent.title,
+                relevanceScore: relevanceResult.score
+              }
+            })
             itemsFound++
             foundItemInThisCandidate = true
             
@@ -439,6 +566,12 @@ export class DiscoveryOrchestrator {
             // Mark as processed so failed URLs don't get reinserted
             processedAnyUrl = true
             consecutiveDuplicates++
+            this.metrics.failures++
+            await this.emitAudit('processing_error', 'fail', {
+              provider: candidate.source,
+              candidateUrl: rawUrl,
+              error: this.formatError(error)
+            })
             
             // For citation candidates, don't reinsert since they only have one URL
             if (candidate.source === 'citation') {
@@ -489,28 +622,23 @@ export class DiscoveryOrchestrator {
   private async fetchUrls(candidate: any): Promise<string[]> {
     console.log(`[Discovery Orchestrator] Fetching URLs from ${candidate.source} (method: ${candidate.method})`)
     
-    try {
-      switch (candidate.source) {
-        case 'wikipedia':
-          return await this.fetchWikipediaUrls(candidate)
-        
-        case 'newsapi':
-          return await this.fetchNewsApiUrls(candidate)
-        
-        case 'rss':
-          return await this.fetchRssUrls(candidate)
-        
-        case 'citation':
-          // For citations, the cursor is the URL itself
-          return [candidate.cursor]
-        
-        default:
-          console.warn(`[Discovery Orchestrator] Unknown source: ${candidate.source}`)
-          return []
-      }
-    } catch (error) {
-      console.error(`[Discovery Orchestrator] Error fetching URLs from ${candidate.source}:`, error)
-      return []
+    switch (candidate.source) {
+      case 'wikipedia':
+        return await this.fetchWikipediaUrls(candidate)
+      
+      case 'newsapi':
+        return await this.fetchNewsApiUrls(candidate)
+      
+      case 'rss':
+        return await this.fetchRssUrls(candidate)
+      
+      case 'citation':
+        // For citations, the cursor is the URL itself
+        return [candidate.cursor]
+      
+      default:
+        console.warn(`[Discovery Orchestrator] Unknown source: ${candidate.source}`)
+        return []
     }
   }
   
@@ -556,7 +684,7 @@ export class DiscoveryOrchestrator {
       return urls
     } catch (error) {
       console.error('[Discovery Orchestrator] Wikipedia fetch error:', error)
-      return []
+      throw error
     }
   }
   
@@ -942,5 +1070,52 @@ export class DiscoveryOrchestrator {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private async emitAudit(
+    step: string,
+    status: 'pending' | 'ok' | 'fail',
+    payload: Record<string, any> = {}
+  ): Promise<void> {
+    try {
+      await audit.emit({
+        runId: this.runId,
+        patchId: this.groupId,
+        step,
+        status,
+        ...payload
+      })
+    } catch (error) {
+      console.error('[Discovery Orchestrator] Failed to emit audit event', error)
+    }
+  }
+
+  private async finalizeRun(status: 'completed' | 'error', error?: unknown): Promise<void> {
+    try {
+      await (prisma as any).discoveryRun.update({
+        where: { id: this.runId },
+        data: {
+          status,
+          endedAt: new Date(),
+          metrics: {
+            ...this.metrics,
+            status,
+            error: error ? this.formatError(error) : undefined
+          }
+        }
+      })
+    } catch (updateError) {
+      console.error('[Discovery Orchestrator] Failed to finalize discovery run', updateError)
+    }
+  }
+
+  private formatError(error: unknown): { message: string; stack?: string } {
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+        stack: error.stack
+      }
+    }
+    return { message: typeof error === 'string' ? error : JSON.stringify(error) }
   }
 }

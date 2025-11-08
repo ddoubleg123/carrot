@@ -43,7 +43,7 @@ export async function GET(
       runsWhere.patchId = patch.id
     }
     
-    const runs = await prisma.discoveryRun.findMany({
+    const runs = await (prisma as any).discoveryRun.findMany({
       where: runsWhere,
       orderBy: { startedAt: 'desc' },
       take: 50, // Show more runs
@@ -83,7 +83,7 @@ export async function GET(
 
     // Get selected run metrics
     const selectedRun = runId 
-      ? await prisma.discoveryRun.findUnique({ 
+      ? await (prisma as any).discoveryRun.findUnique({ 
           where: { id: runId },
           include: {
             patch: {
