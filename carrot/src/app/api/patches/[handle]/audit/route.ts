@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAuditEvents } from '@/lib/redis/discovery'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, { params }: { params: { handle: string } }) {
+export async function GET(request: NextRequest, context: { params: { handle: string } }) {
   try {
     const searchParams = new URL(request.url).searchParams
-    const handle = params.handle
+    const handle = context.params?.handle
 
     if (!handle) {
       return NextResponse.json({ error: 'Missing patch handle' }, { status: 400 })
