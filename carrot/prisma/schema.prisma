@@ -485,7 +485,7 @@ model PostSave {
 model Patch {
   id          String   @id @default(cuid())
   handle      String   @unique
-  name        String
+  title       String
   tagline     String?  // Short one-liner for header
   description String
   rules       String?
@@ -495,6 +495,7 @@ model Patch {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   entity      Json?    @map("entity")
+  guide       Json?
   sourcesWhitelist Json? @map("sources_whitelist")
 
   // Relations
@@ -749,43 +750,29 @@ model BotSubscription {
 
 // AI-Discovered Content for Patches
 model DiscoveredContent {
-  id              String   @id @default(cuid())
-  patchId         String   @map("patch_id")
-  type            String   // 'article' | 'video' | 'pdf' | 'post'
-  title           String
-  content         String   // Legacy field - will be replaced by enrichedContent
-  relevanceScore  Float    @map("relevance_score") @default(0.0)
-  sourceUrl       String?  @map("source_url")
-  canonicalUrl    String   @map("canonical_url") @db.Text
-  contentHash     String?  @map("content_hash") @db.Text
-  whyItMatters    String?  @map("why_it_matters") @db.Text
-  facts           Json?    @map("facts")
-  quotes          Json?    @map("quotes")
-  provenance      Json?    @map("provenance")
-  hero            Json?    @map("hero")
-  tags            String[]
-  status          String   @default("queued") // 'queued' | 'fetching' | 'enriching' | 'ready' | 'failed' | 'requires_review'
-  auditScore      Int?     @map("audit_score") // 1-10, set after DeepSeek audit
-  auditNotes      String?  @map("audit_notes")
-  
-  // Enriched content data
-  enrichedContent Json?    @map("enriched_content") // { summary150, keyPoints[], notableQuote, fullText?, transcript? }
-  mediaAssets     Json?    @map("media_assets")     // { hero:string, blurDataURL:string, dominant:string, source:'og'|'oembed'|'inline'|'video'|'pdf'|'image'|'generated', license:'source'|'generated', gallery[], videoThumb?, pdfPreview? }
-  metadata        Json?    @map("metadata")         // { author, publishDate, source, readingTime, tags[], entities[], citation }
-  qualityScore    Float?   @map("quality_score")    // 0-1 quality rating
-  freshnessScore  Float?   @map("freshness_score")  // 0-1 freshness rating
-  diversityBucket String?  @map("diversity_bucket") // For diversity scoring
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  patchId        String   @map("patch_id")
+  canonicalUrl   String   @map("canonical_url")
+  sourceUrl      String
+  domain         String
+  publishDate    DateTime? @map("publish_date")
+  category       String?  // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
+  isControversy  Boolean  @default(false) @map("is_controversy")
+  isHistory      Boolean  @default(false) @map("is_history")
+  relevanceScore Float    @map("relevance_score") @default(0.0)
+  qualityScore   Float    @map("quality_score") @default(0.0)
+  whyItMatters   String?  @map("why_it_matters")
+  summary        String?
+  facts          Json?
+  quotes         Json?
+  provenance     Json?
+  hero           Json?
+  contentHash    String?  @map("content_hash")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
 
   @@index([patchId])
-  @@index([canonicalUrl])
-  @@index([type])
-  @@index([status])
-  @@index([relevanceScore])
   @@index([contentHash])
   @@unique([patchId, canonicalUrl])
   @@map("discovered_content")

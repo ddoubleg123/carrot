@@ -95,7 +95,7 @@ function getApiKey(): string {
   return key
 }
 
-function normaliseArray<T>(value: unknown, mapper: (entry: any) => T | null | undefined): T[] {
+export function normaliseArray<T>(value: unknown, mapper: (entry: any) => T | null | undefined): T[] {
   if (!Array.isArray(value)) return []
   return value
     .map(mapper)

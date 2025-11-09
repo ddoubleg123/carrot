@@ -6,6 +6,9 @@
 import Redis from 'ioredis'
 
 let redisClient: Redis | null = null
+const RUN_METRICS_KEY = (runId: string) => `discovery:metrics:run:${runId}`
+const PATCH_METRICS_KEY = (patchId: string) => `discovery:metrics:patch:${patchId}`
+const METRICS_TTL_SECONDS = 60 * 60 * 6
 
 async function getRedisClient() {
   if (!redisClient) {
@@ -44,21 +47,21 @@ export async function markAsSeen(patchId: string, canonicalUrl: string, ttlDays:
 export async function isNearDuplicate(patchId: string, contentHash: string, threshold: number = 4): Promise<boolean> {
   const client = await getRedisClient()
   const key = `hashes:patch:${patchId}`
-  
+
   // Get all hashes (last 1k)
   const hashes = await client.zrevrange(key, 0, 1000)
-  
+
   const hashNum = BigInt(contentHash)
-  
+
   for (const existingHashStr of hashes) {
     const existingHash = BigInt(existingHashStr)
     const hammingDistance = calculateHammingDistance(hashNum, existingHash)
-    
+
     if (hammingDistance <= threshold) {
       return true
     }
   }
-  
+
   return false
 }
 
@@ -69,9 +72,9 @@ export async function markContentHash(patchId: string, contentHash: string): Pro
   const client = await getRedisClient()
   const key = `hashes:patch:${patchId}`
   const timestamp = Date.now()
-  
+
   await client.zadd(key, timestamp, contentHash)
-  
+
   // Keep only last 1k entries
   const count = await client.zcard(key)
   if (count > 1000) {
@@ -86,17 +89,17 @@ function calculateHammingDistance(hash1: bigint, hash2: bigint): number {
   const xor = hash1 ^ hash2
   let distance = 0
   let temp = xor
-  
+
   while (temp > BigInt(0)) {
     distance += Number(temp & BigInt(1))
     temp >>= BigInt(1)
   }
-  
+
   return distance
 }
 
 /**
- * Add item to frontier queue
+ * Frontier helpers
  */
 export interface FrontierItem {
   id: string
@@ -108,64 +111,97 @@ export interface FrontierItem {
   payload?: Record<string, any>
 }
 
-export async function addToFrontier(
-  patchId: string,
-  item: FrontierItem
-): Promise<void> {
+const FRONTIER_PREFIX = 'frontier:patch:'
+
+export async function addToFrontier(patchId: string, item: FrontierItem): Promise<void> {
   const client = await getRedisClient()
-  const key = `frontier:patch:${patchId}`
-  
+  const key = `${FRONTIER_PREFIX}${patchId}`
   const value = JSON.stringify(item)
   await client.zadd(key, item.priority, value)
-  
-  // Keep only top 2k entries
+
   const count = await client.zcard(key)
   if (count > 2000) {
     await client.zremrangebyrank(key, 0, count - 2000)
   }
 }
 
-/**
- * Get highest priority item from frontier
- */
 export async function popFromFrontier(patchId: string): Promise<FrontierItem | null> {
   const client = await getRedisClient()
-  const key = `frontier:patch:${patchId}`
-  
+  const key = `${FRONTIER_PREFIX}${patchId}`
   const results = await client.zrevrange(key, 0, 0)
   if (results.length === 0) {
     return null
   }
-  
+
   const item = JSON.parse(results[0]) as FrontierItem
   await client.zrem(key, results[0])
-  
+
   return item
 }
 
 export async function clearFrontier(patchId: string): Promise<void> {
   const client = await getRedisClient()
-  const key = `frontier:patch:${patchId}`
-  await client.del(key)
+  await client.del(`${FRONTIER_PREFIX}${patchId}`)
 }
 
 export async function frontierSize(patchId: string): Promise<number> {
   const client = await getRedisClient()
-  return client.zcard(`frontier:patch:${patchId}`)
+  return client.zcard(`${FRONTIER_PREFIX}${patchId}`)
 }
 
 /**
- * Set active run ID for patch
+ * Controversy / history counters
+ */
+const COUNTER_KEY = (patchId: string) => `discovery:counters:${patchId}`
+
+export interface SaveCounterDelta {
+  total?: number
+  controversy?: number
+  history?: number
+}
+
+export async function incrementSaveCounters(patchId: string, delta: SaveCounterDelta): Promise<void> {
+  const client = await getRedisClient()
+  const key = COUNTER_KEY(patchId)
+  const multi = client.multi()
+  if (delta.total) multi.hincrby(key, 'total', delta.total)
+  if (delta.controversy) multi.hincrby(key, 'controversy', delta.controversy)
+  if (delta.history) multi.hincrby(key, 'history', delta.history)
+  multi.expire(key, 60 * 60 * 6)
+  await multi.exec()
+}
+
+export interface SaveCounters {
+  total: number
+  controversy: number
+  history: number
+}
+
+export async function getSaveCounters(patchId: string): Promise<SaveCounters> {
+  const client = await getRedisClient()
+  const key = COUNTER_KEY(patchId)
+  const [total, controversy, history] = await client.hmget(key, 'total', 'controversy', 'history')
+  return {
+    total: Number(total ?? 0),
+    controversy: Number(controversy ?? 0),
+    history: Number(history ?? 0)
+  }
+}
+
+export async function clearSaveCounters(patchId: string): Promise<void> {
+  const client = await getRedisClient()
+  await client.del(COUNTER_KEY(patchId))
+}
+
+/**
+ * Active run helpers
  */
 export async function setActiveRun(patchId: string, runId: string): Promise<void> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
-  await client.setex(key, 3600, runId) // 1 hour TTL
+  await client.setex(key, 3600, runId)
 }
 
-/**
- * Get active run ID for patch
- */
 export async function getActiveRun(patchId: string): Promise<string | null> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
@@ -173,9 +209,6 @@ export async function getActiveRun(patchId: string): Promise<string | null> {
   return result
 }
 
-/**
- * Clear active run for patch
- */
 export async function clearActiveRun(patchId: string): Promise<void> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
@@ -183,17 +216,14 @@ export async function clearActiveRun(patchId: string): Promise<void> {
 }
 
 /**
- * Cache Wikipedia references for a patch
+ * Wikipedia references cache helpers
  */
 export async function cacheWikiRefs(patchId: string, refs: string[]): Promise<void> {
   const client = await getRedisClient()
   const key = `wiki:refs:${patchId}`
-  await client.setex(key, 24 * 60 * 60, JSON.stringify(refs)) // 24h TTL
+  await client.setex(key, 24 * 60 * 60, JSON.stringify(refs))
 }
 
-/**
- * Get cached Wikipedia references for a patch
- */
 export async function getCachedWikiRefs(patchId: string): Promise<string[] | null> {
   const client = await getRedisClient()
   const key = `wiki:refs:${patchId}`
@@ -204,6 +234,9 @@ export async function getCachedWikiRefs(patchId: string): Promise<string[] | nul
   return null
 }
 
+/**
+ * Audit helpers
+ */
 export async function pushAuditEvent(patchId: string, event: any, cap: number = 2000): Promise<void> {
   const client = await getRedisClient()
   const key = `audit:patch:${patchId}`
@@ -246,6 +279,9 @@ export async function getAuditEvents(patchId: string, options: AuditPageOptions 
   }
 }
 
+/**
+ * Planner guide cache helpers
+ */
 const PLAN_TTL_SECONDS = 60 * 60 // 1 hour
 
 export async function storeDiscoveryPlan(runId: string, plan: any): Promise<void> {
@@ -301,4 +337,44 @@ export async function getContestedCovered(runId: string): Promise<Set<string>> {
   return new Set(members)
 }
 
+export interface RunMetricsSnapshot {
+  runId: string
+  patchId: string
+  status: 'running' | 'completed' | 'error' | 'aborted'
+  timestamp: string
+  metrics: Record<string, any>
+}
 
+export async function storeRunMetricsSnapshot(snapshot: RunMetricsSnapshot): Promise<void> {
+  const client = await getRedisClient()
+  const payload = JSON.stringify(snapshot)
+  await client
+    .multi()
+    .setex(RUN_METRICS_KEY(snapshot.runId), METRICS_TTL_SECONDS, payload)
+    .setex(PATCH_METRICS_KEY(snapshot.patchId), METRICS_TTL_SECONDS, payload)
+    .exec()
+}
+
+export async function getRunMetricsSnapshot(runId: string): Promise<RunMetricsSnapshot | null> {
+  const client = await getRedisClient()
+  const raw = await client.get(RUN_METRICS_KEY(runId))
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as RunMetricsSnapshot
+  } catch (error) {
+    console.warn('[Redis] Failed to parse run metrics snapshot', error)
+    return null
+  }
+}
+
+export async function getPatchMetricsSnapshot(patchId: string): Promise<RunMetricsSnapshot | null> {
+  const client = await getRedisClient()
+  const raw = await client.get(PATCH_METRICS_KEY(patchId))
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as RunMetricsSnapshot
+  } catch (error) {
+    console.warn('[Redis] Failed to parse patch metrics snapshot', error)
+    return null
+  }
+}

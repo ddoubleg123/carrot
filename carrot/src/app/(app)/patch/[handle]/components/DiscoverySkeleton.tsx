@@ -5,17 +5,28 @@
 
 import React from 'react'
 
+type DiscoveryStage = 'searching' | 'vetting' | 'hero' | 'saved' | undefined
+
 interface DiscoverySkeletonProps {
   isActive: boolean
   currentStatus?: string
+  stage?: DiscoveryStage
   className?: string
   id?: string
 }
 
-export default function DiscoverySkeleton({ 
-  isActive, 
-  currentStatus = "Discovering...",
-  className = "",
+const stageCopy: Record<Exclude<DiscoveryStage, undefined>, string> = {
+  searching: 'Scanning sources…',
+  vetting: 'Scoring evidence…',
+  hero: 'Crafting hero imagery…',
+  saved: 'Finalising card…'
+}
+
+export default function DiscoverySkeleton({
+  isActive,
+  currentStatus = 'Discovering…',
+  stage,
+  className = '',
   id
 }: DiscoverySkeletonProps) {
   return (
@@ -33,7 +44,9 @@ export default function DiscoverySkeleton({
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
             <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-2">
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium text-gray-700">{currentStatus}</span>
+              <span className="text-sm font-medium text-gray-700">
+                {stage && stage in stageCopy ? stageCopy[stage as Exclude<DiscoveryStage, undefined>] : currentStatus}
+              </span>
             </div>
           </div>
         )}

@@ -29,6 +29,7 @@ export interface DiscoveryCardPayload {
   canonicalUrl: string
   domain: string
   sourceType?: string
+  category?: string
   credibilityTier?: number
   angle?: string
   noveltySignals?: string[]
@@ -44,5 +45,7 @@ export interface DiscoveryCardPayload {
   relevanceScore: number
   qualityScore: number
   viewSourceOk: boolean
+  isControversy?: boolean
+  isHistory?: boolean
   savedAt: string
 }

@@ -3,7 +3,7 @@ import { DiscoveryEventStream, type DiscoveryEvent } from './streaming'
 import { publishDiscoveryEvent } from './eventBus'
 import { clearActiveRun, setActiveRun } from '@/lib/redis/discovery'
 import { DiscoveryEngineV21 } from './engineV21'
-import { isDiscoveryV21Enabled } from './flags'
+import { isDiscoveryV21Enabled, isDiscoveryKillSwitchEnabled } from './flags'
 
 interface EngineRunner {
   start(): Promise<void>
@@ -25,6 +25,15 @@ export async function runOpenEvidenceEngine({
   patchName,
   runId
 }: OpenEvidenceEngineOptions): Promise<void> {
+  if (isDiscoveryKillSwitchEnabled()) {
+    publishDiscoveryEvent(runId, {
+      type: 'error',
+      timestamp: Date.now(),
+      message: 'Discovery run aborted: killswitch active.'
+    })
+    return
+  }
+
   const eventListener = (event: DiscoveryEvent) => {
     publishDiscoveryEvent(runId, event)
   }

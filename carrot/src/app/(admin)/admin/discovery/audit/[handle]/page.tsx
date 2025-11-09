@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowDownToLine, Filter, RefreshCcw, AlertCircle, Scale } from 'lucide-react'
+import { ArrowDownToLine, Filter, RefreshCcw, AlertCircle, Scale, WifiOff } from 'lucide-react'
 
 interface AuditRecord {
   id: string
@@ -114,8 +114,12 @@ export default function AuditPage(props: AuditPageProps) {
   const [providerFilter, setProviderFilter] = useState<string>('all')
   const [reasonFilter, setReasonFilter] = useState<string>('all')
   const [contestedFilter, setContestedFilter] = useState<'all' | 'contested' | 'non-contested'>('all')
+  const [angleFilter, setAngleFilter] = useState<string>('all')
   const [anglesCovered, setAnglesCovered] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const [connected, setConnected] = useState<boolean>(true)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const seenIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     props.params.then(({ handle }) => {
@@ -137,22 +141,33 @@ export default function AuditPage(props: AuditPageProps) {
       const data = await response.json()
       if (Array.isArray(data.items)) {
         const mapped = data.items.map(buildRow)
+        seenIdsRef.current.clear()
+        mapped.forEach((row) => seenIdsRef.current.add(row.id))
         setRows(mapped)
         setAnglesCovered(new Set(mapped.map((row: AuditRow) => row.angle).filter(Boolean) as string[]))
       }
       setError(null)
+      setConnected(true)
     } catch (err) {
       console.error('[Audit] Failed to load initial events', err)
       setError('Failed to load audit events')
     }
-  }, [])
+  }, [seenIdsRef])
 
   const startStream = useCallback((patchHandle: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
     const source = new EventSource(`/api/patches/${patchHandle}/audit/stream`)
+    eventSourceRef.current = source
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data) as AuditRecord
         const row = buildRow(payload)
+        if (seenIdsRef.current.has(row.id)) {
+          return
+        }
+        seenIdsRef.current.add(row.id)
         setRows((prev) => [row, ...prev])
         if (row.angle) {
           setAnglesCovered((prev) => {
@@ -161,23 +176,36 @@ export default function AuditPage(props: AuditPageProps) {
             return next
           })
         }
+        setError(null)
+        setConnected(true)
       } catch (err) {
         console.error('[Audit SSE] Failed to parse payload', err, event.data)
       }
     }
     source.onerror = (err) => {
       console.error('[Audit SSE] error', err)
+      setConnected(false)
       setError('Live stream disconnected')
+    }
+  }, [seenIdsRef])
+
+  const filteredRows = useMemo(() => {
+    const base = filterRows(rows, statusFilter, providerFilter, reasonFilter, contestedFilter)
+    if (angleFilter === 'all') return base
+    return base.filter((row) => row.angle === angleFilter)
+  }, [rows, statusFilter, providerFilter, reasonFilter, contestedFilter, angleFilter])
+
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
     }
   }, [])
 
-  const filteredRows = useMemo(
-    () => filterRows(rows, statusFilter, providerFilter, reasonFilter, contestedFilter),
-    [rows, statusFilter, providerFilter, reasonFilter, contestedFilter]
-  )
-
   const providers = useMemo(() => ['all', ...Array.from(new Set(rows.map((row) => row.provider).filter(Boolean)))] as string[], [rows])
   const reasons = useMemo(() => ['all', ...Array.from(new Set(rows.map((row) => row.reason).filter(Boolean)))] as string[], [rows])
+  const angles = useMemo(() => ['all', ...Array.from(new Set(rows.map((row) => row.angle).filter(Boolean)))] as string[], [rows])
   const contestedCount = useMemo(() => rows.filter((row) => Boolean(row.contestedNote)).length, [rows])
 
   const acceptedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status === 'ok').length, [rows])
@@ -222,6 +250,11 @@ export default function AuditPage(props: AuditPageProps) {
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Total events</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{rows.length}</p>
+          {!connected && (
+            <div className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+              <WifiOff className="h-3 w-3" /> Stream paused
+            </div>
+          )}
         </Card>
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Accepted saves</p>
@@ -274,6 +307,13 @@ export default function AuditPage(props: AuditPageProps) {
               <option value="all">All viewpoints</option>
               <option value="contested">Contested only</option>
               <option value="non-contested">Non-contested only</option>
+            </select>
+            <select value={angleFilter} onChange={(event) => setAngleFilter(event.target.value)} className="rounded-md border border-slate-200 px-3 py-1.5">
+              {angles.map((angle) => (
+                <option key={angle} value={angle}>
+                  {angle === 'all' ? 'All angles' : angle}
+                </option>
+              ))}
             </select>
           </div>
           {error && (

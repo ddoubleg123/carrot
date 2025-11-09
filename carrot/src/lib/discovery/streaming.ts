@@ -17,6 +17,7 @@ export type DiscoveryEventType =
   | 'pause'
   | 'stop'
   | 'error'
+  | 'stage'
 
 export interface DiscoveryEvent {
   type: DiscoveryEventType
@@ -78,6 +79,13 @@ export class DiscoveryEventStream {
     this.sendEvent('start', { groupId, runId })
   }
   
+  stage(
+    phase: 'searching' | 'vetting' | 'hero' | 'saved',
+    meta?: Record<string, unknown>
+  ): void {
+    this.sendEvent('stage', { phase, meta })
+  }
+
   /**
    * Send searching event
    */

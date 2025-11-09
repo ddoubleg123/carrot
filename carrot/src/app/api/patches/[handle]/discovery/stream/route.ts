@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import { DiscoveryEventStream } from '@/lib/discovery/streaming'
 import { DiscoveryOrchestrator } from '@/lib/discovery/orchestrator'
 import { prisma } from '@/lib/prisma'
-import { isOpenEvidenceV2Enabled } from '@/lib/discovery/flags'
+import { isOpenEvidenceV2Enabled, isDiscoveryKillSwitchEnabled } from '@/lib/discovery/flags'
 import { subscribeDiscoveryEvents } from '@/lib/discovery/eventBus'
 
 export async function GET(
@@ -15,6 +15,10 @@ export async function GET(
 ) {
   const { handle } = await params
   const openEvidenceEnabled = isOpenEvidenceV2Enabled()
+
+  if (isDiscoveryKillSwitchEnabled()) {
+    return new Response('Discovery is disabled', { status: 503 })
+  }
   
   try {
     if (openEvidenceEnabled) {

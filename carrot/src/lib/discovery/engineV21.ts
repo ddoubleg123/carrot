@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { canonicalize } from './canonicalize'
 import { DiscoveryEventStream } from './streaming'
-import { audit } from './logger'
+import { audit, logger, MetricsTracker } from './logger'
 import { HeroImagePipeline } from './hero-pipeline'
 import {
   popFromFrontier,
@@ -15,7 +15,14 @@ import {
   markAngleCovered,
   getCoveredAngles,
   clearPlan,
-  markContestedCovered
+  markContestedCovered,
+  incrementSaveCounters,
+  getSaveCounters,
+  clearSaveCounters,
+  frontierSize,
+  storeRunMetricsSnapshot,
+  type SaveCounters,
+  type RunMetricsSnapshot
 } from '@/lib/redis/discovery'
 import type { FrontierItem } from '@/lib/redis/discovery'
 import { SimHash } from './deduplication'
@@ -89,10 +96,13 @@ export class DiscoveryEngineV21 {
   private firstItemTimestamp?: number
   private plan: DiscoveryPlan | null = null
   private acceptanceCards: AcceptanceCard[] = []
+  private metricsTracker: MetricsTracker
+  private lastCounters: SaveCounters = { total: 0, controversy: 0, history: 0 }
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
     this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
+    this.metricsTracker = new MetricsTracker(`${options.patchHandle}:${options.runId}`)
   }
 
   requestStop(): void {
@@ -105,10 +115,21 @@ export class DiscoveryEngineV21 {
     const { patchId, patchName, runId } = this.options
 
     this.eventStream.start(patchId, runId)
+    this.structuredLog('run_start', {
+      patchId,
+      runId,
+      patchName
+    })
 
     try {
       this.plan = await loadDiscoveryPlan<DiscoveryPlan>(runId)
+      if (!this.plan) {
+        throw new Error(`discovery_plan_missing:${runId}`)
+      }
+      await clearSaveCounters(patchId).catch(() => undefined)
+      this.lastCounters = { total: 0, controversy: 0, history: 0 }
       const coveredAngles = await getCoveredAngles(runId)
+      await this.persistMetricsSnapshot('running', this.lastCounters, { event: 'start' })
       await this.discoveryLoop(coveredAngles)
 
       if (this.stopRequested) {
@@ -136,14 +157,18 @@ export class DiscoveryEngineV21 {
       if (!candidate) {
         const expanded = await this.expandFrontierIfNeeded(patchId, coveredAngles)
         if (!expanded) {
+          await this.persistMetricsSnapshot('running', this.lastCounters, { reason: 'frontier_empty' })
           this.eventStream.idle('Frontier empty')
           break
         }
         continue
       }
+      const depth = await frontierSize(patchId).catch(() => 0)
+      this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
 
       this.metrics.candidatesProcessed++
-      const processResult = await this.processCandidate(candidate)
+      const countersBefore = await getSaveCounters(patchId)
+      const processResult = await this.processCandidate(candidate, countersBefore)
       if (processResult.angle) {
         coveredAngles.add(processResult.angle)
         await markAngleCovered(runId, processResult.angle)
@@ -162,12 +187,15 @@ export class DiscoveryEngineV21 {
     }
   }
 
-  private async processCandidate(candidate: FrontierItem): Promise<ProcessedCandidateResult> {
+  private async processCandidate(candidate: FrontierItem, countersBefore: SaveCounters): Promise<ProcessedCandidateResult> {
     const { patchId } = this.options
     const url = candidate.cursor
     const angle = candidate.meta?.angle as string | undefined
 
     try {
+      const startedAt = Date.now()
+      this.lastCounters = countersBefore
+      this.eventStream.stage('searching', { provider: candidate.provider })
       this.eventStream.searching(candidate.provider)
       await this.emitAudit('frontier_pop', 'pending', {
         provider: candidate.provider,
@@ -187,12 +215,19 @@ export class DiscoveryEngineV21 {
 
       if (await isSeen(patchId, canonicalUrl)) {
         this.metrics.duplicates++
+        this.metricsTracker.recordDuplicate()
+        logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
+        this.structuredLog('duplicate_seen', {
+          url: canonicalUrl,
+          provider: candidate.provider
+        })
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
           decisions: { action: 'drop', reason: 'redis_seen' }
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'redis_seen' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'redis_seen', angle }
       }
 
@@ -202,6 +237,13 @@ export class DiscoveryEngineV21 {
       })
       if (existing) {
         this.metrics.duplicates++
+        this.metricsTracker.recordDuplicate()
+        logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
+        this.structuredLog('duplicate_database', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          existingId: existing.id
+        })
         await markAsSeen(patchId, canonicalUrl).catch(() => undefined)
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
@@ -209,19 +251,29 @@ export class DiscoveryEngineV21 {
           decisions: { action: 'drop', reason: 'db_duplicate', existingId: existing.id }
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'db_duplicate' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'db_duplicate', angle }
       }
 
       this.metrics.urlsAttempted++
+      this.eventStream.stage('searching', { provider: 'fetcher' })
       this.eventStream.searching('fetch')
       const extracted = await this.fetchAndExtractContent(canonicalUrl)
       if (!extracted || extracted.text.length < MIN_CONTENT_LENGTH) {
         this.metrics.dropped++
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'content_too_short')
+        this.structuredLog('content_short', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          length: extracted?.text.length ?? 0
+        })
         await this.emitAudit('fetch', 'fail', {
           candidateUrl: canonicalUrl,
           error: { message: 'content_too_short' }
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'content_too_short' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'content_short', angle }
       }
 
@@ -229,15 +281,24 @@ export class DiscoveryEngineV21 {
       const hashString = simhash.toString()
       if (await isNearDuplicate(patchId, hashString, DUPLICATE_HASH_THRESHOLD)) {
         this.metrics.duplicates++
+        this.metricsTracker.recordDuplicate()
+        logger.logDuplicate(canonicalUrl, 'B', candidate.provider)
+        this.structuredLog('duplicate_simhash', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          contentHash: hashString
+        })
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
           decisions: { action: 'drop', reason: 'near_duplicate' }
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'near_duplicate' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'near_duplicate', angle }
       }
 
+      this.eventStream.stage('vetting', { url: canonicalUrl })
       this.eventStream.searching('vet')
       const synthesis = await this.vetCandidate({
         title: extracted.title,
@@ -247,26 +308,46 @@ export class DiscoveryEngineV21 {
       })
       if (!synthesis || !synthesis.isUseful) {
         this.metrics.dropped++
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'vetter_rejected')
+        this.structuredLog('vetter_rejected', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle,
+          meta: synthesis ?? null
+        })
         await this.emitAudit('synthesis', 'fail', {
           candidateUrl: canonicalUrl,
           meta: synthesis,
           decisions: { action: 'drop', reason: 'vetter_rejected' }
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'vetter_rejected' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'vetter_rejected', angle }
       }
 
       if (synthesis.relevanceScore < MIN_RELEVANCE_SCORE || synthesis.qualityScore < MIN_QUALITY_SCORE) {
         this.metrics.dropped++
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'score_threshold')
+        this.structuredLog('score_threshold', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle,
+          relevanceScore: synthesis.relevanceScore,
+          qualityScore: synthesis.qualityScore
+        })
         await this.emitAudit('synthesis', 'fail', {
           candidateUrl: canonicalUrl,
           meta: synthesis,
           decisions: { action: 'drop', reason: 'score_threshold' }
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'score_threshold' })
+        await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'score_threshold', angle }
       }
 
+      this.eventStream.stage('hero', { url: canonicalUrl })
       this.eventStream.searching('hero')
       const hero = await this.heroPipeline.assignHero({
         title: extracted.title,
@@ -285,40 +366,35 @@ export class DiscoveryEngineV21 {
 
       const viewSourceOk = await checkViewSource(canonicalUrl)
 
-      const metadataPayload: Record<string, unknown> = {
-        angle,
-        credibilityTier: candidate.meta?.credibilityTier,
-        viewSourceStatus: viewSourceOk ? 200 : 404,
-        contested: synthesis.contested
-          ? {
-              note: synthesis.contested.note,
-              supporting: synthesis.contested.supporting,
-              counter: synthesis.contested.counter,
-              claim: synthesis.contested.claim ?? null
-            }
-          : null,
-        contestedClaim: contestedClaim || null
-      }
+      const isControversy = candidate.meta?.isControversy === true
+      const isHistory = candidate.meta?.isHistory === true
 
       const savedItem = await prisma.discoveredContent.create({
         data: {
           patchId,
-          type: candidate.meta?.sourceType || 'article',
-          title: extracted.title,
-          content: extracted.text.substring(0, 5000),
+          canonicalUrl,
+          sourceUrl: canonicalUrl,
+          domain: finalDomain,
+          publishDate: candidate.meta?.publishDate ?? null,
+          category: (candidate.meta?.category as string | undefined) || null,
+          isControversy,
+          isHistory,
           relevanceScore: synthesis.relevanceScore,
           qualityScore: synthesis.qualityScore,
-          sourceUrl: canonicalUrl,
-          canonicalUrl,
-          contentHash: hashString,
           whyItMatters: synthesis.whyItMatters,
+          summary: synthesis.whyItMatters,
           facts: synthesis.facts as unknown as Prisma.JsonArray,
           quotes: synthesis.quotes as unknown as Prisma.JsonArray,
           provenance: synthesis.provenance as unknown as Prisma.JsonArray,
           hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
-          status: viewSourceOk ? 'ready' : 'requires_review',
-          metadata: metadataPayload as Prisma.JsonObject
-        }
+          contentHash: hashString
+        } as any
+      })
+
+      await incrementSaveCounters(patchId, {
+        total: 1,
+        controversy: isControversy ? 1 : 0,
+        history: isHistory ? 1 : 0
       })
 
       const factsPayload = synthesis.facts.map((fact) => ({
@@ -329,16 +405,16 @@ export class DiscoveryEngineV21 {
 
       const cardPayload: DiscoveryCardPayload = {
         id: savedItem.id,
-        title: savedItem.title,
+        title: extracted.title,
         url: canonicalUrl,
         canonicalUrl,
         domain: finalDomain,
-        sourceType: candidate.meta?.sourceType,
+        category: candidate.meta?.category,
         credibilityTier: candidate.meta?.credibilityTier,
         angle,
         noveltySignals: candidate.meta?.noveltySignals,
         expectedInsights: candidate.meta?.expectedInsights,
-        reason: candidate.meta?.reason,
+        reason: candidate.meta?.notes,
         whyItMatters: synthesis.whyItMatters,
         facts: factsPayload,
         quotes: synthesis.quotes,
@@ -349,6 +425,8 @@ export class DiscoveryEngineV21 {
         relevanceScore: synthesis.relevanceScore,
         qualityScore: synthesis.qualityScore,
         viewSourceOk,
+        isControversy,
+        isHistory,
         savedAt: savedItem.createdAt.toISOString()
       }
 
@@ -372,19 +450,65 @@ export class DiscoveryEngineV21 {
         }
       })
 
+      const countersAfter = await getSaveCounters(patchId)
+      this.lastCounters = countersAfter
+      const processingTime = Date.now() - startedAt
+      this.metricsTracker.recordNovel(processingTime)
+      logger.logSuccess(canonicalUrl, processingTime)
+      this.structuredLog('saved', {
+        url: canonicalUrl,
+        provider: candidate.provider,
+        angle,
+        isControversy,
+        isHistory,
+        processingTime,
+        relevanceScore: synthesis.relevanceScore,
+        qualityScore: synthesis.qualityScore
+      })
+      const controversyRatio = countersAfter.total ? countersAfter.controversy / countersAfter.total : 0
+
+      if (isControversy && controversyRatio < 0.5) {
+        await this.emitAudit('coverage', 'ok', {
+          candidateUrl: canonicalUrl,
+          meta: {
+            category: candidate.meta?.category,
+            controversyRatio
+          }
+        })
+      }
+
       this.eventStream.saved(cardPayload)
+      this.eventStream.stage('saved', { id: savedItem.id })
+      await this.persistMetricsSnapshot('running', countersAfter, {
+        lastSavedId: savedItem.id,
+        lastSavedUrl: canonicalUrl
+      })
       if (angle) {
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
       return { saved: true, angle }
     } catch (error) {
       this.metrics.failures++
+      this.metricsTracker.recordError()
+      logger.logError('candidate_processing_failed', {
+        url: candidate.cursor,
+        provider: candidate.provider,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      this.structuredLog('processing_error', {
+        url: candidate.cursor,
+        provider: candidate.provider,
+        reason: error instanceof Error ? error.message : String(error)
+      })
       await this.emitAudit('processing_error', 'fail', {
         candidateUrl: candidate.cursor,
         error: this.formatError(error)
       })
       console.error('[EngineV21] Candidate processing failed:', error)
       this.eventStream.error('Candidate processing failed', error)
+      await this.persistMetricsSnapshot('running', this.lastCounters, {
+        lastError: this.formatError(error)
+      })
       return { saved: false, reason: 'error', angle }
     }
   }
@@ -422,19 +546,38 @@ export class DiscoveryEngineV21 {
     }
 
     const uncoveredAngles = this.plan.queryAngles.filter(angle => !coveredAngles.has(angle.angle))
-    const uncoveredSeeds = this.plan.seedCandidates.filter(seed => uncoveredAngles.some(a => a.angle === seed.angle))
+    const coverageTargets = this.plan.coverageTargets || { controversyRatio: 0.5, controversyWindow: 4, historyInFirst: 3 }
+    const counters = await getSaveCounters(patchId)
+    const controversyRatio = counters.total ? counters.controversy / counters.total : 0
+    const needControversy = controversyRatio < coverageTargets.controversyRatio
+    const overControversy = controversyRatio > (coverageTargets.controversyRatio + 0.1)
+    const needHistory = counters.total < 12 && counters.history < coverageTargets.historyInFirst
 
-    if (!uncoveredSeeds.length) {
+    const candidateSeeds = this.plan.seedCandidates.map((seed, index) => {
+      let score = 100 - index * 2
+      if (needControversy && seed.isControversy) score += 40
+      if (overControversy && seed.isControversy) score -= 20
+      if (needHistory && seed.isHistory) score += 25
+      if (!seed.isControversy && needControversy) score -= 5
+      return { seed, score }
+    })
+
+    const availableSeeds = uncoveredAngles.length
+      ? candidateSeeds.filter(({ seed }) => uncoveredAngles.some((angle) => angle.angle === seed.angle))
+      : candidateSeeds
+
+    if (!availableSeeds.length) {
       return false
     }
 
-    const inserts = uncoveredSeeds.slice(0, 3).map((seed, index) => {
-      const priority = 80 - index * 2
+    availableSeeds.sort((a, b) => b.score - a.score)
+
+    const inserts = availableSeeds.slice(0, 3).map(({ seed, score }) => {
       return addToFrontier(patchId, {
         id: `reseed:${Date.now()}:${seed.url}`,
         provider: 'planner:reseed',
         cursor: seed.url,
-        priority,
+        priority: score,
         angle: seed.angle,
         meta: seed as PlannerSeedCandidate
       })
@@ -446,7 +589,11 @@ export class DiscoveryEngineV21 {
 
   private async vetCandidate(params: { title: string; url: string; text: string; angle?: string }): Promise<VetterResult> {
     const aliases = this.plan?.mustTerms?.filter(term => term && term !== this.plan?.topic) || []
-    const contestedClaims = this.plan?.contestedPlan?.claims?.map(claim => claim.claim)
+    const contestedClaims = this.plan?.controversyAngles
+      ? this.plan.controversyAngles
+          .map((angle) => angle.angle)
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
     const result = await vetSource({
       topic: this.plan?.topic || this.options.patchName,
       aliases,
@@ -491,17 +638,58 @@ export class DiscoveryEngineV21 {
     }
   }
 
+  private structuredLog(event: string, data: Record<string, unknown>): void {
+    try {
+      const payload = {
+        source: 'discovery_engine_v21',
+        runId: this.options.runId,
+        patchId: this.options.patchId,
+        event,
+        timestamp: new Date().toISOString(),
+        ...data
+      }
+      console.log(JSON.stringify(payload))
+    } catch (error) {
+      console.warn('[EngineV21] Failed to emit structured log', error)
+    }
+  }
+
+  private async persistMetricsSnapshot(
+    status: 'running' | 'completed' | 'error' | 'aborted',
+    counters?: SaveCounters,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
+    try {
+      let countersSnapshot = counters
+      if (!countersSnapshot) {
+        countersSnapshot = await getSaveCounters(this.options.patchId).catch(() => this.lastCounters)
+      }
+      if (countersSnapshot) {
+        this.lastCounters = countersSnapshot
+      }
+      const trackerMetrics = this.metricsTracker.getMetrics()
+      const snapshot: RunMetricsSnapshot = {
+        runId: this.options.runId,
+        patchId: this.options.patchId,
+        status,
+        timestamp: new Date().toISOString(),
+        metrics: {
+          ...this.metrics,
+          tracker: trackerMetrics,
+          counters: this.lastCounters,
+          acceptance: this.metrics.acceptance,
+          ...extra
+        }
+      }
+      await storeRunMetricsSnapshot(snapshot)
+    } catch (error) {
+      console.warn('[EngineV21] Failed to persist metrics snapshot', error)
+    }
+  }
+
   private resolveContestedClaim(contested: VetterResult['contested']): string | undefined {
     if (!contested || !contested.note) return undefined
-    if (contested.claim) return contested.claim
-    const claims = this.plan?.contestedPlan?.claims || []
-    const lowerNote = contested.note.toLowerCase()
-    for (const planClaim of claims) {
-      if (lowerNote.includes(planClaim.claim.toLowerCase())) {
-        return planClaim.claim
-      }
-    }
-    return undefined
+    return contested.claim || undefined
   }
 
   private async emitAudit(step: string, status: 'pending' | 'ok' | 'fail', payload: Record<string, any>) {
@@ -520,7 +708,7 @@ export class DiscoveryEngineV21 {
           timeToFirstMs: this.metrics.timeToFirstMs,
           savedCards: this.acceptanceCards,
           plannerAngles: Array.from(new Set((this.plan?.queryAngles || []).map((angle) => angle.angle).filter(Boolean))),
-          contestedClaims: Array.from(new Set(this.plan?.contestedPlan?.claims?.map((claim) => claim.claim).filter(Boolean) || []))
+          contestedClaims: Array.from(new Set(this.plan?.controversyAngles?.map((angle) => angle.angle).filter(Boolean) || []))
         })
       : null
 
@@ -529,13 +717,23 @@ export class DiscoveryEngineV21 {
     }
 
     const auditMeta = acceptance ? { ...this.metrics } : this.metrics
+    const formattedError = error ? this.formatError(error) : undefined
 
     await this.emitAudit('run_complete', status === 'completed' ? 'ok' : status === 'aborted' ? 'ok' : 'fail', {
       meta: auditMeta,
-      error: error ? this.formatError(error) : undefined
+      error: formattedError
     })
 
-    await prisma.discoveryRun.update({
+    this.structuredLog('run_complete', {
+      status,
+      acceptance,
+      error: formattedError
+    })
+
+    this.metricsTracker.printSummary()
+    logger.flush()
+
+    await (prisma as any).discoveryRun.update({
       where: { id: this.options.runId },
       data: {
         status,
@@ -543,11 +741,16 @@ export class DiscoveryEngineV21 {
         metrics: ({
           ...auditMeta,
           status,
-          error: error ? this.formatError(error) : undefined
+          error: formattedError
         } as unknown) as Prisma.JsonObject
       }
-    }).catch((updateError) => {
+    }).catch((updateError: unknown) => {
       console.error('[EngineV21] Failed to save run metrics', updateError)
+    })
+
+    await this.persistMetricsSnapshot(status, this.lastCounters, {
+      acceptance,
+      error: formattedError
     })
   }
 

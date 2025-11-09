@@ -1,24 +1,35 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { DiscoveredItem } from '@/types/discovered-content'
+import { DiscoveryCardPayload } from '@/types/discovery-card'
+
+type DiscoveryStage = 'searching' | 'vetting' | 'hero' | 'saved'
 
 interface DiscoveryStreamState {
   isActive: boolean
   isPaused: boolean
+  currentStage?: DiscoveryStage
   currentStatus: string
   itemsFound: number
   lastItemTitle?: string
   error?: string
+  runId?: string
 }
 
 interface UseDiscoveryStreamReturn {
   state: DiscoveryStreamState
-  items: DiscoveredItem[]
-  start: () => void
-  pause: () => void
-  stop: () => void
-  refresh: () => void
+  items: DiscoveryCardPayload[]
+  start: () => Promise<void>
+  pause: () => Promise<void>
+  stop: () => Promise<void>
+  refresh: () => Promise<void>
+}
+
+const stageMessages: Record<DiscoveryStage, string> = {
+  searching: 'Searching for new sources…',
+  vetting: 'Vetting evidence and extracting facts…',
+  hero: 'Generating hero image…',
+  saved: 'Card saved'
 }
 
 export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamReturn {
@@ -28,27 +39,114 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     currentStatus: '',
     itemsFound: 0
   })
-  
-  const [items, setItems] = useState<DiscoveredItem[]>([])
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Start discovery
+  const [items, setItems] = useState<DiscoveryCardPayload[]>([])
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeRunIdRef = useRef<string | null>(null)
+
+  const closeEventSource = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+  }, [])
+
+  const startSSEConnection = useCallback((runId: string) => {
+    closeEventSource()
+
+    const eventSource = new EventSource(`/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(runId)}`)
+    eventSourceRef.current = eventSource
+    activeRunIdRef.current = runId
+
+    eventSource.onopen = () => {
+      setState(prev => ({
+        ...prev,
+        isActive: true,
+        isPaused: false,
+        error: undefined,
+        runId
+      }))
+    }
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        handleSSEEvent(data)
+      } catch (error) {
+        console.error('[DiscoveryStream] Failed to parse SSE data:', error)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error('[DiscoveryStream] SSE error:', error)
+      setState(prev => ({
+        ...prev,
+        error: 'Connection lost. Reconnecting…'
+      }))
+
+      closeEventSource()
+
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (activeRunIdRef.current) {
+          startSSEConnection(activeRunIdRef.current)
+        }
+      }, 3000)
+    }
+  }, [closeEventSource, patchHandle])
+
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=50`)
+      if (!response.ok) {
+        throw new Error(`Failed to load discovered content: ${response.status}`)
+      }
+      const data = await response.json()
+      const payload: DiscoveryCardPayload[] = Array.isArray(data.items) ? data.items : []
+      setItems(payload)
+      setState(prev => ({
+        ...prev,
+        itemsFound: payload.length
+      }))
+    } catch (error) {
+      console.error('[DiscoveryStream] Failed to refresh:', error)
+    }
+  }, [patchHandle])
+
   const start = useCallback(async () => {
     try {
-      // Start discovery via API
-      const response = await fetch(`/api/patches/${patchHandle}/discovery/start`, {
+      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
-      
+
       if (!response.ok) {
-        throw new Error(`Failed to start discovery: ${response.status}`)
+        const message = await response.json().catch(() => null)
+        const errorText = message?.error || `Failed to start discovery: ${response.status}`
+        throw new Error(errorText)
       }
-      
-      // Start SSE connection
-      startSSEConnection()
-      
+
+      const data = await response.json()
+      const runId = data?.runId
+      if (!runId) {
+        throw new Error('Discovery run failed to initialize')
+      }
+
+      setState(prev => ({
+        ...prev,
+        isActive: true,
+        isPaused: false,
+        currentStage: 'searching',
+        currentStatus: 'Starting discovery…',
+        error: undefined,
+        runId
+      }))
+
+      startSSEConnection(runId)
     } catch (error) {
       console.error('[DiscoveryStream] Failed to start:', error)
       setState(prev => ({
@@ -56,15 +154,14 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         error: error instanceof Error ? error.message : 'Failed to start discovery'
       }))
     }
-  }, [patchHandle])
+  }, [patchHandle, startSSEConnection])
 
-  // Pause discovery
   const pause = useCallback(async () => {
     try {
       await fetch(`/api/patches/${patchHandle}/discovery/pause`, {
         method: 'POST'
       })
-      
+
       setState(prev => ({
         ...prev,
         isPaused: !prev.isPaused
@@ -74,179 +171,130 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     }
   }, [patchHandle])
 
-  // Stop discovery
   const stop = useCallback(async () => {
     try {
       await fetch(`/api/patches/${patchHandle}/discovery/stop`, {
         method: 'POST'
       })
-      
-      // Close SSE connection
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
-      
+    } catch (error) {
+      console.error('[DiscoveryStream] Failed to stop:', error)
+    } finally {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
         reconnectTimeoutRef.current = null
       }
-      
+      activeRunIdRef.current = null
+      closeEventSource()
       setState({
         isActive: false,
         isPaused: false,
         currentStatus: '',
-        itemsFound: 0
+        itemsFound: items.length,
+        runId: undefined
       })
-      
-    } catch (error) {
-      console.error('[DiscoveryStream] Failed to stop:', error)
     }
-  }, [patchHandle])
+  }, [closeEventSource, items.length, patchHandle])
 
-  // Refresh items
-  const refresh = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=20`)
-      if (response.ok) {
-        const data = await response.json()
-        setItems(data.items || [])
-        setState(prev => ({
-          ...prev,
-          itemsFound: data.items?.length || 0
-        }))
-      }
-    } catch (error) {
-      console.error('[DiscoveryStream] Failed to refresh:', error)
-    }
-  }, [patchHandle])
-
-  // Start SSE connection
-  const startSSEConnection = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-    
-    const eventSource = new EventSource(`/api/patches/${patchHandle}/discovery/stream`)
-    eventSourceRef.current = eventSource
-    
-    eventSource.onopen = () => {
-      console.log('[DiscoveryStream] SSE connection opened')
-      setState(prev => ({
-        ...prev,
-        isActive: true,
-        isPaused: false,
-        error: undefined
-      }))
-    }
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        handleSSEEvent(data)
-      } catch (error) {
-        console.error('[DiscoveryStream] Failed to parse SSE data:', error)
-      }
-    }
-    
-    eventSource.onerror = (error) => {
-      console.error('[DiscoveryStream] SSE error:', error)
-      setState(prev => ({
-        ...prev,
-        error: 'Connection lost. Attempting to reconnect...'
-      }))
-      
-      // Attempt to reconnect after 5 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (state.isActive) {
-          startSSEConnection()
-        }
-      }, 5000)
-    }
-  }, [patchHandle, state.isActive])
-
-  // Handle SSE events
   const handleSSEEvent = useCallback((event: any) => {
     switch (event.type) {
-      case 'start':
+      case 'start': {
         setState(prev => ({
           ...prev,
           isActive: true,
           isPaused: false,
-          currentStatus: 'Starting discovery...',
-          itemsFound: 0
+          currentStage: 'searching',
+          currentStatus: 'Starting discovery…'
         }))
         break
-        
-      case 'searching':
+      }
+
+      case 'stage': {
+        const phase = event.data?.phase as DiscoveryStage | undefined
         setState(prev => ({
           ...prev,
-          currentStatus: `Searching ${event.data?.source || 'sources'}...`
+          currentStage: phase,
+          currentStatus: phase ? stageMessages[phase] : prev.currentStatus
         }))
         break
-        
-      case 'candidate':
+      }
+
+      case 'searching': {
+        const source = event.data?.source
         setState(prev => ({
           ...prev,
-          currentStatus: `Processing: ${event.data?.title || event.data?.url}`
+          currentStatus: source ? `Searching ${source}…` : 'Searching sources…',
+          currentStage: prev.currentStage ?? 'searching'
         }))
         break
-        
+      }
+
+      case 'candidate': {
+        const name = event.data?.title || event.data?.url
+        setState(prev => ({
+          ...prev,
+          currentStatus: name ? `Processing ${name}` : 'Processing candidate…'
+        }))
+        break
+      }
+
       case 'skipped:duplicate':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Skipped: Duplicate content'
+          currentStatus: 'Duplicate detected – skipping'
         }))
         break
-        
+
       case 'skipped:low_relevance':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Skipped: Low relevance score'
+          currentStatus: 'Low relevance – skipping'
         }))
         break
-        
+
       case 'skipped:near_dup':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Skipped: Similar content found'
+          currentStatus: 'Near-duplicate – skipping'
         }))
         break
-        
-      case 'enriched':
-        setState(prev => ({
-          ...prev,
-          currentStatus: `Enriched: ${event.data?.title}`
-        }))
-        break
-        
+
       case 'hero_ready':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Hero image ready'
+          currentStatus: 'Hero image ready',
+          currentStage: 'hero'
         }))
         break
-        
-      case 'saved':
-        const newItem = event.data?.item
+
+      case 'saved': {
+        const newItem: DiscoveryCardPayload | undefined = event.data?.item
         if (newItem) {
-          setItems(prev => [newItem, ...prev])
+          setItems(prev => {
+            const existing = new Set(prev.map(item => item.canonicalUrl))
+            if (existing.has(newItem.canonicalUrl)) {
+              return prev
+            }
+            return [newItem, ...prev]
+          })
           setState(prev => ({
             ...prev,
             itemsFound: prev.itemsFound + 1,
             lastItemTitle: newItem.title,
-            currentStatus: `Saved: ${newItem.title}`
+            currentStatus: `Saved: ${newItem.title}`,
+            currentStage: 'saved'
           }))
         }
         break
-        
+      }
+
       case 'idle':
         setState(prev => ({
           ...prev,
-          currentStatus: event.message || 'Discovery idle'
+          currentStatus: event.message || 'Discovery idle',
+          currentStage: prev.currentStage === 'saved' ? prev.currentStage : prev.currentStage
         }))
         break
-        
+
       case 'pause':
         setState(prev => ({
           ...prev,
@@ -254,38 +302,39 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           currentStatus: 'Discovery paused'
         }))
         break
-        
+
       case 'stop':
+        activeRunIdRef.current = null
         setState(prev => ({
           ...prev,
           isActive: false,
           isPaused: false,
-          currentStatus: 'Discovery stopped'
+          currentStatus: 'Discovery completed'
         }))
+        closeEventSource()
         break
-        
+
       case 'error':
         setState(prev => ({
           ...prev,
           error: event.message || 'Discovery error occurred'
         }))
         break
-    }
-  }, [])
 
-  // Cleanup on unmount
+      default:
+        break
+    }
+  }, [closeEventSource])
+
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }
+      closeEventSource()
     }
-  }, [])
+  }, [closeEventSource])
 
-  // Initial refresh
   useEffect(() => {
     refresh()
   }, [refresh])

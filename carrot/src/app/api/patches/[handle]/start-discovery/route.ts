@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
-import { BatchedLogger } from '@/lib/discovery/logger';
 import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
 import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
-import { isDiscoveryV21Enabled, isOpenEvidenceV2Enabled } from '@/lib/discovery/flags';
+import { isDiscoveryV21Enabled, isOpenEvidenceV2Enabled, isDiscoveryKillSwitchEnabled } from '@/lib/discovery/flags';
 import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
-import { clearFrontier } from '@/lib/redis/discovery';
-import { generateDiscoveryPlan } from '@/lib/discovery/planner';
+import { clearFrontier, storeDiscoveryPlan } from '@/lib/redis/discovery';
+import { seedFrontierFromPlan, type DiscoveryPlan } from '@/lib/discovery/planner';
 
 export const runtime = 'nodejs';
 
@@ -41,6 +40,13 @@ export async function POST(
   console.log('[Start Discovery] Feature flag OPEN_EVIDENCE_V2:', openEvidenceEnabled ? 'enabled' : 'disabled');
   console.log('[Start Discovery] Feature flag DISCOVERY_V21:', discoveryV21Enabled ? 'enabled' : 'disabled');
   
+  if (isDiscoveryKillSwitchEnabled()) {
+    return NextResponse.json(
+      { error: 'Discovery is currently disabled via killswitch.' },
+      { status: 503 }
+    );
+  }
+
   // Check if SSE streaming is requested
   const url = new URL(request.url)
   const isStreaming = url.searchParams.get('stream') === 'true' || request.method === 'GET'
@@ -65,11 +71,12 @@ export async function POST(
       where: { handle },
       select: {
         id: true,
-        name: true,
+        title: true,
         description: true,
         tags: true,
         entity: true,
-        createdBy: true
+        createdBy: true,
+        guide: true
       }
     });
 
@@ -115,44 +122,41 @@ export async function POST(
         }
       })
 
-      await clearFrontier(patch.id)
+      const guide = patch.guide as DiscoveryPlan | null
+      if (!guide) {
+        return NextResponse.json({
+          error: 'Discovery guide missing. Refresh the guide before starting discovery.'
+        }, { status: 428 })
+      }
 
-      const entity = (patch.entity ?? {}) as { name?: string; aliases?: string[]; type?: string }
-      const topicName = entity?.name || patch.name
-      const aliasSet = new Set<string>()
-      if (Array.isArray(entity?.aliases)) {
-        entity.aliases.forEach(value => {
-          if (typeof value === 'string' && value.trim()) {
-            aliasSet.add(value.trim())
-          }
-        })
-      }
-      if (Array.isArray(patch.tags)) {
-        patch.tags.forEach(tag => {
-          if (typeof tag === 'string' && tag.trim()) {
-            aliasSet.add(tag.trim())
-          }
-        })
-      }
-      aliasSet.delete(topicName)
-      const aliases = Array.from(aliasSet)
+      await clearFrontier(patch.id).catch((error) => {
+        console.warn('[Start Discovery] Failed to clear frontier before seeding', error)
+      })
 
-      try {
-        await generateDiscoveryPlan({
-          topic: topicName,
-          aliases,
-          description: patch.description || '',
-          patchId: patch.id,
-          runId: run.id
-        })
-      } catch (plannerError) {
-        console.error('[Start Discovery] Planner failed', plannerError)
-      }
+      await storeDiscoveryPlan(run.id, guide).catch((error) => {
+        console.error('[Start Discovery] Failed to cache discovery plan', error)
+        throw error
+      })
+
+      await seedFrontierFromPlan(patch.id, guide).catch((error) => {
+        console.error('[Start Discovery] Failed to seed frontier from guide', error)
+        throw error
+      })
+
+      await (prisma as any).discoveryRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'live',
+          startedAt: new Date()
+        }
+      }).catch((error: unknown) => {
+        console.warn('[Start Discovery] Failed to mark discovery run live', error)
+      })
 
       runOpenEvidenceEngine({
         patchId: patch.id,
         patchHandle: handle,
-        patchName: patch.name,
+        patchName: patch.title,
         runId: run.id
       }).catch(async (error) => {
         console.error('[Start Discovery] Discovery v2.1 engine failed', error)
@@ -184,7 +188,7 @@ export async function POST(
       runOpenEvidenceEngine({
         patchId: patch.id,
         patchHandle: handle,
-        patchName: patch.name,
+        patchName: patch.title,
         runId: run.id
       }).catch(async (error) => {
         console.error('[Start Discovery] Open Evidence engine failed', error)
@@ -197,6 +201,16 @@ export async function POST(
             }
           }
         }).catch(() => undefined)
+      })
+
+      await (prisma as any).discoveryRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'live',
+          startedAt: new Date()
+        }
+      }).catch((error: unknown) => {
+        console.warn('[Start Discovery] Failed to mark legacy discovery run live', error)
       })
 
       return NextResponse.json({
@@ -218,7 +232,7 @@ export async function POST(
     console.log('[Start Discovery] Starting Bulls-specific discovery for patch:', {
       patchId: patch.id,
       handle,
-      name: patch.name,
+      title: patch.title,
       tags: patch.tags,
       description: patch.description
     });
@@ -255,7 +269,7 @@ export async function POST(
     let discoveryResult
     try {
       discoveryResult = await orchestrator.discover(
-        patch.name,
+        patch.title,
         patch.description || '',
         patch.tags
       )
@@ -359,7 +373,7 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        message: `Started content discovery for "${patch.name}"`,
+        message: `Started content discovery for "${patch.title}"`,
         itemsDiscovered: discoveredSources.length,
         itemsSaved: result.saved,
         itemsRejected: result.rejected,

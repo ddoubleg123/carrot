@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client'
+
 /**
  * Robust hero image pipeline with multiple fallback strategies
  * Order: AI → Wikimedia → minSVG
@@ -27,7 +29,11 @@ export interface HeroInput {
   summary?: string
   topic?: string
   entity?: string
+  guideTopic?: string
 }
+
+const HERO_GENERATION_ENDPOINT = '/api/ai/generate-hero-image'
+const WIKIMEDIA_ENDPOINT = '/api/media/wikimedia-search'
 
 /**
  * Hero image pipeline with fallback chain
@@ -39,82 +45,74 @@ export class HeroImagePipeline {
     this.baseUrl = baseUrl
   }
   
-  /**
-   * Assign hero image with fallback chain
-   */
   async assignHero(input: HeroInput): Promise<HeroImageResult> {
-    // 1. Try AI generation first
-    try {
-      const aiResult = await this.tryAIGeneration(input)
-      if (aiResult) {
-        return aiResult
-      }
-    } catch (error) {
-      console.warn('[Hero Pipeline] AI generation failed:', error)
-    }
-    
-    // 2. Try Wikimedia fallback
-    try {
-      const wikiResult = await this.tryWikimedia(input)
-      if (wikiResult) {
-        return wikiResult
-      }
-    } catch (error) {
-      console.warn('[Hero Pipeline] Wikimedia fallback failed:', error)
-    }
-    
-    // 3. Ultimate fallback - skeleton SVG
+    const aiResult = await this.tryWithTimeout(() => this.tryAIGeneration(input), 5000)
+    if (aiResult) return aiResult
+
+    const wikiResult = await this.tryWithTimeout(() => this.tryWikimedia(input), 4000)
+    if (wikiResult) return wikiResult
+
     return this.createSkeleton(input)
   }
-  
+
+  private async tryWithTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T | null> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const result = await operation()
+      return result
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        console.warn('[Hero Pipeline] Operation timed out')
+      }
+      return null
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private buildPayload(input: HeroInput) {
+    return {
+      title: input.title,
+      description: input.summary,
+      topic: input.topic || input.entity || input.guideTopic || 'research',
+      style: 'editorial',
+      artisticStyle: 'photorealistic',
+      enableHiresFix: true,
+      useRefiner: true,
+      useFaceRestoration: true,
+      useRealesrgan: true
+    }
+  }
+
   /**
    * Try AI image generation
    */
   private async tryAIGeneration(item: HeroInput): Promise<HeroImageResult | null> {
     try {
-      console.log(`[Hero Pipeline] Attempting AI generation for: ${item.title}`)
-      
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-      const response = await fetch(`${this.baseUrl}/api/ai/generate-hero-image`, {
+      const response = await fetch(`${this.baseUrl}${HERO_GENERATION_ENDPOINT}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: item.title,
-          description: item.summary,
-          topic: item.topic || item.entity || 'research',
-          style: 'editorial',
-          artisticStyle: 'photorealistic',
-          enableHiresFix: true,
-          useRefiner: true,
-          useFaceRestoration: true,
-          useRealesrgan: true
-        }),
-        signal: controller.signal
-      }).finally(() => clearTimeout(timeout))
-      
-      console.log(`[Hero Pipeline] AI generation response status: ${response.status}`)
-      
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.buildPayload(item))
+      })
+
       if (!response.ok) {
         throw new Error(`AI generation failed: ${response.status}`)
       }
-      
+
       const data = await response.json()
-      
       if (data.success && data.imageUrl) {
         return {
           url: data.imageUrl,
           source: 'ai',
-          width: 1280,
-          height: 720,
-          alt: `AI generated image for ${item.title}`,
+          width: data.width ?? 1280,
+          height: data.height ?? 720,
+          alt: data.alt || `AI generated image for ${item.title}`,
           dominantColor: data.dominantColor,
           blurHash: data.blurHash
         }
       }
-      
+
       return null
     } catch (error) {
       console.warn('[Hero Pipeline] AI generation error:', error)
@@ -126,57 +124,41 @@ export class HeroImagePipeline {
    * Try Wikimedia Commons
    */
   private async tryWikimedia(item: HeroInput): Promise<HeroImageResult | null> {
-    try {
-      // Extract entity from title for Wikimedia search
-      const primaryEntity = item.entity || this.extractEntityForWikimedia(item.title)
-      if (!primaryEntity) {
-        console.log(`[Hero Pipeline] No entity found for Wikimedia search in: ${item.title}`)
-        return null
-      }
+    const primaryEntity = item.entity || this.extractEntityForWikimedia(item.title)
+    if (!primaryEntity) {
+      return null
+    }
 
-      const searchTerms = [primaryEntity]
-      if (item.topic && item.topic !== primaryEntity) {
-        searchTerms.push(item.topic)
-      }
-      
-      console.log(`[Hero Pipeline] Attempting Wikimedia search for entity: ${primaryEntity}`)
-      
-      const response = await fetch(`${this.baseUrl}/api/media/wikimedia-search`, {
+    const searchTerms = [primaryEntity]
+    if (item.topic && item.topic !== primaryEntity) {
+      searchTerms.push(item.topic)
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}${WIKIMEDIA_ENDPOINT}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: searchTerms.join(' '),
-          limit: 5
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchTerms.join(' '), limit: 5 })
       })
-      
-      console.log(`[Hero Pipeline] Wikimedia response status: ${response.status}`)
-      
+
       if (!response.ok) {
         throw new Error(`Wikimedia search failed: ${response.status}`)
       }
-      
+
       const data = await response.json()
-      
-      // wikimedia-search API returns { images: [{ url, thumbnail, ... }] }
-      if (data.images && data.images.length > 0) {
+      if (Array.isArray(data.images) && data.images.length > 0) {
         const image = data.images[0]
-        console.log(`[Hero Pipeline] ✅ Found Wikimedia image: ${image.url}`)
         return {
           url: image.thumbnail || image.url,
           source: 'wikimedia',
-          width: 1280,
-          height: 720,
-          alt: `Wikimedia image for ${item.title}`
+          width: image.width ?? 1280,
+          height: image.height ?? 720,
+          alt: image.alt || `Wikimedia image for ${item.title}`
         }
       }
-      
-      console.log(`[Hero Pipeline] No Wikimedia images found`)
       return null
     } catch (error) {
-      console.warn('[Hero Pipeline] Wikimedia error:', error)
+      console.warn('[Hero Pipeline] Wikimedia fallback failed:', error)
       return null
     }
   }
@@ -186,8 +168,6 @@ export class HeroImagePipeline {
    */
   private createSkeleton(item: HeroInput): HeroImageResult {
     const colors = this.getColorPalette(item)
-    const gradient = `linear-gradient(135deg, ${colors[0]}, ${colors[1]})`
-    
     const svg = `
       <svg width="1280" height="720" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -202,15 +182,15 @@ export class HeroImagePipeline {
         </text>
       </svg>
     `
-    
+
     const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
-    
+
     return {
       url: dataUrl,
       source: 'skeleton',
       width: 1280,
       height: 720,
-      alt: `Minimal design for ${item.title}`,
+      alt: `Placeholder for ${item.title}`,
       dominantColor: colors[0]
     }
   }
@@ -219,39 +199,15 @@ export class HeroImagePipeline {
    * Extract entity for Wikimedia search
    */
   private extractEntityForWikimedia(title: string): string | null {
-    // Enhanced entity extraction for basketball content
     const titleLower = title.toLowerCase()
-    
-    // Known Bulls players (extract if in title)
-    const bullsPlayers = [
-      'Michael Jordan', 'Scottie Pippen', 'Dennis Rodman', 'Phil Jackson',
-      'Derrick Rose', 'Zach LaVine', 'DeMar DeRozan', 'Nikola Vučević',
-      'Coby White', 'Patrick Williams', 'Lonzo Ball'
-    ]
-    
-    for (const player of bullsPlayers) {
-      if (titleLower.includes(player.toLowerCase())) {
-        return player
-      }
+    const properNouns = title.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g)
+    if (properNouns && properNouns.length > 0) {
+      const multiWord = properNouns.find(noun => noun.split(/\s+/).length >= 2)
+      return multiWord || properNouns[0]
     }
-    
-    // Extract team name
     if (titleLower.includes('bulls')) {
       return 'Chicago Bulls'
     }
-    
-    // Extract first proper noun (capitalized words) as entity
-    const properNouns = title.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g)
-    if (properNouns && properNouns.length > 0) {
-      // Return the first multi-word proper noun (likely a person name)
-      const multiWord = properNouns.find(noun => noun.split(/\s+/).length >= 2)
-      if (multiWord) {
-        return multiWord
-      }
-      // Or just return the first proper noun
-      return properNouns[0]
-    }
-    
     return null
   }
   
@@ -259,17 +215,15 @@ export class HeroImagePipeline {
    * Get color palette for item
    */
   private getColorPalette(item: HeroInput): string[] {
-    // Default basketball colors
     const palettes = [
-      ['#1e3a8a', '#3b82f6'], // Blue
-      ['#dc2626', '#ef4444'], // Red
-      ['#059669', '#10b981'], // Green
-      ['#7c3aed', '#a855f7'], // Purple
-      ['#ea580c', '#f97316']  // Orange
+      ['#1e3a8a', '#3b82f6'],
+      ['#dc2626', '#ef4444'],
+      ['#059669', '#10b981'],
+      ['#7c3aed', '#a855f7'],
+      ['#ea580c', '#f97316']
     ]
-    
-    // Use item hash to pick consistent colors
-    const hash = this.simpleHash(item.title)
+
+    const hash = this.simpleHash(item.title + (item.topic || '') + (item.entity || ''))
     return palettes[hash % palettes.length]
   }
   
@@ -281,7 +235,7 @@ export class HeroImagePipeline {
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i)
       hash = ((hash << 5) - hash) + char
-      hash = hash & hash // Convert to 32-bit integer
+      hash = hash & hash
     }
     return Math.abs(hash)
   }
@@ -291,32 +245,14 @@ export class HeroImagePipeline {
    */
   private truncateTitle(title: string, maxLength: number): string {
     if (title.length <= maxLength) return title
-    return title.substring(0, maxLength - 3) + '...'
+    return `${title.substring(0, maxLength - 3)}...`
   }
-  
-  /**
-   * Save hero image to database
-   */
-  async saveHero(itemId: string, heroUrl: string, source: string): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/internal/update-hero-image`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          itemId,
-          heroUrl,
-          source
-        })
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Failed to save hero image: ${response.status}`)
-      }
-    } catch (error) {
-      console.error('[Hero Pipeline] Failed to save hero image:', error)
-      throw error
-    }
+
+  appendHeroMetadata(hero: HeroImageResult): Prisma.JsonObject {
+    return {
+      source: hero.source,
+      dominantColor: hero.dominantColor,
+      blurHash: hero.blurHash
+    } as Prisma.JsonObject
   }
 }
