@@ -1,0 +1,5 @@
+WARNING: Migration 20251109000100_patch_title renames "patches.name" to "title" to support Discovery V21 rollout.
+Rationale: Column rename keeps existing data and matches code expectations; production DB already migrated manually.
+Environment: production (Render)
+Date: 2025-11-09
+Approved by: Daniel G.
