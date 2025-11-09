@@ -98,11 +98,6 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
                 <Button size="sm" onClick={refresh} variant="outline">
                   Retry
                 </Button>
-                {!state.isActive && (
-                  <Button size="sm" onClick={start}>
-                    Restart discovery
-                  </Button>
-                )}
               </div>
             </div>
           )}
@@ -114,10 +109,9 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
               <p className="mt-2 max-w-sm text-sm text-slate-500">
                 Kick off a discovery run to pull in high-signal coverage with minority viewpoints and sourced facts.
               </p>
-              <Button className="mt-6" onClick={start}>
-                <PlayIcon />
-                Start discovery
-              </Button>
+              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">
+                Use the Discovery Live panel to start
+              </p>
             </div>
           )}
 
@@ -156,8 +150,4 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
       />
     </section>
   )
-}
-
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true"><path d="M8 5.14v13.72L19 12 8 5.14z" /></svg>
 }
