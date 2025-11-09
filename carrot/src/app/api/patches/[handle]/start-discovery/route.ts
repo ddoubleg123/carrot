@@ -405,10 +405,11 @@ export async function POST(
     }
 
   } catch (error) {
-    console.error('[Start Discovery] Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Start Discovery] Error:', { message, error })
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: message },
       { status: 500 }
-    );
+    )
   }
 }
