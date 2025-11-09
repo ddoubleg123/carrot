@@ -754,7 +754,7 @@ model DiscoveredContent {
   patchId        String   @map("patch_id")
   canonicalUrl   String   @map("canonical_url")
   title          String
-  sourceUrl      String
+  sourceUrl      String   @map("source_url")
   domain         String
   publishDate    DateTime? @map("publish_date")
   category       String?  // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
