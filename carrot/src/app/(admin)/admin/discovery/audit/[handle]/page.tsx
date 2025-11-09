@@ -142,7 +142,7 @@ export default function AuditPage(props: AuditPageProps) {
       if (Array.isArray(data.items)) {
         const mapped = data.items.map(buildRow)
         seenIdsRef.current.clear()
-        mapped.forEach((row) => seenIdsRef.current.add(row.id))
+        mapped.forEach((row: AuditRow) => seenIdsRef.current.add(row.id))
         setRows(mapped)
         setAnglesCovered(new Set(mapped.map((row: AuditRow) => row.angle).filter(Boolean) as string[]))
       }
