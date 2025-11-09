@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
 import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
 import { isDiscoveryV21Enabled, isOpenEvidenceV2Enabled, isDiscoveryKillSwitchEnabled } from '@/lib/discovery/flags';
 import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
 import { clearFrontier, storeDiscoveryPlan } from '@/lib/redis/discovery';
-import { seedFrontierFromPlan, type DiscoveryPlan } from '@/lib/discovery/planner';
+import { generateGuideSnapshot, seedFrontierFromPlan, type DiscoveryPlan } from '@/lib/discovery/planner';
 
 export const runtime = 'nodejs';
 
@@ -122,11 +123,27 @@ export async function POST(
         }
       })
 
-      const guide = patch.guide as DiscoveryPlan | null
+      let guide = patch.guide as DiscoveryPlan | null
       if (!guide) {
-        return NextResponse.json({
-          error: 'Discovery guide missing. Refresh the guide before starting discovery.'
-        }, { status: 428 })
+        try {
+          const entity = (patch.entity ?? {}) as { name?: string; aliases?: string[] }
+          const topic = entity?.name && entity.name.trim().length ? entity.name.trim() : patch.title
+          const aliases = Array.isArray(entity?.aliases) && entity.aliases.length
+            ? entity.aliases.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            : patch.tags.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+          guide = await generateGuideSnapshot(topic, aliases)
+          await prisma.patch.update({
+            where: { id: patch.id },
+            data: { guide: guide as unknown as Prisma.JsonObject }
+          })
+          console.log('[Start Discovery] Guide auto-generated for patch', { patchId: patch.id, topic })
+        } catch (error) {
+          console.error('[Start Discovery] Failed to auto-generate guide', { patchId: patch.id, error })
+          return NextResponse.json({
+            error: 'Discovery guide missing and automatic generation failed. Please refresh the guide and retry.'
+          }, { status: 500 })
+        }
       }
 
       await clearFrontier(patch.id).catch((error) => {
