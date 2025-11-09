@@ -1,0 +1,1 @@
+ALTER TABLE "patches" ADD COLUMN IF NOT EXISTS "guide" JSONB;
