@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         id: true,
         title: true,
         sourceUrl: true,
-        type: true,
+        category: true,
         patchId: true
       }
     });
@@ -89,9 +89,9 @@ export async function POST(req: Request) {
         
         // If no match found, use a generic real URL
         if (!realUrl) {
-          if (item.type === 'video') {
+          if (item.category === 'video') {
             realUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'; // Rick Roll as fallback
-          } else if (item.type === 'news') {
+          } else if (item.category === 'news') {
             realUrl = 'https://www.espn.com/nba/team/_/name/hou/houston-rockets';
           } else {
             realUrl = 'https://www.nba.com/rockets';

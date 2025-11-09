@@ -27,9 +27,9 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
       include: {
         patch: {
           select: {
-            name: true,
+            title: true,
             description: true,
-            tags: true
+            tags: true,
           }
         }
       }
@@ -77,18 +77,21 @@ Return your assessment as a JSON object with this exact structure:
         content: `Please audit this discovered content for the knowledge group:
 
 GROUP CONTEXT:
-Name: "${patchName || content.patch.name}"
+Name: "${patchName || content.patch.title}"
 Description: "${patchDescription || content.patch.description || 'No description'}"
 Tags: ${(patchTags || content.patch.tags).join(', ')}
 Categories: ${patchCategories.join(', ')}
 
+${(content.patch?.title ? `Patch: ${content.patch.title}\n` : '')}
+
 CONTENT TO AUDIT:
-Type: ${content.type}
+Category: ${content.category || 'article'}
 Title: "${content.title}"
-Content: "${content.content}"
-Relevance Score (from discovery): ${content.relevanceScore}/10
-Tags: ${content.tags.join(', ')}
-${content.sourceUrl ? `Source URL: ${content.sourceUrl}` : 'No source URL provided'}
+Summary: "${content.summary || content.whyItMatters || 'not provided'}"
+Relevance Score (from discovery): ${content.relevanceScore}
+Quality Score (from discovery vetter): ${content.qualityScore}
+Why It Matters: ${content.whyItMatters || 'not provided'}
+Source URL: ${content.sourceUrl}
 
 Please provide a comprehensive audit of this content.`
       }
@@ -165,26 +168,21 @@ Please provide a comprehensive audit of this content.`
       concerns: Array.isArray(auditResult.concerns) ? auditResult.concerns.slice(0, 5) : []
     };
 
-    // Update the content with audit results
-    const updatedContent = await prisma.discoveredContent.update({
-      where: { id: contentId },
-      data: {
-        status: validatedResult.recommendation === 'approve' ? 'approved' : 
-                validatedResult.recommendation === 'reject' ? 'rejected' : 'pending',
-        auditScore: validatedResult.auditScore,
-        auditNotes: validatedResult.notes
-      }
-    });
+    // Persist audit results if needed (fields removed in v2.1 schema)
+    try {
+      // Placeholder for future persistence (e.g., store in metadata JSON)
+    } catch (error) {
+      console.warn('[Audit Content] Failed to persist audit notes', error)
+    }
 
     return NextResponse.json({
       success: true,
-      contentId,
-      auditResult: validatedResult,
+      audit: validatedResult,
       updatedContent: {
-        id: updatedContent.id,
-        status: updatedContent.status,
-        auditScore: updatedContent.auditScore,
-        auditNotes: updatedContent.auditNotes
+        id: content.id,
+        category: content.category,
+        summary: content.summary,
+        whyItMatters: content.whyItMatters
       }
     });
 

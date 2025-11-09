@@ -11,7 +11,7 @@ import COLOR_SCHEMES, { type ColorScheme } from '@/config/colorSchemes';
 interface Patch {
   id: string;
   handle: string;
-  name: string;
+  title: string;
   description?: string | null;
   tags: string[];
   _count: {
@@ -66,7 +66,7 @@ export default function PatchHeader({
 
   const handleSettings = () => {
     // Open settings modal with delete option (simple confirm for now)
-    if (confirm(`Are you sure you want to delete the "${patch.name}" patch? This action cannot be undone.`)) {
+    if (confirm(`Are you sure you want to delete the "${patch.title}" patch? This action cannot be undone.`)) {
       (async () => {
         try {
           console.log('[PatchHeader] Attempting to delete patch:', patch.handle);
@@ -168,7 +168,7 @@ export default function PatchHeader({
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="flex-1 min-w-0 max-w-2xl">
               <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
-                {patch.name}
+                {patch.title}
               </h1>
               {patch.description && (
                 <p className="text-white/95 text-base md:text-lg line-clamp-2 mt-2 pr-4">

@@ -7,7 +7,7 @@ import CreateGroupModal from '@/components/patch/CreateGroupModal';
 interface Patch {
   id: string;
   handle: string;
-  name: string;
+  title: string;
   description: string;
   tags: string[];
   theme: any;
@@ -98,7 +98,7 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
 
   // Filter patches based on search query
   const filteredPatches = patches.filter(patch =>
-    patch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    patch.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     patch.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     patch.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -257,7 +257,7 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
                   {/* Group Info - Fixed height like AI agent tiles */}
                   <div className="h-[100px] p-4 flex flex-col justify-between">
                     <h3 className="text-lg font-bold text-gray-900 group-hover:text-orange-600 transition-colors">
-                      {patch.name}
+                      {patch.title}
                     </h3>
                     
                     <div className="flex items-center gap-2 text-sm text-gray-600">

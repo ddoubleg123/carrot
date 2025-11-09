@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PrismaClient, Prisma } from '@prisma/client'
 import { resolveHero } from '@/lib/media/resolveHero'
-import { MediaAssets } from '@/lib/media/hero-types'
 
 const prisma = new PrismaClient()
 
@@ -16,18 +15,18 @@ export async function POST(req: Request) {
     const discoveredContent = await prisma.discoveredContent.findMany({
       where: {
         OR: [
-          { mediaAssets: { equals: Prisma.JsonNull } },
-          { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
-          { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
+          { hero: { equals: Prisma.JsonNull } },
+          { hero: { path: ['url'], equals: Prisma.JsonNull } }
         ]
       },
       select: {
         id: true,
         title: true,
         sourceUrl: true,
-        type: true,
-        patchId: true,
-        mediaAssets: true
+        category: true,
+        summary: true,
+        whyItMatters: true,
+        hero: true
       },
       take: 10 // Process in batches
     })
@@ -42,28 +41,28 @@ export async function POST(req: Request) {
         console.log(`🎯 Processing discovered content: ${item.title} (${item.sourceUrl})`)
         
         // Determine content type
-        const type = item.type || 'article'
+        const type = (item.category as 'article' | 'video' | 'image' | 'pdf' | 'text') || 'article'
         
         // Resolve hero image using the 4-tier pipeline
         const heroResult = await resolveHero({
           url: item.sourceUrl || undefined,
-          type: type as any,
+          type,
+          title: item.title,
+          summary: item.summary || item.whyItMatters || undefined
         })
 
         // Update the discovered content with media assets
-        const updatedMediaAssets: MediaAssets = {
-          hero: heroResult.hero,
-          blurDataURL: heroResult.blurDataURL,
-          dominant: heroResult.dominant,
-          source: heroResult.source,
-          license: heroResult.license
-        }
-        
         await prisma.discoveredContent.update({
           where: { id: item.id },
-          data: { 
-            mediaAssets: updatedMediaAssets as any, // Cast to satisfy Prisma JSON type
-            status: 'ready'
+          data: {
+            hero: {
+              url: heroResult.hero,
+              source: heroResult.source,
+              license: heroResult.license,
+              blurDataURL: heroResult.blurDataURL,
+              dominantColor: heroResult.dominant,
+              refreshedAt: new Date().toISOString()
+            } as Prisma.JsonObject
           }
         })
 
@@ -101,19 +100,18 @@ export async function GET() {
     const discoveredContentNeedingHero = await prisma.discoveredContent.count({
       where: {
         OR: [
-          { mediaAssets: { equals: Prisma.JsonNull } },
-          { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
-          { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
+          { hero: { equals: Prisma.JsonNull } },
+          { hero: { path: ['url'], equals: Prisma.JsonNull } }
         ]
       }
     })
-    
+
     const discoveredContentWithHero = await prisma.discoveredContent.count({
       where: {
-        AND: [
-          { mediaAssets: { not: Prisma.JsonNull } },
-          { mediaAssets: { path: ['hero'], not: Prisma.JsonNull } }
-        ]
+        hero: {
+          path: ['url'],
+          not: Prisma.JsonNull
+        }
       }
     })
     
@@ -123,7 +121,9 @@ export async function GET() {
         totalDiscoveredContent,
         discoveredContentNeedingHero,
         discoveredContentWithHero,
-        completionRate: `${((discoveredContentWithHero / totalDiscoveredContent) * 100).toFixed(1)}%`
+        completionRate: totalDiscoveredContent === 0
+          ? '0%'
+          : `${((discoveredContentWithHero / totalDiscoveredContent) * 100).toFixed(1)}%`
       }
     })
   } catch (error: any) {

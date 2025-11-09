@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveHero } from '@/lib/media/resolveHero'
-import { MediaAssets } from '@/lib/media/hero-types'
 
 /**
  * Internal API to enrich discovered content with hero images
@@ -24,10 +24,10 @@ export async function POST(
       where: { id },
       select: {
         id: true,
-        type: true,
+        category: true,
         sourceUrl: true,
-        mediaAssets: true,
-        status: true
+        summary: true,
+        hero: true
       }
     })
 
@@ -36,46 +36,40 @@ export async function POST(
     }
 
     // Skip if already enriched
-    const existingMedia = content.mediaAssets as MediaAssets | null
-    if (existingMedia?.hero && existingMedia.source) {
+    const existingHero = content.hero as any
+    if (existingHero?.url && existingHero?.source) {
       console.log('[Enrich API] Content already enriched:', id)
       return NextResponse.json({ 
         success: true, 
         message: 'Already enriched',
-        mediaAssets: existingMedia 
+        hero: existingHero 
       })
     }
-
-    // Update status to enriching
-    await prisma.discoveredContent.update({
-      where: { id },
-      data: { status: 'enriching' }
-    })
 
     try {
       // Resolve hero image using 4-tier pipeline
       const heroResult = await resolveHero({
         url: sourceUrl || content.sourceUrl || undefined,
-        type: (type || content.type) as any,
-        assetUrl
+        type: (type || content.category || 'article') as any,
+        assetUrl,
+        title: content.summary ? content.summary.slice(0, 80) : undefined,
+        summary: content.summary || undefined
       })
 
-      // Update mediaAssets with hero data
-      const updatedMediaAssets: MediaAssets = {
-        ...existingMedia,
-        hero: heroResult.hero,
-        blurDataURL: heroResult.blurDataURL,
-        dominant: heroResult.dominant,
+      const heroPayload: Prisma.JsonObject = {
+        url: heroResult.hero,
         source: heroResult.source,
-        license: heroResult.license
+        license: heroResult.license,
+        blurDataURL: heroResult.blurDataURL,
+        dominantColor: heroResult.dominant,
+        enrichedAt: new Date().toISOString(),
+        origin: 'internal-enrich'
       }
 
-      // Update content in database
       await prisma.discoveredContent.update({
         where: { id },
         data: { 
-          mediaAssets: updatedMediaAssets as any, // Cast to satisfy Prisma JSON type
-          status: 'ready'
+          hero: heroPayload
         }
       })
 
@@ -84,20 +78,12 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: 'Content enriched successfully',
-        mediaAssets: updatedMediaAssets
+        hero: heroPayload
       })
 
     } catch (error) {
       console.error('[Enrich API] Hero resolution failed:', error)
       
-      // Update status to failed
-      await prisma.discoveredContent.update({
-        where: { id },
-        data: { 
-          status: 'failed'
-        }
-      })
-
       return NextResponse.json({
         success: false,
         error: 'Hero resolution failed',
@@ -128,8 +114,7 @@ export async function GET(
       where: { id },
       select: {
         id: true,
-        status: true,
-        mediaAssets: true
+        hero: true
       }
     })
 
@@ -139,8 +124,7 @@ export async function GET(
 
     return NextResponse.json({
       id: content.id,
-      status: content.status,
-      mediaAssets: content.mediaAssets
+      hero: content.hero
     })
 
   } catch (error) {

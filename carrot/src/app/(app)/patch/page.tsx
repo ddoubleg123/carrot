@@ -21,5 +21,7 @@ export default async function PatchPage() {
     take: 60
   });
 
-  return <PatchPageClient patches={ patches } />;
+  const patchesWithName = patches.map((patch) => ({ ...patch, name: patch.title }))
+
+  return <PatchPageClient patches={ patchesWithName } />;
 }

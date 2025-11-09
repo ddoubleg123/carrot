@@ -18,7 +18,7 @@ export default async function ContentPage({ params }: ContentPageProps) {
   // Find the patch first
   const patch = await prisma.patch.findUnique({
     where: { handle },
-    select: { id: true, name: true, handle: true, description: true, tags: true }
+    select: { id: true, title: true, handle: true, description: true, tags: true }
   });
 
   if (!patch) {
@@ -29,17 +29,32 @@ export default async function ContentPage({ params }: ContentPageProps) {
   const content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
-      status: 'ready',
       metadata: {
         path: ['urlSlug'],
         equals: slug
       }
     },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      sourceUrl: true,
+      canonicalUrl: true,
+      relevanceScore: true,
+      qualityScore: true,
+      whyItMatters: true,
+      summary: true,
+      facts: true,
+      quotes: true,
+      provenance: true,
+      hero: true,
+      isControversy: true,
+      isHistory: true,
+      category: true,
+      metadata: true,
       patch: {
         select: {
           id: true,
-          name: true,
+          title: true,
           handle: true,
           description: true,
           tags: true
@@ -64,41 +79,50 @@ export default async function ContentPage({ params }: ContentPageProps) {
     }
   } catch {}
 
-  // Transform to DiscoveredItem format
+  const hero = (content.hero as any) || null
+  const facts = Array.isArray(content.facts as any) ? (content.facts as any) : []
+  const quotes = Array.isArray(content.quotes as any) ? (content.quotes as any) : []
+  const provenance = Array.isArray(content.provenance as any) ? (content.provenance as any) : []
+  const metadata = (content.metadata as any) || {}
+  const summary = content.summary || content.whyItMatters || ''
+  const categoryValue = typeof content.category === 'string' ? content.category : 'article'
+  const allowedTypes = new Set(['article', 'video', 'pdf', 'image', 'text'])
+  const normalizedType = allowedTypes.has(categoryValue) ? categoryValue : 'article'
+
   const discoveredItem = {
     id: content.id,
-    type: content.type as 'article' | 'video' | 'pdf' | 'image' | 'text',
+    type: normalizedType as 'article' | 'video' | 'pdf' | 'image' | 'text',
     title: content.title,
     displayTitle: content.title,
     url: content.sourceUrl || '',
     canonicalUrl: content.canonicalUrl || content.sourceUrl || '',
-    matchPct: content.relevanceScore ? content.relevanceScore / 100 : 0.8,
-    status: content.status as 'queued' | 'fetching' | 'enriching' | 'pending_audit' | 'ready' | 'failed',
+    matchPct: content.relevanceScore ?? 0,
+    status: 'ready' as const,
     media: {
-      hero: (content.mediaAssets as any)?.hero,
-      gallery: (content.mediaAssets as any)?.gallery || [],
-      videoThumb: (content.mediaAssets as any)?.videoThumb,
-      pdfPreview: (content.mediaAssets as any)?.pdfPreview,
-      blurDataURL: (content.mediaAssets as any)?.blurDataURL,
-      dominant: (content.mediaAssets as any)?.dominant,
-      source: (content.mediaAssets as any)?.source || 'generated',
-      license: (content.mediaAssets as any)?.license || 'generated'
+      hero: hero?.url,
+      gallery: [],
+      videoThumb: hero?.videoThumb,
+      pdfPreview: hero?.pdfPreview,
+      blurDataURL: hero?.blurHash,
+      dominant: hero?.dominantColor,
+      source: hero?.source ?? 'generated',
+      license: hero?.license ?? 'generated'
     },
     content: {
-      summary150: content.content?.substring(0, 150) || '',
-      keyPoints: (content.enrichedContent as any)?.keyPoints || [],
-      notableQuote: (content.enrichedContent as any)?.notableQuote,
-      readingTimeMin: (content.enrichedContent as any)?.readingTimeMin
+      summary150: summary.substring(0, 150),
+      keyPoints: facts.map((fact: any) => typeof fact?.value === 'string' ? fact.value : JSON.stringify(fact)).slice(0, 5),
+      notableQuote: quotes.length ? quotes[0]?.text : undefined,
+      readingTimeMin: undefined
     },
     meta: {
       sourceDomain: content.sourceUrl ? new URL(content.sourceUrl).hostname : 'unknown',
-      favicon: (content.metadata as any)?.favicon,
-      author: (content.metadata as any)?.author,
-      publishDate: (content.metadata as any)?.publishDate
+      favicon: metadata?.favicon,
+      author: metadata?.author,
+      publishDate: metadata?.publishDate
     },
     metadata: {
-      contentUrl: (content.metadata as any)?.contentUrl,
-      urlSlug: (content.metadata as any)?.urlSlug
+      contentUrl: metadata?.contentUrl,
+      urlSlug: metadata?.urlSlug
     }
   };
 
@@ -111,7 +135,7 @@ export async function generateMetadata({ params }: ContentPageProps) {
   // Find the patch first
   const patch = await prisma.patch.findUnique({
     where: { handle },
-    select: { id: true, name: true }
+    select: { id: true, title: true }
   });
 
   if (!patch) {
@@ -124,7 +148,6 @@ export async function generateMetadata({ params }: ContentPageProps) {
   const content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
-      status: 'ready',
       metadata: {
         path: ['urlSlug'],
         equals: slug
@@ -132,13 +155,9 @@ export async function generateMetadata({ params }: ContentPageProps) {
     },
     select: {
       title: true,
-      content: true,
-      metadata: true,
-      patch: {
-        select: {
-          name: true
-        }
-      }
+      summary: true,
+      whyItMatters: true,
+      metadata: true
     }
   });
 
@@ -149,11 +168,11 @@ export async function generateMetadata({ params }: ContentPageProps) {
   }
 
   return {
-    title: `${content.title} | ${content.patch.name}`,
-    description: content.content?.substring(0, 160) || '',
+    title: `${patch.title} · ${content.title}`,
+    description: (content.summary || content.whyItMatters || '').substring(0, 160),
     openGraph: {
       title: content.title,
-      description: content.content?.substring(0, 160) || '',
+      description: (content.summary || content.whyItMatters || '').substring(0, 160),
       type: 'article',
     },
   };

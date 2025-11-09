@@ -80,7 +80,7 @@ export class CarrotIntegration {
         query: searchQuery,
         maxAgents,
         minScore: 0.3,
-        context: `Carrot patch: ${patch.name}`,
+        context: `Carrot patch: ${patch.title}`,
       });
 
       // Create connections
@@ -142,7 +142,7 @@ export class CarrotIntegration {
         query: searchQuery,
         maxAgents,
         minScore: 0.4,
-        context: `Carrot post in ${post.patch.name}`,
+        context: `Carrot post in ${post.patch.title}`,
       });
 
       // Create connections
@@ -255,7 +255,7 @@ export class CarrotIntegration {
         query,
         maxAgents,
         minScore: 0.3,
-        context: `Carrot patch: ${patch.name}`,
+        context: `Carrot patch: ${patch.title}`,
       });
 
       return agentMatches.map(match => match.agent);
@@ -271,7 +271,7 @@ export class CarrotIntegration {
   private static createPatchQuery(patch: any): string {
     const parts: string[] = [];
     
-    if (patch.name) parts.push(patch.name);
+    if (patch.title) parts.push(patch.title);
     if (patch.description) parts.push(patch.description);
     if (patch.tags && patch.tags.length > 0) parts.push(patch.tags.join(' '));
     
@@ -298,7 +298,7 @@ export class CarrotIntegration {
     if (post.title) parts.push(post.title);
     if (post.body) parts.push(post.body);
     if (post.tags && post.tags.length > 0) parts.push(post.tags.join(' '));
-    if (post.patch?.name) parts.push(post.patch.name);
+    if (post.patch?.title) parts.push(post.patch.title);
     if (post.patch?.tags && post.patch.tags.length > 0) parts.push(post.patch.tags.join(' '));
 
     return parts.join(' ');

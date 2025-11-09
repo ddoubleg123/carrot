@@ -243,8 +243,7 @@ export async function POST(
       select: { 
         sourceUrl: true, 
         canonicalUrl: true,
-        title: true,
-        status: true 
+        title: true
       }
     });
     
@@ -257,8 +256,6 @@ export async function POST(
     
     console.log('[Start Discovery] 🗄️ URL Cache built:', {
       totalProcessed: processedUrls.length,
-      approved: processedUrls.filter(p => p.status === 'ready').length,
-      denied: processedUrls.filter(p => p.status === 'denied' || p.status === 'rejected').length,
       cacheSize: urlCache.size
     });
     

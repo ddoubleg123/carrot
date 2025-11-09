@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
@@ -70,21 +71,21 @@ export async function POST(request: NextRequest) {
     try {
       const currentItem = await prisma.discoveredContent.findUnique({
         where: { id: postId },
-        select: { mediaAssets: true }
+        select: { hero: true }
       });
 
-      const currentMediaAssets = (currentItem?.mediaAssets as any) || {};
+      const currentHero = (currentItem?.hero as any) || {};
 
       await prisma.discoveredContent.update({
         where: { id: postId },
         data: {
-          mediaAssets: {
-            ...currentMediaAssets,
-            hero: heroUrl,
+          hero: {
+            ...currentHero,
+            url: heroUrl,
             source: mediaSource,
             license: mediaSource === 'ai' ? 'generated' : 'source',
             updatedAt: new Date().toISOString()
-          }
+          } as Prisma.JsonObject
         }
       });
 

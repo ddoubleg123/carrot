@@ -1,5 +1,6 @@
 console.log('--- TOP OF PATCHES ROUTE FILE LOADED ---');
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { OPEN_EVIDENCE_V2 } from '@/lib/flags';
@@ -9,7 +10,9 @@ function sanitizeEntity(rawEntity: any) {
   if (!rawEntity || typeof rawEntity !== 'object') return undefined;
   const name = typeof rawEntity.name === 'string' ? rawEntity.name.trim() : undefined;
   const aliases = Array.isArray(rawEntity.aliases)
-    ? rawEntity.aliases.filter((value: unknown): value is string => typeof value === 'string' && value.trim()).map((value) => value.trim())
+    ? rawEntity.aliases
+        .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value: string) => value.trim())
     : undefined;
   const type = typeof rawEntity.type === 'string' ? rawEntity.type.trim() : undefined;
   const entity: Record<string, unknown> = {};
@@ -106,7 +109,7 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
         title,
         description: String(description || '').trim(),
         createdBy: session.user.id,
-        entity: rawEntity,
+        entity: rawEntity ? (rawEntity as unknown as Prisma.JsonObject) : undefined,
         tags: tags.filter((tag: any) => typeof tag === 'string'), // Ensure all tags are strings
         theme: 'light' // Default theme
       },
@@ -144,13 +147,13 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       try {
         const topic = (rawEntity?.name as string | undefined)?.trim() || title;
         const aliases = rawEntity?.aliases
-          ? (rawEntity.aliases as string[])
-          : tags.filter((tag: any): tag is string => typeof tag === 'string' && tag.trim());
+          ? (rawEntity.aliases as string[]).filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+          : tags.filter((tag: any): tag is string => typeof tag === 'string' && tag.trim().length > 0);
         guide = await generateGuideSnapshot(topic, aliases);
         await prisma.patch.update({
           where: { id: patch.id },
           data: {
-            guide
+            guide: guide as unknown as Prisma.JsonObject
           }
         });
       } catch (guideError) {
@@ -199,7 +202,7 @@ export async function GET(request: Request, context: { params: Promise<{}> }) {
     // Build where clause for search
     const where = search ? {
       OR: [
-        { name: { contains: search, mode: 'insensitive' as const } },
+        { title: { contains: search, mode: 'insensitive' as const } },
         { description: { contains: search, mode: 'insensitive' as const } },
         { tags: { has: search } }
       ]

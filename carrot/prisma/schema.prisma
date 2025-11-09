@@ -753,6 +753,7 @@ model DiscoveredContent {
   id             String   @id @default(cuid())
   patchId        String   @map("patch_id")
   canonicalUrl   String   @map("canonical_url")
+  title          String
   sourceUrl      String
   domain         String
   publishDate    DateTime? @map("publish_date")
@@ -767,6 +768,7 @@ model DiscoveredContent {
   quotes         Json?
   provenance     Json?
   hero           Json?
+  metadata       Json?
   contentHash    String?  @map("content_hash")
   createdAt      DateTime @default(now()) @map("created_at")
 

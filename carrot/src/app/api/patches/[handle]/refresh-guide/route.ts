@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { auth } from '@/auth'
-import prisma from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 import { OPEN_EVIDENCE_V2 } from '@/lib/flags'
 import { generateGuideSnapshot } from '@/lib/discovery/planner'
 
@@ -53,14 +54,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
   const entity = (patch.entity ?? {}) as { name?: string; aliases?: string[] }
   const topic = entity?.name && entity.name.trim().length ? entity.name.trim() : patch.title
   const aliases = Array.isArray(entity?.aliases) && entity.aliases.length
-    ? entity.aliases.filter((value): value is string => typeof value === 'string' && value.trim()).map((value) => value.trim())
-    : patch.tags.filter((value): value is string => typeof value === 'string' && value.trim()).map((value) => value.trim())
+    ? entity.aliases
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim())
+    : patch.tags
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim())
 
   try {
     const guide = await generateGuideSnapshot(topic, aliases)
     await prisma.patch.update({
       where: { id: patch.id },
-      data: { guide }
+      data: { guide: guide as unknown as Prisma.JsonObject }
     })
 
     return NextResponse.json({ success: true, guide })

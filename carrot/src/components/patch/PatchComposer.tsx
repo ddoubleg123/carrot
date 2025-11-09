@@ -13,7 +13,8 @@ import * as z from 'zod';
 interface Patch {
   id: string;
   handle: string;
-  name: string;
+  title?: string;
+  name?: string;
 }
 
 interface PatchComposerProps {
@@ -125,7 +126,7 @@ export default function PatchComposer({ isOpen, onClose, patch }: PatchComposerP
         <div className="flex items-center justify-between p-6 border-b border-[#E6E8EC]">
           <div>
             <h2 className="text-xl font-semibold text-[#0B0B0F]">Create Post</h2>
-            <p className="text-sm text-[#60646C] mt-1">Add content to {patch.name}</p>
+            <p className="text-sm text-[#60646C] mt-1">Add content to {patch.title || patch.name}</p>
           </div>
           <Button
             variant="ghost"

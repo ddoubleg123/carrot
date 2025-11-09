@@ -25,7 +25,7 @@ export async function POST(
       where: { handle },
       select: {
         id: true,
-        name: true,
+        title: true,
         description: true,
         tags: true,
         createdBy: true

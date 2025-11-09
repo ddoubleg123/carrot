@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(
@@ -45,20 +46,19 @@ export async function POST(
       );
     }
 
-    // Update the content with new image
+    const existingHero = (content.hero as any) || {};
+    const heroPayload: Prisma.JsonObject = {
+      ...existingHero,
+      url: imageUrl,
+      source: 'manual-update',
+      license: 'generated',
+      updatedAt: new Date().toISOString()
+    };
+
     const updatedContent = await prisma.discoveredContent.update({
       where: { id },
       data: {
-        mediaAssets: {
-          ...(content.mediaAssets as any),
-          hero: imageUrl,
-          heroImage: {
-            url: imageUrl,
-            source: 'ai-generated',
-            license: 'generated',
-            updatedAt: new Date().toISOString()
-          }
-        }
+        hero: heroPayload
       }
     });
 

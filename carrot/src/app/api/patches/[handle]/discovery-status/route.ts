@@ -25,37 +25,34 @@ export async function GET(
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const isRecentlyCreated = patch.createdAt > fiveMinutesAgo;
 
-    // Get discovery status
-    const discoveryStats = await prisma.discoveredContent.groupBy({
-      by: ['status'],
+    // Compute basic discovery metrics
+    const totalDiscovered = await prisma.discoveredContent.count({
+      where: { patchId: patch.id }
+    });
+
+    const summarizedCount = await prisma.discoveredContent.count({
       where: {
-        patchId: patch.id
-      },
-      _count: {
-        status: true
+        patchId: patch.id,
+        NOT: { summary: null }
       }
     });
 
-    // Get latest discovered content (last 3 items)
     const latestContent = await prisma.discoveredContent.findMany({
       where: {
-        patchId: patch.id,
-        status: { in: ['pending', 'approved', 'audited'] }
+        patchId: patch.id
       },
       orderBy: { createdAt: 'desc' },
       take: 3,
       select: {
         id: true,
-        type: true,
+        category: true,
         title: true,
         relevanceScore: true,
-        status: true,
+        summary: true,
         createdAt: true
       }
     });
 
-    // Calculate discovery progress
-    const totalDiscovered = discoveryStats.reduce((sum, stat) => sum + stat._count.status, 0);
     const isDiscoveryActive = isRecentlyCreated && totalDiscovered < 5; // Still discovering if < 5 items
 
     return NextResponse.json({
@@ -64,10 +61,10 @@ export async function GET(
       isRecentlyCreated,
       totalDiscovered,
       latestContent,
-      discoveryStats: discoveryStats.reduce((acc, stat) => {
-        acc[stat.status] = stat._count.status;
-        return acc;
-      }, {} as Record<string, number>)
+      discoveryStats: {
+        summarized: summarizedCount,
+        unsummarized: Math.max(0, totalDiscovered - summarizedCount)
+      }
     });
 
   } catch (error) {

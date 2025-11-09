@@ -31,7 +31,7 @@ export async function POST() {
       update: {},
       create: {
         handle: 'term-limits-politicians',
-        name: 'Term Limits for Politicians',
+        title: 'Term Limits for Politicians',
         tagline: 'Advocating for congressional term limits to prevent career politicians',
         description: 'A comprehensive movement to establish term limits for members of Congress and other elected officials to ensure fresh perspectives and prevent the concentration of power in long-serving politicians.',
         rules: '1. Be respectful in discussions\n2. Provide sources for claims\n3. Focus on policy, not personalities\n4. No spam or off-topic content',
@@ -40,7 +40,7 @@ export async function POST() {
         createdBy: user.id,
       }
     });
-    console.log('✅ Created/updated patch:', termLimitsPatch.name);
+    console.log('✅ Created/updated patch:', termLimitsPatch.title);
 
     // Create the History patch
     const historyPatch = await prisma.patch.upsert({
@@ -48,7 +48,7 @@ export async function POST() {
       update: {},
       create: {
         handle: 'history',
-        name: 'History',
+        title: 'History',
         tagline: 'Comprehensive historical research and documentation',
         description: 'A scholarly repository dedicated to historical research, documentation, and analysis. Explore historical events, sources, and scholarly discussions.',
         rules: '1. Maintain academic rigor\n2. Cite primary sources\n3. Respect historical accuracy\n4. Encourage scholarly debate',
@@ -57,7 +57,7 @@ export async function POST() {
         createdBy: user.id,
       }
     });
-    console.log('✅ Created/updated patch:', historyPatch.name);
+    console.log('✅ Created/updated patch:', historyPatch.title);
 
     // Create some basic facts for term limits patch
     const termLimitsFacts = [
@@ -325,12 +325,12 @@ export async function POST() {
         {
           id: termLimitsPatch.id,
           handle: termLimitsPatch.handle,
-          name: termLimitsPatch.name
+          title: termLimitsPatch.title
         },
         {
           id: historyPatch.id,
           handle: historyPatch.handle,
-          name: historyPatch.name
+          title: historyPatch.title
         }
       ]
     });

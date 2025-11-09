@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { transcribeWithVosk } from '@/lib/asr/vosk';
 import { polishTranscript, deepseekAudit } from '@/lib/audit/deepseek';
@@ -45,25 +46,51 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
 
     // If targeting external DiscoveredContent (video), store excerpt and route
     if (contentId) {
-      const updated = await prisma.discoveredContent.update({
+      const existing = await prisma.discoveredContent.findUnique({
+        where: { id: contentId },
+        select: { metadata: true }
+      });
+
+      if (!existing) {
+        return NextResponse.json({ ok: false, error: 'content not found' }, { status: 404 });
+      }
+
+      const snippet = polished.length > 240 ? `${polished.slice(0, 240)}…` : polished;
+      let metadata = (existing.metadata as any) || {};
+      metadata = {
+        ...metadata,
+        transcriptPreview: snippet,
+        transcriptUpdatedAt: new Date().toISOString(),
+        transcriptionSource: 'internal/transcribe'
+      };
+
+      await prisma.discoveredContent.update({
         where: { id: contentId },
         data: {
-          content: polished.slice(0, 150) + (polished.length > 150 ? '…' : ''),
-          status: 'enriching',
-        },
+          summary: snippet,
+          metadata: metadata as Prisma.JsonObject
+        }
       });
 
       // Run audit on polished transcript for better tags/summary, then auto-route
       const audit = await deepseekAudit({ text: polished, kind: 'video' });
       const { score, decision } = relevanceScore({ content: { tags: audit.tags } });
-      const routedStatus = decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected';
+      const normalisedScore = Math.max(0, Math.min(1, score));
+
+      metadata = {
+        ...metadata,
+        transcriptFull: polished,
+        transcriptDecision: decision,
+        audit
+      };
 
       await prisma.discoveredContent.update({
         where: { id: contentId },
         data: {
-          content: audit.summaryShort,
-          status: routedStatus,
-          relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
+          summary: audit.summaryShort || snippet,
+          metadata: metadata as Prisma.JsonObject,
+          relevanceScore: normalisedScore,
+          qualityScore: audit.qualityScore ?? 0
         },
       });
 

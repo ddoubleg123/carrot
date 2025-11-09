@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { extractReadableContent, extractKeyPoints, extractTimeline, extractEntities } from '@/lib/readability'
 import { sanitizeHtml, formatHtmlForDisplay } from '@/lib/sanitizeHtml'
@@ -26,10 +27,19 @@ export async function GET(
     // Fetch content from database
     const content = await prisma.discoveredContent.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        summary: true,
+        whyItMatters: true,
+        facts: true,
+        metadata: true,
+        hero: true,
+        sourceUrl: true,
+        category: true,
         patch: {
           select: {
-            name: true,
+            title: true,
             handle: true,
             tags: true
           }
@@ -42,24 +52,44 @@ export async function GET(
     }
     
     // Extract metadata from JSON fields
-    const metadata = content.metadata as any || {}
-    const mediaAssets = content.mediaAssets as any || {}
-    const enrichedContent = content.enrichedContent as any || {}
+    let metadata = (content.metadata as any) || {}
+    const heroData = (content.hero as any) || {}
+    const facts = Array.isArray(content.facts as any)
+      ? (content.facts as any[])
+      : []
+    const baseSummary: string = metadata.summary150 || content.summary || content.whyItMatters || ''
+    const baseKeyPoints: string[] = Array.isArray(metadata.keyPoints)
+      ? metadata.keyPoints
+      : facts
+          .map((fact) => {
+            if (typeof fact === 'string') return fact
+            if (fact && typeof fact.value === 'string') return fact.value
+            if (fact && typeof fact.text === 'string') return fact.text
+            return null
+          })
+          .filter((value): value is string => Boolean(value))
+          .slice(0, 6)
     
     // Build preview data
-    const sourceDomain = metadata.sourceDomain || new URL(content.sourceUrl || 'https://unknown.com').hostname.replace('www.', '')
-    
+    const sourceDomain = metadata.sourceDomain || (() => {
+      try {
+        return new URL(content.sourceUrl || 'https://unknown.com').hostname.replace('www.', '')
+      } catch {
+        return 'unknown.com'
+      }
+    })()
+
     const preview: ContentPreview = {
       id: content.id,
       title: content.title,
-      summary: enrichedContent.summary150 || (content.content || '').substring(0, 150),
-      keyPoints: enrichedContent.keyPoints || [],
+      summary: baseSummary.substring(0, 240),
+      keyPoints: baseKeyPoints,
       excerptHtml: '',
       entities: metadata.entities || [],
       timeline: metadata.timeline || [],
       media: {
-        hero: mediaAssets.heroImage?.url || mediaAssets.hero,
-        dominant: mediaAssets.dominantColor
+        hero: heroData?.url,
+        dominant: heroData?.dominantColor || heroData?.dominant
       },
       source: {
         url: content.sourceUrl || '',
@@ -71,7 +101,7 @@ export async function GET(
       meta: {
         author: metadata.author,
         publishDate: metadata.publishDate,
-        readingTime: enrichedContent.readingTimeMin || Math.ceil((content.content || '').length / 1000)
+        readingTime: metadata.readingTimeMin || Math.ceil((baseSummary || '').length / 1000)
       }
     }
     
@@ -119,21 +149,22 @@ export async function GET(
           }
           
           // Update database with extracted content
+          metadata = {
+            ...metadata,
+            extractedAt: new Date().toISOString(),
+            summary150: preview.summary,
+            keyPoints: preview.keyPoints,
+            readingTimeMin: preview.meta.readingTime,
+            timeline: preview.timeline,
+            entities: preview.entities,
+            rawText: readable.textContent
+          }
+
           await prisma.discoveredContent.update({
             where: { id },
             data: {
-              enrichedContent: {
-                ...enrichedContent,
-                summary150: preview.summary,
-                keyPoints: preview.keyPoints,
-                readingTimeMin: preview.meta.readingTime
-              },
-              metadata: {
-                ...metadata,
-                extractedAt: new Date().toISOString(),
-                timeline: preview.timeline,
-                entities: preview.entities
-              }
+              summary: preview.summary || content.summary || '',
+              metadata: metadata as Prisma.JsonObject
             }
           })
           
@@ -156,7 +187,7 @@ export async function GET(
         const { enrichContentWithDeepSeek, enrichContentFallback } = await import('@/lib/summarize/enrichContent')
         
         // Get article text for enrichment
-        let articleText = content.content || ''
+        let articleText = typeof metadata.rawText === 'string' ? metadata.rawText : ''
         
         // If we don't have good content, try to fetch it
         if (articleText.length < 500 && content.sourceUrl) {
@@ -166,6 +197,7 @@ export async function GET(
               const html = await fetchResponse.text()
               const readable = extractReadableContent(html, content.sourceUrl)
               articleText = readable.textContent
+              metadata.rawText = articleText
             }
           } catch (fetchError) {
             console.warn(`[ContentPreview] Could not fetch source for enrichment:`, fetchError)
@@ -193,21 +225,21 @@ export async function GET(
           }))
           
           // Update database with AI-enriched content
+          metadata = {
+            ...metadata,
+            summary150: preview.summary,
+            keyPoints: preview.keyPoints,
+            context: preview.context,
+            aiEnriched: true,
+            enrichedAt: new Date().toISOString(),
+            entities: preview.entities
+          }
+
           await prisma.discoveredContent.update({
             where: { id },
             data: {
-              enrichedContent: {
-                ...enrichedContent,
-                summary150: preview.summary,
-                keyPoints: preview.keyPoints,
-                context: preview.context,
-                aiEnriched: true,
-                enrichedAt: new Date().toISOString()
-              },
-              metadata: {
-                ...metadata,
-                entities: preview.entities
-              }
+              summary: preview.summary,
+              metadata: metadata as Prisma.JsonObject
             }
           })
         } else {
@@ -225,14 +257,14 @@ export async function GET(
         
         // Last resort fallback
         if (preview.summary.length < 120) {
-          preview.summary = (content.content || '').substring(0, 240)
+          preview.summary = baseSummary.substring(0, 240)
         }
         
         if (preview.keyPoints.length < 3) {
-          const contentText = content.content || ''
+          const contentText = typeof metadata.rawText === 'string' ? metadata.rawText : baseSummary
           const sentences = contentText.split(/[.!?]+/)
-            .map(s => s.trim())
-            .filter(s => s.length > 20 && s.length < 120)
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 20 && s.length < 120)
             .slice(0, 7)
           
           preview.keyPoints = sentences.slice(0, 7)

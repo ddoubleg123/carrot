@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     })
     if (!user) return NextResponse.json({ success: false, error: `User not found: ${username}` }, { status: 404 })
 
-    const patches = await prisma.patch.findMany({ select: { id: true, handle: true, name: true } })
+    const patches = await prisma.patch.findMany({ select: { id: true, handle: true, title: true } })
 
     let updated = 0
     for (const p of patches) {

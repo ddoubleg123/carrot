@@ -9,7 +9,7 @@ import AgentConnectionModal from './AgentConnectionModal';
 
 interface Patch {
   id: string;
-  name: string;
+  title: string;
   _count: {
     members: number;
   };
@@ -160,7 +160,7 @@ export default function RightRail({
                       )}
                     </div>
                     <p className="text-sm text-slate-600">
-                      {followers.length} people following {patch.name}
+                      {followers.length} people following {patch.title}
                     </p>
                   </div>
                 ) : (

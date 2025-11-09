@@ -1129,28 +1129,48 @@ export class DiscoveryOrchestrator {
           title: item.title,
           sourceUrl: item.url,
           canonicalUrl,
-          content: item.content,
-          type: 'article',
-          status: 'ready',
-          relevanceScore: item.relevanceScore,
-          enrichedContent: JSON.stringify({
-            summary: item.summary,
-            keyPoints: item.keyPoints,
-            notableQuotes: item.notableQuotes || []
-          }),
-          mediaAssets: JSON.stringify({
-            hero: item.heroUrl,
-            source: item.heroSource
-          }),
-          metadata: JSON.stringify({
+          domain: item.domain || (() => {
+            try {
+              return new URL(item.url).hostname.replace(/^www\./, '')
+            } catch {
+              return 'unknown'
+            }
+          })(),
+          category: 'article',
+          summary: item.summary || item.content.substring(0, 240),
+          whyItMatters: '',
+          relevanceScore: item.relevanceScore ?? 0,
+          qualityScore: item.qualityScore ?? 0,
+          facts: (item.keyPoints || []).map((point: string, index: number) => ({
+            label: `Insight ${index + 1}`,
+            value: point,
+            citation: item.url
+          })) as Prisma.InputJsonValue,
+          quotes: (item.notableQuotes || []).map((quote: any) => ({
+            text: typeof quote === 'string' ? quote : quote?.text,
+            speaker: quote?.speaker,
+            citation: quote?.citation || item.url
+          })) as Prisma.InputJsonValue,
+          provenance: [item.url] as unknown as Prisma.InputJsonValue,
+          hero: {
+            url: item.heroUrl,
+            source: item.heroSource,
+            license: item.heroSource === 'ai' ? 'generated' : 'source',
+            enrichedAt: new Date().toISOString(),
+            origin: 'legacy-orchestrator'
+          } as Prisma.JsonObject,
+          metadata: {
             sourceDomain: item.domain,
-            urlSlug: urlSlug,
-            contentUrl: contentUrl,
-            relevanceScore: item.relevanceScore
-          })
+            urlSlug,
+            contentUrl,
+            keyPoints: item.keyPoints || [],
+            notableQuotes: item.notableQuotes || [],
+            relevanceScore: item.relevanceScore,
+            processedAt: new Date().toISOString()
+          } as Prisma.JsonObject
         }
       })
-    
+ 
       // Return properly formatted DiscoveredItem
       return {
         id: savedItem.id,
@@ -1165,7 +1185,7 @@ export class DiscoveryOrchestrator {
           license: item.heroSource === 'ai' ? 'generated' : 'source'
         },
         content: {
-          summary150: item.summary,
+          summary150: item.summary || item.content.substring(0, 150),
           keyPoints: item.keyPoints,
           readingTimeMin: Math.ceil(item.content.split(' ').length / 200) // ~200 words per minute
         },

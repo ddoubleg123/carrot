@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resolveHero } from '@/lib/media/resolveHero'
-import { MediaAssets } from '@/lib/media/hero-types'
 import { Prisma } from '@prisma/client'
 
 /**
@@ -12,29 +11,39 @@ import { Prisma } from '@prisma/client'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { patchId, limit = 10, status = 'ready' } = body
+    const { patchId, limit = 10, status = 'missing' } = body
 
     console.log('[Batch Enrich] Starting batch enrichment:', { patchId, limit, status })
 
-    // Find content items that need enrichment
-    const whereClause = {
-      ...(patchId && { patchId }),
-      status,
+    const baseWhere: Record<string, unknown> = {
+      ...(patchId && { patchId })
+    }
+
+    const heroMissingFilter = {
       OR: [
-        { mediaAssets: { equals: Prisma.JsonNull } },
-        { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
-        { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
+        { hero: { equals: Prisma.JsonNull } },
+        { hero: { path: ['url'], equals: Prisma.JsonNull } }
       ]
     }
+
+    const heroPresentFilter = {
+      hero: { path: ['url'], not: Prisma.JsonNull }
+    }
+
+    const whereClause = status === 'hasHero'
+      ? { ...baseWhere, ...heroPresentFilter }
+      : status === 'all'
+        ? baseWhere
+        : { ...baseWhere, ...heroMissingFilter }
 
     const contentItems = await prisma.discoveredContent.findMany({
       where: whereClause,
       select: {
         id: true,
-        type: true,
+        category: true,
         sourceUrl: true,
-        mediaAssets: true,
-        status: true
+        summary: true,
+        hero: true
       },
       take: limit,
       orderBy: { createdAt: 'desc' }
@@ -47,43 +56,35 @@ export async function POST(request: NextRequest) {
 
     for (const item of contentItems) {
       try {
-        console.log('[Batch Enrich] Processing item:', item.id, 'type:', item.type)
-
-        // Update status to enriching
-        await prisma.discoveredContent.update({
-          where: { id: item.id },
-          data: { status: 'enriching' }
-        })
+        console.log('[Batch Enrich] Processing item:', item.id, 'category:', item.category)
 
         // Resolve hero image
         const heroResult = await resolveHero({
           url: item.sourceUrl || undefined,
-          type: item.type as any
+          type: (item.category as any) || 'article',
+          summary: item.summary || undefined
         })
 
-        // Update mediaAssets
-        const existingMedia = item.mediaAssets as MediaAssets | null
-        const updatedMediaAssets: MediaAssets = {
-          ...existingMedia,
-          hero: heroResult.hero,
-          blurDataURL: heroResult.blurDataURL,
-          dominant: heroResult.dominant,
+        const heroPayload: Prisma.JsonObject = {
+          url: heroResult.hero,
           source: heroResult.source,
-          license: heroResult.license
+          license: heroResult.license,
+          blurDataURL: heroResult.blurDataURL,
+          dominantColor: heroResult.dominant,
+          enrichedAt: new Date().toISOString(),
+          origin: 'batch-enrich'
         }
 
-        // Update database
         await prisma.discoveredContent.update({
           where: { id: item.id },
           data: { 
-            mediaAssets: updatedMediaAssets as any, // Cast to satisfy Prisma JSON type
-            status: 'ready'
+            hero: heroPayload
           }
         })
 
         results.push({
           id: item.id,
-          type: item.type,
+          category: item.category,
           source: heroResult.source,
           success: true
         })
@@ -93,15 +94,9 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error('[Batch Enrich] Failed to enrich item:', item.id, error)
 
-        // Update status to failed
-        await prisma.discoveredContent.update({
-          where: { id: item.id },
-          data: { status: 'failed' }
-        })
-
         errors.push({
           id: item.id,
-          type: item.type,
+          category: item.category,
           error: error instanceof Error ? error.message : 'Unknown error'
         })
       }
@@ -140,29 +135,20 @@ export async function GET(request: NextRequest) {
       ...(patchId && { patchId })
     }
 
-    // Get counts by status
-    const [total, ready, enriching, failed, needsEnrichment] = await Promise.all([
+    const heroMissingFilter = {
+      OR: [
+        { hero: { equals: Prisma.JsonNull } },
+        { hero: { path: ['url'], equals: Prisma.JsonNull } }
+      ]
+    }
+
+    const [total, needsEnrichment] = await Promise.all([
       prisma.discoveredContent.count({ where: whereClause }),
-      prisma.discoveredContent.count({ where: { ...whereClause, status: 'ready' } }),
-      prisma.discoveredContent.count({ where: { ...whereClause, status: 'enriching' } }),
-      prisma.discoveredContent.count({ where: { ...whereClause, status: 'failed' } }),
-      prisma.discoveredContent.count({
-        where: {
-          ...(patchId && { patchId }),
-          OR: [
-            { mediaAssets: { equals: Prisma.JsonNull } },
-            { mediaAssets: { path: ['hero'], equals: Prisma.JsonNull } },
-            { mediaAssets: { path: ['source'], equals: Prisma.JsonNull } }
-          ]
-        }
-      })
+      prisma.discoveredContent.count({ where: { ...whereClause, ...heroMissingFilter } })
     ])
 
     return NextResponse.json({
       total,
-      ready,
-      enriching,
-      failed,
       needsEnrichment,
       enriched: total - needsEnrichment
     })

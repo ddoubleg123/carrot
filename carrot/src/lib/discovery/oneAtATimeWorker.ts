@@ -286,31 +286,40 @@ export class OneAtATimeWorker {
       const savedItem = await prisma.discoveredContent.create({
         data: {
           patchId,
-          type: source.type,
           title: source.title,
-          content,
+          summary: content.substring(0, 240),
+          whyItMatters: '',
           sourceUrl: source.url,
           canonicalUrl,
-          relevanceScore: source.relevanceScore,
-          tags: ['chicago-bulls', 'basketball'],
-          status: 'ready',
-          enrichedContent: {
-            summary150: content.substring(0, 150),
-            keyPoints: this.extractKeyPoints(content),
-            readingTimeMin: Math.ceil(content.length / 1000)
-          },
-          mediaAssets: {
-            heroImage: {
-              url: heroResult.url,
-              source: heroResult.source,
-              license: heroResult.source === 'ai-generated' ? 'generated' : 'fair-use'
+          domain: source.metadata.domain || (() => {
+            try {
+              return new URL(source.url).hostname.replace(/^www\./, '')
+            } catch {
+              return 'unknown'
             }
-          },
+          })(),
+          category: (source.type as any) || 'article',
+          relevanceScore: source.relevanceScore ?? 0.5,
+          qualityScore: 0,
+          facts: this.extractKeyPoints(content).map((point, index) => ({
+            label: `Insight ${index + 1}`,
+            value: point,
+            citation: source.url
+          })) as Prisma.InputJsonValue,
+          provenance: [source.url] as unknown as Prisma.InputJsonValue,
+          hero: {
+            url: heroResult.url,
+            source: heroResult.source,
+            license: heroResult.source === 'ai-generated' ? 'generated' : 'fair-use',
+            generatedAt: new Date().toISOString(),
+            origin: 'one-at-a-time'
+          } as Prisma.JsonObject,
           metadata: {
             sourceDomain: source.metadata.domain,
             urlSlug: `${source.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`,
-            contentUrl: `/patch/${patchHandle}/content/${source.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`
-          }
+            contentUrl: `/patch/${patchHandle}/content/${source.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50)}-${Math.random().toString(36).substring(7)}`,
+            processedAt: new Date().toISOString()
+          } as Prisma.JsonObject
         }
       })
       

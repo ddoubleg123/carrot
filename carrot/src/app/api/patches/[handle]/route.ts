@@ -21,7 +21,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ handle: str
 
     const patch = await prisma.patch.findUnique({ 
       where: { handle }, 
-      select: { id: true, createdBy: true, name: true } 
+      select: { id: true, createdBy: true, title: true } 
     })
     
     if (!patch) {
@@ -29,7 +29,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ handle: str
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
     }
 
-    console.log('[PATCH DELETE] Found patch:', { id: patch.id, name: patch.name, createdBy: patch.createdBy })
+    console.log('[PATCH DELETE] Found patch:', { id: patch.id, title: patch.title, createdBy: patch.createdBy })
 
     // Check admin: creator or has member role=admin
     const isCreator = patch.createdBy === session.user.id

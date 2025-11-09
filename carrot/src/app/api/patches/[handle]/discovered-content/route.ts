@@ -36,8 +36,7 @@ export async function GET(
     const t3 = Date.now();
     const allContent = await prisma.discoveredContent.findMany({
       where: {
-        patchId: patch.id,
-        status: 'ready'
+        patchId: patch.id
       },
       orderBy: [
         { relevanceScore: 'desc' }, // Most relevant first
@@ -50,10 +49,9 @@ export async function GET(
         title: true,
         sourceUrl: true,
         canonicalUrl: true,
-        type: true,
-        content: true,
+        category: true,
+        summary: true,
         relevanceScore: true,
-        status: true,
         createdAt: true,
         whyItMatters: true,
         facts: true,
@@ -99,11 +97,30 @@ export async function GET(
       const heroRaw = parseJson<DiscoveryHero | null>(item.hero, null)
       const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
 
-      const facts: DiscoveryFact[] = factsRaw.map((fact, index) => ({
-        label: fact?.label || `Fact ${index + 1}`,
-        value: fact?.value || '',
-        citation: fact?.citation || primaryUrl
-      })).filter(fact => fact.value)
+      const facts: DiscoveryFact[] = factsRaw.map((fact, index) => {
+        if (typeof fact === 'string') {
+          return {
+            label: `Fact ${index + 1}`,
+            value: fact,
+            citation: primaryUrl
+          }
+        }
+
+        if (fact && typeof fact === 'object') {
+          const textValue = (fact as any).value || (fact as any).text || ''
+          return {
+            label: (fact as any).label || `Fact ${index + 1}`,
+            value: textValue,
+            citation: (fact as any).citation || primaryUrl
+          }
+        }
+
+        return {
+          label: `Fact ${index + 1}`,
+          value: '',
+          citation: primaryUrl
+        }
+      }).filter(fact => fact.value)
 
       const quotes: DiscoveryQuote[] = quotesRaw.slice(0, 3).map((quote) => ({
         text: quote?.text || '',
@@ -122,13 +139,15 @@ export async function GET(
         url: primaryUrl,
         canonicalUrl: primaryUrl,
         domain,
-        sourceType: metadataRaw?.sourceType || item.type || 'article',
+        sourceType: metadataRaw?.sourceType || item.category || 'article',
         credibilityTier: metadataRaw?.credibilityTier,
         angle: metadataRaw?.angle,
         noveltySignals: metadataRaw?.noveltySignals,
         expectedInsights: metadataRaw?.expectedInsights,
         reason: metadataRaw?.reason,
-        whyItMatters: (typeof item.whyItMatters === 'string' && item.whyItMatters.trim()) ? item.whyItMatters.trim() : (metadataRaw?.summary || ''),
+        whyItMatters: (typeof item.whyItMatters === 'string' && item.whyItMatters.trim())
+          ? item.whyItMatters.trim()
+          : (metadataRaw?.summary150 || item.summary || ''),
         facts,
         quotes,
         provenance,
@@ -151,12 +170,6 @@ export async function GET(
       const verifyOne = async (item: any) => {
         const url = item.canonicalUrl || item.url
         if (!url) return { ok: false, item }
-
-        // If item already has lastVerifiedStatus in metadata, respect it fast-path
-        const lastVerified = (item.metadata as any)?.lastVerifiedStatus
-        if (typeof lastVerified === 'number') {
-          return { ok: lastVerified < 400, item }
-        }
 
         try {
           const verifyRes = await fetch(`${baseUrl}/api/internal/links/verify?url=${encodeURIComponent(url)}`, {

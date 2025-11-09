@@ -93,7 +93,9 @@ export default async function PatchPage({
     }
 
     // Get followers data
-    const actualFollowers = patch.members.map(member => ({
+    const patchWithName = { ...patch, name: patch.title }
+
+    const actualFollowers = patchWithName.members.map(member => ({
       id: member.id,
       user: {
         id: member.user.id,
@@ -105,7 +107,7 @@ export default async function PatchPage({
     }));
 
     const actualFollowerCount = actualFollowers.length;
-    const botSubscriptionsWithBotData = patch.botSubscriptions.map(sub => ({
+    const botSubscriptionsWithBotData = patchWithName.botSubscriptions.map(sub => ({
       id: sub.id,
       botId: sub.botId,
       ownerUserId: sub.ownerUserId,
@@ -113,7 +115,7 @@ export default async function PatchPage({
     }));
 
     // Format events for timeline
-    const formattedEvents = (patch.members || []).map(member => ({
+    const formattedEvents = (patchWithName.members || []).map(member => ({
       id: `member-${member.user.id}`,
       title: `${member.user.name} joined the patch`,
       dateStart: member.joinedAt.toISOString(),
@@ -138,8 +140,8 @@ export default async function PatchPage({
           {/* Header */}
           <PatchHeader
             patch={{
-              ...patch,
-              updatedAt: patch.updatedAt.toISOString()
+              ...patchWithName,
+              updatedAt: patchWithName.updatedAt.toISOString()
             }}
             userTheme={actualUserTheme ? {
               mode: actualUserTheme.mode as 'preset' | 'image',
@@ -153,19 +155,19 @@ export default async function PatchPage({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
               {/* Main Content Area */}
               <div className="max-w-[880px] min-w-0">
-                <PatchTabs activeTab={activeTab} patch={patch}>
-                  {activeTab === 'overview' && <Overview patch={patch} />}
-                  {activeTab === 'documents' && <DocumentsView patch={patch} />}
-                  {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patch.id} />}
-                  {activeTab === 'sources' && <SourcesView patch={patch} patchHandle={handle} />}
-                  {activeTab === 'discussions' && <DiscussionsView patch={patch} />}
+                <PatchTabs activeTab={activeTab} patch={patchWithName}>
+                  {activeTab === 'overview' && <Overview patch={patchWithName} />}
+                  {activeTab === 'documents' && <DocumentsView patch={patchWithName} />}
+                  {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
+                  {activeTab === 'sources' && <SourcesView patch={patchWithName} patchHandle={handle} />}
+                  {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
                 </PatchTabs>
               </div>
 
               {/* Right Rail */}
               <div className="w-[320px] shrink-0 min-w-0">
                 <RightRail
-                  patch={patch}
+                  patch={patchWithName}
                   followers={actualFollowers}
                   botSubscriptions={botSubscriptionsWithBotData as any}
                   followerCount={actualFollowerCount}
@@ -202,7 +204,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const patch = await prisma.patch.findUnique({
     where: { handle },
     select: {
-      name: true,
+      title: true,
       description: true,
       tags: true,
     }
@@ -215,7 +217,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   }
 
   return {
-    title: `${patch.name} - Carrot Patch`,
+    title: `${patch.title} - Carrot Patch`,
     description: patch.description,
     keywords: patch.tags.join(', '),
   };

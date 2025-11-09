@@ -95,7 +95,7 @@ export async function GET() {
       patchData: patch ? {
         id: patch.id,
         handle: patch.handle,
-        name: patch.name,
+        name: patch.title,
         tagline: patch.tagline,
         theme: patch.theme,
         factsCount: patch.facts.length,

@@ -82,7 +82,7 @@ export async function GET(
     // Legacy behaviour when feature flag is disabled
     const patch = await prisma.patch.findUnique({
       where: { handle },
-      select: { id: true, name: true }
+      select: { id: true, title: true }
     })
     
     if (!patch) {
@@ -105,7 +105,7 @@ export async function GET(
         // Start discovery orchestrator
         const orchestrator = new DiscoveryOrchestrator(
           patch.id,
-          patch.name,
+          patch.title,
           handle,
           eventStream,
           run.id

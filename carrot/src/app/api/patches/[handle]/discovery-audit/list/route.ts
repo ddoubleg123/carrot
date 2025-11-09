@@ -51,7 +51,7 @@ export async function GET(
         patch: {
           select: {
             handle: true,
-            name: true
+            title: true
           }
         }
       }
@@ -66,7 +66,7 @@ export async function GET(
         patch: {
           select: {
             handle: true,
-            name: true
+            title: true
           }
         }
       }
@@ -89,7 +89,7 @@ export async function GET(
             patch: {
               select: {
                 handle: true,
-                name: true
+                title: true
               }
             }
           }

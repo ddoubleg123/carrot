@@ -67,7 +67,7 @@ export async function GET(
           caption: patch.description
         },
         text: {
-          headline: patch.name,
+          headline: patch.title,
           text: patch.description
         }
       },

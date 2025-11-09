@@ -22,7 +22,7 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
       where: { id: patchId },
       select: {
         id: true,
-        name: true,
+        title: true,
         description: true,
         tags: true
       }
@@ -36,7 +36,6 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
     const pendingContent = await prisma.discoveredContent.findMany({
       where: {
         patchId,
-        status: 'pending'
       },
       orderBy: [
         { relevanceScore: 'desc' },
@@ -64,7 +63,7 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
           },
           body: JSON.stringify({
             contentId: content.id,
-            patchName: patch.name,
+            patchName: patch.title,
             patchDescription: patch.description,
             patchTags: patch.tags,
             patchCategories: [] // We don't store categories in the patch model yet

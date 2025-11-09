@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
     // Find discovered content for the patch
     const patch = await prisma.patch.findFirst({
       where: { handle: patchHandle },
-      select: { id: true, name: true }
+      select: { id: true, title: true }
     })
 
     if (!patch) {
@@ -38,9 +39,8 @@ export async function POST(request: NextRequest) {
     const itemsToProcess = forceRegenerate 
       ? discoveredContent
       : discoveredContent.filter(item => {
-          if (!item.mediaAssets) return true
-          const assets = item.mediaAssets as any
-          return !assets.heroImage || !assets.heroImage.url
+          const hero = item.hero as any
+          return !hero || !hero.url
         })
 
     console.log(`[Backfill AI Images] Found ${itemsToProcess.length} items to process`)
@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             title: item.title,
-            summary: item.content || 'No summary available',
+            summary: item.summary || item.whyItMatters || 'No summary available',
             sourceDomain: item.sourceUrl ? new URL(item.sourceUrl).hostname : 'unknown',
-            contentType: item.type || 'article',
-            patchTheme: patch.name,
+            contentType: item.category || 'article',
+            patchTheme: patch.title,
             artisticStyle: 'photorealistic',
             enableHiresFix: true
           })
@@ -80,18 +80,15 @@ export async function POST(request: NextRequest) {
         }
 
         // Update the discovered content with the AI-generated image
-        const currentMediaAssets = (item.mediaAssets as any) || {}
-        
         await prisma.discoveredContent.update({
           where: { id: item.id },
           data: {
-            mediaAssets: {
-              ...currentMediaAssets,
-              hero: aiResult.imageUrl,
+            hero: {
+              url: aiResult.imageUrl,
               source: 'ai-generated',
               license: 'generated',
               updatedAt: new Date().toISOString()
-            }
+            } as Prisma.JsonObject
           }
         })
 
@@ -117,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      patch: patch.name,
+      patch: patch.title,
       processed: discoveredContent.length,
       successful: results.length,
       failed: errors.length,
@@ -152,7 +149,7 @@ export async function GET(request: NextRequest) {
 
     const patch = await prisma.patch.findFirst({
       where: { handle: patchHandle },
-      select: { id: true, name: true }
+      select: { id: true, title: true }
     })
 
     if (!patch) {
@@ -167,7 +164,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         title: true,
-        mediaAssets: true,
+        hero: true,
         createdAt: true
       },
       orderBy: { createdAt: 'desc' }
@@ -176,27 +173,27 @@ export async function GET(request: NextRequest) {
     const stats = {
       total: discoveredContent.length,
       withHero: discoveredContent.filter(item => {
-        const mediaAssets = item.mediaAssets as any
-        return mediaAssets?.hero
+        const hero = item.hero as any
+        return hero?.url
       }).length,
       withoutHero: discoveredContent.filter(item => {
-        const mediaAssets = item.mediaAssets as any
-        return !mediaAssets?.hero
+        const hero = item.hero as any
+        return !hero?.url
       }).length,
       aiGenerated: discoveredContent.filter(item => {
-        const mediaAssets = item.mediaAssets as any
-        return mediaAssets?.source === 'ai-generated'
+        const hero = item.hero as any
+        return hero?.source === 'ai-generated'
       }).length
     }
 
     return NextResponse.json({
-      patch: patch.name,
+      patch: patch.title,
       stats,
       items: discoveredContent.map(item => ({
         id: item.id,
         title: item.title,
-        hasHero: !!(item.mediaAssets as any)?.hero,
-        source: (item.mediaAssets as any)?.source,
+        hasHero: !!(item.hero as any)?.url,
+        source: (item.hero as any)?.source,
         createdAt: item.createdAt
       }))
     })

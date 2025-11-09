@@ -29,6 +29,9 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
     const type = (['article','video','image','pdf','text'] as const).includes(body?.type) ? body.type : 'article';
     const patchHint = typeof body?.patchHint === 'string' ? body.patchHint : undefined;
     const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl : undefined;
+    const submittedBy = typeof body?.submittedBy === 'string' ? body.submittedBy : 'anonymous';
+    const submittedNotes = typeof body?.notes === 'string' ? body.notes : '';
+    const submittedTags = Array.isArray(body?.tags) ? body.tags.filter((tag: unknown) => typeof tag === 'string') : [];
 
     const canonicalUrl = canonicalizeUrlFast(chooseCanonical(url, undefined) || url || `generated://${randomUUID()}`);
 
@@ -41,19 +44,42 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
 
     // Create discovered content
     let item;
+    let latestSummary = '';
+    let latestWhyItMatters: string | null = null;
+    let latestQuality = 0;
+    let latestRelevance = 0.5;
     try {
       item = await prisma.discoveredContent.create({
         data: {
           patchId: patchId || (await fallbackFirstPatchId()),
-          type,
           title: title || (url ? new URL(url).hostname : 'Untitled'),
-          content: '',
-          relevanceScore: 5,
+          summary: '',
+          whyItMatters: null,
+          relevanceScore: 0.5,
+          qualityScore: 0,
           sourceUrl: url,
           canonicalUrl,
-          tags: [],
-          status: 'enriching',
-        },
+          domain: (() => {
+            try {
+              return url ? new URL(url).hostname.replace(/^www\./, '') : 'manual';
+            } catch {
+              return 'manual';
+            }
+          })(),
+          metadata: {
+            source: 'manual',
+            notes: submittedNotes,
+            tags: submittedTags,
+            addedBy: submittedBy,
+            addedAt: new Date().toISOString(),
+            urlSlug: `${(title || canonicalUrl || 'content').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Math.random().toString(36).slice(2, 8)}`
+          } as Prisma.JsonObject,
+          category: type || 'article',
+          facts: Prisma.JsonNull,
+          quotes: Prisma.JsonNull,
+          provenance: Prisma.JsonNull,
+          hero: Prisma.JsonNull
+        }
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -65,6 +91,16 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
       throw error;
     }
 
+    // Normalise metadata helper
+    const baseMetadata: Prisma.JsonObject = (() => {
+      if (item?.metadata && typeof item.metadata === 'object' && item.metadata !== null) {
+        return { ...(item.metadata as Prisma.JsonObject) };
+      }
+      return {};
+    })();
+
+    const normaliseScore = (score: number) => Math.max(0, Math.min(1, score));
+
     if (type === 'video' && mediaUrl) {
       // Video path: transcribe with Vosk, polish with DeepSeek, then audit+route
       const vosk = await transcribeWithVosk({ audioUrl: mediaUrl });
@@ -72,38 +108,62 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         // Fall back to URL-only audit if ASR fails
         const fallbackAudit = await deepseekAudit({ text: `${title || ''} ${url || ''}`.trim() || 'video', kind: 'video' });
         const { score, decision } = relevanceScore({ content: { tags: fallbackAudit.tags } });
+        latestSummary = fallbackAudit.summaryShort || '';
+        latestWhyItMatters = null;
+        latestQuality = fallbackAudit.qualityScore ?? 0;
+        latestRelevance = normaliseScore(score);
+        baseMetadata.audit = fallbackAudit;
+        baseMetadata.decision = decision;
         await prisma.discoveredContent.update({
           where: { id: item.id },
           data: {
-            content: fallbackAudit.summaryShort,
-            status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
-            relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
-          },
+            summary: latestSummary,
+            whyItMatters: latestWhyItMatters,
+            relevanceScore: latestRelevance,
+            qualityScore: latestQuality,
+            metadata: baseMetadata
+          }
         });
       } else {
         const polished = await polishTranscript(vosk.transcription);
         const vidAudit = await deepseekAudit({ text: polished, kind: 'video' });
         const { score, decision } = relevanceScore({ content: { tags: vidAudit.tags } });
+        latestSummary = vidAudit.summaryShort || '';
+        latestWhyItMatters = null;
+        latestQuality = vidAudit.qualityScore ?? 0;
+        latestRelevance = normaliseScore(score);
+        baseMetadata.audit = vidAudit;
+        baseMetadata.decision = decision;
         await prisma.discoveredContent.update({
           where: { id: item.id },
           data: {
-            content: vidAudit.summaryShort,
-            status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
-            relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
-          },
+            summary: latestSummary,
+            whyItMatters: latestWhyItMatters,
+            relevanceScore: latestRelevance,
+            qualityScore: latestQuality,
+            metadata: baseMetadata
+          }
         });
       }
     } else {
       // Non-video or no mediaUrl: audit title/url text
       const audit = await deepseekAudit({ text: `${title || ''} ${url || ''}`.trim() || 'content', kind: type as any });
       const { score, decision } = relevanceScore({ content: { tags: audit.tags } });
+      latestSummary = audit.summaryShort || '';
+      latestWhyItMatters = null;
+      latestQuality = audit.qualityScore ?? 0;
+      latestRelevance = normaliseScore(score);
+      baseMetadata.audit = audit;
+      baseMetadata.decision = decision;
       await prisma.discoveredContent.update({
         where: { id: item.id },
         data: {
-          content: audit.summaryShort,
-          status: decision === 'approved' ? 'approved' : decision === 'queued' ? 'requires_review' : 'rejected',
-          relevanceScore: Math.max(1, Math.min(10, Math.round(score * 10))),
-        },
+          summary: latestSummary,
+          whyItMatters: latestWhyItMatters,
+          relevanceScore: latestRelevance,
+          qualityScore: latestQuality,
+          metadata: baseMetadata
+        }
       });
     }
 
@@ -114,7 +174,7 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
         
         const heroResult = await generateAIImage({
           title: item.title,
-          summary: item.content || '',
+          summary: latestSummary || '',
           artisticStyle: DISCOVERY_CONFIG.DEFAULT_IMAGE_STYLE,
           enableHiresFix: DISCOVERY_CONFIG.HD_MODE
         });
@@ -127,17 +187,18 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
             storageType: 'discovered'
           });
           
-          // Update with hero image using correct field names per schema
+          const heroPayload: Prisma.JsonObject = {
+            url: firebaseUrl,
+            source: 'ai-generated-auto',
+            license: 'generated',
+            generatedAt: new Date().toISOString(),
+            prompt: heroResult.prompt,
+            origin: 'content-ingest'
+          };
           await prisma.discoveredContent.update({
             where: { id: item.id },
             data: {
-              mediaAssets: {
-                hero: firebaseUrl,  // ← Correct field name!
-                source: 'ai-generated-auto',
-                license: 'generated',
-                generatedAt: new Date().toISOString(),
-                prompt: heroResult.prompt
-              }
+              hero: heroPayload
             }
           });
           
@@ -155,14 +216,17 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
           }
           
           if (fallbackUrl) {
+            const fallbackHero: Prisma.JsonObject = {
+              url: fallbackUrl,
+              source: wikimediaUrl ? 'wikimedia' : 'generated',
+              license: wikimediaUrl ? 'source' : 'generated',
+              generatedAt: new Date().toISOString(),
+              origin: wikimediaUrl ? 'wikimedia' : 'placeholder'
+            };
             await prisma.discoveredContent.update({
               where: { id: item.id },
               data: {
-                mediaAssets: {
-                  hero: fallbackUrl,  // ← Correct field name!
-                  source: wikimediaUrl ? 'wikimedia' : 'generated',
-                  license: wikimediaUrl ? 'source' : 'generated'
-                }
+                hero: fallbackHero
               }
             });
             console.log(`[Discovery] ⚠️  Used fallback image (${wikimediaUrl ? 'wikimedia' : 'generated'}) for: ${item.title}`);
@@ -188,7 +252,7 @@ async function fallbackFirstPatchId() {
   const created = await prisma.patch.create({
     data: {
       handle: 'general',
-      name: 'General',
+      title: 'General',
       description: 'General Patch',
       tags: [],
       createdBy: (await ensureSeedUser()).id,
