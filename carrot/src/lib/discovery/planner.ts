@@ -371,7 +371,9 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
 
   const normaliseList = (value: unknown): string[] | undefined => {
     if (!Array.isArray(value)) return undefined
-    const items = value.map((entry) => String(entry).trim()).filter(Boolean)
+    const items = value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : typeof entry === 'number' ? String(entry).trim() : undefined))
+      .filter((entry): entry is string => Boolean(entry && entry.length > 0))
     return items.length ? items : undefined
   }
 
