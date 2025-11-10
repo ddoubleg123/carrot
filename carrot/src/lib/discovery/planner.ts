@@ -393,6 +393,20 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
     return matrix.length ? matrix : undefined
   }
 
+  const extractSiteFilters = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) return undefined
+    const collected: unknown[] = []
+    for (const entry of value) {
+      if (entry && typeof entry === 'object') {
+        const siteFilters = (entry as { siteFilters?: unknown }).siteFilters
+        if (Array.isArray(siteFilters)) {
+          collected.push(...siteFilters)
+        }
+      }
+    }
+    return normaliseList(collected)
+  }
+
   const queries: PlannerQueries = {
     wikipedia: {
       sections:
@@ -413,7 +427,7 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         [],
       siteFilters:
         normaliseList(plan.queries?.news?.siteFilters) ??
-        plan.contentQueries?.news?.map((item) => item.siteFilters).flat().filter(Boolean) ??
+        extractSiteFilters(plan.contentQueries?.news) ??
         fallback.queries?.news?.siteFilters ??
         []
     },
@@ -434,7 +448,7 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         [],
       siteFilters:
         normaliseList(plan.queries?.data?.siteFilters) ??
-        plan.contentQueries?.data?.map((item) => item.siteFilters).flat().filter(Boolean) ??
+        extractSiteFilters(plan.contentQueries?.data) ??
         fallback.queries?.data?.siteFilters ??
         []
     },
@@ -448,7 +462,7 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         [],
       siteFilters:
         normaliseList(plan.queries?.longform?.siteFilters) ??
-        plan.contentQueries?.longform?.map((item) => item.siteFilters).flat().filter(Boolean) ??
+        extractSiteFilters(plan.contentQueries?.longform) ??
         fallback.queries?.longform?.siteFilters ??
         []
     }
