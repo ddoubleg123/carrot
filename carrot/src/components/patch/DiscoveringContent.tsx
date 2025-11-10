@@ -46,6 +46,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
   const [runId, setRunId] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
+  const [skipCounts, setSkipCounts] = useState({ duplicates: 0, lowRelevance: 0, nearDuplicate: 0 })
   const startTimeRef = useRef<number | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
 
@@ -95,6 +96,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         setIsDiscovering(true)
         setStatusMessage('Discovery engine warming up…')
         setError(null)
+        setSkipCounts({ duplicates: 0, lowRelevance: 0, nearDuplicate: 0 })
         break
       case 'searching':
         setIsDiscovering(true)
@@ -127,12 +129,15 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
         break
       case 'skipped:duplicate':
         setStatusMessage('Skipped duplicate')
+        setSkipCounts((prev) => ({ ...prev, duplicates: prev.duplicates + 1 }))
         break
       case 'skipped:low_relevance':
         setStatusMessage('Skipped low relevance source')
+        setSkipCounts((prev) => ({ ...prev, lowRelevance: prev.lowRelevance + 1 }))
         break
       case 'skipped:near_dup':
         setStatusMessage('Skipped near-duplicate')
+        setSkipCounts((prev) => ({ ...prev, nearDuplicate: prev.nearDuplicate + 1 }))
         break
       case 'error':
         setIsDiscovering(false)
@@ -221,6 +226,7 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
       startTimeRef.current = performance.now()
       setStatusMessage('Starting discovery…')
       setIsDiscovering(true)
+      setSkipCounts({ duplicates: 0, lowRelevance: 0, nearDuplicate: 0 })
     } catch (err) {
       console.error('[Discovery] Failed to start discovery', err)
       setError(err instanceof Error ? err.message : 'Failed to start discovery. Please try again.')
@@ -347,15 +353,15 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600">
             <div className="rounded-lg bg-slate-50 px-4 py-3">
               <dt className="text-xs uppercase tracking-wide text-slate-500">Duplicates skipped</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.duplicatesSkipped}</dd>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{skipCounts.duplicates}</dd>
             </div>
             <div className="rounded-lg bg-slate-50 px-4 py-3">
               <dt className="text-xs uppercase tracking-wide text-slate-500">Low relevance dropped</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.lowRelevanceSkipped}</dd>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{skipCounts.lowRelevance}</dd>
             </div>
             <div className="rounded-lg bg-slate-50 px-4 py-3">
               <dt className="text-xs uppercase tracking-wide text-slate-500">Near-duplicates</dt>
-              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.nearDuplicateSkipped}</dd>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{skipCounts.nearDuplicate}</dd>
             </div>
           </dl>
         </div>
@@ -366,9 +372,8 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           <DiscoverySkeleton
             id="discovery-skeleton"
             className="w-full"
-            isActive={state.isActive}
-            currentStatus={state.currentStatus}
-            stage={state.currentStage}
+            isActive={isDiscovering}
+            currentStatus={statusMessage}
           />
         )}
         {!isDiscovering && cards.length === 0 && (
