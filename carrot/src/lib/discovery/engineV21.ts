@@ -45,6 +45,14 @@ interface ProcessedCandidateResult {
   angle?: string
 }
 
+type NumericMetricKey =
+  | 'candidatesProcessed'
+  | 'urlsAttempted'
+  | 'itemsSaved'
+  | 'duplicates'
+  | 'dropped'
+  | 'failures'
+
 interface Metrics {
   candidatesProcessed: number
   urlsAttempted: number
@@ -153,21 +161,24 @@ export class DiscoveryEngineV21 {
     return this.metricsMutationQueue
   }
 
+  private isNumericMetric(key: keyof Metrics): key is NumericMetricKey {
+    return (
+      key === 'candidatesProcessed' ||
+      key === 'urlsAttempted' ||
+      key === 'itemsSaved' ||
+      key === 'duplicates' ||
+      key === 'dropped' ||
+      key === 'failures'
+    )
+  }
+
   private incrementMetric(key: keyof Metrics, delta: number = 1): Promise<void> {
-    const numericKeys: Array<keyof Metrics> = [
-      'candidatesProcessed',
-      'urlsAttempted',
-      'itemsSaved',
-      'duplicates',
-      'dropped',
-      'failures'
-    ]
-    if (!numericKeys.includes(key)) {
+    if (!this.isNumericMetric(key)) {
       return Promise.resolve()
     }
     return this.mutateMetrics(() => {
-      const current = (this.metrics[key] as number | undefined) ?? 0
-      this.metrics[key] = (current + delta) as Metrics[keyof Metrics]
+      const current = (this.metrics[key] ?? 0) as number
+      this.metrics[key] = (current + delta) as Metrics[NumericMetricKey]
     })
   }
 
