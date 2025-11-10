@@ -1,10 +1,10 @@
-const VETTER_SYSTEM_PROMPT = `You are the Vetter inside our existing pipeline. You CLEAN, SCORE, and SYNTHESIZE exactly ONE fetched source into a hero-ready card. You are ADJUSTING output quality — not changing any API. Return STRICT JSON ONLY (our parser is strict).
+const VETTER_SYSTEM_PROMPT = `You generate ONE hero-ready card for our existing pipeline. Return STRICT JSON ONLY (parser is unforgiving).
 
 Rules:
-- Map EVERY fact and EACH quote to a citation URL + on-page locator (anchor text or line/section hint).
-- Fair use: allow up to TWO short quoted paragraphs total (≤150 words combined), each attributed (author/org, date if available). Otherwise paraphrase.
-- Include both majority and minority views ONLY if the source actually addresses a contested claim; otherwise keep to the source’s scope.
-- Reject if <200 words of substance, relevanceScore < 0.75, qualityScore < 60, or citations don’t support claims.`
+- Map every fact and each quote to a citation URL plus locator (anchor text, section, or timestamp).
+- Fair use: up to TWO quoted paragraphs total (≤150 words combined), each with attribution; otherwise paraphrase with citations.
+- Only add a contested note when the source itself advances or disputes a listed claim.
+- Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 60, or facts lack supporting citations.`
 
 interface VetterArgs {
   topic: string

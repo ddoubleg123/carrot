@@ -21,6 +21,7 @@ import {
   clearSaveCounters,
   frontierSize,
   storeRunMetricsSnapshot,
+  enqueueHeroRetry,
   type SaveCounters,
   type RunMetricsSnapshot
 } from '@/lib/redis/discovery'
@@ -55,12 +56,33 @@ interface Metrics {
   acceptance?: AcceptanceResult
 }
 
-const FETCH_TIMEOUT_MS = 7000
+const FETCH_TIMEOUT_MS = 8000
 const MIN_CONTENT_LENGTH = 200
 const DUPLICATE_HASH_THRESHOLD = 4
 const MIN_RELEVANCE_SCORE = 0.75
 const MIN_QUALITY_SCORE = 60
-const MIN_FACT_COUNT = 3
+const MIN_FACT_COUNT = 2
+
+interface TelemetryCounters {
+  seedsEnqueued: number
+  directFetchOk: number
+  htmlExtracted: number
+  vetterJsonOk: number
+  accepted: number
+  rejectedThreshold: number
+  rejectedParse: number
+  paywall: number
+  robotsBlock: number
+  timeout: number
+  softAccepted: number
+}
+
+interface ExtractedContent {
+  title: string
+  text: string
+  lang?: string
+  headings?: string[]
+}
 
 function abortableFetch(url: string, options: RequestInit = {}, timeout = FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController()
@@ -93,16 +115,55 @@ export class DiscoveryEngineV21 {
     dropped: 0,
     failures: 0
   }
+  private telemetry: TelemetryCounters = {
+    seedsEnqueued: 0,
+    directFetchOk: 0,
+    htmlExtracted: 0,
+    vetterJsonOk: 0,
+    accepted: 0,
+    rejectedThreshold: 0,
+    rejectedParse: 0,
+    paywall: 0,
+    robotsBlock: 0,
+    timeout: 0,
+    softAccepted: 0
+  }
   private firstItemTimestamp?: number
   private plan: DiscoveryPlan | null = null
   private acceptanceCards: AcceptanceCard[] = []
   private metricsTracker: MetricsTracker
   private lastCounters: SaveCounters = { total: 0, controversy: 0, history: 0 }
+  private priorityBurstProcessed = false
+  private metricsMutationQueue: Promise<void> = Promise.resolve()
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
     this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
     this.metricsTracker = new MetricsTracker(`${options.patchHandle}:${options.runId}`)
+  }
+
+  private mutateMetrics(mutator: () => void): Promise<void> {
+    this.metricsMutationQueue = this.metricsMutationQueue
+      .then(() => {
+        mutator()
+      })
+      .catch((error) => {
+        console.error('[EngineV21] Metrics mutation failed', error)
+      })
+    return this.metricsMutationQueue
+  }
+
+  private incrementMetric(key: keyof Metrics, delta: number = 1): Promise<void> {
+    return this.mutateMetrics(() => {
+      const current = (this.metrics[key] as number | undefined) ?? 0
+      this.metrics[key] = (current + delta) as Metrics[keyof Metrics]
+    })
+  }
+
+  private setMetric<K extends keyof Metrics>(key: K, value: Metrics[K]): Promise<void> {
+    return this.mutateMetrics(() => {
+      this.metrics[key] = value
+    })
   }
 
   requestStop(): void {
@@ -122,9 +183,24 @@ export class DiscoveryEngineV21 {
     })
 
     try {
+      this.priorityBurstProcessed = false
       this.plan = await loadDiscoveryPlan<DiscoveryPlan>(runId)
       if (!this.plan) {
         throw new Error(`discovery_plan_missing:${runId}`)
+      }
+      const seedsCount = Math.min(Array.isArray(this.plan.seedCandidates) ? this.plan.seedCandidates.length : 0, 10)
+      this.telemetry = {
+        seedsEnqueued: seedsCount,
+        directFetchOk: 0,
+        htmlExtracted: 0,
+        vetterJsonOk: 0,
+        accepted: 0,
+        rejectedThreshold: 0,
+        rejectedParse: 0,
+        paywall: 0,
+        robotsBlock: 0,
+        timeout: 0,
+        softAccepted: 0
       }
       await clearSaveCounters(patchId).catch(() => undefined)
       this.lastCounters = { total: 0, controversy: 0, history: 0 }
@@ -148,8 +224,16 @@ export class DiscoveryEngineV21 {
   }
 
   private async discoveryLoop(coveredAngles: Set<string>): Promise<void> {
-    const { patchId, patchName, runId } = this.options
+    const { patchId } = this.options
     const startTime = Date.now()
+
+    if (!this.priorityBurstProcessed) {
+      const handled = await this.processPriorityBurst(coveredAngles, startTime)
+      this.priorityBurstProcessed = true
+      if (handled && this.stopRequested) {
+        return
+      }
+    }
 
     while (!this.stopRequested) {
       const candidate = await popFromFrontier(patchId)
@@ -163,26 +247,92 @@ export class DiscoveryEngineV21 {
         }
         continue
       }
-      const depth = await frontierSize(patchId).catch(() => 0)
-      this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
 
-      this.metrics.candidatesProcessed++
-      const countersBefore = await getSaveCounters(patchId)
-      const processResult = await this.processCandidate(candidate, countersBefore)
-      if (processResult.angle) {
-        coveredAngles.add(processResult.angle)
-        await markAngleCovered(runId, processResult.angle)
-      }
-
-      if (processResult.saved) {
-        if (!this.metrics.timeToFirstMs) {
-          this.metrics.timeToFirstMs = Date.now() - startTime
-        }
-        this.metrics.itemsSaved++
-      }
+      await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
 
       if (this.stopRequested) {
         break
+      }
+    }
+  }
+
+  private async processPriorityBurst(coveredAngles: Set<string>, startTime: number): Promise<boolean> {
+    const { patchId } = this.options
+    const burst: FrontierItem[] = []
+    const toRequeue: FrontierItem[] = []
+
+    while (burst.length < 3) {
+      const candidate = await popFromFrontier(patchId)
+      if (!candidate) break
+      if (candidate.meta?.planPriority === 1 && candidate.provider === 'direct') {
+        burst.push(candidate)
+      } else {
+        toRequeue.push(candidate)
+        if (candidate.meta?.planPriority !== 1) {
+          break
+        }
+      }
+    }
+
+    if (toRequeue.length) {
+      await Promise.all(toRequeue.map((item) => addToFrontier(patchId, item)))
+    }
+
+    if (!burst.length) {
+      return false
+    }
+
+    await Promise.all(
+      burst.map(async (candidate) => {
+        if (this.stopRequested) return
+        await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
+      })
+    )
+
+    return true
+  }
+
+  private async processCandidateWithBookkeeping(
+    candidate: FrontierItem,
+    coveredAngles: Set<string>,
+    startTime: number
+  ): Promise<void> {
+    const { patchId } = this.options
+    await this.incrementMetric('candidatesProcessed')
+    const depth = await frontierSize(patchId).catch(() => 0)
+    this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
+    const countersBefore = await getSaveCounters(patchId)
+    const result = await this.processCandidate(candidate, countersBefore)
+    await this.applyProcessOutcome(result, candidate, coveredAngles, startTime)
+  }
+
+  private async applyProcessOutcome(
+    result: ProcessedCandidateResult,
+    candidate: FrontierItem,
+    coveredAngles: Set<string>,
+    startTime: number
+  ): Promise<void> {
+    const { runId } = this.options
+    if (result.angle) {
+      coveredAngles.add(result.angle)
+      await markAngleCovered(runId, result.angle).catch(() => undefined)
+    }
+
+    if (result.saved) {
+      if (!this.metrics.timeToFirstMs) {
+        await this.setMetric('timeToFirstMs', Date.now() - startTime)
+      }
+      await this.incrementMetric('itemsSaved')
+      this.telemetry.accepted++
+    } else if (result.reason) {
+      if (
+        result.reason === 'score_threshold' ||
+        result.reason === 'vetter_rejected' ||
+        result.reason === 'entity_missing'
+      ) {
+        this.telemetry.rejectedThreshold++
+      } else if (result.reason === 'vetter_parse' || result.reason === 'vetter_insufficient_facts') {
+        this.telemetry.rejectedParse++
       }
     }
   }
@@ -214,7 +364,7 @@ export class DiscoveryEngineV21 {
       })
 
       if (await isSeen(patchId, canonicalUrl)) {
-        this.metrics.duplicates++
+        await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
         this.structuredLog('duplicate_seen', {
@@ -236,7 +386,7 @@ export class DiscoveryEngineV21 {
         select: { id: true }
       })
       if (existing) {
-        this.metrics.duplicates++
+        await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
         this.structuredLog('duplicate_database', {
@@ -255,12 +405,12 @@ export class DiscoveryEngineV21 {
         return { saved: false, reason: 'db_duplicate', angle }
       }
 
-      this.metrics.urlsAttempted++
+      await this.incrementMetric('urlsAttempted')
       this.eventStream.stage('searching', { provider: 'fetcher' })
       this.eventStream.searching('fetch')
       const extracted = await this.fetchAndExtractContent(canonicalUrl)
       if (!extracted || extracted.text.length < MIN_CONTENT_LENGTH) {
-        this.metrics.dropped++
+        await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'content_too_short')
         this.structuredLog('content_short', {
@@ -277,10 +427,28 @@ export class DiscoveryEngineV21 {
         return { saved: false, reason: 'content_short', angle }
       }
 
+      if (!this.hasEntityMention(extracted)) {
+        await this.incrementMetric('dropped')
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'entity_missing')
+        this.structuredLog('entity_missing', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle
+        })
+        await this.emitAudit('fetch', 'fail', {
+          candidateUrl: canonicalUrl,
+          error: { message: 'entity_missing' }
+        })
+        this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'entity_missing' })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: 'entity_missing', angle }
+      }
+
       const simhash = SimHash.generate(extracted.text)
       const hashString = simhash.toString()
       if (await isNearDuplicate(patchId, hashString, DUPLICATE_HASH_THRESHOLD)) {
-        this.metrics.duplicates++
+        await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'B', candidate.provider)
         this.structuredLog('duplicate_simhash', {
@@ -300,14 +468,39 @@ export class DiscoveryEngineV21 {
 
       this.eventStream.stage('vetting', { url: canonicalUrl })
       this.eventStream.searching('vet')
-      const synthesis = await this.vetCandidate({
-        title: extracted.title,
-        url: canonicalUrl,
-        text: extracted.text,
-        angle
-      })
+      let synthesis: VetterResult | null = null
+      try {
+        synthesis = await this.vetCandidate({
+          title: extracted.title,
+          url: canonicalUrl,
+          text: extracted.text,
+          angle
+        })
+      } catch (error) {
+        await this.incrementMetric('dropped')
+        this.metricsTracker.recordError()
+        const errMessage = error instanceof Error ? error.message : String(error)
+        const parseReason =
+          errMessage === 'vetter_insufficient_facts' ? 'vetter_insufficient_facts' : 'vetter_parse'
+        logger.logSkip(canonicalUrl, parseReason)
+        this.structuredLog(parseReason, {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle,
+          error: errMessage
+        })
+        await this.emitAudit('synthesis', 'fail', {
+          candidateUrl: canonicalUrl,
+          error: this.formatError(error),
+          decisions: { action: 'drop', reason: parseReason }
+        })
+        this.eventStream.skipped('low_relevance', canonicalUrl, { reason: parseReason })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: parseReason, angle }
+      }
+
       if (!synthesis || !synthesis.isUseful) {
-        this.metrics.dropped++
+        await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'vetter_rejected')
         this.structuredLog('vetter_rejected', {
@@ -326,8 +519,19 @@ export class DiscoveryEngineV21 {
         return { saved: false, reason: 'vetter_rejected', angle }
       }
 
-      if (synthesis.relevanceScore < MIN_RELEVANCE_SCORE || synthesis.qualityScore < MIN_QUALITY_SCORE) {
-        this.metrics.dropped++
+      this.telemetry.vetterJsonOk++
+
+      const factsWithCitations = Array.isArray(synthesis.facts)
+        ? synthesis.facts.filter((fact) => fact && typeof fact.citation === 'string' && fact.citation.length > 0).length
+        : 0
+
+      const isFirstCard = countersBefore.total === 0
+      const softEligible = isFirstCard && synthesis.qualityScore >= 70 && factsWithCitations >= 2
+      const minRelevance = softEligible ? 0.7 : MIN_RELEVANCE_SCORE
+      const minQuality = softEligible ? 70 : MIN_QUALITY_SCORE
+
+      if (synthesis.relevanceScore < minRelevance || synthesis.qualityScore < minQuality) {
+        await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'score_threshold')
         this.structuredLog('score_threshold', {
@@ -347,6 +551,17 @@ export class DiscoveryEngineV21 {
         return { saved: false, reason: 'score_threshold', angle }
       }
 
+      if (softEligible && synthesis.relevanceScore < MIN_RELEVANCE_SCORE) {
+        this.telemetry.softAccepted++
+        this.structuredLog('soft_accepted', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle,
+          relevanceScore: synthesis.relevanceScore,
+          qualityScore: synthesis.qualityScore
+        })
+      }
+
       this.eventStream.stage('hero', { url: canonicalUrl })
       this.eventStream.searching('hero')
       const hero = await this.heroPipeline.assignHero({
@@ -355,6 +570,19 @@ export class DiscoveryEngineV21 {
         topic: this.options.patchName,
         entity: this.plan?.topic
       })
+
+      if (hero?.source === 'skeleton') {
+        await enqueueHeroRetry({
+          patchId,
+          runId: this.options.runId,
+          url: canonicalUrl,
+          title: extracted.title
+        }).catch(() => undefined)
+        this.structuredLog('hero_retry_queued', {
+          url: canonicalUrl,
+          provider: candidate.provider
+        })
+      }
 
       const contestedClaim = this.resolveContestedClaim(synthesis.contested)
       if (contestedClaim) {
@@ -488,7 +716,7 @@ export class DiscoveryEngineV21 {
       }
       return { saved: true, angle }
     } catch (error) {
-      this.metrics.failures++
+      await this.incrementMetric('failures')
       this.metricsTracker.recordError()
       logger.logError('candidate_processing_failed', {
         url: candidate.cursor,
@@ -513,31 +741,143 @@ export class DiscoveryEngineV21 {
     }
   }
 
-  private async fetchAndExtractContent(url: string): Promise<{ title: string; text: string }> {
-    try {
-      const response = await abortableFetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    retries: number = 0,
+    timeoutMs: number = FETCH_TIMEOUT_MS
+  ): Promise<Response> {
+    let attempt = 0
+    let currentTimeout = timeoutMs
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        return await abortableFetch(url, options, currentTimeout)
+      } catch (error) {
+        if (attempt >= retries) {
+          throw error
         }
-      })
+        const backoff = Math.pow(2, attempt) * 250
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+        attempt += 1
+        currentTimeout = Math.min(currentTimeout * 1.5, 15000)
+      }
+    }
+  }
+
+  private async fetchAndExtractContent(url: string): Promise<ExtractedContent> {
+    try {
+      const response = await this.fetchWithRetry(
+        url,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
+          }
+        },
+        1,
+        FETCH_TIMEOUT_MS
+      )
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 402) {
+          this.telemetry.paywall++
+        } else if (response.status === 403) {
+          const robots = response.headers.get('x-robots-tag')
+          if (robots && robots.length) {
+            this.telemetry.robotsBlock++
+          } else {
+            this.telemetry.paywall++
+          }
+        }
         throw new Error(`fetch_failed_${response.status}`)
       }
 
+      this.telemetry.directFetchOk++
       const html = await response.text()
-      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-      const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
-      const mainMatch = html.match(/<main[\s\S]*?<\/main>/i) || html.match(/<article[\s\S]*?<\/article>/i)
-      const bodyMatch = mainMatch || html.match(/<body[\s\S]*?<\/body>/i)
-      const raw = bodyMatch ? bodyMatch[0] : html
-      const text = raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ')
-      const clean = text.replace(/\s+/g, ' ').trim()
-      return { title, text: clean }
+      const extracted = this.extractHtmlContent(html)
+      this.telemetry.htmlExtracted++
+      return extracted
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        this.telemetry.timeout++
+      }
       console.error('[EngineV21] Failed to fetch content:', error)
       throw error
     }
+  }
+
+  private extractHtmlContent(html: string): ExtractedContent {
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+    const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
+    const langMatch = html.match(/<html[^>]*lang=["']([^"']+)["'][^>]*>/i)
+    const lang = langMatch ? langMatch[1].toLowerCase() : undefined
+
+    const headingRegex = /<(h1|h2)[^>]*>(.*?)<\/\1>/gi
+    const headings: string[] = []
+    let headingMatch: RegExpExecArray | null
+    // eslint-disable-next-line no-cond-assign
+    while ((headingMatch = headingRegex.exec(html))) {
+      const headingText = headingMatch[2]
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (headingText) {
+        headings.push(headingText)
+      }
+    }
+
+    const mainMatch = html.match(/<main[\s\S]*?<\/main>/i) || html.match(/<article[\s\S]*?<\/article>/i)
+    const bodyMatch = mainMatch || html.match(/<body[\s\S]*?<\/body>/i)
+    const raw = bodyMatch ? bodyMatch[0] : html
+    const withoutScripts = raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+    const textBody = withoutScripts
+      .replace(/<\/(p|div|section|br|li)>/gi, '$&\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const headingTrail = headings.slice(0, 4).join(' > ')
+    const text = headingTrail ? `${headingTrail}\n\n${textBody}` : textBody
+
+    return {
+      title,
+      text,
+      lang,
+      headings
+    }
+  }
+
+  private hasEntityMention(content: ExtractedContent): boolean {
+    const terms = new Set<string>()
+    if (this.plan?.topic) {
+      terms.add(this.plan.topic.toLowerCase())
+    }
+    if (Array.isArray(this.plan?.aliases)) {
+      this.plan?.aliases
+        .map((alias) => alias?.toLowerCase?.())
+        .filter((alias): alias is string => Boolean(alias && alias.length))
+        .forEach((alias) => terms.add(alias))
+    }
+    if (terms.size === 0) {
+      return true
+    }
+
+    const title = content.title?.toLowerCase?.() ?? ''
+    const words = content.text?.split(/\s+/).slice(0, 200).join(' ').toLowerCase()
+    const body = content.text?.toLowerCase?.() ?? ''
+
+    for (const term of terms) {
+      if (!term) continue
+      if (title.includes(term)) return true
+      if (words.includes(term)) return true
+    }
+
+    for (const term of terms) {
+      if (!term) continue
+      if (body.includes(term)) return true
+    }
+
+    return false
   }
 
   private async expandFrontierIfNeeded(patchId: string, coveredAngles: Set<string>): Promise<boolean> {
@@ -679,6 +1019,7 @@ export class DiscoveryEngineV21 {
           tracker: trackerMetrics,
           counters: this.lastCounters,
           acceptance: this.metrics.acceptance,
+          telemetry: { ...this.telemetry },
           ...extra
         }
       }
@@ -717,7 +1058,8 @@ export class DiscoveryEngineV21 {
       this.metrics.acceptance = acceptance
     }
 
-    const auditMeta = acceptance ? { ...this.metrics } : this.metrics
+    const metricsWithTelemetry = { ...this.metrics, telemetry: { ...this.telemetry } }
+    const auditMeta = acceptance ? { ...metricsWithTelemetry } : metricsWithTelemetry
     const formattedError = error ? this.formatError(error) : undefined
 
     await this.emitAudit('run_complete', status === 'completed' || status === 'suspended' ? 'ok' : 'fail', {

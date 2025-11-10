@@ -120,10 +120,28 @@ export default function AuditPage(props: AuditPageProps) {
   const [connected, setConnected] = useState<boolean>(true)
   const eventSourceRef = useRef<EventSource | null>(null)
   const seenIdsRef = useRef<Set<string>>(new Set())
-  const [aggregate, setAggregate] = useState<{ accepted: number; denied: number; skipped: number }>({
+  const [aggregate, setAggregate] = useState<{
+    accepted: number
+    denied: number
+    skipped: number
+    telemetry?: {
+      seedsEnqueued?: number
+      directFetchOk?: number
+      htmlExtracted?: number
+      vetterJsonOk?: number
+      accepted?: number
+      rejectedThreshold?: number
+      rejectedParse?: number
+      paywall?: number
+      robotsBlock?: number
+      timeout?: number
+      softAccepted?: number
+    } | null
+  }>({
     accepted: 0,
     denied: 0,
-    skipped: 0
+    skipped: 0,
+    telemetry: null
   })
   const [statusSummary, setStatusSummary] = useState<{ status: string; runId?: string } | null>(null)
 
@@ -231,6 +249,23 @@ export default function AuditPage(props: AuditPageProps) {
   const reasons = useMemo(() => ['all', ...Array.from(new Set(rows.map((row) => row.reason).filter(Boolean)))] as string[], [rows])
   const angles = useMemo(() => ['all', ...Array.from(new Set(rows.map((row) => row.angle).filter(Boolean)))] as string[], [rows])
   const contestedCount = useMemo(() => rows.filter((row) => Boolean(row.contestedNote)).length, [rows])
+  const telemetry = aggregate.telemetry
+  const telemetrySummary = useMemo(() => {
+    if (!telemetry) return []
+    return [
+      { label: 'Seeds enqueued', value: telemetry.seedsEnqueued ?? 0 },
+      { label: 'Direct fetch ok', value: telemetry.directFetchOk ?? 0 },
+      { label: 'HTML extracted', value: telemetry.htmlExtracted ?? 0 },
+      { label: 'Vetter JSON ok', value: telemetry.vetterJsonOk ?? 0 },
+      { label: 'Accepted', value: telemetry.accepted ?? 0 },
+      { label: 'Rejected threshold', value: telemetry.rejectedThreshold ?? 0 },
+      { label: 'Rejected parse', value: telemetry.rejectedParse ?? 0 },
+      { label: 'Paywall', value: telemetry.paywall ?? 0 },
+      { label: 'Robots block', value: telemetry.robotsBlock ?? 0 },
+      { label: 'Timeout', value: telemetry.timeout ?? 0 },
+      { label: 'Soft accepted', value: telemetry.softAccepted ?? 0 }
+    ]
+  }, [telemetry])
 
   const acceptedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status === 'ok').length, [rows])
   const deniedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status !== 'ok').length, [rows])
@@ -296,6 +331,21 @@ export default function AuditPage(props: AuditPageProps) {
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Skipped items</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{aggregate.skipped}</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Run telemetry</p>
+          {telemetrySummary.length > 0 ? (
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-700">
+              {telemetrySummary.map((item) => (
+                <div key={item.label} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <dt className="text-xs uppercase tracking-wide text-slate-500">{item.label}</dt>
+                  <dd className="mt-1 text-lg font-semibold text-slate-900">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">Telemetry will appear once the run emits counters.</p>
+          )}
         </Card>
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Contested cards</p>

@@ -302,62 +302,60 @@ export class DiscoveryOrchestrator {
       return 0
     }
 
-    const contestedSeeds = plan.seedCandidates.filter(
-      (seed) => seed.stance === 'contested' || seed.isControversy === true
-    )
-    const establishmentSeeds = plan.seedCandidates.filter(
-      (seed) => seed.stance !== 'contested' && seed.isControversy !== true
-    )
-
-    const sortByPlannerPriority = (a: PlannerSeedCandidate, b: PlannerSeedCandidate) => {
+    const seedsSorted = [...plan.seedCandidates].sort((a, b) => {
       const priorityA = a.priority ?? 999
       const priorityB = b.priority ?? 999
       if (priorityA !== priorityB) {
         return priorityA - priorityB
       }
       return 0
-    }
-
-    contestedSeeds.sort(sortByPlannerPriority)
-    establishmentSeeds.sort(sortByPlannerPriority)
+    })
 
     const domainCounts = new Map<string, number>()
+    let contestedCount = 0
+    let establishmentCount = 0
+    const selected: PlannerSeedCandidate[] = []
 
-    const selectSeeds = (sourceSeeds: PlannerSeedCandidate[], limit: number): PlannerSeedCandidate[] => {
-      const selected: PlannerSeedCandidate[] = []
-      for (const seed of sourceSeeds) {
-        if (!seed.url) continue
-        let domain = 'unknown'
-        try {
-          domain = new URL(seed.url).hostname.toLowerCase()
-        } catch {
-          // ignore parse error
-        }
-        const currentCount = domainCounts.get(domain) ?? 0
-        if (currentCount >= 2) continue
-        domainCounts.set(domain, currentCount + 1)
-        selected.push(seed)
-        if (selected.length >= limit) break
+    for (const candidate of seedsSorted) {
+      if (!candidate.url) continue
+      const isContested = candidate.stance === 'contested' || candidate.isControversy === true
+      if (isContested) {
+        if (contestedCount >= 5) continue
+      } else if (establishmentCount >= 5) {
+        continue
       }
-      return selected
+
+      let domain = 'unknown'
+      try {
+        domain = new URL(candidate.url).hostname.toLowerCase()
+      } catch {
+        // ignore malformed host
+      }
+
+      const currentCount = domainCounts.get(domain) ?? 0
+      const domainLimit = selected.length < 10 ? 3 : 2
+      if (currentCount >= domainLimit) continue
+
+      domainCounts.set(domain, currentCount + 1)
+      selected.push(candidate as PlannerSeedCandidate)
+      if (isContested) contestedCount++
+      else establishmentCount++
+
+      if (selected.length >= 10) break
     }
 
-    const selectedContested = selectSeeds(contestedSeeds, 5)
-    const selectedEstablishment = selectSeeds(establishmentSeeds, 5)
-    const combined = [...selectedContested, ...selectedEstablishment]
-
-    if (!combined.length) {
+    if (!selected.length) {
       return 0
     }
 
-    if (combined.length < 10) {
+    if (selected.length < 10) {
       console.warn(
         '[Initialize Frontier] Planner provided fewer than 10 usable seeds after applying domain/stance constraints',
-        combined.length
+        selected.length
       )
     }
 
-    const seeds = combined.map((seed, index) => {
+    const seeds = selected.map((seed, index) => {
       let domain = 'unknown'
       try {
         domain = new URL(seed.url).hostname
@@ -370,14 +368,15 @@ export class DiscoveryOrchestrator {
       const stanceBoost = seed.stance === 'contested' || seed.isControversy ? 40 : 0
 
       return {
-        source: 'planner',
-        method: 'planner',
+        source: 'direct',
+        method: 'direct',
         cursor: seed.url,
         domain,
         lastSeen: new Date(),
         duplicateRate: 0,
         priority: basePriority + stanceBoost,
         meta: {
+          directSeed: true,
           planPriority: seed.priority,
           angle: seed.angle,
           stance: seed.stance ?? (seed.isControversy ? 'contested' : 'establishment'),

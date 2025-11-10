@@ -100,6 +100,8 @@ export async function GET(
     const denied = filteredAudits.filter(audit => audit.step === 'save' && audit.status !== 'ok').length
     const skipped = filteredAudits.filter(audit => audit.step.startsWith('skipped')).length
 
+    const telemetry = selectedRun?.metrics?.telemetry ?? null
+
     return NextResponse.json({
       runs,
       audits: filteredAudits,
@@ -110,7 +112,8 @@ export async function GET(
       aggregate: {
         accepted,
         denied,
-        skipped
+        skipped,
+        telemetry
       }
     })
   } catch (error: any) {

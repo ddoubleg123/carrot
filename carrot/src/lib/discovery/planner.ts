@@ -132,14 +132,7 @@ interface PlannerOptions {
   runId: string
 }
 
-const SYSTEM_PROMPT = `You are the Planner for our existing discovery engine. You are ADJUSTING its inputs — not replacing any component. Output a compact, HIGH-SIGNAL plan that our CURRENT crawler can use immediately:
-• 10 fetchable seed items (non-paywalled preferred) with a hard 50/50 split between 'establishment' and 'contested'.
-• At least 6 distinct domains; max 2 per domain.
-• For every contested seed, include ≥1 non-media authority (court/UN/official/NGO/academic) either as the seed itself or explicitly in contestedPlan.
-• Mark 3 seeds 'priority':1 for fastest first wins.
-• Provide quotePullHints (1–3 exact phrases on-page) to help the vetter pull up to TWO paragraphs total (≤150 words combined) under fair use with attribution.
-• Include verification targets (numbers, dates, law, named entities) for each seed to keep the vetter honest.
-Return STRICT JSON ONLY. If unknown, return null (do not invent). You are adjusting inputs for an existing pipeline; keep output small and precise.`
+const SYSTEM_PROMPT = `You are adjusting inputs for our existing discovery engine. Return STRICT JSON ONLY. Provide 10 directly fetchable seeds (≤2 per domain, ≥6 distinct domains) with an exact 5 establishment / 5 contested split. Mark exactly 3 seeds as priority:1. Add 1–3 quotePullHints per seed (exact phrases visible on-page). Prefer recent sources (≤3 years) unless a historical primary document is stronger. For every contested claim, include at least one non-media authority (court, UN, official, NGO, academic) either as a seed or in contestedPlan. Keep the output compact, precise, and ready to fetch immediately.`
 
 function buildUserPrompt(topic: string, aliases: string[]): string {
   const aliasesCSV = aliases.length ? aliases.join(', ') : '—'
@@ -150,7 +143,8 @@ We are not starting over. We need a precise, small plan that our current engine 
 - coverageTargets.controversyRatio = 0.5 (exactly 5 'contested' + 5 'establishment'),
 - minNonMediaPerContested = 1,
 - maxPerDomain = 2,
-- prefer recent (≤3 years) unless historical primary is stronger,
+- prefer recent (≤3 years) unless a historical primary is stronger,
+- seeds must be directly fetchable URLs (no search/result placeholders),
 - disallow travel/recipe/tourism/fiction.
 
 Return JSON with:
@@ -756,44 +750,53 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     return
   }
 
-  const contestedSeeds = plan.seedCandidates.filter(
-    (seed) => seed.stance === 'contested' || seed.isControversy === true
-  )
-  const establishmentSeeds = plan.seedCandidates.filter(
-    (seed) => seed.stance !== 'contested' && seed.isControversy !== true
-  )
-
-  const sortByPlannerPriority = (a: PlannerSeedCandidate, b: PlannerSeedCandidate) => {
+  const seedsSorted = [...plan.seedCandidates].sort((a, b) => {
     const priorityA = a.priority ?? 999
     const priorityB = b.priority ?? 999
     if (priorityA !== priorityB) return priorityA - priorityB
     return 0
-  }
-
-  contestedSeeds.sort(sortByPlannerPriority)
-  establishmentSeeds.sort(sortByPlannerPriority)
+  })
 
   const domainCounts = new Map<string, number>()
-  const selectSeeds = (sourceSeeds: PlannerSeedCandidate[], limit: number): PlannerSeedCandidate[] => {
-    const selected: PlannerSeedCandidate[] = []
-    for (const seed of sourceSeeds) {
-      if (!seed.url) continue
-      let domain = 'unknown'
-      try {
-        domain = new URL(seed.url).hostname.toLowerCase()
-      } catch {
-        // ignore
-      }
-      const currentCount = domainCounts.get(domain) ?? 0
-      if (currentCount >= 2) continue
-      domainCounts.set(domain, currentCount + 1)
-      selected.push(seed)
-      if (selected.length >= limit) break
+  const selectedSeeds: PlannerSeedCandidate[] = []
+  let contestedCount = 0
+  let establishmentCount = 0
+
+  for (const seed of seedsSorted) {
+    if (!seed || !seed.url) continue
+    const isContested = seed.stance === 'contested' || seed.isControversy === true
+    if (isContested) {
+      if (contestedCount >= 5) continue
+    } else if (establishmentCount >= 5) {
+      continue
     }
-    return selected
+
+    let domain = 'unknown'
+    try {
+      domain = new URL(seed.url).hostname.toLowerCase()
+    } catch {
+      // ignore malformed hostnames
+    }
+
+    const currentCount = domainCounts.get(domain) ?? 0
+    const domainLimit = selectedSeeds.length < 10 ? 3 : 2
+    if (currentCount >= domainLimit) {
+      continue
+    }
+
+    domainCounts.set(domain, currentCount + 1)
+    selectedSeeds.push(seed as PlannerSeedCandidate)
+    if (isContested) contestedCount++
+    else establishmentCount++
+
+    if (selectedSeeds.length >= 10) {
+      break
+    }
   }
 
-  const selectedSeeds = [...selectSeeds(contestedSeeds, 5), ...selectSeeds(establishmentSeeds, 5)]
+  if (!selectedSeeds.length) {
+    return
+  }
 
   const tasks: Array<Promise<void>> = []
 
@@ -801,12 +804,13 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     if (!seed.url) return
 
     const item: FrontierItem = {
-      id: `seed:${Date.now()}:${index}:${seed.url}`,
-      provider: 'planner',
+      id: `direct_seed:${Date.now()}:${index}:${seed.url}`,
+      provider: 'direct',
       cursor: seed.url,
       priority: computeSeedPriority(seed, index, plan.domainWhitelists),
       angle: seed.angle,
       meta: {
+        directSeed: true,
         planPriority: seed.priority,
         category: seed.category,
         expectedInsights: seed.expectedInsights,
@@ -829,5 +833,4 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
 
   await Promise.all(tasks)
 }
-
 

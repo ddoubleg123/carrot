@@ -337,6 +337,27 @@ export async function getContestedCovered(runId: string): Promise<Set<string>> {
   return new Set(members)
 }
 
+const HERO_RETRY_KEY = 'hero:retry:queue'
+
+export interface HeroRetryPayload {
+  patchId: string
+  runId: string
+  url: string
+  title: string
+  createdAt?: string
+}
+
+export async function enqueueHeroRetry(payload: HeroRetryPayload): Promise<void> {
+  const client = await getRedisClient()
+  const entry = JSON.stringify({
+    ...payload,
+    createdAt: payload.createdAt ?? new Date().toISOString()
+  })
+  await client.lpush(HERO_RETRY_KEY, entry)
+  await client.ltrim(HERO_RETRY_KEY, 0, 499)
+  await client.expire(HERO_RETRY_KEY, PLAN_TTL_SECONDS)
+}
+
 export interface RunMetricsSnapshot {
   runId: string
   patchId: string
