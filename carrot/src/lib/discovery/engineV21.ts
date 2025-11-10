@@ -547,11 +547,12 @@ export class DiscoveryEngineV21 {
 
     const uncoveredAngles = this.plan.queryAngles.filter(angle => !coveredAngles.has(angle.angle))
     const coverageTargets = this.plan.coverageTargets || { controversyRatio: 0.5, controversyWindow: 4, historyInFirst: 3 }
+    const historyTarget = coverageTargets.historyInFirst ?? 3
     const counters = await getSaveCounters(patchId)
     const controversyRatio = counters.total ? counters.controversy / counters.total : 0
     const needControversy = controversyRatio < coverageTargets.controversyRatio
     const overControversy = controversyRatio > (coverageTargets.controversyRatio + 0.1)
-    const needHistory = counters.total < 12 && counters.history < coverageTargets.historyInFirst
+    const needHistory = counters.total < 12 && counters.history < historyTarget
 
     const candidateSeeds = this.plan.seedCandidates.map((seed, index) => {
       let score = 100 - index * 2
