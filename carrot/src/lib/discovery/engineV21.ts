@@ -154,6 +154,17 @@ export class DiscoveryEngineV21 {
   }
 
   private incrementMetric(key: keyof Metrics, delta: number = 1): Promise<void> {
+    const numericKeys: Array<keyof Metrics> = [
+      'candidatesProcessed',
+      'urlsAttempted',
+      'itemsSaved',
+      'duplicates',
+      'dropped',
+      'failures'
+    ]
+    if (!numericKeys.includes(key)) {
+      return Promise.resolve()
+    }
     return this.mutateMetrics(() => {
       const current = (this.metrics[key] as number | undefined) ?? 0
       this.metrics[key] = (current + delta) as Metrics[keyof Metrics]
