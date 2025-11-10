@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DiscoveryCardPayload } from '@/types/discovery-card'
 import { DiscoveryCard } from '@/app/(app)/patch/[handle]/components/DiscoveryCard'
+import DiscoverySkeleton from '@/app/(app)/patch/[handle]/components/DiscoverySkeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
