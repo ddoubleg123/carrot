@@ -96,13 +96,22 @@ export async function GET(
         })
       : runs[0]
 
+    const accepted = filteredAudits.filter(audit => audit.step === 'save' && audit.status === 'ok').length
+    const denied = filteredAudits.filter(audit => audit.step === 'save' && audit.status !== 'ok').length
+    const skipped = filteredAudits.filter(audit => audit.step.startsWith('skipped')).length
+
     return NextResponse.json({
       runs,
       audits: filteredAudits,
       run: selectedRun ? {
         ...selectedRun,
         metrics: selectedRun.metrics || {}
-      } : null
+      } : null,
+      aggregate: {
+        accepted,
+        denied,
+        skipped
+      }
     })
   } catch (error: any) {
     console.error('[Audit List] Error:', error)

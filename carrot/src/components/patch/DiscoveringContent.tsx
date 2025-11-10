@@ -339,15 +339,44 @@ export default function DiscoveringContent({ patchHandle }: DiscoveringContentPr
           </div>
         </div>
 
-        <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-          <div className="flex flex-col items-center gap-3 text-center">
-            {skeletonState.icon}
-            <p>{skeletonState.message}</p>
-          </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Skip summary</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Aggregated counts reset on each run.
+          </p>
+          <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600">
+            <div className="rounded-lg bg-slate-50 px-4 py-3">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Duplicates skipped</dt>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.duplicatesSkipped}</dd>
+            </div>
+            <div className="rounded-lg bg-slate-50 px-4 py-3">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Low relevance dropped</dt>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.lowRelevanceSkipped}</dd>
+            </div>
+            <div className="rounded-lg bg-slate-50 px-4 py-3">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Near-duplicates</dt>
+              <dd className="mt-1 text-lg font-semibold text-slate-900">{state.nearDuplicateSkipped}</dd>
+            </div>
+          </dl>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {isDiscovering && (
+          <DiscoverySkeleton
+            id="discovery-skeleton"
+            className="w-full"
+            isActive={state.isActive}
+            currentStatus={state.currentStatus}
+            stage={state.currentStage}
+          />
+        )}
+        {!isDiscovering && cards.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+            {skeletonState.icon}
+            <p>{skeletonState.message}</p>
+          </div>
+        )}
         {cards.map((card) => (
           <DiscoveryCard key={card.id} item={card} onSelect={setSelectedCard} />
         ))}

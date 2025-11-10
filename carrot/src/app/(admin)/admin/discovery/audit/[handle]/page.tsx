@@ -120,6 +120,12 @@ export default function AuditPage(props: AuditPageProps) {
   const [connected, setConnected] = useState<boolean>(true)
   const eventSourceRef = useRef<EventSource | null>(null)
   const seenIdsRef = useRef<Set<string>>(new Set())
+  const [aggregate, setAggregate] = useState<{ accepted: number; denied: number; skipped: number }>({
+    accepted: 0,
+    denied: 0,
+    skipped: 0
+  })
+  const [statusSummary, setStatusSummary] = useState<{ status: string; runId?: string } | null>(null)
 
   useEffect(() => {
     props.params.then(({ handle }) => {
@@ -145,6 +151,9 @@ export default function AuditPage(props: AuditPageProps) {
         mapped.forEach((row: AuditRow) => seenIdsRef.current.add(row.id))
         setRows(mapped)
         setAnglesCovered(new Set(mapped.map((row: AuditRow) => row.angle).filter(Boolean) as string[]))
+      }
+      if (data.aggregate) {
+        setAggregate(data.aggregate)
       }
       setError(null)
       setConnected(true)
@@ -174,6 +183,21 @@ export default function AuditPage(props: AuditPageProps) {
             const next = new Set(prev)
             next.add(row.angle as string)
             return next
+          })
+        }
+        if (row.step === 'save') {
+          setAggregate((prev) => {
+            if (row.status === 'ok') {
+              return { ...prev, accepted: prev.accepted + 1 }
+            }
+            return { ...prev, denied: prev.denied + 1 }
+          })
+        } else if (row.step.startsWith('skipped')) {
+          setAggregate((prev) => ({ ...prev, skipped: prev.skipped + 1 }))
+        } else if (row.step === 'run_complete' && row.status !== 'ok') {
+          setStatusSummary({
+            status: row.status,
+            runId: row.payload?.decisions?.runId || undefined
           })
         }
         setError(null)
@@ -255,14 +279,23 @@ export default function AuditPage(props: AuditPageProps) {
               <WifiOff className="h-3 w-3" /> Stream paused
             </div>
           )}
+          {statusSummary && (
+            <div className="mt-2 text-xs text-slate-500">
+              Status: <span className="font-medium text-slate-800">{statusSummary.status}</span>
+            </div>
+          )}
         </Card>
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Accepted saves</p>
-          <p className="mt-1 text-2xl font-semibold text-emerald-600">{acceptedCount}</p>
+          <p className="mt-1 text-2xl font-semibold text-emerald-600">{aggregate.accepted || acceptedCount}</p>
         </Card>
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Denied saves</p>
-          <p className="mt-1 text-2xl font-semibold text-amber-600">{deniedCount}</p>
+          <p className="mt-1 text-2xl font-semibold text-amber-600">{aggregate.denied || deniedCount}</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Skipped items</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{aggregate.skipped}</p>
         </Card>
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Contested cards</p>

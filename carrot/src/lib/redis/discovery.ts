@@ -340,7 +340,7 @@ export async function getContestedCovered(runId: string): Promise<Set<string>> {
 export interface RunMetricsSnapshot {
   runId: string
   patchId: string
-  status: 'running' | 'completed' | 'error' | 'aborted'
+  status: 'running' | 'completed' | 'error' | 'suspended'
   timestamp: string
   metrics: Record<string, any>
 }

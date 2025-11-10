@@ -11,6 +11,7 @@ export interface SearchCandidate {
   lastSeen: Date
   duplicateRate: number
   domain: string
+  meta?: Record<string, any>
 }
 
 export interface FrontierConfig {
@@ -96,12 +97,22 @@ export class SearchFrontier {
     const novelty = this.calculateNovelty(candidate)
     const diversity = this.calculateDiversity(candidate.domain)
     const penalty = candidate.duplicateRate
-    
-    // Give citations MUCH higher priority (they're the next step after Wikipedia)
+
     const citationBonus = candidate.source === 'citation' ? 10.0 : 0
-    
+    const plannerPriority = (() => {
+      const planPriority = (candidate as SearchCandidate).meta?.planPriority
+      if (planPriority === 1) return 80
+      if (planPriority === 2) return 35
+      if (planPriority === 3) return 10
+      return 0
+    })()
+
+    const contestedBonus = (candidate as SearchCandidate).meta?.stance === 'contested' ? 12 : 0
+
     return (
       citationBonus +
+      plannerPriority +
+      contestedBonus +
       this.config.noveltyWeight * novelty +
       this.config.diversityWeight * diversity -
       this.config.penaltyWeight * penalty
@@ -167,7 +178,9 @@ export class SearchFrontier {
   } {
     const totalCandidates = this.candidates.length
     const uniqueDomains = this.seenDomains.size
-    const averagePriority = this.candidates.reduce((sum, c) => sum + c.priority, 0) / totalCandidates
+    const averagePriority = totalCandidates
+      ? this.candidates.reduce((sum, c) => sum + c.priority, 0) / totalCandidates
+      : 0
     
     const topDomains = Array.from(this.domainCounts.entries())
       .sort(([, a], [, b]) => b - a)

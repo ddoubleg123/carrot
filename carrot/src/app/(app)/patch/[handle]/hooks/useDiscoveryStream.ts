@@ -14,6 +14,9 @@ interface DiscoveryStreamState {
   lastItemTitle?: string
   error?: string
   runId?: string
+  duplicatesSkipped: number
+  lowRelevanceSkipped: number
+  nearDuplicateSkipped: number
 }
 
 interface UseDiscoveryStreamReturn {
@@ -37,7 +40,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     isActive: false,
     isPaused: false,
     currentStatus: '',
-    itemsFound: 0
+    itemsFound: 0,
+    duplicatesSkipped: 0,
+    lowRelevanceSkipped: 0,
+    nearDuplicateSkipped: 0
   })
 
   const [items, setItems] = useState<DiscoveryCardPayload[]>([])
@@ -143,7 +149,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         currentStage: 'searching',
         currentStatus: 'Starting discovery…',
         error: undefined,
-        runId
+        runId,
+        duplicatesSkipped: 0,
+        lowRelevanceSkipped: 0,
+        nearDuplicateSkipped: 0
       }))
 
       startSSEConnection(runId)
@@ -185,13 +194,14 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
       }
       activeRunIdRef.current = null
       closeEventSource()
-      setState({
+      setState(prev => ({
+        ...prev,
         isActive: false,
         isPaused: false,
         currentStatus: '',
         itemsFound: items.length,
         runId: undefined
-      })
+      }))
     }
   }, [closeEventSource, items.length, patchHandle])
 
@@ -203,7 +213,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           isActive: true,
           isPaused: false,
           currentStage: 'searching',
-          currentStatus: 'Starting discovery…'
+          currentStatus: 'Starting discovery…',
+          duplicatesSkipped: 0,
+          lowRelevanceSkipped: 0,
+          nearDuplicateSkipped: 0
         }))
         break
       }
@@ -240,21 +253,24 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
       case 'skipped:duplicate':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Duplicate detected – skipping'
+          currentStatus: 'Duplicate detected – skipping',
+          duplicatesSkipped: prev.duplicatesSkipped + 1
         }))
         break
 
       case 'skipped:low_relevance':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Low relevance – skipping'
+          currentStatus: 'Low relevance – skipping',
+          lowRelevanceSkipped: prev.lowRelevanceSkipped + 1
         }))
         break
 
       case 'skipped:near_dup':
         setState(prev => ({
           ...prev,
-          currentStatus: 'Near-duplicate – skipping'
+          currentStatus: 'Near-duplicate – skipping',
+          nearDuplicateSkipped: prev.nearDuplicateSkipped + 1
         }))
         break
 

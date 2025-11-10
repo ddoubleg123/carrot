@@ -15,6 +15,12 @@ import { prisma } from '@/lib/prisma'
 import { DiscoveredItem } from '@/types/discovered-content'
 import { isOpenEvidenceV2Enabled } from './flags'
 import { isSeen, markAsSeen } from '@/lib/redis/discovery'
+import {
+  DiscoveryPlan,
+  generateGuideSnapshot,
+  normaliseSeedCandidate,
+  PlannerSeedCandidate
+} from './planner'
 
 export interface DiscoveryConfig {
   maxItems: number
@@ -38,6 +44,7 @@ export class DiscoveryOrchestrator {
   }
   private stopRequested = false
   private queuedCanonicalUrls = new Set<string>()
+  private plannerGuide: DiscoveryPlan | null = null
   
   constructor(
     private groupId: string,
@@ -87,6 +94,8 @@ export class DiscoveryOrchestrator {
       // Build entity profile
       await this.relevance.buildEntityProfile(this.groupId, this.groupName)
       
+      await this.ensurePlannerGuide()
+      
       // Initialize search frontier
       await this.initializeFrontier()
       
@@ -97,11 +106,11 @@ export class DiscoveryOrchestrator {
         await this.emitAudit('run_complete', 'ok', {
           meta: { ...this.metrics, stopped: true },
           decisions: {
-            action: 'stop',
+            action: 'suspend',
             reason: 'user_requested_stop'
           }
         })
-        await this.finalizeRun('aborted')
+        await this.finalizeRun('suspended')
         return
       }
 
@@ -131,6 +140,15 @@ export class DiscoveryOrchestrator {
    * Initialize search frontier with seed sources
    */
   private async initializeFrontier(): Promise<void> {
+    if (this.plannerGuide && this.plannerGuide.seedCandidates?.length) {
+      const added = await this.seedFrontierFromPlanner(this.plannerGuide)
+      if (added > 0) {
+        console.log(`[Initialize Frontier] Seeded ${added} planner candidates for ${this.groupName}`)
+        return
+      }
+      console.warn('[Initialize Frontier] Planner seeds missing or invalid, falling back to legacy seeds')
+    }
+
     // Check what Wikipedia pages we've already discovered
     const existingWikiPages = await prisma.discoveredContent.findMany({
       where: {
@@ -212,6 +230,178 @@ export class DiscoveryOrchestrator {
       lastSeen: new Date()
     })
     
+  }
+
+  private async ensurePlannerGuide(): Promise<void> {
+    try {
+      const patch = await prisma.patch.findUnique({
+        where: { id: this.groupId },
+        select: {
+          title: true,
+          tags: true,
+          entity: true,
+          guide: true
+        }
+      })
+
+      if (!patch) {
+        console.warn('[Discovery Orchestrator] Failed to load patch for planner guide', this.groupId)
+        return
+      }
+
+      let guide = patch.guide as unknown as DiscoveryPlan | null
+      if (!guide) {
+        const entityName = (patch.entity as any)?.name
+        const entityAliases = Array.isArray((patch.entity as any)?.aliases)
+          ? (patch.entity as any).aliases.filter((value: unknown): value is string => typeof value === 'string')
+          : []
+        const topic = typeof entityName === 'string' && entityName.trim().length ? entityName.trim() : patch.title
+        const aliases =
+          entityAliases.length > 0
+            ? entityAliases
+            : patch.tags.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+
+        guide = await generateGuideSnapshot(topic, aliases)
+        await prisma.patch.update({
+          where: { id: this.groupId },
+          data: { guide: guide as unknown as Prisma.JsonObject }
+        })
+      }
+
+      if (guide) {
+        const seeds = Array.isArray(guide.seedCandidates) ? guide.seedCandidates.filter((seed) => seed?.url) : []
+        if (seeds.length === 0) {
+          console.warn('[Discovery Orchestrator] Planner guide has no seeds', this.groupId)
+        } else if (seeds.length !== 10) {
+          console.warn(
+            '[Discovery Orchestrator] Planner guide does not contain exactly 10 seeds',
+            this.groupId,
+            seeds.length
+          )
+        }
+        this.plannerGuide = {
+          ...guide,
+          seedCandidates: seeds.map((seed) => {
+            try {
+              return normaliseSeedCandidate(seed as PlannerSeedCandidate)
+            } catch (error) {
+              console.warn('[Discovery Orchestrator] Invalid planner seed skipped', seed, error)
+              return null
+            }
+          }).filter((seed): seed is PlannerSeedCandidate => Boolean(seed))
+        }
+      }
+    } catch (error) {
+      console.error('[Discovery Orchestrator] Failed to ensure planner guide', error)
+      this.plannerGuide = null
+    }
+  }
+
+  private async seedFrontierFromPlanner(plan: DiscoveryPlan): Promise<number> {
+    if (!plan.seedCandidates?.length) {
+      return 0
+    }
+
+    const contestedSeeds = plan.seedCandidates.filter(
+      (seed) => seed.stance === 'contested' || seed.isControversy === true
+    )
+    const establishmentSeeds = plan.seedCandidates.filter(
+      (seed) => seed.stance !== 'contested' && seed.isControversy !== true
+    )
+
+    const sortByPlannerPriority = (a: PlannerSeedCandidate, b: PlannerSeedCandidate) => {
+      const priorityA = a.priority ?? 999
+      const priorityB = b.priority ?? 999
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB
+      }
+      return 0
+    }
+
+    contestedSeeds.sort(sortByPlannerPriority)
+    establishmentSeeds.sort(sortByPlannerPriority)
+
+    const domainCounts = new Map<string, number>()
+
+    const selectSeeds = (sourceSeeds: PlannerSeedCandidate[], limit: number): PlannerSeedCandidate[] => {
+      const selected: PlannerSeedCandidate[] = []
+      for (const seed of sourceSeeds) {
+        if (!seed.url) continue
+        let domain = 'unknown'
+        try {
+          domain = new URL(seed.url).hostname.toLowerCase()
+        } catch {
+          // ignore parse error
+        }
+        const currentCount = domainCounts.get(domain) ?? 0
+        if (currentCount >= 2) continue
+        domainCounts.set(domain, currentCount + 1)
+        selected.push(seed)
+        if (selected.length >= limit) break
+      }
+      return selected
+    }
+
+    const selectedContested = selectSeeds(contestedSeeds, 5)
+    const selectedEstablishment = selectSeeds(establishmentSeeds, 5)
+    const combined = [...selectedContested, ...selectedEstablishment]
+
+    if (!combined.length) {
+      return 0
+    }
+
+    if (combined.length < 10) {
+      console.warn(
+        '[Initialize Frontier] Planner provided fewer than 10 usable seeds after applying domain/stance constraints',
+        combined.length
+      )
+    }
+
+    const seeds = combined.map((seed, index) => {
+      let domain = 'unknown'
+      try {
+        domain = new URL(seed.url).hostname
+      } catch {
+        // ignore
+      }
+
+      const basePriority =
+        seed.priority === 1 ? 500 : seed.priority === 2 ? 420 : seed.priority === 3 ? 360 : 300 - index * 5
+      const stanceBoost = seed.stance === 'contested' || seed.isControversy ? 40 : 0
+
+      return {
+        source: 'planner',
+        method: 'planner',
+        cursor: seed.url,
+        domain,
+        lastSeen: new Date(),
+        duplicateRate: 0,
+        priority: basePriority + stanceBoost,
+        meta: {
+          planPriority: seed.priority,
+          angle: seed.angle,
+          stance: seed.stance ?? (seed.isControversy ? 'contested' : 'establishment'),
+          category: seed.category,
+          expectedInsights: seed.expectedInsights,
+          credibilityTier: seed.credibilityTier,
+          noveltySignals: seed.noveltySignals,
+          quotePullHints: seed.quotePullHints,
+          verification: seed.verification,
+          isControversy: seed.isControversy ?? seed.stance === 'contested',
+          isHistory: seed.isHistory,
+          whyItMatters: seed.whyItMatters,
+          notes: seed.notes,
+          titleGuess: seed.titleGuess
+        }
+      }
+    })
+
+    let inserted = 0
+    for (const seed of seeds) {
+      this.frontier.addCandidate(seed)
+      inserted++
+    }
+    return inserted
   }
   
   /**
@@ -1243,7 +1433,7 @@ export class DiscoveryOrchestrator {
     }
   }
 
-  private async finalizeRun(status: 'completed' | 'error' | 'aborted', error?: unknown): Promise<void> {
+  private async finalizeRun(status: 'completed' | 'error' | 'suspended', error?: unknown): Promise<void> {
     try {
       await (prisma as any).discoveryRun.update({
         where: { id: this.runId },

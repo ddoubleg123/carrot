@@ -133,7 +133,7 @@ export class DiscoveryEngineV21 {
       await this.discoveryLoop(coveredAngles)
 
       if (this.stopRequested) {
-        await this.emitRunComplete('aborted')
+        await this.emitRunComplete('suspended')
       } else {
         await this.emitRunComplete('completed')
       }
@@ -655,7 +655,7 @@ export class DiscoveryEngineV21 {
   }
 
   private async persistMetricsSnapshot(
-    status: 'running' | 'completed' | 'error' | 'aborted',
+    status: 'running' | 'completed' | 'error' | 'suspended',
     counters?: SaveCounters,
     extra: Record<string, unknown> = {}
   ): Promise<void> {
@@ -702,7 +702,7 @@ export class DiscoveryEngineV21 {
     })
   }
 
-  private async emitRunComplete(status: 'completed' | 'error' | 'aborted', error?: unknown) {
+  private async emitRunComplete(status: 'completed' | 'error' | 'suspended', error?: unknown) {
     const acceptance = status === 'completed' && this.plan
       ? evaluateAcceptance({
           timeToFirstMs: this.metrics.timeToFirstMs,
@@ -719,7 +719,7 @@ export class DiscoveryEngineV21 {
     const auditMeta = acceptance ? { ...this.metrics } : this.metrics
     const formattedError = error ? this.formatError(error) : undefined
 
-    await this.emitAudit('run_complete', status === 'completed' ? 'ok' : status === 'aborted' ? 'ok' : 'fail', {
+    await this.emitAudit('run_complete', status === 'completed' || status === 'suspended' ? 'ok' : 'fail', {
       meta: auditMeta,
       error: formattedError
     })

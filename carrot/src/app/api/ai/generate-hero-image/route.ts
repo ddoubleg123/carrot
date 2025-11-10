@@ -93,31 +93,10 @@ export async function POST(request: NextRequest) {
       const result = await response.json();
       
       if (!result.success || !result.image) {
-        console.log('[GenerateHeroImage] SDXL API failed, using fallback image');
-        // Fallback to a placeholder image
-        const fallbackImageUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Question_mark_%28black%29.svg/1024px-Question_mark_%28black%29.svg.png';
-        return NextResponse.json({
-          success: true,
-          imageUrl: fallbackImageUrl,
-          prompt: positivePrompt,
-          model: 'fallback',
-          generationTime: 0,
-          features: {
-            refiner: false,
-            faceRestoration: false,
-            upscaling: false,
-            hiresFix: false
-          }
-        });
-      }
-
-      // Handle case where no image was generated
-      if (!result.image) {
+        console.log('[GenerateHeroImage] SDXL API returned no image');
         return NextResponse.json(
-          {
-            error: "No image was generated. This could be due to content safety rules or technical issues.",
-          },
-          { status: 400 }
+          { success: false, error: 'no_image_generated' },
+          { status: 502 }
         );
       }
 
@@ -191,22 +170,11 @@ export async function POST(request: NextRequest) {
       });
       
     } catch (sdxlError: any) {
-      console.log('[GenerateHeroImage] SDXL API error, using fallback:', sdxlError.message);
-      // Fallback to a placeholder image when SDXL fails
-      const fallbackImageUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Question_mark_%28black%29.svg/1024px-Question_mark_%28black%29.svg.png';
-      return NextResponse.json({
-        success: true,
-        imageUrl: fallbackImageUrl,
-        prompt: positivePrompt,
-        model: 'fallback',
-        generationTime: 0,
-        features: {
-          refiner: false,
-          faceRestoration: false,
-          upscaling: false,
-          hiresFix: false
-        }
-      });
+      console.log('[GenerateHeroImage] SDXL API error:', sdxlError.message);
+      return NextResponse.json(
+        { success: false, error: 'ai_generation_failed' },
+        { status: 502 }
+      );
     }
 
   } catch (error) {
