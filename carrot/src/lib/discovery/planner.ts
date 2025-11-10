@@ -348,8 +348,7 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
       : fallback.historyAngles
 
   const coverageTargets: PlannerCoverageTargets = (() => {
-    const source = typeof plan.coverageTargets === 'object' && plan.coverageTargets ? plan.coverageTargets : {}
-    const baseline = fallback.coverageTargets || {
+    const baseline: PlannerCoverageTargets = fallback.coverageTargets || {
       controversyRatio: 0.5,
       controversyWindow: 4,
       historyInFirst: 3,
@@ -358,14 +357,15 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
       minFreshnessDays: 0,
       preferFreshWithinDays: 1095
     }
+    const source = typeof plan.coverageTargets === 'object' && plan.coverageTargets ? plan.coverageTargets : undefined
     return {
-      controversyRatio: Number(source.controversyRatio ?? baseline.controversyRatio ?? 0.5),
-      controversyWindow: Number(source.controversyWindow ?? baseline.controversyWindow ?? 4),
-      historyInFirst: Number(source.historyInFirst ?? baseline.historyInFirst ?? 3),
-      minNonMediaPerContested: Number(source.minNonMediaPerContested ?? baseline.minNonMediaPerContested ?? 1),
-      maxPerDomain: Number(source.maxPerDomain ?? baseline.maxPerDomain ?? 2),
-      minFreshnessDays: Number(source.minFreshnessDays ?? baseline.minFreshnessDays ?? 0),
-      preferFreshWithinDays: Number(source.preferFreshWithinDays ?? baseline.preferFreshWithinDays ?? 1095)
+      controversyRatio: Number((source as any)?.controversyRatio ?? baseline.controversyRatio ?? 0.5),
+      controversyWindow: Number((source as any)?.controversyWindow ?? baseline.controversyWindow ?? 4),
+      historyInFirst: Number((source as any)?.historyInFirst ?? baseline.historyInFirst ?? 3),
+      minNonMediaPerContested: Number((source as any)?.minNonMediaPerContested ?? baseline.minNonMediaPerContested ?? 1),
+      maxPerDomain: Number((source as any)?.maxPerDomain ?? baseline.maxPerDomain ?? 2),
+      minFreshnessDays: Number((source as any)?.minFreshnessDays ?? baseline.minFreshnessDays ?? 0),
+      preferFreshWithinDays: Number((source as any)?.preferFreshWithinDays ?? baseline.preferFreshWithinDays ?? 1095)
     }
   })()
 
