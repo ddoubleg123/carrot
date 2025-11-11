@@ -8,6 +8,7 @@ import Redis from 'ioredis'
 let redisClient: Redis | null = null
 const RUN_METRICS_KEY = (runId: string) => `discovery:metrics:run:${runId}`
 const PATCH_METRICS_KEY = (patchId: string) => `discovery:metrics:patch:${patchId}`
+const RUN_STATE_KEY = (patchId: string) => `run_state:${patchId}`
 const METRICS_TTL_SECONDS = 60 * 60 * 6
 
 async function getRedisClient() {
@@ -199,7 +200,11 @@ export async function clearSaveCounters(patchId: string): Promise<void> {
 export async function setActiveRun(patchId: string, runId: string): Promise<void> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
-  await client.setex(key, 3600, runId)
+  await client
+    .multi()
+    .setex(key, 3600, runId)
+    .set(RUN_STATE_KEY(patchId), 'live')
+    .exec()
 }
 
 export async function getActiveRun(patchId: string): Promise<string | null> {
@@ -212,7 +217,11 @@ export async function getActiveRun(patchId: string): Promise<string | null> {
 export async function clearActiveRun(patchId: string): Promise<void> {
   const client = await getRedisClient()
   const key = `run:patch:${patchId}`
-  await client.del(key)
+  await client
+    .multi()
+    .del(key)
+    .del(RUN_STATE_KEY(patchId))
+    .exec()
 }
 
 /**
@@ -320,6 +329,20 @@ export async function clearPlan(runId: string): Promise<void> {
   await client.del(`plan:run:${runId}`)
   await client.del(`plan:run:${runId}:angles`)
   await client.del(`plan:run:${runId}:contested`)
+}
+
+export async function setRunState(patchId: string, state: 'live' | 'suspended' | 'paused'): Promise<void> {
+  const client = await getRedisClient()
+  await client.set(RUN_STATE_KEY(patchId), state)
+}
+
+export async function getRunState(patchId: string): Promise<'live' | 'suspended' | 'paused' | null> {
+  const client = await getRedisClient()
+  const state = await client.get(RUN_STATE_KEY(patchId))
+  if (state === 'live' || state === 'suspended' || state === 'paused') {
+    return state
+  }
+  return null
 }
 
 export async function markContestedCovered(runId: string, claim: string): Promise<void> {

@@ -103,6 +103,133 @@ const filterRows = (rows: AuditRow[], statusFilter: string, provider: string, re
   })
 }
 
+const OPERATOR_ACTIONS: Array<{
+  value: string
+  label: string
+  placeholder?: string
+  helper?: string
+}> = [
+  { value: 'pin_seed', label: 'Pin seed', placeholder: 'Seed URL to prioritize' },
+  { value: 'nuke_host', label: 'Nuke host (24h)', placeholder: 'Domain to block', helper: 'Blocks the host for 24 hours' },
+  { value: 'boost_hook', label: 'Boost hook', placeholder: 'Hook ID to boost', helper: 'Temporarily increases priority' },
+  { value: 'skip_angle', label: 'Skip angle', placeholder: 'Angle ID to skip', helper: 'Skips further attempts for the angle' },
+  { value: 'add_seed', label: 'Add manual seed', placeholder: 'Seed URL with notes', helper: 'Adds a seed URL with your notes' }
+]
+
+interface HookStat {
+  hookId: string
+  attempts: number
+  saved: number
+}
+
+interface HostStat {
+  host: string
+  attempts: number
+  saved: number
+}
+
+interface ViewpointStat {
+  label: string
+  count: number
+}
+
+interface AnalyticsSummary {
+  hooks: HookStat[]
+  hosts: HostStat[]
+  viewpoints: ViewpointStat[]
+  wikiShare: number
+  totalAttempts: number
+  seedsVsQueries: { seeds: number; queries: number }
+  paywallLog: AuditRow[]
+  robotsLog: AuditRow[]
+}
+
+function computeAnalytics(rows: AuditRow[]): AnalyticsSummary {
+  const hookMap = new Map<string, HookStat>()
+  const hostMap = new Map<string, HostStat>()
+  const viewpointMap = new Map<string, number>()
+  let wikiTagged = 0
+  let total = 0
+  let seedCount = 0
+  let queryCount = 0
+  const paywall: AuditRow[] = []
+  const robots: AuditRow[] = []
+
+  rows.forEach((row) => {
+    total += 1
+    const meta = row.payload.meta || {}
+    const decisions = row.payload.decisions || {}
+    const hookId = meta.hookId || decisions.hookId
+    const viewpoint = meta.viewpoint || meta.stance || (row.contestedNote ? 'contested' : 'majority')
+    const reason = (row.reason || '').toLowerCase()
+    const metaReason = typeof meta.reason === 'string' ? meta.reason : ''
+
+    const candidateUrl = row.candidateUrl || ''
+    let host = meta.domain || ''
+    if (!host && candidateUrl && candidateUrl !== '—') {
+      try {
+        host = new URL(candidateUrl).hostname.toLowerCase()
+      } catch {
+        host = candidateUrl
+      }
+    }
+    const isSave = row.step === 'save' && row.status === 'ok'
+
+    if (hookId) {
+      const hook = hookMap.get(hookId) ?? { hookId, attempts: 0, saved: 0 }
+      hook.attempts += 1
+      if (isSave) hook.saved += 1
+      hookMap.set(hookId, hook)
+    }
+
+    if (host) {
+      const hostStat = hostMap.get(host) ?? { host, attempts: 0, saved: 0 }
+      hostStat.attempts += 1
+      if (isSave) hostStat.saved += 1
+      hostMap.set(host, hostStat)
+    }
+
+    if (viewpoint) {
+      viewpointMap.set(viewpoint, (viewpointMap.get(viewpoint) ?? 0) + (isSave ? 1 : 0))
+    }
+
+    if (host.includes('wikipedia.org')) {
+      wikiTagged += 1
+    }
+
+    if (metaReason === 'planner_query') {
+      queryCount += 1
+    } else if (meta.directSeed || metaReason === 'direct_seed' || decisions.action === 'seed_accepted') {
+      seedCount += 1
+    }
+
+    if (reason.includes('paywall')) {
+      paywall.push(row)
+    } else if (reason.includes('robots') || (meta.http && meta.http.status === 403)) {
+      robots.push(row)
+    }
+  })
+
+  const hooks = Array.from(hookMap.values()).sort((a, b) => b.attempts - a.attempts)
+  const hosts = Array.from(hostMap.values()).sort((a, b) => b.attempts - a.attempts)
+  const viewpoints = Array.from(viewpointMap.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const wikiShare = total > 0 ? (wikiTagged / total) * 100 : 0
+
+  return {
+    hooks,
+    hosts,
+    viewpoints,
+    wikiShare,
+    totalAttempts: total,
+    seedsVsQueries: { seeds: seedCount, queries: queryCount },
+    paywallLog: paywall.slice(0, 10),
+    robotsLog: robots.slice(0, 10)
+  }
+}
+
 interface AuditPageProps {
   params: Promise<{ handle: string }>
 }
@@ -120,6 +247,11 @@ export default function AuditPage(props: AuditPageProps) {
   const [connected, setConnected] = useState<boolean>(true)
   const eventSourceRef = useRef<EventSource | null>(null)
   const seenIdsRef = useRef<Set<string>>(new Set())
+  const [plan, setPlan] = useState<any | null>(null)
+  const [planHash, setPlanHash] = useState<string | null>(null)
+  const [isPlanOpen, setIsPlanOpen] = useState<boolean>(false)
+  const [run, setRun] = useState<any | null>(null)
+  const [runState, setRunState] = useState<'live' | 'paused' | 'suspended' | null>(null)
   const [aggregate, setAggregate] = useState<{
     accepted: number
     denied: number
@@ -136,6 +268,9 @@ export default function AuditPage(props: AuditPageProps) {
       robotsBlock?: number
       timeout?: number
       softAccepted?: number
+      queriesExpanded?: number
+      queryExpansionSkipped?: number
+      queryDeferred?: number
     } | null
   }>({
     accepted: 0,
@@ -144,6 +279,11 @@ export default function AuditPage(props: AuditPageProps) {
     telemetry: null
   })
   const [statusSummary, setStatusSummary] = useState<{ status: string; runId?: string } | null>(null)
+  const [operatorAction, setOperatorAction] = useState<string>('pin_seed')
+  const [operatorTarget, setOperatorTarget] = useState<string>('')
+  const [operatorNotes, setOperatorNotes] = useState<string>('')
+  const [operatorSubmitting, setOperatorSubmitting] = useState<boolean>(false)
+  const [operatorMessage, setOperatorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     props.params.then(({ handle }) => {
@@ -173,6 +313,10 @@ export default function AuditPage(props: AuditPageProps) {
       if (data.aggregate) {
         setAggregate(data.aggregate)
       }
+      setPlan(data.plan ?? null)
+      setPlanHash(data.planHash ?? null)
+      setRun(data.run ?? null)
+      setRunState(data.runState ?? null)
       setError(null)
       setConnected(true)
     } catch (err) {
@@ -212,11 +356,28 @@ export default function AuditPage(props: AuditPageProps) {
           })
         } else if (row.step.startsWith('skipped')) {
           setAggregate((prev) => ({ ...prev, skipped: prev.skipped + 1 }))
-        } else if (row.step === 'run_complete' && row.status !== 'ok') {
+        } else if (row.step === 'run_complete') {
+          const metaStatus = (row.payload?.meta as any)?.status
+          const nextRunState =
+            metaStatus === 'suspended'
+              ? 'suspended'
+              : metaStatus === 'paused'
+                ? 'paused'
+                : 'live'
+          setRunState(nextRunState)
           setStatusSummary({
-            status: row.status,
-            runId: row.payload?.decisions?.runId || undefined
+            status: metaStatus || row.status,
+            runId: (row.payload?.decisions as any)?.runId || row.payload?.meta?.runId || undefined
           })
+          const telemetryMeta = (row.payload?.meta as any)?.telemetry
+          if (telemetryMeta) {
+            setAggregate((prev) => ({ ...prev, telemetry: telemetryMeta }))
+          }
+          setRun((prev: any) => ({
+            ...(prev ?? {}),
+            id: (row.payload?.decisions as any)?.runId || prev?.id || row.id,
+            metrics: row.payload?.meta || prev?.metrics || {}
+          }))
         }
         setError(null)
         setConnected(true)
@@ -263,12 +424,18 @@ export default function AuditPage(props: AuditPageProps) {
       { label: 'Paywall', value: telemetry.paywall ?? 0 },
       { label: 'Robots block', value: telemetry.robotsBlock ?? 0 },
       { label: 'Timeout', value: telemetry.timeout ?? 0 },
-      { label: 'Soft accepted', value: telemetry.softAccepted ?? 0 }
+      { label: 'Soft accepted', value: telemetry.softAccepted ?? 0 },
+      { label: 'Queries expanded', value: telemetry.queriesExpanded ?? 0 },
+      { label: 'Query skips', value: telemetry.queryExpansionSkipped ?? 0 },
+      { label: 'Query deferred', value: telemetry.queryDeferred ?? 0 }
     ]
   }, [telemetry])
 
   const acceptedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status === 'ok').length, [rows])
   const deniedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status !== 'ok').length, [rows])
+  const analytics = useMemo(() => computeAnalytics(rows), [rows])
+  const seedsVsQueries = analytics.seedsVsQueries
+  const wikiSharePercent = analytics.wikiShare.toFixed(1)
 
   const handleExport = useCallback(async () => {
     try {
@@ -290,6 +457,18 @@ export default function AuditPage(props: AuditPageProps) {
 
   return (
     <div className="space-y-6">
+      {runState && runState !== 'live' && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <p className="text-sm font-semibold text-amber-800">
+            {runState === 'paused' ? 'Discovery run paused' : 'Discovery run suspended'}
+          </p>
+          <p className="text-xs text-amber-700">
+            {statusSummary?.status
+              ? `Last status: ${statusSummary.status}`
+              : 'Operator attention required before discovery resumes.'}
+          </p>
+        </div>
+      )}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Discovery Audit · {handle}</h1>
@@ -364,6 +543,234 @@ export default function AuditPage(props: AuditPageProps) {
               ))}
             </div>
           )}
+        </Card>
+      </section>
+
+      {plan && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Planner guide</p>
+              {planHash && <p className="text-xs text-slate-400">Hash: {planHash}</p>}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(JSON.stringify(plan, null, 2))}>
+                Copy JSON
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsPlanOpen((prev) => !prev)}>
+                {isPlanOpen ? 'Hide plan' : 'Show plan'}
+              </Button>
+            </div>
+          </div>
+          {isPlanOpen && (
+            <pre className="mt-4 max-h-96 overflow-y-auto rounded-xl bg-slate-900/90 p-4 text-xs text-slate-100">
+              {JSON.stringify(plan, null, 2)}
+            </pre>
+          )}
+        </section>
+      )}
+
+      <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Hook coverage</p>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {analytics.hooks.slice(0, 6).map((hook) => (
+              <li key={hook.hookId} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="font-medium">{hook.hookId}</span>
+                <span className="text-xs text-slate-500">
+                  {hook.saved} saved / {hook.attempts} attempts
+                </span>
+              </li>
+            ))}
+            {analytics.hooks.length === 0 && <li className="text-xs text-slate-500">No hook activity yet.</li>}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Top hosts</p>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {analytics.hosts.slice(0, 6).map((host) => (
+              <li key={host.host} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="truncate font-medium">{host.host}</span>
+                <span className="text-xs text-slate-500">
+                  {host.saved} saved / {host.attempts} attempts
+                </span>
+              </li>
+            ))}
+            {analytics.hosts.length === 0 && <li className="text-xs text-slate-500">No host data yet.</li>}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Viewpoint coverage</p>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {analytics.viewpoints.slice(0, 6).map((item) => (
+              <li key={item.label} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="font-medium capitalize">{item.label}</span>
+                <span className="text-xs text-slate-500">{item.count} saved</span>
+              </li>
+            ))}
+            {analytics.viewpoints.length === 0 && <li className="text-xs text-slate-500">No viewpoint data yet.</li>}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Seeds vs Planner queries</p>
+          <div className="mt-4 space-y-3 text-sm text-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-600">Seeds</span>
+              <span>{seedsVsQueries.seeds}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-600">Queries</span>
+              <span>{seedsVsQueries.queries}</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-100">
+              {(() => {
+                const total = seedsVsQueries.seeds + seedsVsQueries.queries
+                if (total === 0) return null
+                const seedPct = (seedsVsQueries.seeds / total) * 100
+                return (
+                  <div className="flex h-2 w-full overflow-hidden rounded-full">
+                    <span className="bg-emerald-500" style={{ width: `${seedPct}%` }} />
+                    <span className="bg-blue-500" style={{ width: `${100 - seedPct}%` }} />
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Wikipedia share</p>
+          <div className="mt-4 space-y-2">
+            <p className="text-3xl font-semibold text-slate-900">{wikiSharePercent}%</p>
+            <div className="h-2 w-full rounded-full bg-slate-100">
+              <div
+                className={`h-2 rounded-full ${analytics.wikiShare > 45 ? 'bg-red-500' : analytics.wikiShare > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                style={{ width: `${Math.min(analytics.wikiShare, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">Share of events touching wikipedia.org out of {analytics.totalAttempts} events.</p>
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Zero-save diagnostics</p>
+          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+            {(() => {
+              const zeroSave =
+                run?.metrics?.zeroSave ??
+                run?.metrics?.zeroSavePayload ??
+                run?.metrics?.zeroSaveContext ??
+                run?.metrics?.acceptance?.zeroSave ??
+                null
+              if (!zeroSave) {
+                return <p>No zero-save warnings recorded for the current run.</p>
+              }
+              return <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(zeroSave, null, 2)}</pre>
+            })()}
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Recent paywall blocks</p>
+          <ul className="mt-3 space-y-2 text-xs text-slate-700">
+            {analytics.paywallLog.length > 0 ? (
+              analytics.paywallLog.slice(0, 6).map((row) => (
+                <li key={row.id} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="font-medium">{row.candidateUrl}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">{row.reason}</p>
+                </li>
+              ))
+            ) : (
+              <li className="text-xs text-slate-500">No paywall incidents captured.</li>
+            )}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Robots.txt decisions</p>
+          <ul className="mt-3 space-y-2 text-xs text-slate-700">
+            {analytics.robotsLog.length > 0 ? (
+              analytics.robotsLog.slice(0, 6).map((row) => (
+                <li key={row.id} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="font-medium">{row.candidateUrl}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">{row.reason || 'robots.txt'}</p>
+                </li>
+              ))
+            ) : (
+              <li className="text-xs text-slate-500">No robots decisions recorded.</li>
+            )}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Operator controls</p>
+          <form
+            className="mt-3 space-y-3 text-sm text-slate-700"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              setOperatorSubmitting(true)
+              setOperatorMessage(null)
+              try {
+                const response = await fetch(`/api/patches/${handle}/discovery/operator`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: operatorAction, target: operatorTarget, notes: operatorNotes })
+                })
+                if (!response.ok) {
+                  throw new Error(`Request failed with status ${response.status}`)
+                }
+                setOperatorTarget('')
+                setOperatorNotes('')
+                setOperatorMessage('Action logged to audit stream.')
+              } catch (err) {
+                console.error('[OperatorAction] failed', err)
+                setOperatorMessage('Failed to log action. See console for details.')
+              } finally {
+                setOperatorSubmitting(false)
+              }
+            }}
+          >
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-500">
+              Action
+              <select
+                value={operatorAction}
+                onChange={(event) => setOperatorAction(event.target.value)}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+              >
+                {OPERATOR_ACTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-500">
+              Target
+              <input
+                value={operatorTarget}
+                onChange={(event) => setOperatorTarget(event.target.value)}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+                placeholder={OPERATOR_ACTIONS.find((option) => option.value === operatorAction)?.placeholder}
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-500">
+              Notes (optional)
+              <textarea
+                value={operatorNotes}
+                onChange={(event) => setOperatorNotes(event.target.value)}
+                className="min-h-[64px] rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+                placeholder={OPERATOR_ACTIONS.find((option) => option.value === operatorAction)?.helper}
+              />
+            </label>
+            <Button type="submit" size="sm" disabled={operatorSubmitting} className="w-full">
+              {operatorSubmitting ? 'Recording…' : 'Log action'}
+            </Button>
+            {operatorMessage && <p className="text-xs text-slate-500">{operatorMessage}</p>}
+          </form>
         </Card>
       </section>
 

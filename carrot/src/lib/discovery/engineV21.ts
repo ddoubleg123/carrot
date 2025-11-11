@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
-import { canonicalize } from './canonicalize'
+import { canonicalize, canonicalizeUrlFast } from './canonicalize'
 import { DiscoveryEventStream } from './streaming'
 import { audit, logger, MetricsTracker } from './logger'
 import { HeroImagePipeline } from './hero-pipeline'
+import { createHash } from 'crypto'
 import {
   popFromFrontier,
   addToFrontier,
@@ -22,6 +23,7 @@ import {
   frontierSize,
   storeRunMetricsSnapshot,
   enqueueHeroRetry,
+  getRunState,
   type SaveCounters,
   type RunMetricsSnapshot
 } from '@/lib/redis/discovery'
@@ -31,6 +33,12 @@ import { DiscoveryPlan, PlannerSeedCandidate } from './planner'
 import { vetSource, VetterResult } from './vetter'
 import { DiscoveryCardPayload } from '@/types/discovery-card'
 import { evaluateAcceptance, type AcceptanceCard, type AcceptanceResult } from './acceptance'
+import {
+  expandPlannerQuery,
+  filterQuerySuggestions,
+  type FilteredSuggestion,
+  QueryExpanderConstants
+} from './queryExpander'
 
 interface EngineOptions {
   patchId: string
@@ -67,8 +75,8 @@ interface Metrics {
 const FETCH_TIMEOUT_MS = 8000
 const MIN_CONTENT_LENGTH = 200
 const DUPLICATE_HASH_THRESHOLD = 4
-const MIN_RELEVANCE_SCORE = 0.75
-const MIN_QUALITY_SCORE = 60
+const MIN_RELEVANCE_SCORE = 0.65
+const MIN_QUALITY_SCORE = 70
 const MIN_FACT_COUNT = 2
 
 interface TelemetryCounters {
@@ -83,6 +91,9 @@ interface TelemetryCounters {
   robotsBlock: number
   timeout: number
   softAccepted: number
+  queriesExpanded: number
+  queryExpansionSkipped: number
+  queryDeferred: number
 }
 
 interface ExtractedContent {
@@ -90,6 +101,7 @@ interface ExtractedContent {
   text: string
   lang?: string
   headings?: string[]
+  rawHtml?: string
 }
 
 function abortableFetch(url: string, options: RequestInit = {}, timeout = FETCH_TIMEOUT_MS): Promise<Response> {
@@ -134,7 +146,10 @@ export class DiscoveryEngineV21 {
     paywall: 0,
     robotsBlock: 0,
     timeout: 0,
-    softAccepted: 0
+    softAccepted: 0,
+    queriesExpanded: 0,
+    queryExpansionSkipped: 0,
+    queryDeferred: 0
   }
   private firstItemTimestamp?: number
   private plan: DiscoveryPlan | null = null
@@ -143,6 +158,15 @@ export class DiscoveryEngineV21 {
   private lastCounters: SaveCounters = { total: 0, controversy: 0, history: 0 }
   private priorityBurstProcessed = false
   private metricsMutationQueue: Promise<void> = Promise.resolve()
+  private runSignatures = new Set<string>()
+  private wikiRefCache = new Set<string>()
+  private attemptedControversy = 0
+  private attemptedTotal = 0
+  private contestedKeywords = new Set<string>()
+  private lastRunStateCheck = 0
+  private lastRunState: 'live' | 'suspended' | 'paused' | null = null
+  private seedCanonicalUrls = new Set<string>()
+  private expansionCooldowns = new Map<string, { lastSeen: number; cooldownUntil: number }>()
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
@@ -210,6 +234,17 @@ export class DiscoveryEngineV21 {
       if (!this.plan) {
         throw new Error(`discovery_plan_missing:${runId}`)
       }
+      this.seedCanonicalUrls = new Set(
+        (this.plan.seedCandidates ?? [])
+          .map((seed) => canonicalizeUrlFast(seed.url))
+          .filter((value): value is string => Boolean(value && value.length))
+      )
+      this.contestedKeywords = this.buildContestedKeywords(this.plan)
+      this.runSignatures.clear()
+      this.wikiRefCache.clear()
+      this.attemptedControversy = 0
+      this.attemptedTotal = 0
+      this.lastRunState = 'live'
       const seedsCount = Math.min(Array.isArray(this.plan.seedCandidates) ? this.plan.seedCandidates.length : 0, 10)
       this.telemetry = {
         seedsEnqueued: seedsCount,
@@ -222,7 +257,10 @@ export class DiscoveryEngineV21 {
         paywall: 0,
         robotsBlock: 0,
         timeout: 0,
-        softAccepted: 0
+        softAccepted: 0,
+        queriesExpanded: 0,
+        queryExpansionSkipped: 0,
+        queryDeferred: 0
       }
       await clearSaveCounters(patchId).catch(() => undefined)
       this.lastCounters = { total: 0, controversy: 0, history: 0 }
@@ -258,7 +296,10 @@ export class DiscoveryEngineV21 {
     }
 
     while (!this.stopRequested) {
-      const candidate = await popFromFrontier(patchId)
+      if (!(await this.ensureLiveState('loop'))) {
+        break
+      }
+      const candidate = await this.pullCandidateWithBias(patchId)
 
       if (!candidate) {
         const expanded = await this.expandFrontierIfNeeded(patchId, coveredAngles)
@@ -284,6 +325,9 @@ export class DiscoveryEngineV21 {
     const toRequeue: FrontierItem[] = []
 
     while (burst.length < 3) {
+      if (!(await this.ensureLiveState('priority_burst'))) {
+        return false
+      }
       const candidate = await popFromFrontier(patchId)
       if (!candidate) break
       if (candidate.meta?.planPriority === 1 && candidate.provider === 'direct') {
@@ -324,8 +368,212 @@ export class DiscoveryEngineV21 {
     const depth = await frontierSize(patchId).catch(() => 0)
     this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
     const countersBefore = await getSaveCounters(patchId)
+    this.attemptedTotal += 1
+    if (this.isControversyCandidate(candidate)) {
+      this.attemptedControversy += 1
+    }
     const result = await this.processCandidate(candidate, countersBefore)
     await this.applyProcessOutcome(result, candidate, coveredAngles, startTime)
+    const frontierDepth = typeof depth === 'number' ? depth : 0
+    this.emitMetricsSnapshot(frontierDepth)
+  }
+
+  private shouldBiasControversy(): boolean {
+    if (this.attemptedTotal >= 10) return false
+    if (this.attemptedTotal === 0) return true
+    return this.attemptedControversy / Math.max(this.attemptedTotal, 1) < 0.5
+  }
+
+  private isControversyCandidate(candidate: FrontierItem): boolean {
+    if (candidate.meta?.isControversy === true) return true
+    if (typeof candidate.meta?.stance === 'string' && candidate.meta.stance.toLowerCase() === 'contested') return true
+    const angle = candidate.angle?.toLowerCase?.() ?? ''
+    const cursor = typeof candidate.cursor === 'string' ? candidate.cursor.toLowerCase() : ''
+    for (const keyword of this.contestedKeywords) {
+      if (!keyword) continue
+      if (angle.includes(keyword) || cursor.includes(keyword)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private async pullCandidateWithBias(patchId: string): Promise<FrontierItem | null> {
+    const wantControversy = this.shouldBiasControversy()
+    let attempts = 0
+    while (attempts < 6) {
+      const candidate = await popFromFrontier(patchId)
+      if (!candidate) {
+        return null
+      }
+      if (!wantControversy || this.isControversyCandidate(candidate) || attempts >= 5) {
+        return candidate
+      }
+      await addToFrontier(patchId, {
+        ...candidate,
+        id: `rebias:${Date.now()}:${Math.random()}`,
+        priority: candidate.priority - 5
+      })
+      attempts += 1
+    }
+    return await popFromFrontier(patchId)
+  }
+
+  private async ensureLiveState(context: string): Promise<boolean> {
+    const state = await this.getCurrentRunState()
+    if (state && state !== 'live') {
+      this.structuredLog('run_state_exit', { state, context })
+      this.stopRequested = true
+      return false
+    }
+    return true
+  }
+
+  private async getCurrentRunState(): Promise<'live' | 'suspended' | 'paused' | null> {
+    const now = Date.now()
+    if (now - this.lastRunStateCheck < 1000 && this.lastRunState !== null) {
+      return this.lastRunState
+    }
+    try {
+      const state = await getRunState(this.options.patchId)
+      this.lastRunState = state
+      this.lastRunStateCheck = now
+      return state
+    } catch {
+      this.lastRunState = 'live'
+      this.lastRunStateCheck = now
+      return 'live'
+    }
+  }
+
+  private computeSignature(url: string, content: ExtractedContent): string {
+    const preview = `${content.title ?? ''}::${(content.text ?? '').slice(0, 280)}`
+    return createHash('sha1').update(url.toLowerCase()).update(preview).digest('hex')
+  }
+
+  private isWikipediaUrl(url: string): boolean {
+    try {
+      const host = new URL(url).hostname.toLowerCase()
+      return host.endsWith('wikipedia.org')
+    } catch {
+      return false
+    }
+  }
+
+  private async enqueueWikipediaReferences(rawHtml: string | undefined, sourceUrl: string): Promise<void> {
+    if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) return
+    if (this.wikiRefCache.has(sourceUrl)) return
+    this.wikiRefCache.add(sourceUrl)
+
+    const referencesMatch = rawHtml.match(/<ol[^>]*class="[^"]*references[^"]*"[^>]*>([\s\S]*?)<\/ol>/i)
+    if (!referencesMatch) return
+
+    const refMatches = referencesMatch[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
+    if (!refMatches.length) return
+
+    const added = new Set<string>()
+    const tasks: Array<Promise<void>> = []
+
+    for (const ref of refMatches) {
+      const hrefMatch = ref.match(/href="([^"#]+)"/i)
+      if (!hrefMatch) continue
+      let href = hrefMatch[1]
+      if (!href) continue
+
+      try {
+        if (!href.startsWith('http')) {
+          href = new URL(href, sourceUrl).toString()
+        }
+      } catch {
+        continue
+      }
+
+      if (href.includes('wikipedia.org')) {
+        continue
+      }
+
+      const canonical = canonicalizeUrlFast(href)
+      if (!canonical || added.has(canonical)) continue
+      added.add(canonical)
+      if (added.size > 25) break
+
+      tasks.push(
+        addToFrontier(this.options.patchId, {
+          id: `wiki_ref:${Date.now()}:${Math.random()}`,
+          provider: 'wiki_ref',
+          cursor: canonical,
+          priority: 180 - added.size * 2,
+          meta: {
+            sourceType: 'web',
+            reason: 'wiki_ref',
+            from: sourceUrl,
+            planIndex: null
+          }
+        })
+      )
+    }
+
+    if (tasks.length) {
+      await Promise.all(tasks)
+    }
+  }
+
+  private async enqueueQuerySuggestion(
+    parent: FrontierItem,
+    item: FilteredSuggestion,
+    index: number
+  ): Promise<void> {
+    const basePriority =
+      parent.priority +
+      (typeof item.suggestion.priorityOffset === 'number' ? item.suggestion.priorityOffset : 0)
+    const newItem: FrontierItem = {
+      id: `query_result:${Date.now()}:${Math.random()}`,
+      provider: 'direct',
+      cursor: item.suggestion.url,
+      priority: basePriority - index * 4,
+      angle: parent.meta?.angle as string | undefined,
+      meta: {
+        reason: 'planner_query',
+        queryProvider: parent.provider,
+        queryPlanIndex: parent.meta?.planIndex,
+        sourceType: item.suggestion.sourceType,
+        host: item.suggestion.host,
+        keywords: item.suggestion.keywords,
+        plannerQueryMeta: item.suggestion.metadata,
+        hookId: parent.meta?.hookId,
+        viewpoint: parent.meta?.viewpoint,
+        angleCategory: parent.meta?.angleCategory,
+        minPubDate: parent.meta?.minPubDate,
+        queryAttempts: parent.meta?.queryAttempts ?? 0
+      }
+    }
+
+    await addToFrontier(this.options.patchId, newItem)
+  }
+
+  private async requeueQueryCandidate(candidate: FrontierItem, nextAttempt: number): Promise<void> {
+    const updated: FrontierItem = {
+      ...candidate,
+      id: `query_retry:${Date.now()}:${Math.random()}`,
+      priority: candidate.priority - 10,
+      meta: {
+        ...candidate.meta,
+        queryAttempts: nextAttempt
+      }
+    }
+
+    await addToFrontier(this.options.patchId, updated)
+  }
+
+  private emitMetricsSnapshot(frontierDepth: number): void {
+    this.eventStream.metrics({
+      frontier: frontierDepth,
+      duplicates: this.metrics.duplicates,
+      skipped: this.metrics.dropped,
+      saved: this.metrics.itemsSaved,
+      attempted: this.metrics.candidatesProcessed,
+      runState: this.lastRunState ?? 'live'
+    })
   }
 
   private async applyProcessOutcome(
@@ -359,12 +607,97 @@ export class DiscoveryEngineV21 {
     }
   }
 
+  private async expandQueryCandidate(candidate: FrontierItem): Promise<string> {
+    const { patchId } = this.options
+    const attempts = Number(candidate.meta?.queryAttempts ?? 0)
+    const expansion = expandPlannerQuery({ candidate, attempt: attempts })
+
+    const filterResult = await filterQuerySuggestions(expansion.suggestions, {
+      patchId,
+      seeds: this.seedCanonicalUrls,
+      cooldowns: this.expansionCooldowns,
+      isSeen
+    })
+
+    const accepted = filterResult.accepted
+    const skipped = filterResult.skipped
+
+    for (let index = 0; index < accepted.length; index += 1) {
+      const item = accepted[index]
+      await this.enqueueQuerySuggestion(candidate, item, index)
+    }
+
+    if (accepted.length > 0) {
+      this.telemetry.queriesExpanded += accepted.length
+    }
+    if (skipped.length > 0) {
+      this.telemetry.queryExpansionSkipped += skipped.length
+    }
+
+    const skippedByReason = skipped.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.reason] = (acc[entry.reason] ?? 0) + 1
+      return acc
+    }, {})
+
+    await this.emitAudit('query_expand', accepted.length > 0 ? 'ok' : 'fail', {
+      candidateUrl: typeof candidate.cursor === 'string' ? candidate.cursor : undefined,
+      provider: candidate.provider,
+      meta: {
+        generated: accepted.length,
+        skipped: skippedByReason,
+        deferredGeneral: expansion.deferredGeneral,
+        attempts
+      }
+    })
+
+    this.structuredLog('query_expand', {
+      provider: candidate.provider,
+      generated: accepted.length,
+      skipped: skippedByReason,
+      deferredGeneral: expansion.deferredGeneral,
+      attempts
+    })
+
+    await this.persistMetricsSnapshot('running', this.lastCounters, {
+      queryExpansion: {
+        provider: candidate.provider,
+        accepted: accepted.length,
+        skipped: skippedByReason,
+        deferred: expansion.deferredGeneral,
+        attempts
+      }
+    })
+
+    if (accepted.length > 0) {
+      return 'query_expanded'
+    }
+
+    if (expansion.deferredGeneral) {
+      this.telemetry.queryDeferred += 1
+      if (attempts + 1 <= QueryExpanderConstants.GENERAL_UNLOCK_ATTEMPTS) {
+        await this.requeueQueryCandidate(candidate, attempts + 1)
+      }
+      return 'query_deferred'
+    }
+
+    return 'query_no_results'
+  }
+
   private async processCandidate(candidate: FrontierItem, countersBefore: SaveCounters): Promise<ProcessedCandidateResult> {
     const { patchId } = this.options
     const url = candidate.cursor
     const angle = candidate.meta?.angle as string | undefined
 
     try {
+      if (!(await this.ensureLiveState('pre_candidate'))) {
+        return { saved: false, reason: 'run_suspended', angle }
+      }
+
+      if (typeof candidate.provider === 'string' && candidate.provider.startsWith('query:')) {
+        const queryResult = await this.expandQueryCandidate(candidate)
+        return { saved: false, reason: queryResult, angle }
+      }
+
       const startedAt = Date.now()
       this.lastCounters = countersBefore
       this.eventStream.stage('searching', { provider: candidate.provider })
@@ -379,6 +712,9 @@ export class DiscoveryEngineV21 {
       const canonical = await canonicalize(url)
       const canonicalUrl = canonical.canonicalUrl
       const finalDomain = canonical.finalDomain
+      if (!(await this.ensureLiveState('post_canonical'))) {
+        return { saved: false, reason: 'run_suspended', angle }
+      }
       await this.emitAudit('canonicalize', 'ok', {
         candidateUrl: url,
         finalUrl: canonicalUrl,
@@ -431,7 +767,12 @@ export class DiscoveryEngineV21 {
       this.eventStream.stage('searching', { provider: 'fetcher' })
       this.eventStream.searching('fetch')
       const extracted = await this.fetchAndExtractContent(canonicalUrl)
-      if (!extracted || extracted.text.length < MIN_CONTENT_LENGTH) {
+      if (!(await this.ensureLiveState('post_fetch'))) {
+        return { saved: false, reason: 'run_suspended', angle }
+      }
+      const wordCount = extracted?.text ? extracted.text.split(/\s+/).filter(Boolean).length : 0
+      const structuredOverride = candidate.meta?.hasStructuredStats === true
+      if (!extracted || (wordCount < MIN_CONTENT_LENGTH && !structuredOverride)) {
         await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'content_too_short')
@@ -447,6 +788,30 @@ export class DiscoveryEngineV21 {
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'content_too_short' })
         await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'content_short', angle }
+      }
+
+      const signature = this.computeSignature(canonicalUrl, extracted)
+      if (this.runSignatures.has(signature)) {
+        await this.incrementMetric('duplicates')
+        this.metricsTracker.recordDuplicate()
+        logger.logDuplicate(canonicalUrl, 'C', candidate.provider)
+        this.structuredLog('duplicate_signature', {
+          url: canonicalUrl,
+          provider: candidate.provider
+        })
+        await this.emitAudit('duplicate_check', 'fail', {
+          candidateUrl: canonicalUrl,
+          provider: candidate.provider,
+          decisions: { action: 'drop', reason: 'signature_duplicate' }
+        })
+        this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'signature_duplicate' })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: 'signature_duplicate', angle }
+      }
+      this.runSignatures.add(signature)
+
+      if (this.isWikipediaUrl(canonicalUrl)) {
+        await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl)
       }
 
       if (!this.hasEntityMention(extracted)) {
@@ -818,7 +1183,7 @@ export class DiscoveryEngineV21 {
       const html = await response.text()
       const extracted = this.extractHtmlContent(html)
       this.telemetry.htmlExtracted++
-      return extracted
+      return { ...extracted, rawHtml: html }
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') {
         this.telemetry.timeout++
@@ -999,6 +1364,43 @@ export class DiscoveryEngineV21 {
       contested: result.contested && result.contested.note ? result.contested : null,
       quotes
     }
+  }
+
+  private buildContestedKeywords(plan: DiscoveryPlan | null): Set<string> {
+    const keywords = new Set<string>()
+    if (!plan) return keywords
+
+    const add = (value?: string) => {
+      if (!value) return
+      value
+        .split(/[\s,/]+/)
+        .map((token) => token.trim().toLowerCase())
+        .filter((token) => token.length > 2)
+        .forEach((token) => keywords.add(token))
+    }
+
+    plan.controversyAngles?.forEach((angle) => {
+      add(angle.angle)
+      angle.quoteTargets?.forEach(add)
+      angle.signals?.forEach(add)
+    })
+
+    plan.contestedPlan?.forEach((entry) => {
+      add(entry.claim)
+      entry.supportingSources?.forEach(add)
+      entry.counterSources?.forEach(add)
+      entry.verificationFocus?.forEach(add)
+    })
+
+    plan.seedCandidates?.forEach((seed) => {
+      if (seed.isControversy || seed.stance === 'contested') {
+        add(seed.angle)
+        add(seed.titleGuess)
+        add(seed.url)
+      }
+    })
+
+    return keywords
   }
 
   private structuredLog(event: string, data: Record<string, unknown>): void {

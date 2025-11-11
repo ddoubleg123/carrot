@@ -4,7 +4,9 @@
 
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import prisma from '@/lib/prisma'
 import { discoveryStateManager } from '@/lib/discovery/streaming'
+import { getRunState, setRunState } from '@/lib/redis/discovery'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,12 +22,29 @@ export async function POST(
 
     const { handle } = await params
 
+    const patch = await prisma.patch.findUnique({
+      where: { handle },
+      select: { id: true }
+    })
+
+    if (!patch) {
+      return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
+    }
+
+    const currentRunState = await getRunState(patch.id)
+    const nextState = currentRunState === 'paused' ? 'live' : 'paused'
+
     // Pause discovery state
-    discoveryStateManager.updateState({ isPaused: true })
+    discoveryStateManager.updateState({ isPaused: nextState === 'paused' })
+
+    await setRunState(patch.id, nextState).catch((error) => {
+      console.warn('[DiscoveryPause] Failed to update run state', error)
+    })
 
     return NextResponse.json({
       success: true,
-      message: 'Discovery paused'
+      message: nextState === 'paused' ? 'Discovery paused' : 'Discovery resumed',
+      runState: nextState
     })
 
   } catch (error) {

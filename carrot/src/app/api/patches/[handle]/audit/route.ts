@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
-import { getAuditEvents } from '@/lib/redis/discovery'
+import { getAuditEvents, getRunState } from '@/lib/redis/discovery'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,14 @@ export async function GET(request: NextRequest, context: any) {
       return NextResponse.json({ error: 'Missing patch handle' }, { status: 400 })
     }
 
-    const patch = await prisma.patch.findUnique({ where: { handle }, select: { id: true } })
+    const patch = await prisma.patch.findUnique({
+      where: { handle },
+      select: {
+        id: true,
+        title: true,
+        guide: true
+      }
+    })
     if (!patch) {
       return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
     }
@@ -49,14 +57,41 @@ export async function GET(request: NextRequest, context: any) {
       return NextResponse.json({
         items: fallback,
         cursor: fallback.length,
-        hasMore: fallback.length === limit
+        hasMore: fallback.length === limit,
+        aggregate: {
+          accepted: fallback.filter((audit) => audit.step === 'save' && audit.status === 'ok').length,
+          denied: fallback.filter((audit) => audit.step === 'save' && audit.status !== 'ok').length,
+          skipped: fallback.filter((audit) => audit.step.startsWith('skipped')).length,
+          telemetry: null
+        },
+        plan: patch.guide ?? null,
+        planHash: patch.guide ? createHash('sha1').update(JSON.stringify(patch.guide)).digest('hex') : null,
+        run: null,
+        runState: await getRunState(patch.id)
       })
     }
+
+    const latestRun = await (prisma as any).discoveryRun.findFirst({
+      where: { patchId: patch.id },
+      orderBy: { startedAt: 'desc' }
+    })
+
+    const runState = await getRunState(patch.id)
 
     return NextResponse.json({
       items,
       cursor: nextOffset,
-      hasMore
+      hasMore,
+      aggregate: {
+        accepted: items.filter((item) => item.step === 'save' && item.status === 'ok').length,
+        denied: items.filter((item) => item.step === 'save' && item.status !== 'ok').length,
+        skipped: items.filter((item) => item.step.startsWith('skipped')).length,
+        telemetry: latestRun?.metrics?.telemetry ?? null
+      },
+      plan: patch.guide ?? null,
+      planHash: patch.guide ? createHash('sha1').update(JSON.stringify(patch.guide)).digest('hex') : null,
+      run: latestRun ?? null,
+      runState
     })
   } catch (error) {
     console.error('[Audit API] Failed to fetch audit events', error)

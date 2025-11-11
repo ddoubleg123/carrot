@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { discoveryStateManager } from '@/lib/discovery/streaming'
-import { getActiveRun, clearActiveRun } from '@/lib/redis/discovery'
+import { getActiveRun, clearActiveRun, setRunState } from '@/lib/redis/discovery'
 import { stopOpenEvidenceRun } from '@/lib/discovery/engine'
 import prisma from '@/lib/prisma'
 
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     await clearActiveRun(patch.id).catch(() => undefined)
+    await setRunState(patch.id, 'suspended').catch(() => undefined)
 
     return NextResponse.json({
       success: true,

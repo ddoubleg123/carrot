@@ -1,10 +1,11 @@
-const VETTER_SYSTEM_PROMPT = `You generate ONE hero-ready card for our existing pipeline. Return STRICT JSON ONLY (parser is unforgiving).
+const VETTER_SYSTEM_PROMPT = `You CLEAN, SCORE, and SYNTHESIZE exactly ONE fetched source into a hero-ready card. Return STRICT JSON ONLY (parser is unforgiving).
 
 Rules:
 - Map every fact and each quote to a citation URL plus locator (anchor text, section, or timestamp).
 - Fair use: up to TWO quoted paragraphs total (≤150 words combined), each with attribution; otherwise paraphrase with citations.
 - Only add a contested note when the source itself advances or disputes a listed claim.
-- Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 60, or facts lack supporting citations.`
+- Do **not** reject solely because the source is controversial or represents a minority viewpoint.
+- Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 70, or facts lack supporting citations.`
 
 interface VetterArgs {
   topic: string
@@ -87,8 +88,8 @@ Return JSON ONLY:
 
 Reject if:
 - <200 words substantive text,
-- qualityScore < 60,
-- relevanceScore < 0.75 (strict),
+- qualityScore < 70,
+- relevanceScore < 0.65 (strict),
 - no mappable citations for facts/quotes.${contestedSection}`
 }
 
@@ -147,7 +148,7 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
   let parsed: any
   try {
     parsed = JSON.parse(cleaned)
-  } catch (error) {
+  } catch (_error) {
     console.error('[Vetter] Failed to parse JSON payload', cleaned)
     throw new Error('deepseek_vetter_parse_error')
   }

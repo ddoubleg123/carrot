@@ -3,7 +3,7 @@
  * Provides real-time feedback during content discovery
  */
 
-export type DiscoveryEventType = 
+export type DiscoveryEventType =
   | 'start'
   | 'searching'
   | 'candidate'
@@ -18,6 +18,7 @@ export type DiscoveryEventType =
   | 'stop'
   | 'error'
   | 'stage'
+  | 'metrics'
 
 export interface DiscoveryEvent {
   type: DiscoveryEventType
@@ -127,6 +128,10 @@ export class DiscoveryEventStream {
   saved(item: any): void {
     this.sendEvent('saved', { item })
   }
+
+  metrics(snapshot: Record<string, unknown>): void {
+    this.sendEvent('metrics', snapshot)
+  }
   
   /**
    * Send idle event
@@ -166,7 +171,7 @@ export class DiscoveryEventStream {
     this.isActive = false
     try {
       this.controller?.close()
-    } catch (error) {
+    } catch (_error) {
       // Stream may already be closed
     }
   }

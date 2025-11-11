@@ -19,6 +19,11 @@ interface LivePanelProps {
   lastItemTitle?: string
   error?: string
   runId?: string
+  runState?: 'live' | 'paused' | 'suspended'
+  frontierSize: number
+  totalDuplicates: number
+  totalSkipped: number
+  totalSaved: number
   onStart: () => void | Promise<void>
   onPause: () => void | Promise<void>
   onStop: () => void | Promise<void>
@@ -52,6 +57,11 @@ export default function LivePanel({
   lastItemTitle,
   error,
   runId,
+  runState,
+  frontierSize,
+  totalDuplicates,
+  totalSkipped,
+  totalSaved,
   onStart,
   onPause,
   onStop,
@@ -107,6 +117,11 @@ export default function LivePanel({
           {runId && (
             <Badge variant="secondary" className="text-[10px] tracking-wide uppercase">
               Run {runId.slice(0, 6)}
+            </Badge>
+          )}
+          {runState && (
+            <Badge variant="outline" className="text-[10px] tracking-wide uppercase">
+              {runState}
             </Badge>
           )}
         </div>
@@ -177,6 +192,28 @@ export default function LivePanel({
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900">Live Counters</h3>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          {[
+            { label: 'Frontier', value: frontierSize },
+            { label: 'De-duped', value: totalDuplicates },
+            { label: 'Skipped', value: totalSkipped },
+            { label: 'Saved', value: totalSaved }
+          ].map((metric) => (
+            <div
+              key={metric.label}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {metric.label}
+              </p>
+              <p className="text-lg font-semibold text-slate-900">{metric.value ?? 0}</p>
+            </div>
+          ))}
         </div>
       </div>
 

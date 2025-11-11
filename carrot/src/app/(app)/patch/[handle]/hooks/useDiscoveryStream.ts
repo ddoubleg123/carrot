@@ -17,6 +17,11 @@ interface DiscoveryStreamState {
   duplicatesSkipped: number
   lowRelevanceSkipped: number
   nearDuplicateSkipped: number
+  frontierSize: number
+  totalDuplicates: number
+  totalSkipped: number
+  totalSaved: number
+  runState?: 'live' | 'paused' | 'suspended'
 }
 
 interface UseDiscoveryStreamReturn {
@@ -43,7 +48,12 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     itemsFound: 0,
     duplicatesSkipped: 0,
     lowRelevanceSkipped: 0,
-    nearDuplicateSkipped: 0
+    nearDuplicateSkipped: 0,
+    frontierSize: 0,
+    totalDuplicates: 0,
+    totalSkipped: 0,
+    totalSaved: 0,
+    runState: undefined
   })
 
   const [items, setItems] = useState<DiscoveryCardPayload[]>([])
@@ -152,7 +162,12 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         runId,
         duplicatesSkipped: 0,
         lowRelevanceSkipped: 0,
-        nearDuplicateSkipped: 0
+        nearDuplicateSkipped: 0,
+        frontierSize: 0,
+        totalDuplicates: 0,
+        totalSkipped: 0,
+        totalSaved: 0,
+        runState: 'live'
       }))
 
       startSSEConnection(runId)
@@ -216,7 +231,8 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           currentStatus: 'Starting discovery…',
           duplicatesSkipped: 0,
           lowRelevanceSkipped: 0,
-          nearDuplicateSkipped: 0
+          nearDuplicateSkipped: 0,
+          runState: 'live'
         }))
         break
       }
@@ -315,7 +331,8 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         setState(prev => ({
           ...prev,
           isPaused: true,
-          currentStatus: 'Discovery paused'
+          currentStatus: 'Discovery paused',
+          runState: 'paused'
         }))
         break
 
@@ -325,7 +342,8 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           ...prev,
           isActive: false,
           isPaused: false,
-          currentStatus: 'Discovery completed'
+          currentStatus: 'Discovery completed',
+          runState: 'suspended'
         }))
         closeEventSource()
         break
@@ -336,6 +354,19 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           error: event.message || 'Discovery error occurred'
         }))
         break
+
+      case 'metrics': {
+        const metrics = event.data || {}
+        setState(prev => ({
+          ...prev,
+          frontierSize: typeof metrics.frontier === 'number' ? metrics.frontier : prev.frontierSize,
+          totalDuplicates: typeof metrics.duplicates === 'number' ? metrics.duplicates : prev.totalDuplicates,
+          totalSkipped: typeof metrics.skipped === 'number' ? metrics.skipped : prev.totalSkipped,
+          totalSaved: typeof metrics.saved === 'number' ? metrics.saved : prev.totalSaved,
+          runState: metrics.runState ?? prev.runState
+        }))
+        break
+      }
 
       default:
         break

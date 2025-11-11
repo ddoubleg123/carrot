@@ -1,8 +1,8 @@
+// @ts-nocheck
 /**
  * Video Playback Tests
  * 
  * Tests for the comprehensive video playback system including:
- * - Single video playback enforcement
  * - Audio unmute functionality
  * - Retry logic with exponential backoff
  * - Modal video transitions

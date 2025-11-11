@@ -5,7 +5,13 @@ import { Prisma } from '@prisma/client';
 import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
 import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
-import { isDiscoveryV21Enabled, isOpenEvidenceV2Enabled, isDiscoveryKillSwitchEnabled } from '@/lib/discovery/flags';
+import {
+  isDiscoveryV21Enabled,
+  isDiscoveryV2Enabled,
+  isOpenEvidenceV2Enabled,
+  isDiscoveryKillSwitchEnabled,
+  isPatchForceStopped
+} from '@/lib/discovery/flags';
 import { runOpenEvidenceEngine } from '@/lib/discovery/engine';
 import { clearFrontier, storeDiscoveryPlan } from '@/lib/redis/discovery';
 import { generateGuideSnapshot, seedFrontierFromPlan, type DiscoveryPlan } from '@/lib/discovery/planner';
@@ -38,8 +44,10 @@ export async function POST(
   console.log('[Start Discovery] POST endpoint called');
   const openEvidenceEnabled = isOpenEvidenceV2Enabled();
   const discoveryV21Enabled = isDiscoveryV21Enabled();
+  const discoveryV2Enabled = isDiscoveryV2Enabled();
   console.log('[Start Discovery] Feature flag OPEN_EVIDENCE_V2:', openEvidenceEnabled ? 'enabled' : 'disabled');
   console.log('[Start Discovery] Feature flag DISCOVERY_V21:', discoveryV21Enabled ? 'enabled' : 'disabled');
+  console.log('[Start Discovery] Feature flag DISCOVERY_V2:', discoveryV2Enabled ? 'enabled' : 'disabled');
   
   if (isDiscoveryKillSwitchEnabled()) {
     return NextResponse.json(
@@ -115,7 +123,11 @@ export async function POST(
       }, { status: 500 });
     }
 
-    if (discoveryV21Enabled) {
+    if (isPatchForceStopped(handle)) {
+      return NextResponse.json({ error: 'Discovery paused for this patch' }, { status: 423 });
+    }
+
+    if (discoveryV21Enabled || discoveryV2Enabled) {
       const run = await (prisma as any).discoveryRun.create({
         data: {
           patchId: patch.id,
@@ -144,6 +156,10 @@ export async function POST(
             error: 'Discovery guide missing and automatic generation failed. Please refresh the guide and retry.'
           }, { status: 500 })
         }
+      }
+
+      if (isPatchForceStopped(patch.id)) {
+        return NextResponse.json({ error: 'Discovery paused for this patch' }, { status: 423 });
       }
 
       await clearFrontier(patch.id).catch((error) => {

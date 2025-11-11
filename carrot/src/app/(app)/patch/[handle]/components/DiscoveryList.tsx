@@ -69,6 +69,11 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           lastItemTitle={state.lastItemTitle}
           error={state.error}
           runId={state.runId}
+          runState={state.runState}
+          frontierSize={state.frontierSize}
+          totalDuplicates={state.totalDuplicates}
+          totalSkipped={state.totalSkipped}
+          totalSaved={state.totalSaved}
           onStart={start}
           onPause={pause}
           onStop={stop}

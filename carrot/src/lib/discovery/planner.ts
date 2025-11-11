@@ -199,8 +199,8 @@ Return JSON with:
     }
   ],
   "fetchRules": {
-    "requireEntityMention": "title_or_h1",
-    "timeoutMs": 4000,
+    "requireEntityMention": "title_or_body",
+    "timeoutMs": 8000,
     "dedupe": ["canonicalUrl","simhash"],
     "preferSections": true,
     "alternateIfPaywalled": true,
@@ -671,36 +671,62 @@ function computeSeedPriority(seed: PlannerSeedCandidate, index: number, domainWh
 
   switch (seed.credibilityTier) {
     case 1:
-      priority += 25
+      priority += 40
       break
     case 2:
-      priority += 15
+      priority += 20
       break
     case 3:
-      priority += 5
+      priority += 8
       break
     default:
       break
   }
 
-  if (seed.noveltySignals?.some(signal => /202[3-9]/.test(signal))) {
-    priority += 10
+  const sourceType = seed.sourceType || seed.category
+  if (sourceType) {
+    switch (sourceType) {
+      case 'court':
+      case 'official':
+        priority += 45
+        break
+      case 'UN':
+      case 'intergovernmental':
+        priority += 40
+        break
+      case 'watchdog':
+      case 'academic':
+        priority += 30
+        break
+      case 'data':
+        priority += 25
+        break
+      case 'longform':
+      case 'media':
+      default:
+        priority += 10
+        break
+    }
+  }
+
+  if (seed.noveltySignals?.some((signal) => /202[3-9]/.test(signal))) {
+    priority += 12
   }
 
   if (seed.stance === 'contested' || seed.isControversy) {
-    priority += 8
+    priority += 18
   }
 
   if (seed.isHistory) {
-    priority += 4
+    priority += 6
   }
 
   try {
     const domain = new URL(seed.url).hostname.toLowerCase()
-    if (domainWhitelists?.authority?.some(w => domain.endsWith(w.replace(/^[*.]+/, '')))) {
-      priority += 10
-    } else if (domainWhitelists?.referenceHubs?.some(w => domain.endsWith(w.replace(/^[*.]+/, '')))) {
-      priority += 6
+    if (domainWhitelists?.authority?.some((w) => domain.endsWith(w.replace(/^[*.]+/, '')))) {
+      priority += 14
+    } else if (domainWhitelists?.referenceHubs?.some((w) => domain.endsWith(w.replace(/^[*.]+/, '')))) {
+      priority += 8
     }
   } catch {
     // ignore malformed URLs
@@ -779,7 +805,7 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     }
 
     const currentCount = domainCounts.get(domain) ?? 0
-    const domainLimit = selectedSeeds.length < 10 ? 3 : 2
+    const domainLimit = 2
     if (currentCount >= domainLimit) {
       continue
     }
@@ -832,5 +858,133 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
   })
 
   await Promise.all(tasks)
+  await enqueueQueriesFromPlan(patchId, plan)
+}
+
+function scoreQuery(type: 'wikipedia' | 'news' | 'official' | 'longform' | 'data', index: number): number {
+  const base = {
+    wikipedia: 240,
+    news: 210,
+    official: 260,
+    longform: 200,
+    data: 220
+  }[type]
+
+  return base - index * 5
+}
+
+async function enqueueQueriesFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
+  const tasks: Array<Promise<void>> = []
+
+  if (Array.isArray(plan.contentQueries?.wikipedia)) {
+    plan.contentQueries.wikipedia.forEach((query, index) => {
+      tasks.push(
+        addToFrontier(patchId, {
+          id: `query:wikipedia:${index}:${query.query}`,
+          provider: 'query:wikipedia',
+          cursor: query.query,
+          priority: scoreQuery('wikipedia', index),
+          angle: query.notes,
+          meta: {
+            intent: query.intent,
+            notes: query.notes,
+            sourceType: 'wikipedia',
+            reason: 'planner_seed',
+            planIndex: index
+          }
+        })
+      )
+    })
+  }
+
+  if (Array.isArray(plan.contentQueries?.news)) {
+    plan.contentQueries.news.forEach((query, index) => {
+      tasks.push(
+        addToFrontier(patchId, {
+          id: `query:news:${index}:${query.keywords.join('+')}`,
+          provider: 'query:news',
+          cursor: JSON.stringify(query),
+          priority: scoreQuery('news', index),
+          angle: query.notes,
+          meta: {
+            keywords: query.keywords,
+            siteFilters: query.siteFilters,
+            notes: query.notes,
+            sourceType: 'news',
+            reason: 'planner_seed',
+            planIndex: index
+          }
+        })
+      )
+    })
+  }
+
+  if (Array.isArray(plan.contentQueries?.official)) {
+    plan.contentQueries.official.forEach((query, index) => {
+      tasks.push(
+        addToFrontier(patchId, {
+          id: `query:official:${index}:${query.url}`,
+          provider: 'query:official',
+          cursor: query.url,
+          priority: scoreQuery('official', index),
+          angle: query.notes,
+          meta: {
+            notes: query.notes,
+            sourceType: 'official',
+            reason: 'planner_seed',
+            planIndex: index
+          }
+        })
+      )
+    })
+  }
+
+  if (Array.isArray(plan.contentQueries?.longform)) {
+    plan.contentQueries.longform.forEach((query, index) => {
+      tasks.push(
+        addToFrontier(patchId, {
+          id: `query:longform:${index}:${query.keywords.join('+')}`,
+          provider: 'query:longform',
+          cursor: JSON.stringify(query),
+          priority: scoreQuery('longform', index),
+          angle: query.notes,
+          meta: {
+            keywords: query.keywords,
+            siteFilters: query.siteFilters,
+            notes: query.notes,
+            sourceType: 'longform',
+            reason: 'planner_seed',
+            planIndex: index
+          }
+        })
+      )
+    })
+  }
+
+  if (Array.isArray(plan.contentQueries?.data)) {
+    plan.contentQueries.data.forEach((query, index) => {
+      tasks.push(
+        addToFrontier(patchId, {
+          id: `query:data:${index}:${query.keywords.join('+')}`,
+          provider: 'query:data',
+          cursor: JSON.stringify(query),
+          priority: scoreQuery('data', index),
+          angle: query.notes,
+          meta: {
+            keywords: query.keywords,
+            siteFilters: query.siteFilters,
+            notes: query.notes,
+            sourceType: 'data',
+            reason: 'planner_seed',
+            planIndex: index
+          }
+        })
+      )
+    })
+  }
+
+  if (tasks.length) {
+    await Promise.all(tasks)
+  }
 }
 
