@@ -1,9 +1,9 @@
 import { canonicalizeUrlFast } from './canonicalize'
 import type { FrontierItem } from '@/lib/redis/discovery'
 
-const MAX_RESULTS_PER_QUERY = 20
-const MAX_RESULTS_PER_HOST = 3
-const GENERAL_UNLOCK_ATTEMPTS = 20
+const MAX_RESULTS_PER_QUERY = 8
+const MAX_RESULTS_PER_HOST = 2
+const GENERAL_UNLOCK_ATTEMPTS = 15
 const FIVE_MINUTES = 5 * 60 * 1000
 const THIRTY_MINUTES = 30 * 60 * 1000
 
@@ -103,6 +103,22 @@ function formatDateForQuery(date: string | undefined): string | undefined {
   const day = `${parsed.getUTCDate()}`.padStart(2, '0')
   const year = parsed.getUTCFullYear()
   return `${month}/${day}/${year}`
+}
+
+function resolveMinPubDate(candidate: FrontierItem): string | undefined {
+  if (typeof candidate.meta?.minPubDate === 'string') {
+    return candidate.meta.minPubDate
+  }
+
+  const recencyWeeks = Number(candidate.meta?.recencyBiasWeeks)
+  if (!Number.isFinite(recencyWeeks) || recencyWeeks <= 0) {
+    return undefined
+  }
+
+  const now = new Date()
+  const days = Math.floor(recencyWeeks * 7)
+  now.setUTCDate(now.getUTCDate() - days)
+  return now.toISOString().slice(0, 10)
 }
 
 function buildNewsUrls(
@@ -236,7 +252,7 @@ export function expandPlannerQuery(options: {
   const suggestions: QueryExpansionSuggestion[] = []
   const hostCounts = new Map<string | null, number>()
   let deferredGeneral = false
-  const minPubDate = typeof candidate.meta?.minPubDate === 'string' ? candidate.meta?.minPubDate : undefined
+  const minPubDate = resolveMinPubDate(candidate)
 
   const addSuggestion = (suggestion: QueryExpansionSuggestion) => {
     if (suggestions.length >= MAX_RESULTS_PER_QUERY) return

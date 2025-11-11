@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
-import { getAuditEvents, getRunState } from '@/lib/redis/discovery'
+import {
+  getAuditEvents,
+  getRunState,
+  getRunMetricsSnapshot,
+  getZeroSaveDiagnostics,
+  getPaywallBranches
+} from '@/lib/redis/discovery'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +83,21 @@ export async function GET(request: NextRequest, context: any) {
     })
 
     const runState = await getRunState(patch.id)
+    const runSnapshot = latestRun?.id ? await getRunMetricsSnapshot(latestRun.id).catch(() => null) : null
+    const zeroSaveDiagnostics = await getZeroSaveDiagnostics(patch.id).catch(() => null)
+    const paywallBranches = await getPaywallBranches(patch.id, 20).catch(() => [])
+    const whyRejected = buildWhyRejected(items)
+    const robotsDecisions = buildRobotsDecisions(items)
+    const seedsVsQueries = computeSeedsVsQueries(items)
+    const topCandidates = buildTopCandidates(items)
+    const analytics = buildAnalytics(items, runSnapshot, {
+      paywallBranches,
+      zeroSaveDiagnostics,
+      seedsVsQueries,
+      whyRejected,
+      robotsDecisions,
+      topCandidates
+    })
 
     return NextResponse.json({
       items,
@@ -86,12 +107,13 @@ export async function GET(request: NextRequest, context: any) {
         accepted: items.filter((item) => item.step === 'save' && item.status === 'ok').length,
         denied: items.filter((item) => item.step === 'save' && item.status !== 'ok').length,
         skipped: items.filter((item) => item.step.startsWith('skipped')).length,
-        telemetry: latestRun?.metrics?.telemetry ?? null
+        telemetry: latestRun?.metrics?.telemetry ?? runSnapshot?.metrics?.telemetry ?? null
       },
       plan: patch.guide ?? null,
       planHash: patch.guide ? createHash('sha1').update(JSON.stringify(patch.guide)).digest('hex') : null,
       run: latestRun ?? null,
-      runState
+      runState,
+      analytics
     })
   } catch (error) {
     console.error('[Audit API] Failed to fetch audit events', error)

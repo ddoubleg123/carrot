@@ -252,6 +252,7 @@ export default function AuditPage(props: AuditPageProps) {
   const [isPlanOpen, setIsPlanOpen] = useState<boolean>(false)
   const [run, setRun] = useState<any | null>(null)
   const [runState, setRunState] = useState<'live' | 'paused' | 'suspended' | null>(null)
+  const [serverAnalytics, setServerAnalytics] = useState<any | null>(null)
   const [aggregate, setAggregate] = useState<{
     accepted: number
     denied: number
@@ -317,6 +318,7 @@ export default function AuditPage(props: AuditPageProps) {
       setPlanHash(data.planHash ?? null)
       setRun(data.run ?? null)
       setRunState(data.runState ?? null)
+      setServerAnalytics(data.analytics ?? null)
       setError(null)
       setConnected(true)
     } catch (err) {
@@ -433,9 +435,39 @@ export default function AuditPage(props: AuditPageProps) {
 
   const acceptedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status === 'ok').length, [rows])
   const deniedCount = useMemo(() => rows.filter((row) => row.step === 'save' && row.status !== 'ok').length, [rows])
-  const analytics = useMemo(() => computeAnalytics(rows), [rows])
+  const computedAnalytics = useMemo(() => computeAnalytics(rows), [rows])
+  const analytics = useMemo(() => {
+    if (!serverAnalytics) return computedAnalytics
+    return {
+      ...computedAnalytics,
+      wikiShare: typeof serverAnalytics.wikiShare === 'number' ? serverAnalytics.wikiShare : computedAnalytics.wikiShare,
+      seedsVsQueries: serverAnalytics.seedsVsQueries ?? computedAnalytics.seedsVsQueries
+    }
+  }, [computedAnalytics, serverAnalytics])
   const seedsVsQueries = analytics.seedsVsQueries
   const wikiSharePercent = analytics.wikiShare.toFixed(1)
+  const paywallBranches = serverAnalytics?.paywallBranches ?? []
+  const ttfSeconds =
+    serverAnalytics?.ttfSeconds ??
+    (typeof run?.metrics?.timeToFirstMs === 'number' ? Math.round(run.metrics.timeToFirstMs / 1000) : null)
+  const distinctHosts = serverAnalytics?.distinctHosts ?? analytics.hosts.length
+  const controversyAttemptRatio =
+    serverAnalytics?.controversy?.attemptRatio !== undefined
+      ? serverAnalytics.controversy.attemptRatio
+      : 0
+  const controversySaveRatio =
+    serverAnalytics?.controversy?.saveRatio !== undefined ? serverAnalytics.controversy.saveRatio : 0
+  const zeroSaveData =
+    serverAnalytics?.zeroSave ??
+    run?.metrics?.zeroSave ??
+    run?.metrics?.zeroSavePayload ??
+    run?.metrics?.zeroSaveContext ??
+    null
+  const controversyWindowSize = serverAnalytics?.controversy?.windowSize ?? 40
+  const frontierSize = serverAnalytics?.frontierSize ?? run?.metrics?.tracker?.frontierDepth ?? null
+  const whyRejected = serverAnalytics?.whyRejected ?? []
+  const robotsDecisions = serverAnalytics?.robotsDecisions ?? []
+  const topCandidates = serverAnalytics?.topCandidates ?? []
 
   const handleExport = useCallback(async () => {
     try {
@@ -469,6 +501,18 @@ export default function AuditPage(props: AuditPageProps) {
           </p>
         </div>
       )}
+      {runState && runState !== 'live' && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <div className="flex items-center gap-2 font-medium uppercase tracking-wide">
+            <AlertCircle className="h-4 w-4" />
+            Discovery {runState}
+          </div>
+          <p className="mt-2 text-xs text-amber-700">
+            The engine is currently {runState}. Verify zero-save diagnostics, operator logs, and kill switches before resuming.
+          </p>
+        </div>
+      )}
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Discovery Audit · {handle}</h1>
@@ -483,6 +527,39 @@ export default function AuditPage(props: AuditPageProps) {
           </Button>
         </div>
       </header>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">TTF-S (shadow)</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{ttfSeconds !== null ? `${ttfSeconds}s` : '—'}</p>
+          <p className="mt-2 text-xs text-slate-500">Time-to-first-save for the current run.</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Distinct hosts (last 20)</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{distinctHosts}</p>
+          <p className="mt-2 text-xs text-slate-500">Calculated from the most recent dequeues.</p>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Contested ratios (rolling {controversyWindowSize})</p>
+          <div className="mt-2 space-y-1 text-xs text-slate-600">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+              <span>Attempts</span>
+              <span className="font-semibold text-slate-900">{(controversyAttemptRatio * 100).toFixed(1)}%</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+              <span>Saves</span>
+              <span className="font-semibold text-slate-900">{(controversySaveRatio * 100).toFixed(1)}%</span>
+            </div>
+          </div>
+        </Card>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Wikipedia share (30s)</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{wikiSharePercent}%</p>
+          <p className="mt-2 text-xs text-slate-500">
+            Based on the latest window. Frontier depth: {frontierSize ?? '—'}.
+          </p>
+        </Card>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-5">
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -658,33 +735,31 @@ export default function AuditPage(props: AuditPageProps) {
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Zero-save diagnostics</p>
           <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-            {(() => {
-              const zeroSave =
-                run?.metrics?.zeroSave ??
-                run?.metrics?.zeroSavePayload ??
-                run?.metrics?.zeroSaveContext ??
-                run?.metrics?.acceptance?.zeroSave ??
-                null
-              if (!zeroSave) {
-                return <p>No zero-save warnings recorded for the current run.</p>
-              }
-              return <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(zeroSave, null, 2)}</pre>
-            })()}
+            {zeroSaveData ? (
+              <div className="space-y-2">
+                <p>
+                  Status: <span className="font-semibold uppercase text-slate-800">{zeroSaveData.status ?? 'unknown'}</span> · Attempts: {zeroSaveData.attempts ?? '—'}
+                </p>
+                {zeroSaveData.reason && <p className="text-slate-500">Reason: {zeroSaveData.reason}</p>}
+                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(zeroSaveData, null, 2)}</pre>
+              </div>
+            ) : (
+              <p>No zero-save warnings recorded for the current run.</p>
+            )}
           </div>
         </Card>
 
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Recent paywall blocks</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Paywall branch attempts</p>
           <ul className="mt-3 space-y-2 text-xs text-slate-700">
-            {analytics.paywallLog.length > 0 ? (
-              analytics.paywallLog.slice(0, 6).map((row) => (
-                <li key={row.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                  <p className="font-medium">{row.candidateUrl}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">{row.reason}</p>
+            {paywallBranches.length > 0 ? (
+              paywallBranches.map((entry, index) => (
+                <li key={`${entry}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="font-medium text-slate-700">{entry}</span>
                 </li>
               ))
             ) : (
-              <li className="text-xs text-slate-500">No paywall incidents captured.</li>
+              <li className="text-xs text-slate-500">No paywall branches recorded yet.</li>
             )}
           </ul>
         </Card>
@@ -692,15 +767,47 @@ export default function AuditPage(props: AuditPageProps) {
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Robots.txt decisions</p>
           <ul className="mt-3 space-y-2 text-xs text-slate-700">
-            {analytics.robotsLog.length > 0 ? (
-              analytics.robotsLog.slice(0, 6).map((row) => (
-                <li key={row.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                  <p className="font-medium">{row.candidateUrl}</p>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">{row.reason || 'robots.txt'}</p>
+            {robotsDecisions.length > 0 ? (
+              robotsDecisions.slice(0, 8).map((entry, index) => (
+                <li key={`${entry.url}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="font-medium truncate text-slate-700">{entry.url || 'Unknown URL'}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Rule: {entry.rule || 'robots.txt'}</p>
                 </li>
               ))
             ) : (
               <li className="text-xs text-slate-500">No robots decisions recorded.</li>
+            )}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Why items were rejected</p>
+          <ul className="mt-3 space-y-2 text-xs text-slate-700">
+            {whyRejected.length > 0 ? (
+              whyRejected.slice(0, 8).map((item) => (
+                <li key={item.reason} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="font-medium capitalize text-slate-700">{item.reason}</span>
+                  <span className="text-[11px] uppercase tracking-wide text-slate-500">{item.count}</span>
+                </li>
+              ))
+            ) : (
+              <li className="text-xs text-slate-500">No rejection data yet.</li>
+            )}
+          </ul>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Top conversation candidates</p>
+          <ul className="mt-3 space-y-2 text-xs text-slate-700">
+            {topCandidates.length > 0 ? (
+              topCandidates.slice(0, 8).map((item, index) => (
+                <li key={`${item.url}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="font-medium truncate text-slate-700">{item.url || 'Unknown URL'}</p>
+                  {item.angle && <p className="text-[11px] uppercase tracking-wide text-slate-500">Angle: {item.angle}</p>}
+                </li>
+              ))
+            ) : (
+              <li className="text-xs text-slate-500">No saved candidates yet.</li>
             )}
           </ul>
         </Card>

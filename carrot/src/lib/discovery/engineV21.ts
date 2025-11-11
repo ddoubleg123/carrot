@@ -24,8 +24,17 @@ import {
   storeRunMetricsSnapshot,
   enqueueHeroRetry,
   getRunState,
+  setRunState,
+  getSuccessRates,
+  setSuccessRate,
+  setZeroSaveDiagnostics,
+  getZeroSaveDiagnostics,
+  clearZeroSaveDiagnostics,
+  pushPaywallBranch,
   type SaveCounters,
-  type RunMetricsSnapshot
+  type RunMetricsSnapshot,
+  type SuccessRateRecord,
+  type ZeroSaveDiagnostics
 } from '@/lib/redis/discovery'
 import type { FrontierItem } from '@/lib/redis/discovery'
 import { SimHash } from './deduplication'
@@ -39,6 +48,17 @@ import {
   type FilteredSuggestion,
   QueryExpanderConstants
 } from './queryExpander'
+import {
+  SchedulerGuards,
+  type ControversyWindow,
+  type SuccessRateStats,
+  type WikiGuardState
+} from './scheduler'
+import {
+  isDiscoveryV2ShadowModeEnabled,
+  isDiscoveryV2WriteModeEnabled
+} from './flags'
+import { buildPaywallPlan } from './paywall'
 
 interface EngineOptions {
   patchId: string
@@ -51,6 +71,8 @@ interface ProcessedCandidateResult {
   saved: boolean
   reason?: string
   angle?: string
+  host?: string | null
+  paywallBranch?: string | null
 }
 
 type NumericMetricKey =
@@ -78,6 +100,27 @@ const DUPLICATE_HASH_THRESHOLD = 4
 const MIN_RELEVANCE_SCORE = 0.65
 const MIN_QUALITY_SCORE = 70
 const MIN_FACT_COUNT = 2
+const ZERO_SAVE_WARN_THRESHOLD = 25
+const ZERO_SAVE_AUTOPAUSE_THRESHOLD = 40
+const CANONICAL_COOLDOWN_MS = 30 * 60 * 1000
+const NON_PROVIDER_FAILURE_REASONS = new Set([
+  'redis_seen',
+  'db_duplicate',
+  'signature_duplicate',
+  'near_duplicate',
+  'query_expanded',
+  'query_deferred',
+  'query_no_results',
+  'run_suspended',
+  'canonical_cooldown'
+])
+
+class PaywallBlockedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PaywallBlockedError'
+  }
+}
 
 interface TelemetryCounters {
   seedsEnqueued: number
@@ -167,11 +210,23 @@ export class DiscoveryEngineV21 {
   private lastRunState: 'live' | 'suspended' | 'paused' | null = null
   private seedCanonicalUrls = new Set<string>()
   private expansionCooldowns = new Map<string, { lastSeen: number; cooldownUntil: number }>()
+  private scheduler = new SchedulerGuards()
+  private wikiGuardState: WikiGuardState = { active: false, share: 0, window: 0 }
+  private controversyWindow: ControversyWindow = { attemptRatio: 0, saveRatio: 0, size: 0 }
+  private successRates = new Map<string, SuccessRateStats>()
+  private zeroSaveWarningIssued = false
+  private zeroSaveAutoPaused = false
+  private shadowMode = false
+  private redisPatchId: string
+  private canonicalAttempts = new Map<string, number>()
+  private canonicalCooldowns = new Map<string, number>()
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
     this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
     this.metricsTracker = new MetricsTracker(`${options.patchHandle}:${options.runId}`)
+    this.shadowMode = isDiscoveryV2ShadowModeEnabled() && !isDiscoveryV2WriteModeEnabled()
+    this.redisPatchId = this.shadowMode ? `shadow::${options.patchId}` : options.patchId
   }
 
   private mutateMetrics(mutator: () => void): Promise<void> {
@@ -262,7 +317,30 @@ export class DiscoveryEngineV21 {
         queryExpansionSkipped: 0,
         queryDeferred: 0
       }
-      await clearSaveCounters(patchId).catch(() => undefined)
+      const successSnapshot = await getSuccessRates(this.redisPatchId).catch(
+        () => ({} as Record<string, SuccessRateRecord>)
+      )
+      const schedulerSnapshot: Record<string, SuccessRateStats> = {}
+      this.successRates = new Map<string, SuccessRateStats>()
+      Object.entries(successSnapshot).forEach(([host, stats]) => {
+        if (typeof stats?.ema === 'number' && typeof stats?.updatedAt === 'number') {
+          const normalized: SuccessRateStats = { ema: stats.ema, updatedAt: stats.updatedAt }
+          schedulerSnapshot[host] = normalized
+          this.successRates.set(host, normalized)
+        }
+      })
+      this.scheduler.hydrateSuccessRates(schedulerSnapshot)
+
+      const zeroSaveState = await getZeroSaveDiagnostics(this.redisPatchId).catch(() => null)
+      if (zeroSaveState) {
+        this.zeroSaveWarningIssued = zeroSaveState.status === 'warning' || zeroSaveState.status === 'paused'
+        this.zeroSaveAutoPaused = zeroSaveState.status === 'paused'
+      } else {
+        this.zeroSaveWarningIssued = false
+        this.zeroSaveAutoPaused = false
+      }
+
+      await clearSaveCounters(this.redisPatchId).catch(() => undefined)
       this.lastCounters = { total: 0, controversy: 0, history: 0 }
       const coveredAngles = await getCoveredAngles(runId)
       await this.persistMetricsSnapshot('running', this.lastCounters, { event: 'start' })
@@ -284,7 +362,7 @@ export class DiscoveryEngineV21 {
   }
 
   private async discoveryLoop(coveredAngles: Set<string>): Promise<void> {
-    const { patchId } = this.options
+    const redisPatchId = this.redisPatchId
     const startTime = Date.now()
 
     if (!this.priorityBurstProcessed) {
@@ -299,10 +377,10 @@ export class DiscoveryEngineV21 {
       if (!(await this.ensureLiveState('loop'))) {
         break
       }
-      const candidate = await this.pullCandidateWithBias(patchId)
+      const candidate = await this.pullCandidateWithBias(redisPatchId)
 
       if (!candidate) {
-        const expanded = await this.expandFrontierIfNeeded(patchId, coveredAngles)
+        const expanded = await this.expandFrontierIfNeeded(redisPatchId, coveredAngles)
         if (!expanded) {
           await this.persistMetricsSnapshot('running', this.lastCounters, { reason: 'frontier_empty' })
           this.eventStream.idle('Frontier empty')
@@ -320,7 +398,7 @@ export class DiscoveryEngineV21 {
   }
 
   private async processPriorityBurst(coveredAngles: Set<string>, startTime: number): Promise<boolean> {
-    const { patchId } = this.options
+    const redisPatchId = this.redisPatchId
     const burst: FrontierItem[] = []
     const toRequeue: FrontierItem[] = []
 
@@ -328,7 +406,7 @@ export class DiscoveryEngineV21 {
       if (!(await this.ensureLiveState('priority_burst'))) {
         return false
       }
-      const candidate = await popFromFrontier(patchId)
+      const candidate = await popFromFrontier(redisPatchId)
       if (!candidate) break
       if (candidate.meta?.planPriority === 1 && candidate.provider === 'direct') {
         burst.push(candidate)
@@ -341,7 +419,7 @@ export class DiscoveryEngineV21 {
     }
 
     if (toRequeue.length) {
-      await Promise.all(toRequeue.map((item) => addToFrontier(patchId, item)))
+      await Promise.all(toRequeue.map((item) => addToFrontier(redisPatchId, item)))
     }
 
     if (!burst.length) {
@@ -363,19 +441,34 @@ export class DiscoveryEngineV21 {
     coveredAngles: Set<string>,
     startTime: number
   ): Promise<void> {
-    const { patchId } = this.options
+    const redisPatchId = this.redisPatchId
+    const now = Date.now()
+    const host = this.resolveHost(candidate)
+    const isContested = this.isControversyCandidate(candidate)
+    this.scheduler.recordAttempt({
+      timestamp: now,
+      host,
+      isContested,
+      isWikipedia: Boolean(host && host.endsWith('wikipedia.org'))
+    })
+    this.wikiGuardState = this.scheduler.getWikiGuardState()
+    this.controversyWindow = this.scheduler.getControversyWindow()
     await this.incrementMetric('candidatesProcessed')
-    const depth = await frontierSize(patchId).catch(() => 0)
+    const depth = await frontierSize(redisPatchId).catch(() => 0)
     this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
-    const countersBefore = await getSaveCounters(patchId)
+    const countersBefore = await getSaveCounters(redisPatchId)
     this.attemptedTotal += 1
-    if (this.isControversyCandidate(candidate)) {
+    if (isContested) {
       this.attemptedControversy += 1
     }
     const result = await this.processCandidate(candidate, countersBefore)
     await this.applyProcessOutcome(result, candidate, coveredAngles, startTime)
     const frontierDepth = typeof depth === 'number' ? depth : 0
     this.emitMetricsSnapshot(frontierDepth)
+    await this.handleZeroSaveSlo()
+    if (this.scheduler.needsReseed()) {
+      await this.triggerReseed(coveredAngles)
+    }
   }
 
   private shouldBiasControversy(): boolean {
@@ -399,24 +492,26 @@ export class DiscoveryEngineV21 {
   }
 
   private async pullCandidateWithBias(patchId: string): Promise<FrontierItem | null> {
-    const wantControversy = this.shouldBiasControversy()
     let attempts = 0
-    while (attempts < 6) {
+    while (attempts < 12) {
       const candidate = await popFromFrontier(patchId)
       if (!candidate) {
         return null
       }
-      if (!wantControversy || this.isControversyCandidate(candidate) || attempts >= 5) {
-        return candidate
-      }
-      await addToFrontier(patchId, {
-        ...candidate,
-        id: `rebias:${Date.now()}:${Math.random()}`,
-        priority: candidate.priority - 5
+      const host = this.resolveHost(candidate)
+      const isContested = this.isControversyCandidate(candidate)
+      const evaluation = this.scheduler.evaluateCandidate({
+        candidate,
+        host,
+        isContested
       })
+      if (evaluation.action === 'accept') {
+        return evaluation.candidate
+      }
+      await addToFrontier(patchId, evaluation.candidate)
       attempts += 1
     }
-    return await popFromFrontier(patchId)
+    return null
   }
 
   private async ensureLiveState(context: string): Promise<boolean> {
@@ -498,7 +593,7 @@ export class DiscoveryEngineV21 {
       if (added.size > 25) break
 
       tasks.push(
-        addToFrontier(this.options.patchId, {
+        addToFrontier(this.redisPatchId, {
           id: `wiki_ref:${Date.now()}:${Math.random()}`,
           provider: 'wiki_ref',
           cursor: canonical,
@@ -516,6 +611,126 @@ export class DiscoveryEngineV21 {
     if (tasks.length) {
       await Promise.all(tasks)
     }
+  }
+
+  private normaliseHost(input: string | null | undefined): string | null {
+    if (!input) return null
+    try {
+      const normalised = input.replace(/^https?:\/\//i, '')
+      return new URL(`https://${normalised}`).hostname.toLowerCase()
+    } catch {
+      try {
+        return new URL(input).hostname.toLowerCase()
+      } catch {
+        return input.toLowerCase()
+      }
+    }
+  }
+
+  private resolveHost(candidate: FrontierItem): string | null {
+    const metaHost = typeof candidate.meta?.host === 'string' ? candidate.meta.host : undefined
+    if (metaHost && metaHost.length > 0) {
+      return this.normaliseHost(metaHost)
+    }
+    const cursor = typeof candidate.cursor === 'string' ? candidate.cursor : ''
+    if (!cursor) return null
+    try {
+      return new URL(cursor).hostname.toLowerCase()
+    } catch {
+      return null
+    }
+  }
+
+  private shouldRecordFailure(reason?: string): boolean {
+    if (!reason) return true
+    return !NON_PROVIDER_FAILURE_REASONS.has(reason)
+  }
+
+  private async recordSuccessOutcome(host: string, outcome: 'success' | 'failure'): Promise<void> {
+    const stats = this.scheduler.updateSuccessRate(host, outcome)
+    if (!stats) return
+    this.successRates.set(host, stats)
+    try {
+      await setSuccessRate(this.redisPatchId, host, {
+        ema: stats.ema,
+        updatedAt: stats.updatedAt
+      })
+    } catch (error) {
+      console.warn('[EngineV21] Failed to persist success rate', { host, error })
+    }
+  }
+
+  private async handleZeroSaveSlo(): Promise<void> {
+    const attempts = this.metrics.candidatesProcessed
+    const saves = this.metrics.itemsSaved
+
+    if (saves > 0) {
+      if (this.zeroSaveWarningIssued || this.zeroSaveAutoPaused) {
+        await clearZeroSaveDiagnostics(this.redisPatchId).catch(() => undefined)
+      }
+      this.zeroSaveWarningIssued = false
+      this.zeroSaveAutoPaused = false
+      return
+    }
+
+    if (!this.zeroSaveWarningIssued && attempts >= ZERO_SAVE_WARN_THRESHOLD) {
+      this.zeroSaveWarningIssued = true
+      const diagnostics: ZeroSaveDiagnostics = {
+        status: 'warning',
+        attempts,
+        issuedAt: new Date().toISOString(),
+        reason: 'zero_save_warning'
+      }
+      await setZeroSaveDiagnostics(this.redisPatchId, diagnostics).catch(() => undefined)
+      await this.emitAudit('zero_save', 'pending', { meta: diagnostics })
+      this.structuredLog('zero_save_warning', { attempts })
+    }
+
+    if (!this.zeroSaveAutoPaused && attempts >= ZERO_SAVE_AUTOPAUSE_THRESHOLD) {
+      this.zeroSaveAutoPaused = true
+      const diagnostics: ZeroSaveDiagnostics = {
+        status: 'paused',
+        attempts,
+        issuedAt: new Date().toISOString(),
+        reason: 'zero_save_autopause'
+      }
+      await setZeroSaveDiagnostics(this.redisPatchId, diagnostics).catch(() => undefined)
+      await this.emitAudit('zero_save', 'fail', { meta: diagnostics })
+      this.eventStream.pause()
+      this.structuredLog('zero_save_autopause', { attempts })
+      if (!this.shadowMode) {
+        await setRunState(this.options.patchId, 'paused').catch(() => undefined)
+      }
+      this.stopRequested = true
+    }
+  }
+
+  private async triggerReseed(coveredAngles: Set<string>): Promise<void> {
+    try {
+      const reseeded = await this.expandFrontierIfNeeded(this.redisPatchId, coveredAngles)
+      if (reseeded) {
+        this.structuredLog('reseed_triggered', {
+          reason: 'scheduler_guard',
+          hostDiversity: this.scheduler.getHostDiversityCount(),
+          wikiGuard: this.wikiGuardState.active
+        })
+      }
+    } catch (error) {
+      console.warn('[EngineV21] Failed to trigger reseed', error)
+    }
+  }
+
+  private async deferForCanonicalCooldown(candidate: FrontierItem, penaltyUntil: number): Promise<void> {
+    await addToFrontier(this.redisPatchId, {
+      ...candidate,
+      id: `canonical_cooldown:${Date.now()}:${Math.random()}`,
+      priority: candidate.priority - 20,
+      meta: {
+        ...candidate.meta,
+        cooldownUntil: penaltyUntil,
+        reason: 'canonical_cooldown'
+      }
+    })
   }
 
   private async enqueueQuerySuggestion(
@@ -548,7 +763,7 @@ export class DiscoveryEngineV21 {
       }
     }
 
-    await addToFrontier(this.options.patchId, newItem)
+    await addToFrontier(this.redisPatchId, newItem)
   }
 
   private async requeueQueryCandidate(candidate: FrontierItem, nextAttempt: number): Promise<void> {
@@ -562,7 +777,7 @@ export class DiscoveryEngineV21 {
       }
     }
 
-    await addToFrontier(this.options.patchId, updated)
+    await addToFrontier(this.redisPatchId, updated)
   }
 
   private emitMetricsSnapshot(frontierDepth: number): void {
@@ -572,7 +787,14 @@ export class DiscoveryEngineV21 {
       skipped: this.metrics.dropped,
       saved: this.metrics.itemsSaved,
       attempted: this.metrics.candidatesProcessed,
-      runState: this.lastRunState ?? 'live'
+      runState: this.lastRunState ?? 'live',
+      wikiShare: this.wikiGuardState.share,
+      wikiGuardActive: this.wikiGuardState.active,
+      hostDiversity: this.scheduler.getHostDiversityCount(),
+      controversyAttemptRatio: this.controversyWindow.attemptRatio,
+      controversySaveRatio: this.controversyWindow.saveRatio,
+      zeroSaveWarning: this.zeroSaveWarningIssued,
+      zeroSavePaused: this.zeroSaveAutoPaused
     })
   }
 
@@ -604,6 +826,18 @@ export class DiscoveryEngineV21 {
       } else if (result.reason === 'vetter_parse' || result.reason === 'vetter_insufficient_facts') {
         this.telemetry.rejectedParse++
       }
+    }
+
+    if (result.host) {
+      if (result.saved) {
+        await this.recordSuccessOutcome(result.host, 'success')
+      } else if (this.shouldRecordFailure(result.reason)) {
+        await this.recordSuccessOutcome(result.host, 'failure')
+      }
+    }
+
+    if (result.paywallBranch) {
+      await pushPaywallBranch(this.redisPatchId, result.paywallBranch).catch(() => undefined)
     }
   }
 
@@ -685,17 +919,18 @@ export class DiscoveryEngineV21 {
 
   private async processCandidate(candidate: FrontierItem, countersBefore: SaveCounters): Promise<ProcessedCandidateResult> {
     const { patchId } = this.options
+    const redisPatchId = this.redisPatchId
     const url = candidate.cursor
     const angle = candidate.meta?.angle as string | undefined
 
     try {
       if (!(await this.ensureLiveState('pre_candidate'))) {
-        return { saved: false, reason: 'run_suspended', angle }
+        return { saved: false, reason: 'run_suspended', angle, host: hostHint }
       }
 
       if (typeof candidate.provider === 'string' && candidate.provider.startsWith('query:')) {
         const queryResult = await this.expandQueryCandidate(candidate)
-        return { saved: false, reason: queryResult, angle }
+        return { saved: false, reason: queryResult, angle, host: hostHint }
       }
 
       const startedAt = Date.now()
@@ -712,8 +947,39 @@ export class DiscoveryEngineV21 {
       const canonical = await canonicalize(url)
       const canonicalUrl = canonical.canonicalUrl
       const finalDomain = canonical.finalDomain
+      const host = finalDomain ? finalDomain.toLowerCase() : hostHint
+
+      const nowTs = Date.now()
+      const cooldownUntil = this.canonicalCooldowns.get(canonicalUrl)
+      if (cooldownUntil) {
+        if (nowTs < cooldownUntil) {
+          await this.emitAudit('canonical_cooldown', 'pending', {
+            candidateUrl: canonicalUrl,
+            meta: { cooldownUntil }
+          })
+          this.structuredLog('canonical_cooldown_skip', { url: canonicalUrl, cooldownUntil })
+          await this.deferForCanonicalCooldown(candidate, cooldownUntil)
+          return { saved: false, reason: 'canonical_cooldown', angle, host }
+        }
+        this.canonicalCooldowns.delete(canonicalUrl)
+      }
+
+      const lastAttemptTs = this.canonicalAttempts.get(canonicalUrl)
+      this.canonicalAttempts.set(canonicalUrl, nowTs)
+      if (lastAttemptTs && nowTs - lastAttemptTs < QueryExpanderConstants.FIVE_MINUTES) {
+        const penaltyUntil = nowTs + CANONICAL_COOLDOWN_MS
+        this.canonicalCooldowns.set(canonicalUrl, penaltyUntil)
+        await this.emitAudit('canonical_cooldown', 'pending', {
+          candidateUrl: canonicalUrl,
+          meta: { penaltyUntil, previousAttempt: lastAttemptTs }
+        })
+        this.structuredLog('canonical_cooldown_set', { url: canonicalUrl, penaltyUntil })
+        await this.deferForCanonicalCooldown(candidate, penaltyUntil)
+        return { saved: false, reason: 'canonical_cooldown', angle, host }
+      }
+
       if (!(await this.ensureLiveState('post_canonical'))) {
-        return { saved: false, reason: 'run_suspended', angle }
+        return { saved: false, reason: 'run_suspended', angle, host }
       }
       await this.emitAudit('canonicalize', 'ok', {
         candidateUrl: url,
@@ -721,7 +987,7 @@ export class DiscoveryEngineV21 {
         meta: { domain: finalDomain }
       })
 
-      if (await isSeen(patchId, canonicalUrl)) {
+      if (await isSeen(redisPatchId, canonicalUrl)) {
         await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
@@ -736,39 +1002,54 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'redis_seen' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'redis_seen', angle }
+        return { saved: false, reason: 'redis_seen', angle, host }
       }
 
-      const existing = await prisma.discoveredContent.findFirst({
-        where: { patchId, canonicalUrl },
-        select: { id: true }
-      })
-      if (existing) {
-        await this.incrementMetric('duplicates')
-        this.metricsTracker.recordDuplicate()
-        logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
-        this.structuredLog('duplicate_database', {
-          url: canonicalUrl,
-          provider: candidate.provider,
-          existingId: existing.id
+      if (!this.shadowMode) {
+        const existing = await prisma.discoveredContent.findFirst({
+          where: { patchId, canonicalUrl },
+          select: { id: true }
         })
-        await markAsSeen(patchId, canonicalUrl).catch(() => undefined)
-        await this.emitAudit('duplicate_check', 'fail', {
-          candidateUrl: canonicalUrl,
-          provider: candidate.provider,
-          decisions: { action: 'drop', reason: 'db_duplicate', existingId: existing.id }
-        })
+        if (existing) {
+          await this.incrementMetric('duplicates')
+          this.metricsTracker.recordDuplicate()
+          logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
+          this.structuredLog('duplicate_database', {
+            url: canonicalUrl,
+            provider: candidate.provider,
+            existingId: existing.id
+          })
+          await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
+          await this.emitAudit('duplicate_check', 'fail', {
+            candidateUrl: canonicalUrl,
+            provider: candidate.provider,
+            decisions: { action: 'drop', reason: 'db_duplicate', existingId: existing.id }
+          })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'db_duplicate' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'db_duplicate', angle }
+        return { saved: false, reason: 'db_duplicate', angle, host }
+        }
       }
 
       await this.incrementMetric('urlsAttempted')
       this.eventStream.stage('searching', { provider: 'fetcher' })
       this.eventStream.searching('fetch')
-      const extracted = await this.fetchAndExtractContent(canonicalUrl)
+      const fetchResult = await this.fetchAndExtractContent({
+        canonicalUrl,
+        candidate,
+        host
+      })
+      const extracted = fetchResult.extracted
+      const paywallBranch = fetchResult.branch
+      if (paywallBranch && !paywallBranch.startsWith('canonical')) {
+        this.structuredLog('paywall_branch_used', {
+          branch: paywallBranch,
+          url: fetchResult.finalUrl,
+          canonical: canonicalUrl
+        })
+      }
       if (!(await this.ensureLiveState('post_fetch'))) {
-        return { saved: false, reason: 'run_suspended', angle }
+        return { saved: false, reason: 'run_suspended', angle, host }
       }
       const wordCount = extracted?.text ? extracted.text.split(/\s+/).filter(Boolean).length : 0
       const structuredOverride = candidate.meta?.hasStructuredStats === true
@@ -787,7 +1068,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'content_too_short' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'content_short', angle }
+        return { saved: false, reason: 'content_short', angle, host }
       }
 
       const signature = this.computeSignature(canonicalUrl, extracted)
@@ -806,7 +1087,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'signature_duplicate' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'signature_duplicate', angle }
+        return { saved: false, reason: 'signature_duplicate', angle, host }
       }
       this.runSignatures.add(signature)
 
@@ -829,12 +1110,12 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'entity_missing' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'entity_missing', angle }
+        return { saved: false, reason: 'entity_missing', angle, host }
       }
 
       const simhash = SimHash.generate(extracted.text)
       const hashString = simhash.toString()
-      if (await isNearDuplicate(patchId, hashString, DUPLICATE_HASH_THRESHOLD)) {
+      if (await isNearDuplicate(redisPatchId, hashString, DUPLICATE_HASH_THRESHOLD)) {
         await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'B', candidate.provider)
@@ -850,7 +1131,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'near_duplicate' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'near_duplicate', angle }
+        return { saved: false, reason: 'near_duplicate', angle, host }
       }
 
       this.eventStream.stage('vetting', { url: canonicalUrl })
@@ -883,7 +1164,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: parseReason })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: parseReason, angle }
+        return { saved: false, reason: parseReason, angle, host }
       }
 
       if (!synthesis || !synthesis.isUseful) {
@@ -903,7 +1184,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'vetter_rejected' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'vetter_rejected', angle }
+        return { saved: false, reason: 'vetter_rejected', angle, host }
       }
 
       this.telemetry.vetterJsonOk++
@@ -935,7 +1216,7 @@ export class DiscoveryEngineV21 {
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'score_threshold' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'score_threshold', angle }
+        return { saved: false, reason: 'score_threshold', angle, host }
       }
 
       if (softEligible && synthesis.relevanceScore < MIN_RELEVANCE_SCORE) {
@@ -976,37 +1257,46 @@ export class DiscoveryEngineV21 {
         await markContestedCovered(this.options.runId, contestedClaim).catch(() => undefined)
       }
 
-      await markAsSeen(patchId, canonicalUrl).catch(() => undefined)
-      await markContentHash(patchId, hashString).catch(() => undefined)
+      await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
+      await markContentHash(this.redisPatchId, hashString).catch(() => undefined)
 
       const viewSourceOk = await checkViewSource(canonicalUrl)
 
       const isControversy = candidate.meta?.isControversy === true
       const isHistory = candidate.meta?.isHistory === true
 
-      const savedItem = await prisma.discoveredContent.create({
-        data: {
-          patchId,
-          canonicalUrl,
-          sourceUrl: canonicalUrl,
-          domain: finalDomain,
-          publishDate: candidate.meta?.publishDate ?? null,
-          category: (candidate.meta?.category as string | undefined) || null,
-          isControversy,
-          isHistory,
-          relevanceScore: synthesis.relevanceScore,
-          qualityScore: synthesis.qualityScore,
-          whyItMatters: synthesis.whyItMatters,
-          summary: synthesis.whyItMatters,
-          facts: synthesis.facts as unknown as Prisma.JsonArray,
-          quotes: synthesis.quotes as unknown as Prisma.JsonArray,
-          provenance: synthesis.provenance as unknown as Prisma.JsonArray,
-          hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
-          contentHash: hashString
-        } as any
-      })
+      let savedId: string
+      let savedCreatedAt: Date
+      if (this.shadowMode) {
+        savedId = `shadow:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
+        savedCreatedAt = new Date()
+      } else {
+        const savedItem = await prisma.discoveredContent.create({
+          data: {
+            patchId,
+            canonicalUrl,
+            sourceUrl: canonicalUrl,
+            domain: finalDomain,
+            publishDate: candidate.meta?.publishDate ?? null,
+            category: (candidate.meta?.category as string | undefined) || null,
+            isControversy,
+            isHistory,
+            relevanceScore: synthesis.relevanceScore,
+            qualityScore: synthesis.qualityScore,
+            whyItMatters: synthesis.whyItMatters,
+            summary: synthesis.whyItMatters,
+            facts: synthesis.facts as unknown as Prisma.JsonArray,
+            quotes: synthesis.quotes as unknown as Prisma.JsonArray,
+            provenance: synthesis.provenance as unknown as Prisma.JsonArray,
+            hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
+            contentHash: hashString
+          } as any
+        })
+        savedId = savedItem.id
+        savedCreatedAt = savedItem.createdAt
+      }
 
-      await incrementSaveCounters(patchId, {
+      await incrementSaveCounters(this.redisPatchId, {
         total: 1,
         controversy: isControversy ? 1 : 0,
         history: isHistory ? 1 : 0
@@ -1019,7 +1309,7 @@ export class DiscoveryEngineV21 {
       }))
 
       const cardPayload: DiscoveryCardPayload = {
-        id: savedItem.id,
+        id: savedId,
         title: extracted.title,
         url: canonicalUrl,
         canonicalUrl,
@@ -1042,11 +1332,11 @@ export class DiscoveryEngineV21 {
         viewSourceOk,
         isControversy,
         isHistory,
-        savedAt: savedItem.createdAt.toISOString()
+        savedAt: savedCreatedAt.toISOString()
       }
 
       this.acceptanceCards.push({
-        id: savedItem.id,
+        id: savedId,
         canonicalUrl,
         angle,
         viewSourceOk,
@@ -1056,7 +1346,7 @@ export class DiscoveryEngineV21 {
       await this.emitAudit('save', 'ok', {
         candidateUrl: canonicalUrl,
         meta: {
-          id: savedItem.id,
+          id: savedId,
           whyItMatters: synthesis.whyItMatters,
           angle,
           heroSource: hero?.source,
@@ -1065,7 +1355,7 @@ export class DiscoveryEngineV21 {
         }
       })
 
-      const countersAfter = await getSaveCounters(patchId)
+      const countersAfter = await getSaveCounters(this.redisPatchId)
       this.lastCounters = countersAfter
       const processingTime = Date.now() - startedAt
       this.metricsTracker.recordNovel(processingTime)
@@ -1093,15 +1383,15 @@ export class DiscoveryEngineV21 {
       }
 
       this.eventStream.saved(cardPayload)
-      this.eventStream.stage('saved', { id: savedItem.id })
+      this.eventStream.stage('saved', { id: savedId })
       await this.persistMetricsSnapshot('running', countersAfter, {
-        lastSavedId: savedItem.id,
+        lastSavedId: savedId,
         lastSavedUrl: canonicalUrl
       })
       if (angle) {
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
-      return { saved: true, angle }
+      return { saved: true, angle, host, paywallBranch }
     } catch (error) {
       await this.incrementMetric('failures')
       this.metricsTracker.recordError()
@@ -1124,7 +1414,7 @@ export class DiscoveryEngineV21 {
       await this.persistMetricsSnapshot('running', this.lastCounters, {
         lastError: this.formatError(error)
       })
-      return { saved: false, reason: 'error', angle }
+      return { saved: false, reason: 'error', angle, host: hostHint }
     }
   }
 
@@ -1152,45 +1442,112 @@ export class DiscoveryEngineV21 {
     }
   }
 
-  private async fetchAndExtractContent(url: string): Promise<ExtractedContent> {
-    try {
-      const response = await this.fetchWithRetry(
-        url,
-        {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
-          }
-        },
-        1,
-        FETCH_TIMEOUT_MS
-      )
+  private async fetchAndExtractContent(args: {
+    canonicalUrl: string
+    candidate: FrontierItem
+    host: string | null
+  }): Promise<{ extracted: ExtractedContent; branch: string; finalUrl: string }> {
+    const { canonicalUrl, candidate } = args
+    const plan = buildPaywallPlan({
+      canonicalUrl,
+      meta: candidate.meta
+    })
 
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 402) {
-          this.telemetry.paywall++
-        } else if (response.status === 403) {
-          const robots = response.headers.get('x-robots-tag')
-          if (robots && robots.length) {
-            this.telemetry.robotsBlock++
-          } else {
+    let lastError: unknown = null
+
+    for (const branch of plan) {
+      this.structuredLog('paywall_branch_attempt', {
+        branch: branch.branch,
+        url: branch.url,
+        canonical: canonicalUrl
+      })
+
+      try {
+        const response = await this.fetchWithRetry(
+          branch.url,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
+            }
+          },
+          1,
+          FETCH_TIMEOUT_MS
+        )
+
+        if (!response.ok) {
+          const statusKind = this.detectPaywallStatus(response)
+          if (statusKind === 'paywall') {
             this.telemetry.paywall++
+            lastError = new PaywallBlockedError(`status:${response.status}`)
+            continue
           }
+          if (statusKind === 'robots') {
+            this.telemetry.robotsBlock++
+            throw new Error('robots_blocked')
+          }
+          throw new Error(`fetch_failed_${response.status}`)
         }
-        throw new Error(`fetch_failed_${response.status}`)
-      }
 
-      this.telemetry.directFetchOk++
-      const html = await response.text()
-      const extracted = this.extractHtmlContent(html)
-      this.telemetry.htmlExtracted++
-      return { ...extracted, rawHtml: html }
-    } catch (error) {
-      if ((error as Error)?.name === 'AbortError') {
-        this.telemetry.timeout++
+        this.telemetry.directFetchOk++
+        const html = await response.text()
+        if (this.isPaywallHtml(html)) {
+          this.telemetry.paywall++
+          lastError = new PaywallBlockedError('paywall_html')
+          continue
+        }
+        const extracted = this.extractHtmlContent(html)
+        this.telemetry.htmlExtracted++
+        return {
+          extracted: { ...extracted, rawHtml: html },
+          branch: branch.branch,
+          finalUrl: response.url ?? branch.url
+        }
+      } catch (error) {
+        if ((error as Error)?.name === 'AbortError') {
+          this.telemetry.timeout++
+        }
+        if (error instanceof PaywallBlockedError) {
+          lastError = error
+          continue
+        }
+        lastError = error
       }
-      console.error('[EngineV21] Failed to fetch content:', error)
-      throw error
     }
+
+    console.error('[EngineV21] Exhausted paywall branches', lastError)
+    throw lastError ?? new Error('paywall_branches_exhausted')
+  }
+
+  private detectPaywallStatus(response: Response): 'paywall' | 'robots' | 'none' {
+    if (response.status === 401 || response.status === 402 || response.status === 423 || response.status === 451) {
+      return 'paywall'
+    }
+    if (response.status === 403) {
+      const robots = response.headers.get('x-robots-tag')
+      if (robots && robots.length) {
+        return 'robots'
+      }
+      return 'paywall'
+    }
+    if (response.status === 429) {
+      return 'paywall'
+    }
+    return 'none'
+  }
+
+  private isPaywallHtml(html: string): boolean {
+    const snippet = html.slice(0, 20000).toLowerCase()
+    const indicators = [
+      'subscribe now',
+      'subscriber-only',
+      'log in to continue',
+      'this content is available to subscribers',
+      'purchase a subscription',
+      'digital subscription',
+      'sign in to read',
+      'unlock this story'
+    ]
+    return indicators.some((phrase) => snippet.includes(phrase))
   }
 
   private extractHtmlContent(html: string): ExtractedContent {
@@ -1427,7 +1784,7 @@ export class DiscoveryEngineV21 {
     try {
       let countersSnapshot = counters
       if (!countersSnapshot) {
-        countersSnapshot = await getSaveCounters(this.options.patchId).catch(() => this.lastCounters)
+        countersSnapshot = await getSaveCounters(this.redisPatchId).catch(() => this.lastCounters)
       }
       if (countersSnapshot) {
         this.lastCounters = countersSnapshot
@@ -1435,7 +1792,7 @@ export class DiscoveryEngineV21 {
       const trackerMetrics = this.metricsTracker.getMetrics()
       const snapshot: RunMetricsSnapshot = {
         runId: this.options.runId,
-        patchId: this.options.patchId,
+        patchId: this.redisPatchId,
         status,
         timestamp: new Date().toISOString(),
         metrics: {
@@ -1444,6 +1801,15 @@ export class DiscoveryEngineV21 {
           counters: this.lastCounters,
           acceptance: this.metrics.acceptance,
           telemetry: { ...this.telemetry },
+          wikiGuard: this.wikiGuardState,
+          controversyWindow: this.controversyWindow,
+          successRates: Object.fromEntries(this.successRates.entries()),
+          zeroSave: {
+            warning: this.zeroSaveWarningIssued,
+            paused: this.zeroSaveAutoPaused,
+            attempts: this.metrics.candidatesProcessed
+          },
+          actualPatchId: this.options.patchId,
           ...extra
         }
       }

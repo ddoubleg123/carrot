@@ -5,7 +5,9 @@ Rules:
 - Fair use: up to TWO quoted paragraphs total (≤150 words combined), each with attribution; otherwise paraphrase with citations.
 - Only add a contested note when the source itself advances or disputes a listed claim.
 - Do **not** reject solely because the source is controversial or represents a minority viewpoint.
-- Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 70, or facts lack supporting citations.`
+- Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 70, or facts lack supporting citations.
+- Reject if the source asserts criminal conduct about a private individual without at least one Tier1/Tier2 credentialed citation (Reuters, AP, FT, WSJ, WaPo, NYT, BBC, Bloomberg, Guardian, NPR, Axios, Politico, Al-Monitor, France24).
+- Strip or redact PII (emails, phone numbers, street addresses); if removal changes meaning or context, reject the source.`
 
 interface VetterArgs {
   topic: string
@@ -46,6 +48,51 @@ export interface VetterResult {
 }
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
+
+const TIER1_DOMAINS = new Set([
+  'reuters.com',
+  'apnews.com',
+  'ap.org',
+  'ft.com',
+  'wsj.com',
+  'washingtonpost.com',
+  'nytimes.com',
+  'bbc.co.uk',
+  'bbc.com'
+])
+
+const TIER2_DOMAINS = new Set([
+  'bloomberg.com',
+  'theguardian.com',
+  'npr.org',
+  'axios.com',
+  'politico.com',
+  'al-monitor.com',
+  'france24.com'
+])
+
+const CRIMINAL_KEYWORDS = [
+  'arrested',
+  'charged',
+  'indicted',
+  'convicted',
+  'crime',
+  'criminal',
+  'felony',
+  'manslaughter',
+  'murder',
+  'homicide',
+  'assault',
+  'fraud',
+  'embezzle',
+  'rape',
+  'sexual assault',
+  'terrorism'
+]
+
+const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+const PHONE_REGEX = /\b(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/
+const ADDRESS_REGEX = /\b\d{2,5}\s+[^\n,]+\s+(street|st\.?|avenue|ave\.?|road|rd\.?|drive|dr\.?|lane|ln\.?|boulevard|blvd\.?|court|ct\.?|way)\b/i
 
 function stripMarkdownFence(payload: string): string {
   return payload
@@ -191,6 +238,28 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
       }
     : null
 
+  const combinedNarrative = [
+    typeof parsed.whyItMatters === 'string' ? parsed.whyItMatters : '',
+    ...facts.map((fact) => fact.value),
+    ...quotes.map((quote) => quote.text)
+  ].join(' ')
+
+  if (containsPII(combinedNarrative)) {
+    throw new Error('deepseek_vetter_pii_detected')
+  }
+
+  for (const fact of facts) {
+    if (mentionsCriminalKeyword(fact.value) && !hasTierCitation(fact.citation)) {
+      throw new Error('deepseek_vetter_defamation_guard')
+    }
+  }
+
+  for (const quote of quotes) {
+    if (mentionsCriminalKeyword(quote.text) && !hasTierCitation(quote.citation)) {
+      throw new Error('deepseek_vetter_defamation_guard')
+    }
+  }
+
   return {
     isUseful: parsed.isUseful !== false,
     relevanceScore: Number(parsed.relevanceScore ?? 0),
@@ -201,6 +270,47 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     provenance: provenance.length ? provenance : [args.url],
     contested: contestedValue && contestedValue.note ? contestedValue : null
   }
+}
+
+function containsPII(payload: string): boolean {
+  if (!payload) return false
+  return EMAIL_REGEX.test(payload) || PHONE_REGEX.test(payload) || ADDRESS_REGEX.test(payload)
+}
+
+function mentionsCriminalKeyword(text: string): boolean {
+  if (!text) return false
+  const lower = text.toLowerCase()
+  return CRIMINAL_KEYWORDS.some((keyword) => lower.includes(keyword))
+}
+
+function hasTierCitation(citation: string): boolean {
+  if (!citation) return false
+  const hosts = extractCitationHosts(citation)
+  if (hosts.some((host) => TIER1_DOMAINS.has(host) || TIER2_DOMAINS.has(host))) {
+    return true
+  }
+  const raw = citation.toLowerCase()
+  const trustedDomains = [...TIER1_DOMAINS, ...TIER2_DOMAINS]
+  return trustedDomains.some((domain) => raw.includes(domain))
+}
+
+function extractCitationHosts(citation: string): string[] {
+  return citation
+    .split(/[\\s,;]+/)
+    .map((entry) => {
+      if (!entry) return null
+      try {
+        const url = new URL(entry.includes('://') ? entry : `https://${entry}`)
+        return normaliseHost(url.hostname)
+      } catch {
+        return null
+      }
+    })
+    .filter((host): host is string => Boolean(host))
+}
+
+function normaliseHost(hostname: string): string {
+  return hostname.replace(/^www\\./i, '').toLowerCase()
 }
 
 

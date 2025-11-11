@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
-    "lint": "npm run lint:discovery",
-    "lint:discovery": "eslint --max-warnings=0 \"src/lib/discovery/{engineV21,planner,queryExpander,streaming,vetter}.ts\" \"src/app/**/discovery/**\" \"src/app/**/audit/**\"",
+    "lint": "npm run lint:v2",
+    "lint:v2": "eslint --max-warnings=0 \"src/lib/discovery/{engineV21,planner,queryExpander,scheduler,paywall,vetter,auditAnalytics}.ts\" \"src/app/**/discovery/**\" \"src/app/**/audit/**\"",
     "lint:all": "eslint .",
     "type-check": "tsc --noEmit",
     "deploy-check": "node scripts/deploy-check.js",
@@ -16,7 +16,8 @@
     "health-check": "curl -f http://localhost:3005/api/health || exit 1",
     "backfill-images": "tsx scripts/backfill-hero-images.ts",
     "inspect-images": "tsx scripts/inspect-patch-images.ts",
-    "test": "jest"
+    "test": "jest",
+    "test:v2": "jest --runTestsByPath src/lib/__tests__/paywall.plan.test.ts src/lib/__tests__/scheduler.guards.test.ts src/lib/__tests__/vetter.defamation.test.ts src/lib/__tests__/audit.analytics.test.ts src/lib/__tests__/redis.namespace.test.ts --passWithNoTests"
   },
   "engines": {
     "node": "20.x",
