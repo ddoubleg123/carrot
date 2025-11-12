@@ -446,7 +446,7 @@ export default function AuditPage(props: AuditPageProps) {
   }, [computedAnalytics, serverAnalytics])
   const seedsVsQueries = analytics.seedsVsQueries
   const wikiSharePercent = analytics.wikiShare.toFixed(1)
-  const paywallBranches = serverAnalytics?.paywallBranches ?? []
+  const paywallBranches: string[] = serverAnalytics?.paywallBranches ?? []
   const ttfSeconds =
     serverAnalytics?.ttfSeconds ??
     (typeof run?.metrics?.timeToFirstMs === 'number' ? Math.round(run.metrics.timeToFirstMs / 1000) : null)
@@ -465,9 +465,9 @@ export default function AuditPage(props: AuditPageProps) {
     null
   const controversyWindowSize = serverAnalytics?.controversy?.windowSize ?? 40
   const frontierSize = serverAnalytics?.frontierSize ?? run?.metrics?.tracker?.frontierDepth ?? null
-  const whyRejected = serverAnalytics?.whyRejected ?? []
-  const robotsDecisions = serverAnalytics?.robotsDecisions ?? []
-  const topCandidates = serverAnalytics?.topCandidates ?? []
+  const whyRejected: Array<{ reason: string; count: number }> = serverAnalytics?.whyRejected ?? []
+  const robotsDecisions: Array<{ url?: string | null; rule?: string | null }> = serverAnalytics?.robotsDecisions ?? []
+  const topCandidates: Array<{ url: string; angle?: string | null; savedAt?: string | null }> = serverAnalytics?.topCandidates ?? []
 
   const handleExport = useCallback(async () => {
     try {

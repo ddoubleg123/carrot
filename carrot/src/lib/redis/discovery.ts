@@ -214,8 +214,6 @@ export async function frontierSize(patchId: string): Promise<number> {
 /**
  * Controversy / history counters
  */
-const COUNTER_KEY = (patchId: string) => `discovery:counters:${patchId}`
-
 export interface SaveCounterDelta {
   total?: number
   controversy?: number

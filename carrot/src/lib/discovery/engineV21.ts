@@ -24,6 +24,8 @@ import {
   storeRunMetricsSnapshot,
   enqueueHeroRetry,
   getRunState,
+  getZeroSaveDiagnostics,
+  pushPaywallBranch,
   type SaveCounters,
   type RunMetricsSnapshot
 } from '@/lib/redis/discovery'
@@ -214,7 +216,7 @@ export class DiscoveryEngineV21 {
   private lastRunState: 'live' | 'suspended' | 'paused' | null = null
   private seedCanonicalUrls = new Set<string>()
   private expansionCooldowns = new Map<string, { lastSeen: number; cooldownUntil: number }>()
-  private scheduler = new SchedulerGuards()
+  private scheduler: SchedulerGuards
   private wikiGuardState: WikiGuardState = { active: false, share: 0, window: 0 }
   private controversyWindow: ControversyWindow = { attemptRatio: 0, saveRatio: 0, size: 0 }
   private zeroSaveWarningIssued = false
@@ -1341,7 +1343,6 @@ export class DiscoveryEngineV21 {
           url: error.meta.url
         }
         this.structuredLog('robots_blocked', {
-          url: candidate.cursor,
           provider: candidate.provider,
           ...diagnostics
         })

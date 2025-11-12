@@ -8,6 +8,13 @@ import {
   getZeroSaveDiagnostics,
   getPaywallBranches
 } from '@/lib/redis/discovery'
+import {
+  buildAnalytics,
+  buildWhyRejected,
+  buildRobotsDecisions,
+  computeSeedsVsQueries,
+  buildTopCandidates
+} from '@/lib/discovery/auditAnalytics'
 
 export const dynamic = 'force-dynamic'
 
