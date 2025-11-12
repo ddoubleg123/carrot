@@ -1,3 +1,12 @@
+jest.mock('../redis/discovery', () => ({
+  getSuccessRates: jest.fn().mockResolvedValue({}),
+  setSuccessRate: jest.fn(),
+  getZeroSaveDiagnostics: jest.fn().mockResolvedValue(null),
+  setZeroSaveDiagnostics: jest.fn(),
+  clearZeroSaveDiagnostics: jest.fn(),
+  setRunState: jest.fn()
+}))
+
 import { SchedulerGuards } from '../discovery/scheduler'
 
 function createCandidate(host: string | null = 'example.com') {

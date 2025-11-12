@@ -1,5 +1,6 @@
 import { chatStream } from '@/lib/llm/providers/DeepSeekClient'
 import { addToFrontier, FrontierItem, storeDiscoveryPlan } from '@/lib/redis/discovery'
+import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
 
 export interface PlannerQueryAngle {
@@ -47,6 +48,8 @@ export interface PlannerSeedCandidate {
   quotePullHints?: string[]
   priority?: 1 | 2 | 3
   alt?: string | null
+  publishDateHint?: string
+  isPrimaryOrOfficial?: boolean
 }
 
 export interface PlannerCoverageTargets {
@@ -67,17 +70,22 @@ export interface PlannerQueries {
   news?: {
     keywords?: string[][]
     siteFilters?: string[]
+    recencyWeeks?: number
   }
   official?: {
     urls?: string[]
+    siteFilters?: string[]
+    recencyWeeks?: number
   }
   data?: {
     keywords?: string[][]
     siteFilters?: string[]
+    recencyWeeks?: number
   }
   longform?: {
     keywords?: string[][]
     siteFilters?: string[]
+    recencyWeeks?: number
   }
 }
 
@@ -132,81 +140,93 @@ interface PlannerOptions {
   runId: string
 }
 
-const SYSTEM_PROMPT = `You are adjusting inputs for our existing discovery engine. Return STRICT JSON ONLY. Provide 10 directly fetchable seeds (≤2 per domain, ≥6 distinct domains) with an exact 5 establishment / 5 contested split. Mark exactly 3 seeds as priority:1. Add 1–3 quotePullHints per seed (exact phrases visible on-page). Prefer recent sources (≤3 years) unless a historical primary document is stronger. For every contested claim, include at least one non-media authority (court, UN, official, NGO, academic) either as a seed or in contestedPlan. Keep the output compact, precise, and ready to fetch immediately.`
+const SYSTEM_PROMPT = `You are adjusting inputs for our existing discovery engine. Return STRICT JSON ONLY. Provide 10 directly fetchable seeds with an exact 5 establishment / 5 contested split. HARD REQUIREMENTS:
+- At most ONE en.wikipedia.org seed; all other seeds must come from ≥6 distinct non-wikipedia domains.
+- Seeds must be deep links (URL path depth ≥ 2 and not a homepage/section hub). Reject /news, /world, /section landing pages.
+- Prefer recent sources (publish date ≤ 24 months) unless the seed is a primary/official historical document; include recency hints in metadata.
+- Add 1–3 quotePullHints per seed (exact phrases visible on-page).
+- For every contested claim, include at least one non-media authority (court, UN, official, NGO, academic) either as a seed or in contestedPlan.
+- Ensure official/data/news query blocks include site filters and recency windows we can translate into site:… searches.
+Keep the output compact, precise, and ready to fetch immediately.`
 
 function buildUserPrompt(topic: string, aliases: string[]): string {
   const aliasesCSV = aliases.length ? aliases.join(', ') : '—'
   return `Topic: "${topic}"
-Aliases: ${aliasesCSV}
-
-We are not starting over. We need a precise, small plan that our current engine can fetch NOW. Enforce:
+ Aliases: ${aliasesCSV}
+ 
+ We are not starting over. We need a precise, small plan that our current engine can fetch NOW. Enforce:
 - coverageTargets.controversyRatio = 0.5 (exactly 5 'contested' + 5 'establishment'),
 - minNonMediaPerContested = 1,
 - maxPerDomain = 2,
-- prefer recent (≤3 years) unless a historical primary is stronger,
-- seeds must be directly fetchable URLs (no search/result placeholders),
+- prefer recent (≤24 months) unless a primary/official record is stronger,
+- seeds must be directly fetchable deep links (path depth ≥2, no homepages/section hubs),
+- at most one seed from en.wikipedia.org,
 - disallow travel/recipe/tourism/fiction.
-
-Return JSON with:
-{
-  "topic": string,
-  "aliases": string[] | null,
-  "mustTerms": string[],                // canonical entity + aliases
-  "shouldTerms": string[],              // adjacent entities/eras/keywords
-  "disallowTerms": string[],
-  "coverageTargets": {
-    "controversyRatio": 0.5,
-    "minNonMediaPerContested": 1,
-    "maxPerDomain": 2,
-    "minFreshnessDays": 0,
-    "preferFreshWithinDays": 1095
-  },
-  "queries": {
-    "wikipedia": { "sections": string[], "refsKeywords": string[] },
-    "news": { "keywords": string[][], "siteFilters": string[] },
-    "official": { "urls": string[] },
-    "data": { "keywords": string[][], "siteFilters": string[] },
-    "longform": { "keywords": string[][], "siteFilters": string[] }
-  },
-  "seedCandidates": [
-    {
-      "url": string,
-      "alt": string | null,
-      "titleGuess": string,
-      "sourceType": "court"|"UN"|"official"|"watchdog"|"academic"|"media"|"data",
-      "angle": string,
-      "stance": "establishment"|"contested",
-      "whyItMatters": string,
-      "expectedInsights": string[],
-      "verification": {
-        "numbers": string[],
-        "dates": string[],
-        "law": string[],
-        "namesOrEntities": string[]
-      },
-      "quotePullHints": string[],
-      "credibilityTier": 1|2|3,
-      "noveltySignals": string[],
-      "priority": 1|2|3
-    }
-  ],
-  "contestedPlan": [
-    {
-      "claim": string,
-      "supportingSources": string[],
-      "counterSources": string[],
-      "verificationFocus": string[]
-    }
-  ],
-  "fetchRules": {
-    "requireEntityMention": "title_or_body",
-    "timeoutMs": 8000,
-    "dedupe": ["canonicalUrl","simhash"],
-    "preferSections": true,
-    "alternateIfPaywalled": true,
-    "respectRobotsTxt": true
-  }
-}`
+ 
+ Return JSON with:
+ {
+   "topic": string,
+   "aliases": string[] | null,
+   "mustTerms": string[],                // canonical entity + aliases
+   "shouldTerms": string[],              // adjacent entities/eras/keywords
+   "disallowTerms": string[],
+   "coverageTargets": {
+     "controversyRatio": 0.5,
+     "minNonMediaPerContested": 1,
+     "maxPerDomain": 2,
+     "minFreshnessDays": 0,
+     "preferFreshWithinDays": 730
+   },
+   "queries": {
+     "wikipedia": { "sections": string[], "refsKeywords": string[] },
+     "news": { "keywords": string[][], "siteFilters": string[], "recencyWeeks": number },
+     "official": { "urls": string[], "siteFilters": string[], "recencyWeeks": number },
+     "data": { "keywords": string[][], "siteFilters": string[], "recencyWeeks": number },
+     "longform": { "keywords": string[][], "siteFilters": string[], "recencyWeeks": number }
+   },
+   "seedCandidates": [
+     {
+       "url": string,
+       "alt": string | null,
+       "titleGuess": string,
+       "sourceType": "court"|"UN"|"official"|"watchdog"|"academic"|"media"|"data",
+       "angle": string,
+       "stance": "establishment"|"contested",
+       "whyItMatters": string,
+       "expectedInsights": string[],
+       "verification": {
+         "numbers": string[],
+         "dates": string[],
+         "law": string[],
+         "namesOrEntities": string[]
+       },
+       "quotePullHints": string[],
+       "credibilityTier": 1|2|3,
+       "noveltySignals": string[],
+       "priority": 1|2|3,
+       "publishDateHint": string,
+       "isPrimaryOrOfficial": boolean
+     }
+   ],
+   "contestedPlan": [
+     {
+       "claim": string,
+       "supportingSources": string[],
+       "counterSources": string[],
+       "verificationFocus": string[]
+     }
+   ],
+   "fetchRules": {
+     "requireEntityMention": "title_or_body",
+     "timeoutMs": 8000,
+     "dedupe": ["canonicalUrl","simhash"],
+     "preferSections": true,
+     "alternateIfPaywalled": true,
+     "respectRobotsTxt": true,
+     "maxWikiSeeds": 1,
+     "minDistinctDomains": 6
+   }
+ }`
 }
 
 async function collectStreamResponse(params: Parameters<typeof chatStream>[0]): Promise<string> {
@@ -318,7 +338,12 @@ export function normaliseSeedCandidate(seed: PlannerSeedCandidate): PlannerSeedC
     verification: normalisedVerification,
     quotePullHints,
     priority: seed.priority === 1 || seed.priority === 2 || seed.priority === 3 ? seed.priority : undefined,
-    alt: typeof seed.alt === 'string' && seed.alt.trim().length > 0 ? seed.alt.trim() : null
+    alt: typeof seed.alt === 'string' && seed.alt.trim().length > 0 ? seed.alt.trim() : null,
+    publishDateHint:
+      typeof seed.publishDateHint === 'string' && seed.publishDateHint.trim().length > 0
+        ? seed.publishDateHint.trim()
+        : undefined,
+    isPrimaryOrOfficial: seed.isPrimaryOrOfficial === true
   }
 
   return normalisedSeed
@@ -430,7 +455,18 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         normaliseList(plan.queries?.official?.urls) ??
         plan.contentQueries?.official?.map((item) => item.url).filter(Boolean) ??
         fallback.queries?.official?.urls ??
-        []
+        [],
+      siteFilters:
+        normaliseList(plan.queries?.official?.siteFilters) ??
+        extractSiteFilters(plan.contentQueries?.official) ??
+        fallback.queries?.official?.siteFilters ??
+        [],
+      recencyWeeks:
+        typeof plan.queries?.official?.recencyWeeks === 'number'
+          ? plan.queries.official.recencyWeeks
+          : typeof fallback.queries?.official?.recencyWeeks === 'number'
+          ? fallback.queries.official.recencyWeeks
+          : undefined
     },
     data: {
       keywords:
@@ -444,7 +480,13 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         normaliseList(plan.queries?.data?.siteFilters) ??
         extractSiteFilters(plan.contentQueries?.data) ??
         fallback.queries?.data?.siteFilters ??
-        []
+        [],
+      recencyWeeks:
+        typeof plan.queries?.data?.recencyWeeks === 'number'
+          ? plan.queries.data.recencyWeeks
+          : typeof fallback.queries?.data?.recencyWeeks === 'number'
+          ? fallback.queries.data.recencyWeeks
+          : undefined
     },
     longform: {
       keywords:
@@ -458,7 +500,13 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         normaliseList(plan.queries?.longform?.siteFilters) ??
         extractSiteFilters(plan.contentQueries?.longform) ??
         fallback.queries?.longform?.siteFilters ??
-        []
+        [],
+      recencyWeeks:
+        typeof plan.queries?.longform?.recencyWeeks === 'number'
+          ? plan.queries.longform.recencyWeeks
+          : typeof fallback.queries?.longform?.recencyWeeks === 'number'
+          ? fallback.queries.longform.recencyWeeks
+          : undefined
     }
   }
 
@@ -616,9 +664,9 @@ function buildFallbackPlan(topic: string, aliases: string[]): DiscoveryPlan {
         keywords: [['Chicago Bulls', 'season'], ['Chicago Bulls', 'trade']],
         siteFilters: []
       },
-      official: { urls: [] },
-      data: { keywords: [['NBA statistics', 'Chicago Bulls']], siteFilters: [] },
-      longform: { keywords: [['Chicago Bulls analysis']], siteFilters: [] }
+      official: { urls: [], siteFilters: [], recencyWeeks: 24 },
+      data: { keywords: [['NBA statistics', 'Chicago Bulls']], siteFilters: [], recencyWeeks: 24 },
+      longform: { keywords: [['Chicago Bulls analysis']], siteFilters: [], recencyWeeks: 24 }
     },
     contentQueries: {
       wikipedia: [{ query: topic, intent: 'sections', notes: 'lead sections and history details' }],
@@ -738,11 +786,23 @@ function computeSeedPriority(seed: PlannerSeedCandidate, index: number, domainWh
 async function buildGuideSnapshot(topic: string, aliases: string[]): Promise<DiscoveryPlan> {
   const fallback = buildFallbackPlan(topic, aliases)
   try {
+    const userPrompt = buildUserPrompt(topic, aliases)
+    const patchIdForLog = (() => {
+      const candidate = (globalThis as { patchId?: unknown })?.patchId
+      return typeof candidate === 'string' ? candidate : '(n/a)'
+    })()
+    console.info(
+      `[DISCOVERY_V2][PLANNER_PROMPT] patch=${patchIdForLog} sysHash=${createHash('sha256')
+        .update(SYSTEM_PROMPT)
+        .digest('hex')} userHash=${createHash('sha256').update(userPrompt).digest('hex')} sysHead="${SYSTEM_PROMPT.slice(0, 120).replace(/\s+/g, ' ')}" userHead="${userPrompt
+        .slice(0, 120)
+        .replace(/\s+/g, ' ')}"`
+    )
     const response = await collectStreamResponse({
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(topic, aliases) }
+        { role: 'user', content: userPrompt }
       ],
       temperature: 0.3,
       max_tokens: 2800
@@ -769,6 +829,11 @@ export async function generateDiscoveryPlan(options: PlannerOptions): Promise<Di
   await seedFrontierFromPlan(patchId, plan)
 
   return plan
+}
+
+export const __plannerPrompts = {
+  SYSTEM_PROMPT,
+  buildUserPrompt
 }
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
@@ -850,7 +915,9 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
         verification: seed.verification,
         quotePullHints: seed.quotePullHints,
         sourceType: seed.sourceType,
-        whyItMatters: seed.whyItMatters
+        whyItMatters: seed.whyItMatters,
+        publishDateHint: seed.publishDateHint,
+        isPrimaryOrOfficial: seed.isPrimaryOrOfficial
       }
     }
 

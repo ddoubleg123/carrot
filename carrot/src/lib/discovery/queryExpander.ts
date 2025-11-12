@@ -6,6 +6,8 @@ const MAX_RESULTS_PER_HOST = 2
 const GENERAL_UNLOCK_ATTEMPTS = 15
 const FIVE_MINUTES = 5 * 60 * 1000
 const THIRTY_MINUTES = 30 * 60 * 1000
+const SEARCH_HOST_ALLOWLIST = new Set(['news.google.com', 'www.google.com'])
+const HOMEPAGE_SEGMENTS = new Set(['news', 'world', 'latest', 'section', 'topics', 'index'])
 
 export type QueryProvider =
   | 'query:wikipedia'
@@ -119,6 +121,22 @@ function resolveMinPubDate(candidate: FrontierItem): string | undefined {
   const days = Math.floor(recencyWeeks * 7)
   now.setUTCDate(now.getUTCDate() - days)
   return now.toISOString().slice(0, 10)
+}
+
+function deriveMinPubDate(
+  candidate: FrontierItem,
+  overrides?: { recencyWeeks?: number; minPubDate?: string }
+): string | undefined {
+  if (overrides?.minPubDate && typeof overrides.minPubDate === 'string') {
+    return overrides.minPubDate
+  }
+  if (overrides?.recencyWeeks && Number.isFinite(overrides.recencyWeeks) && overrides.recencyWeeks > 0) {
+    const now = new Date()
+    const days = Math.floor(overrides.recencyWeeks * 7)
+    now.setUTCDate(now.getUTCDate() - days)
+    return now.toISOString().slice(0, 10)
+  }
+  return resolveMinPubDate(candidate)
 }
 
 function buildNewsUrls(
@@ -243,16 +261,106 @@ function buildLongformUrls(
   ]
 }
 
+function buildOfficialUrls(
+  keywords: string[],
+  siteFilters: string[],
+  urls: string[] | undefined,
+  minPubDate?: string
+): QueryExpansionSuggestion[] {
+  const suggestions: QueryExpansionSuggestion[] = []
+  if (Array.isArray(urls)) {
+    urls.forEach((directUrl) => {
+      if (typeof directUrl !== 'string' || !directUrl.trim()) return
+      suggestions.push({
+        url: directUrl.trim(),
+        sourceType: 'official',
+        host: normaliseHost(directUrl),
+        keywords,
+        priorityOffset: 40,
+        metadata: { origin: 'planner-official-direct' }
+      })
+    })
+  }
+
+  if (!keywords.length || !siteFilters.length) {
+    return suggestions
+  }
+
+  const primary = keywords.slice(0, 3).join(' ')
+  siteFilters.forEach((filterHost) => {
+    const host = normaliseHost(filterHost)
+    if (!host) return
+    const googleSearch = new URL('https://www.google.com/search')
+    googleSearch.searchParams.set('q', `${primary} site:${host}`)
+    const cdMin = formatDateForQuery(minPubDate)
+    if (cdMin) {
+      googleSearch.searchParams.set('tbs', `cdr:1,cd_min:${cdMin}`)
+      googleSearch.searchParams.set('cd_min', cdMin)
+    }
+    suggestions.push({
+      url: googleSearch.toString(),
+      sourceType: 'official',
+      host,
+      keywords: [primary],
+      priorityOffset: 35,
+      metadata: { feed: 'google-official-search' }
+    })
+  })
+
+  return suggestions
+}
+
+function isDeepLinkUrl(urlString: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(urlString)
+  } catch {
+    return false
+  }
+
+  const host = parsed.hostname.toLowerCase()
+  if (SEARCH_HOST_ALLOWLIST.has(host)) {
+    return true
+  }
+
+  const segments = parsed.pathname.split('/').filter(Boolean)
+  if (segments.length === 0) {
+    return false
+  }
+
+  const normalized = segments.map((segment) => segment.toLowerCase())
+  if (normalized.every((segment) => HOMEPAGE_SEGMENTS.has(segment))) {
+    return false
+  }
+
+  if (segments.length >= 2) {
+    return true
+  }
+
+  const [first] = normalized
+  if (first.includes('.')) {
+    return true
+  }
+  if (/\d/.test(first) || first.length > 12 || first.includes('-')) {
+    return true
+  }
+
+  return false
+}
+
+function shouldKeepSuggestion(suggestion: QueryExpansionSuggestion): boolean {
+  return isDeepLinkUrl(suggestion.url)
+}
+
 export function expandPlannerQuery(options: {
   candidate: FrontierItem
   attempt: number
 }): QueryExpansionResult {
   const { candidate, attempt } = options
   const provider = candidate.provider as QueryProvider
-  const suggestions: QueryExpansionSuggestion[] = []
+  let suggestions: QueryExpansionSuggestion[] = []
   const hostCounts = new Map<string | null, number>()
   let deferredGeneral = false
-  const minPubDate = resolveMinPubDate(candidate)
 
   const addSuggestion = (suggestion: QueryExpansionSuggestion) => {
     if (suggestions.length >= MAX_RESULTS_PER_QUERY) return
@@ -279,17 +387,22 @@ export function expandPlannerQuery(options: {
       break
     }
     case 'query:official': {
-      const url = typeof candidate.cursor === 'string' ? candidate.cursor : ''
-      if (!url) break
-      const host = normaliseHost(candidate.cursor)
-      addSuggestion({
-        url,
-        sourceType: 'official',
-        host,
-        keywords: [],
-        priorityOffset: 35,
-        metadata: {}
+      let parsed: any = null
+      if (typeof candidate.cursor === 'string') {
+        try {
+          parsed = JSON.parse(candidate.cursor)
+        } catch {
+          parsed = null
+        }
+      }
+      const keywords = flattenKeywords(parsed?.keywords ?? candidate.meta?.keywords ?? [])
+      const siteFilters = flattenKeywords(parsed?.siteFilters ?? candidate.meta?.siteFilters ?? [])
+      const urls = Array.isArray(parsed?.urls) ? parsed.urls : undefined
+      const minPubDate = deriveMinPubDate(candidate, {
+        recencyWeeks: Number(parsed?.recencyWeeks),
+        minPubDate: typeof parsed?.minPubDate === 'string' ? parsed.minPubDate : undefined
       })
+      buildOfficialUrls(keywords, siteFilters, urls, minPubDate).forEach(addSuggestion)
       break
     }
     case 'query:news':
@@ -305,6 +418,10 @@ export function expandPlannerQuery(options: {
       }
       const keywords = flattenKeywords(parsed?.keywords ?? candidate.meta?.keywords ?? [])
       const siteFilters = flattenKeywords(parsed?.siteFilters ?? candidate.meta?.siteFilters ?? [])
+      const minPubDate = deriveMinPubDate(candidate, {
+        recencyWeeks: Number(parsed?.recencyWeeks),
+        minPubDate: typeof parsed?.minPubDate === 'string' ? parsed.minPubDate : undefined
+      })
 
       if (siteFilters.length === 0 && attempt < GENERAL_UNLOCK_ATTEMPTS) {
         deferredGeneral = true
@@ -331,6 +448,8 @@ export function expandPlannerQuery(options: {
     default:
       break
   }
+
+  suggestions = suggestions.filter(shouldKeepSuggestion)
 
   return {
     suggestions,

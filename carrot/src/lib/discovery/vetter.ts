@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto'
+
 const VETTER_SYSTEM_PROMPT = `You CLEAN, SCORE, and SYNTHESIZE exactly ONE fetched source into a hero-ready card. Return STRICT JSON ONLY (parser is unforgiving).
 
 Rules:
 - Map every fact and each quote to a citation URL plus locator (anchor text, section, or timestamp).
+- For each fact, include evidence anchors with CSS/XPath plus context offsets (see schema below).
 - Fair use: up to TWO quoted paragraphs total (≤150 words combined), each with attribution; otherwise paraphrase with citations.
 - Only add a contested note when the source itself advances or disputes a listed claim.
+- Capture quoted word count, publish date, and SFW flag.
 - Do **not** reject solely because the source is controversial or represents a minority viewpoint.
 - Reject only if the cleaned source has <200 substantive words, relevance is below the threshold provided, qualityScore < 70, or facts lack supporting citations.
 - Reject if the source asserts criminal conduct about a private individual without at least one Tier1/Tier2 credentialed citation (Reuters, AP, FT, WSJ, WaPo, NYT, BBC, Bloomberg, Guardian, NPR, Axios, Politico, Al-Monitor, France24).
@@ -21,6 +25,7 @@ export interface VetterFact {
   label: string
   value: string
   citation: string
+  evidence?: VetterEvidence[]
 }
 
 export interface VetterQuote {
@@ -36,6 +41,20 @@ export interface VetterContested {
   claim?: string
 }
 
+export interface VetterEvidenceAnchor {
+  cssPath?: string
+  xpath?: string
+  startOffset?: number
+  endOffset?: number
+  preContext?: string
+  postContext?: string
+}
+
+export interface VetterEvidence {
+  url: string
+  anchor: VetterEvidenceAnchor
+}
+
 export interface VetterResult {
   isUseful: boolean
   relevanceScore: number
@@ -45,6 +64,14 @@ export interface VetterResult {
   quotes: VetterQuote[]
   provenance: string[]
   contested: VetterContested | null
+  quotedWordCount: number
+  isSfw: boolean
+  publishDate?: string
+}
+
+export const __vetterPrompts = {
+  SYSTEM_PROMPT: VETTER_SYSTEM_PROMPT,
+  buildUserPrompt
 }
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions'
@@ -115,9 +142,9 @@ Source HTML/Text (cleaned extract): <<<${text}>>>
 
 Tasks:
 1) Relevance (0–1) and Quality (0–100). Off-topic if title/H1 lacks topic/alias.
-2) Why it matters: 1–2 concise sentences tailored to the topic.
-3) Facts: 3–6 bullets with dates/numbers; each must map to a citation.
-4) Quotes (optional): up to 3 SHORT verbatim quotes (<=25 words each) with speaker + citation + anchor if available.
+2) Why it matters: 1–2 concise sentences tailored to the topic, include publish date hints.
+3) Facts: 3–6 bullets with dates/numbers; each must map to a citation AND include an evidence array with anchors {cssPath|xpath,startOffset,endOffset,preContext,postContext}.
+4) Quotes (optional): up to 3 SHORT verbatim quotes (<=25 words each) with speaker + citation + anchor; track total quoted words.
 5) Contested (optional): if this source advances or disputes a controversial claim, add a compact “contested” note with one supporting and one counter source (URLs).
 6) Provenance: array of source URLs (this URL first; add on-page anchors when possible).
 
@@ -127,10 +154,28 @@ Return JSON ONLY:
   "relevanceScore": 0.00,
   "qualityScore": 0,
   "whyItMatters": "...",
-  "facts": [{"label":"...", "value":"...", "citation":"url#anchor"}],
+  "facts": [{
+    "label":"...",
+    "value":"...",
+    "citation":"url#anchor",
+    "evidence": [{
+      "url": "...",
+      "anchor": {
+        "cssPath": "...",
+        "xpath": "...",
+        "startOffset": 0,
+        "endOffset": 0,
+        "preContext": "...",
+        "postContext": "..."
+      }
+    }]
+  }],
   "quotes": [{"text":"...", "speaker":"...", "citation":"url#anchor"}],
   "contested": {"note":"...", "supporting":"url", "counter":"url", "claim":"exact contested claim when applicable"} | null,
-  "provenance": ["url#anchor", "..."]
+  "provenance": ["url#anchor", "..."],
+  "quotedWordCount": 0,
+  "isSfw": true,
+  "publishDate": "YYYY-MM-DD"
 }
 
 Reject if:
@@ -161,6 +206,18 @@ function sanitiseResponsePayload(payload: string): string {
 
 export async function vetSource(args: VetterArgs): Promise<VetterResult> {
   const apiKey = getApiKey()
+  const userPrompt = buildUserPrompt(args)
+  const patchIdForLog = (() => {
+    const candidate = (globalThis as { patchId?: unknown })?.patchId
+    return typeof candidate === 'string' ? candidate : '(n/a)'
+  })()
+  console.info(
+    `[DISCOVERY_V2][VETTER_PROMPT] patch=${patchIdForLog} sysHash=${createHash('sha256')
+      .update(VETTER_SYSTEM_PROMPT)
+      .digest('hex')} userHash=${createHash('sha256').update(userPrompt).digest('hex')} sysHead="${VETTER_SYSTEM_PROMPT.slice(0, 120).replace(/\s+/g, ' ')}" userHead="${userPrompt
+      .slice(0, 120)
+      .replace(/\s+/g, ' ')}"`
+  )
 
   const response = await fetch(DEEPSEEK_ENDPOINT, {
     method: 'POST',
@@ -172,7 +229,7 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: VETTER_SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(args) }
+        { role: 'user', content: userPrompt }
       ],
       temperature: 0.2,
       max_tokens: 2200,
@@ -208,7 +265,8 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     return {
       label: fact.label.trim(),
       value: fact.value.trim(),
-      citation: fact.citation.trim()
+      citation: fact.citation.trim(),
+      evidence: normaliseArray(fact.evidence, parseEvidence)
     }
   })
 
@@ -268,7 +326,10 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     facts,
     quotes,
     provenance: provenance.length ? provenance : [args.url],
-    contested: contestedValue && contestedValue.note ? contestedValue : null
+    contested: contestedValue && contestedValue.note ? contestedValue : null,
+    quotedWordCount: Number(parsed.quotedWordCount ?? quotes.reduce((sum, quote) => sum + quote.text.split(/\s+/).filter(Boolean).length, 0)),
+    isSfw: parsed.isSfw !== false,
+    publishDate: typeof parsed.publishDate === 'string' ? parsed.publishDate.trim() : undefined
   }
 }
 
@@ -310,7 +371,25 @@ function extractCitationHosts(citation: string): string[] {
 }
 
 function normaliseHost(hostname: string): string {
-  return hostname.replace(/^www\\./i, '').toLowerCase()
+  return hostname.replace(/^www\./i, '').toLowerCase()
+}
+
+function parseEvidence(entry: any): VetterEvidence | null {
+  if (!entry || typeof entry !== 'object') return null
+  const url = typeof entry.url === 'string' ? entry.url.trim() : undefined
+  const anchorRaw = entry.anchor
+  if (!url || !anchorRaw || typeof anchorRaw !== 'object') {
+    return null
+  }
+  const anchor: VetterEvidenceAnchor = {
+    cssPath: typeof anchorRaw.cssPath === 'string' ? anchorRaw.cssPath.trim() : undefined,
+    xpath: typeof anchorRaw.xpath === 'string' ? anchorRaw.xpath.trim() : undefined,
+    startOffset: Number.isFinite(anchorRaw.startOffset) ? Number(anchorRaw.startOffset) : undefined,
+    endOffset: Number.isFinite(anchorRaw.endOffset) ? Number(anchorRaw.endOffset) : undefined,
+    preContext: typeof anchorRaw.preContext === 'string' ? anchorRaw.preContext : undefined,
+    postContext: typeof anchorRaw.postContext === 'string' ? anchorRaw.postContext : undefined
+  }
+  return { url, anchor }
 }
 
 

@@ -108,7 +108,7 @@ export async function markAsSeen(patchId: string, canonicalUrl: string, ttlDays:
 /**
  * Check if content hash is near-duplicate (SimHash)
  */
-export async function isNearDuplicate(patchId: string, contentHash: string, threshold: number = 4): Promise<boolean> {
+export async function isNearDuplicate(patchId: string, contentHash: string, threshold: number = 7): Promise<boolean> {
   const client = await getRedisClient()
   const key = HASHES_KEY(patchId)
 

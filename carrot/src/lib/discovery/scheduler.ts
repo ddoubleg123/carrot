@@ -1,10 +1,21 @@
 import type { FrontierItem } from '@/lib/redis/discovery'
+import {
+  getSuccessRates as loadSuccessRates,
+  setSuccessRate,
+  getZeroSaveDiagnostics,
+  setZeroSaveDiagnostics,
+  clearZeroSaveDiagnostics,
+  setRunState
+} from '@/lib/redis/discovery'
 
-const WIKI_WINDOW_MS = 30 * 1000
-const WIKI_GUARD_DURATION_MS = 2 * 60 * 1000
-const HOST_DIVERSITY_WINDOW_MS = 30 * 1000
+const WIKI_WINDOW_MS = Number(process.env.DISCOVERY_V2_WIKI_WINDOW_MS ?? 30_000)
+const WIKI_GUARD_DURATION_MS = Number(process.env.DISCOVERY_V2_WIKI_GUARD_PAUSE_MS ?? 120_000)
 const CONTROVERSY_WINDOW_SIZE = 40
-const SUCCESS_DECAY_MS = 14 * 24 * 60 * 60 * 1000
+const SUCCESS_DECAY_MS = Number(process.env.DISCOVERY_V2_SUCCESS_DECAY_MS ?? 14 * 24 * 60 * 60 * 1000)
+const DEFAULT_WIKI_SHARE_MAX = Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ?? 0.3)
+const QPS_PER_HOST_DEFAULT = Number(process.env.DISCOVERY_V2_QPS_PER_HOST ?? 0.5)
+const CANONICAL_COOLDOWN_MS = Number(process.env.DISCOVERY_V2_CANONICAL_COOLDOWN_MS ?? 30 * 60 * 1000)
+const CANONICAL_HIT_THRESHOLD_MS = Number(process.env.DISCOVERY_V2_CANONICAL_HIT_THRESHOLD_MS ?? 5 * 60 * 1000)
 
 export interface WikiGuardState {
   active: boolean
@@ -48,12 +59,34 @@ export class SchedulerGuards {
   private wikiGuardActiveUntil = 0
   private hostHistory: Array<{ timestamp: number; host: string | null }> = []
   private successRates = new Map<string, SuccessRateStats>()
+  private lastSuccessPersist = 0
+  private wikiShareMax = DEFAULT_WIKI_SHARE_MAX
+  private patchId: string
+  private canonicalHits = new Map<string, { firstSeen: number; attempts: number; cooldownUntil?: number }>()
+  private hostThrottle: Map<string, number> = new Map()
+  private qpsPerHost = QPS_PER_HOST_DEFAULT
 
   constructor(
-    private readonly opts: {
+    options: {
+      patchId: string
       now?: () => number
-    } = {}
-  ) {}
+      wikiShareMax?: number
+      qpsPerHost?: number
+    }
+  ) {
+    this.opts = { now: options.now }
+    this.patchId = options.patchId
+    if (typeof options.wikiShareMax === 'number') {
+      this.wikiShareMax = options.wikiShareMax
+    }
+    if (typeof options.qpsPerHost === 'number' && options.qpsPerHost > 0) {
+      this.qpsPerHost = options.qpsPerHost
+    }
+  }
+
+  private readonly opts: {
+    now?: () => number
+  }
 
   now(): number {
     return this.opts.now ? this.opts.now() : Date.now()
@@ -75,11 +108,11 @@ export class SchedulerGuards {
     this.attempts = this.attempts.filter((entry) => entry.timestamp >= windowStart)
 
     this.hostHistory.push({ timestamp, host: sample.host })
-    this.hostHistory = this.hostHistory.filter((entry) => entry.timestamp >= timestamp - HOST_DIVERSITY_WINDOW_MS)
+    this.hostHistory = this.hostHistory.filter((entry) => entry.timestamp >= timestamp - WIKI_WINDOW_MS)
 
     const wikiAttempts = this.attempts.filter((entry) => entry.isWikipedia)
     const share = this.attempts.length ? wikiAttempts.length / this.attempts.length : 0
-    if (share > 0.3) {
+    if (share > this.wikiShareMax) {
       this.wikiGuardActiveUntil = Math.max(this.wikiGuardActiveUntil, timestamp + WIKI_GUARD_DURATION_MS)
     }
   }
@@ -121,54 +154,78 @@ export class SchedulerGuards {
   }): CandidateEvaluation {
     const { candidate, host, isContested } = args
     const now = this.now()
-    const successFactor = this.resolveSuccessFactor(host)
+    const wikiState = this.getWikiGuardState()
 
-    const isWikipedia = Boolean(host && host.endsWith('wikipedia.org'))
-    const wikiGuardActive = this.wikiGuardActiveUntil > now
-
-    if (wikiGuardActive && isWikipedia) {
-      const adjusted: FrontierItem = {
-        ...candidate,
-        id: `wiki_guard:${Date.now()}:${Math.random()}`,
-        priority: Math.floor(candidate.priority * 0.2)
+    if (wikiState.active && host && host.endsWith('wikipedia.org')) {
+      return {
+        action: 'requeue',
+        candidate: {
+          ...candidate,
+          priority: Math.floor(candidate.priority * 0.2)
+        },
+        reason: 'wiki_guard'
       }
-      return { action: 'requeue', candidate: adjusted, reason: 'wiki_guard' }
+    }
+
+    const hostEvaluation = this.applyHostSuccessBias(candidate, host)
+    if (hostEvaluation) {
+      return hostEvaluation
     }
 
     if (this.needsContestedBias() && !isContested) {
-      const adjusted: FrontierItem = {
-        ...candidate,
-        id: `bias_contested:${Date.now()}:${Math.random()}`,
-        priority: candidate.priority - 15
+      return {
+        action: 'requeue',
+        candidate: {
+          ...candidate,
+          priority: candidate.priority - 15
+        },
+        reason: 'contested_bias'
       }
-      return { action: 'requeue', candidate: adjusted, reason: 'contested_bias' }
     }
 
-    if (successFactor !== 1) {
-      const adjusted: FrontierItem = {
-        ...candidate,
-        id: `success_weight:${Date.now()}:${Math.random()}`,
-        priority: Math.floor(candidate.priority * successFactor)
+    if (host && this.isHostThrottled(host, now)) {
+      return {
+        action: 'requeue',
+        candidate: {
+          ...candidate,
+          priority: candidate.priority - 10
+        },
+        reason: 'qps_throttle'
       }
-      return { action: 'requeue', candidate: adjusted, reason: 'success_bias' }
     }
 
     return { action: 'accept', candidate }
   }
 
-  resolveSuccessFactor(host: string | null): number {
-    if (!host) return 1
+  private applyHostSuccessBias(candidate: FrontierItem, host: string | null): CandidateEvaluation | null {
+    if (!host) return null
     const stats = this.successRates.get(host)
-    if (!stats) return 1
+    if (!stats) return null
     const ema = Math.max(0, Math.min(1, stats.ema))
     const neutral = 0.5
     if (Math.abs(ema - neutral) < 0.05) {
-      return 1
+      return null
     }
+
     if (ema >= neutral) {
-      return 1 + (ema - neutral) * 0.2
+      return {
+        action: 'accept',
+        candidate: {
+          ...candidate,
+          priority: Math.floor(candidate.priority * (1 + (ema - neutral) * 0.2))
+        },
+        reason: undefined
+      }
     }
-    return 1 - (neutral - ema) * 0.3
+
+    return {
+      action: 'requeue',
+      candidate: {
+        ...candidate,
+        priority: Math.floor(candidate.priority * (1 - (neutral - ema) * 0.3))
+      },
+      reason: 'success_bias'
+    }
   }
 
   getWikiGuardState(): WikiGuardState {
@@ -218,6 +275,97 @@ export class SchedulerGuards {
     const window = this.getControversyWindow()
     if (window.size < 5) return false
     return window.attemptRatio < 0.5 || window.saveRatio < 0.4
+  }
+
+  async hydrateFromRedis(): Promise<void> {
+    const successRates = await loadSuccessRates(this.patchId)
+    this.hydrateSuccessRates(successRates)
+  }
+
+  async persistSuccessRate(host: string, outcome: 'success' | 'failure'): Promise<void> {
+    if (!host) return
+    const now = this.now()
+    const stats = this.updateSuccessRate(host, outcome)
+    if (!stats) return
+    if (now - this.lastSuccessPersist < 5_000) return
+    this.lastSuccessPersist = now
+    await setSuccessRate(this.patchId, host, stats)
+  }
+
+  private isHostThrottled(host: string, now: number): boolean {
+    const prev = this.hostThrottle.get(host) ?? 0
+    const minInterval = 1000 / Math.max(this.qpsPerHost, 0.01)
+    if (now - prev < minInterval) {
+      this.hostThrottle.set(host, now)
+      return true
+    }
+    this.hostThrottle.set(host, now)
+    return false
+  }
+
+  recordCanonicalHit(canonicalUrl: string): 'ok' | 'cooldown' {
+    const now = this.now()
+    const record = this.canonicalHits.get(canonicalUrl)
+    if (!record) {
+      this.canonicalHits.set(canonicalUrl, { firstSeen: now, attempts: 1 })
+      return 'ok'
+    }
+
+    if (record.cooldownUntil && now < record.cooldownUntil) {
+      return 'cooldown'
+    }
+
+    if (now - record.firstSeen <= CANONICAL_HIT_THRESHOLD_MS) {
+      record.attempts += 1
+      if (record.attempts >= 2) {
+        record.cooldownUntil = now + CANONICAL_COOLDOWN_MS
+        return 'cooldown'
+      }
+    } else {
+      record.firstSeen = now
+      record.attempts = 1
+      record.cooldownUntil = undefined
+    }
+
+    this.canonicalHits.set(canonicalUrl, record)
+    return 'ok'
+  }
+
+  clearCanonicalCooldown(canonicalUrl: string): void {
+    this.canonicalHits.delete(canonicalUrl)
+  }
+
+  async handleZeroSave(attempts: number): Promise<'ok' | 'warning' | 'paused'> {
+    const zeroSave = await getZeroSaveDiagnostics(this.patchId)
+    if (attempts >= 40) {
+      if (!zeroSave || zeroSave.status !== 'paused') {
+        await setZeroSaveDiagnostics(this.patchId, {
+          status: 'paused',
+          attempts,
+          issuedAt: new Date().toISOString(),
+          reason: 'zero_save_autopause'
+        })
+        await setRunState(this.patchId, 'paused')
+      }
+      return 'paused'
+    } else if (attempts >= 25) {
+      if (!zeroSave || zeroSave.status === 'ok') {
+        await setZeroSaveDiagnostics(this.patchId, {
+          status: 'warning',
+          attempts,
+          issuedAt: new Date().toISOString(),
+          reason: 'zero_save_warning'
+        })
+      }
+      return 'warning'
+    } else if (zeroSave && zeroSave.status !== 'ok') {
+      await clearZeroSaveDiagnostics(this.patchId)
+    }
+    return 'ok'
+  }
+
+  getSuccessRatesSnapshot(): Record<string, SuccessRateStats> {
+    return Object.fromEntries(this.successRates.entries())
   }
 }
 

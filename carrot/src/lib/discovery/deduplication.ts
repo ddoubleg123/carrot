@@ -207,7 +207,7 @@ export class DeduplicationChecker {
     
     for (const existingHash of recentHashes) {
       const distance = SimHash.hammingDistance(contentHash, existingHash)
-      if (distance <= 4) { // Threshold for near-duplicate
+      if (distance <= 7) {
         return {
           isDuplicate: true,
           tier: 'B',

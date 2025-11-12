@@ -24,17 +24,8 @@ import {
   storeRunMetricsSnapshot,
   enqueueHeroRetry,
   getRunState,
-  setRunState,
-  getSuccessRates,
-  setSuccessRate,
-  setZeroSaveDiagnostics,
-  getZeroSaveDiagnostics,
-  clearZeroSaveDiagnostics,
-  pushPaywallBranch,
   type SaveCounters,
-  type RunMetricsSnapshot,
-  type SuccessRateRecord,
-  type ZeroSaveDiagnostics
+  type RunMetricsSnapshot
 } from '@/lib/redis/discovery'
 import type { FrontierItem } from '@/lib/redis/discovery'
 import { SimHash } from './deduplication'
@@ -51,7 +42,6 @@ import {
 import {
   SchedulerGuards,
   type ControversyWindow,
-  type SuccessRateStats,
   type WikiGuardState
 } from './scheduler'
 import {
@@ -94,14 +84,13 @@ interface Metrics {
   acceptance?: AcceptanceResult
 }
 
-const FETCH_TIMEOUT_MS = 8000
-const MIN_CONTENT_LENGTH = 200
-const DUPLICATE_HASH_THRESHOLD = 4
+const FETCH_TIMEOUT_MS = Number(process.env.DISCOVERY_V2_FETCH_TIMEOUT_MS ?? 6500)
+const FETCH_USER_AGENT = 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
+const MIN_CONTENT_LENGTH = Number(process.env.DISCOVERY_V2_MIN_CONTENT_LENGTH ?? 450)
+const DUPLICATE_HASH_THRESHOLD = Number(process.env.DISCOVERY_V2_DUPLICATE_HASH_THRESHOLD ?? 7)
 const MIN_RELEVANCE_SCORE = 0.65
 const MIN_QUALITY_SCORE = 70
 const MIN_FACT_COUNT = 2
-const ZERO_SAVE_WARN_THRESHOLD = 25
-const ZERO_SAVE_AUTOPAUSE_THRESHOLD = 40
 const CANONICAL_COOLDOWN_MS = 30 * 60 * 1000
 const NON_PROVIDER_FAILURE_REASONS = new Set([
   'redis_seen',
@@ -119,6 +108,21 @@ class PaywallBlockedError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'PaywallBlockedError'
+  }
+}
+
+class RobotsBlockedError extends Error {
+  constructor(
+    message: string,
+    public readonly meta: {
+      userAgent: string
+      rule: string | null
+      status: number
+      url: string
+    }
+  ) {
+    super(message)
+    this.name = 'RobotsBlockedError'
   }
 }
 
@@ -213,13 +217,10 @@ export class DiscoveryEngineV21 {
   private scheduler = new SchedulerGuards()
   private wikiGuardState: WikiGuardState = { active: false, share: 0, window: 0 }
   private controversyWindow: ControversyWindow = { attemptRatio: 0, saveRatio: 0, size: 0 }
-  private successRates = new Map<string, SuccessRateStats>()
   private zeroSaveWarningIssued = false
   private zeroSaveAutoPaused = false
   private shadowMode = false
   private redisPatchId: string
-  private canonicalAttempts = new Map<string, number>()
-  private canonicalCooldowns = new Map<string, number>()
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
@@ -227,6 +228,11 @@ export class DiscoveryEngineV21 {
     this.metricsTracker = new MetricsTracker(`${options.patchHandle}:${options.runId}`)
     this.shadowMode = isDiscoveryV2ShadowModeEnabled() && !isDiscoveryV2WriteModeEnabled()
     this.redisPatchId = this.shadowMode ? `shadow::${options.patchId}` : options.patchId
+    this.scheduler = new SchedulerGuards({
+      patchId: this.redisPatchId,
+      wikiShareMax: Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ?? 0.3),
+      qpsPerHost: Number(process.env.DISCOVERY_V2_QPS_PER_HOST ?? 0.5)
+    })
   }
 
   private mutateMetrics(mutator: () => void): Promise<void> {
@@ -317,19 +323,7 @@ export class DiscoveryEngineV21 {
         queryExpansionSkipped: 0,
         queryDeferred: 0
       }
-      const successSnapshot = await getSuccessRates(this.redisPatchId).catch(
-        () => ({} as Record<string, SuccessRateRecord>)
-      )
-      const schedulerSnapshot: Record<string, SuccessRateStats> = {}
-      this.successRates = new Map<string, SuccessRateStats>()
-      Object.entries(successSnapshot).forEach(([host, stats]) => {
-        if (typeof stats?.ema === 'number' && typeof stats?.updatedAt === 'number') {
-          const normalized: SuccessRateStats = { ema: stats.ema, updatedAt: stats.updatedAt }
-          schedulerSnapshot[host] = normalized
-          this.successRates.set(host, normalized)
-        }
-      })
-      this.scheduler.hydrateSuccessRates(schedulerSnapshot)
+      await this.scheduler.hydrateFromRedis()
 
       const zeroSaveState = await getZeroSaveDiagnostics(this.redisPatchId).catch(() => null)
       if (zeroSaveState) {
@@ -560,6 +554,13 @@ export class DiscoveryEngineV21 {
     if (this.wikiRefCache.has(sourceUrl)) return
     this.wikiRefCache.add(sourceUrl)
 
+    let sourceHost: string | null = null
+    try {
+      sourceHost = new URL(sourceUrl).hostname.toLowerCase()
+    } catch {
+      sourceHost = null
+    }
+
     const referencesMatch = rawHtml.match(/<ol[^>]*class="[^"]*references[^"]*"[^>]*>([\s\S]*?)<\/ol>/i)
     if (!referencesMatch) return
 
@@ -589,8 +590,18 @@ export class DiscoveryEngineV21 {
 
       const canonical = canonicalizeUrlFast(href)
       if (!canonical || added.has(canonical)) continue
+      try {
+        if (sourceHost) {
+          const canonicalHost = new URL(canonical).hostname.toLowerCase()
+          if (canonicalHost === sourceHost) {
+            continue
+          }
+        }
+      } catch {
+        // ignore host parsing issues
+      }
       added.add(canonical)
-      if (added.size > 25) break
+      if (added.size >= 20) break
 
       tasks.push(
         addToFrontier(this.redisPatchId, {
@@ -647,60 +658,15 @@ export class DiscoveryEngineV21 {
   }
 
   private async recordSuccessOutcome(host: string, outcome: 'success' | 'failure'): Promise<void> {
-    const stats = this.scheduler.updateSuccessRate(host, outcome)
-    if (!stats) return
-    this.successRates.set(host, stats)
-    try {
-      await setSuccessRate(this.redisPatchId, host, {
-        ema: stats.ema,
-        updatedAt: stats.updatedAt
-      })
-    } catch (error) {
-      console.warn('[EngineV21] Failed to persist success rate', { host, error })
-    }
+    await this.scheduler.persistSuccessRate(host, outcome)
   }
 
   private async handleZeroSaveSlo(): Promise<void> {
-    const attempts = this.metrics.candidatesProcessed
-    const saves = this.metrics.itemsSaved
-
-    if (saves > 0) {
-      if (this.zeroSaveWarningIssued || this.zeroSaveAutoPaused) {
-        await clearZeroSaveDiagnostics(this.redisPatchId).catch(() => undefined)
-      }
-      this.zeroSaveWarningIssued = false
-      this.zeroSaveAutoPaused = false
-      return
-    }
-
-    if (!this.zeroSaveWarningIssued && attempts >= ZERO_SAVE_WARN_THRESHOLD) {
-      this.zeroSaveWarningIssued = true
-      const diagnostics: ZeroSaveDiagnostics = {
-        status: 'warning',
-        attempts,
-        issuedAt: new Date().toISOString(),
-        reason: 'zero_save_warning'
-      }
-      await setZeroSaveDiagnostics(this.redisPatchId, diagnostics).catch(() => undefined)
-      await this.emitAudit('zero_save', 'pending', { meta: diagnostics })
-      this.structuredLog('zero_save_warning', { attempts })
-    }
-
-    if (!this.zeroSaveAutoPaused && attempts >= ZERO_SAVE_AUTOPAUSE_THRESHOLD) {
-      this.zeroSaveAutoPaused = true
-      const diagnostics: ZeroSaveDiagnostics = {
-        status: 'paused',
-        attempts,
-        issuedAt: new Date().toISOString(),
-        reason: 'zero_save_autopause'
-      }
-      await setZeroSaveDiagnostics(this.redisPatchId, diagnostics).catch(() => undefined)
-      await this.emitAudit('zero_save', 'fail', { meta: diagnostics })
+    const status = await this.scheduler.handleZeroSave(this.metrics.candidatesProcessed)
+    this.zeroSaveWarningIssued = status === 'warning'
+    this.zeroSaveAutoPaused = status === 'paused'
+    if (status === 'paused') {
       this.eventStream.pause()
-      this.structuredLog('zero_save_autopause', { attempts })
-      if (!this.shadowMode) {
-        await setRunState(this.options.patchId, 'paused').catch(() => undefined)
-      }
       this.stopRequested = true
     }
   }
@@ -718,19 +684,6 @@ export class DiscoveryEngineV21 {
     } catch (error) {
       console.warn('[EngineV21] Failed to trigger reseed', error)
     }
-  }
-
-  private async deferForCanonicalCooldown(candidate: FrontierItem, penaltyUntil: number): Promise<void> {
-    await addToFrontier(this.redisPatchId, {
-      ...candidate,
-      id: `canonical_cooldown:${Date.now()}:${Math.random()}`,
-      priority: candidate.priority - 20,
-      meta: {
-        ...candidate.meta,
-        cooldownUntil: penaltyUntil,
-        reason: 'canonical_cooldown'
-      }
-    })
   }
 
   private async enqueueQuerySuggestion(
@@ -816,6 +769,7 @@ export class DiscoveryEngineV21 {
       }
       await this.incrementMetric('itemsSaved')
       this.telemetry.accepted++
+      this.scheduler.recordSave({ timestamp: Date.now(), isContested: this.isControversyCandidate(candidate) })
     } else if (result.reason) {
       if (
         result.reason === 'score_threshold' ||
@@ -922,6 +876,7 @@ export class DiscoveryEngineV21 {
     const redisPatchId = this.redisPatchId
     const url = candidate.cursor
     const angle = candidate.meta?.angle as string | undefined
+    const hostHint = this.resolveHost(candidate)
 
     try {
       if (!(await this.ensureLiveState('pre_candidate'))) {
@@ -947,36 +902,21 @@ export class DiscoveryEngineV21 {
       const canonical = await canonicalize(url)
       const canonicalUrl = canonical.canonicalUrl
       const finalDomain = canonical.finalDomain
-      const host = finalDomain ? finalDomain.toLowerCase() : hostHint
-
-      const nowTs = Date.now()
-      const cooldownUntil = this.canonicalCooldowns.get(canonicalUrl)
-      if (cooldownUntil) {
-        if (nowTs < cooldownUntil) {
-          await this.emitAudit('canonical_cooldown', 'pending', {
-            candidateUrl: canonicalUrl,
-            meta: { cooldownUntil }
-          })
-          this.structuredLog('canonical_cooldown_skip', { url: canonicalUrl, cooldownUntil })
-          await this.deferForCanonicalCooldown(candidate, cooldownUntil)
-          return { saved: false, reason: 'canonical_cooldown', angle, host }
-        }
-        this.canonicalCooldowns.delete(canonicalUrl)
-      }
-
-      const lastAttemptTs = this.canonicalAttempts.get(canonicalUrl)
-      this.canonicalAttempts.set(canonicalUrl, nowTs)
-      if (lastAttemptTs && nowTs - lastAttemptTs < QueryExpanderConstants.FIVE_MINUTES) {
-        const penaltyUntil = nowTs + CANONICAL_COOLDOWN_MS
-        this.canonicalCooldowns.set(canonicalUrl, penaltyUntil)
-        await this.emitAudit('canonical_cooldown', 'pending', {
-          candidateUrl: canonicalUrl,
-          meta: { penaltyUntil, previousAttempt: lastAttemptTs }
+      const cooldownResult = this.scheduler.recordCanonicalHit(canonicalUrl)
+      if (cooldownResult === 'cooldown') {
+        await addToFrontier(redisPatchId, {
+          ...candidate,
+          id: `cooldown:${Date.now()}:${Math.random()}`,
+          priority: candidate.priority - 20
         })
-        this.structuredLog('canonical_cooldown_set', { url: canonicalUrl, penaltyUntil })
-        await this.deferForCanonicalCooldown(candidate, penaltyUntil)
-        return { saved: false, reason: 'canonical_cooldown', angle, host }
+        await this.emitAudit('cooldown', 'pending', {
+          candidateUrl: canonicalUrl,
+          provider: candidate.provider,
+          meta: { reason: 'canonical_cooldown', cooldownMs: CANONICAL_COOLDOWN_MS }
+        })
+        return { saved: false, reason: 'canonical_cooldown', angle }
       }
+      const host = finalDomain ? finalDomain.toLowerCase() : hostHint
 
       if (!(await this.ensureLiveState('post_canonical'))) {
         return { saved: false, reason: 'run_suspended', angle, host }
@@ -1393,6 +1333,45 @@ export class DiscoveryEngineV21 {
       }
       return { saved: true, angle, host, paywallBranch }
     } catch (error) {
+      if (error instanceof RobotsBlockedError) {
+        const diagnostics = {
+          userAgent: error.meta.userAgent,
+          rule: error.meta.rule,
+          status: error.meta.status,
+          url: error.meta.url
+        }
+        this.structuredLog('robots_blocked', {
+          url: candidate.cursor,
+          provider: candidate.provider,
+          ...diagnostics
+        })
+        await this.emitAudit('robots', 'fail', {
+          candidateUrl: candidate.cursor,
+          provider: candidate.provider,
+          meta: diagnostics
+        })
+        await this.persistMetricsSnapshot('running', this.lastCounters, {
+          lastError: diagnostics
+        })
+        return { saved: false, reason: 'robots_blocked', angle, host: hostHint }
+      }
+
+      if (error instanceof PaywallBlockedError) {
+        this.structuredLog('paywall_blocked', {
+          url: candidate.cursor,
+          provider: candidate.provider
+        })
+        await this.emitAudit('fetch', 'fail', {
+          candidateUrl: candidate.cursor,
+          provider: candidate.provider,
+          error: { message: 'paywall_blocked' }
+        })
+        await this.persistMetricsSnapshot('running', this.lastCounters, {
+          lastError: { message: 'paywall_blocked' }
+        })
+        return { saved: false, reason: 'paywall_blocked', angle, host: hostHint }
+      }
+
       await this.incrementMetric('failures')
       this.metricsTracker.recordError()
       logger.logError('candidate_processing_failed', {
@@ -1467,7 +1446,7 @@ export class DiscoveryEngineV21 {
           branch.url,
           {
             headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
+              'User-Agent': FETCH_USER_AGENT
             }
           },
           1,
@@ -1483,7 +1462,13 @@ export class DiscoveryEngineV21 {
           }
           if (statusKind === 'robots') {
             this.telemetry.robotsBlock++
-            throw new Error('robots_blocked')
+            const rule = response.headers.get('x-robots-tag')
+            throw new RobotsBlockedError('robots_blocked', {
+              userAgent: FETCH_USER_AGENT,
+              rule,
+              status: response.status,
+              url: branch.url
+            })
           }
           throw new Error(`fetch_failed_${response.status}`)
         }
@@ -1509,6 +1494,9 @@ export class DiscoveryEngineV21 {
         if (error instanceof PaywallBlockedError) {
           lastError = error
           continue
+        }
+        if (error instanceof RobotsBlockedError) {
+          throw error
         }
         lastError = error
       }
@@ -1803,7 +1791,7 @@ export class DiscoveryEngineV21 {
           telemetry: { ...this.telemetry },
           wikiGuard: this.wikiGuardState,
           controversyWindow: this.controversyWindow,
-          successRates: Object.fromEntries(this.successRates.entries()),
+          successRates: this.scheduler.getSuccessRatesSnapshot(),
           zeroSave: {
             warning: this.zeroSaveWarningIssued,
             paused: this.zeroSaveAutoPaused,
