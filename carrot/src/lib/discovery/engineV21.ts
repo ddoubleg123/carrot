@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
-import { canonicalize, canonicalizeUrlFast } from './canonicalize'
+import { canonicalize, canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
 import { DiscoveryEventStream } from './streaming'
 import { audit, logger, MetricsTracker } from './logger'
 import { HeroImagePipeline } from './hero-pipeline'
@@ -40,6 +40,9 @@ import {
   type FilteredSuggestion,
   QueryExpanderConstants
 } from './queryExpander'
+import { DEEP_LINK_SCRAPER } from './flags'
+import { extractOffHostLinks } from './refOut'
+import { passesDeepLinkFilters } from './filters'
 import {
   SchedulerGuards,
   type ControversyWindow,
@@ -237,6 +240,7 @@ export class DiscoveryEngineV21 {
   private zeroSaveWarningIssued = false
   private zeroSaveAutoPaused = false
   private shadowMode = false
+  private simhashes: bigint[] = []
   private redisPatchId: string
   private firstTwentyHosts: string[] = []
   private firstTwelveAngles: string[] = []
@@ -1305,6 +1309,53 @@ export class DiscoveryEngineV21 {
       if (!(await this.ensureLiveState('post_fetch'))) {
         return { saved: false, reason: 'run_suspended', angle, host }
       }
+
+      // Deep-link scraper: skip summary/wiki pages and enqueue ref_out links (pre-vet)
+      if (DEEP_LINK_SCRAPER) {
+        try {
+          const urlObj = new URL(canonicalUrl)
+          const isWiki = this.isWikipediaUrl(canonicalUrl)
+          const pathDepthForSummary = urlObj.pathname.split('/').filter(Boolean).length
+          const isSummary = isWiki || pathDepthForSummary < 2
+          if (isSummary) {
+            const html = extracted?.rawHtml || ''
+            if (html && html.length > 0) {
+              const refs = await extractOffHostLinks(html, canonicalUrl, { maxLinks: 20 })
+              let enqueued = 0
+              for (const ref of refs) {
+                if (!passesDeepLinkFilters(ref.url, ref.sourceHost)) continue
+                const item: FrontierItem = {
+                  id: `ref_out:${Date.now()}:${Math.random()}`,
+                  provider: 'direct',
+                  cursor: ref.url,
+                  priority: (candidate.priority ?? 300) - 10 - enqueued,
+                  angle: candidate.angle ?? undefined,
+                  meta: {
+                    reason: 'ref_out',
+                    parent: canonicalUrl,
+                    parentHost: urlObj.hostname.toLowerCase(),
+                    hookId: candidate.meta?.hookId,
+                    viewpoint: (candidate.meta?.viewpoint as string | undefined) ?? (candidate.meta?.stance as string | undefined),
+                    angleCategory: (candidate.meta?.angleCategory as string | undefined) ?? candidate.meta?.angle,
+                    originatingProvider: candidate.provider,
+                    originatingReason: candidate.meta?.reason
+                  }
+                }
+                await addToFrontier(this.redisPatchId, item)
+                enqueued++
+              }
+              if (enqueued > 0) {
+                this.structuredLog('ref_out_enqueued', { source: canonicalUrl, count: enqueued, context: isWiki ? 'wikipedia' : 'summary' })
+              }
+            }
+            await this.emitAudit('summary_skipped', 'ok', { candidateUrl: canonicalUrl })
+            await this.persistMetricsSnapshot('running', countersBefore)
+            return { saved: false, reason: 'summary_skipped', angle, host }
+          }
+        } catch {
+          // ignore
+        }
+      }
       const wordCount = extracted?.text ? extracted.text.split(/\s+/).filter(Boolean).length : 0
       const structuredOverride = candidate.meta?.hasStructuredStats === true
       if (!extracted || (wordCount < MIN_CONTENT_LENGTH && !structuredOverride)) {
@@ -1554,10 +1605,46 @@ export class DiscoveryEngineV21 {
       await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
       await markContentHash(this.redisPatchId, hashString).catch(() => undefined)
 
+      // Content-level near-duplicate using SimHash (Hamming ≤ 7)
+      try {
+        const contentForHash = (extracted?.text || '').slice(0, 5000)
+        if (contentForHash.length > 0) {
+          const hash = SimHash.generate(contentForHash)
+          for (const existing of this.simhashes) {
+            const d = SimHash.hammingDistance(hash, existing)
+            if (d <= 7) {
+              await this.incrementMetric('duplicates')
+              this.metricsTracker.recordDuplicate()
+              this.structuredLog('duplicate_simhash', {
+                url: canonicalUrl,
+                provider: candidate.provider,
+                hamming: d
+              })
+              await this.emitAudit('duplicate_check', 'fail', {
+                candidateUrl: canonicalUrl,
+                provider: candidate.provider,
+                decisions: { action: 'drop', reason: 'near_duplicate', hamming: d }
+              })
+              await this.persistMetricsSnapshot('running', countersBefore)
+              return { saved: false, reason: 'near_duplicate', angle, host }
+            }
+          }
+          this.simhashes.push(hash)
+          if (this.simhashes.length > 2000) this.simhashes.shift()
+        }
+      } catch {
+        // best-effort; ignore errors
+      }
+
       const viewSourceOk = await checkViewSource(canonicalUrl)
 
       const isControversy = candidate.meta?.isControversy === true
       const isHistory = candidate.meta?.isHistory === true
+
+      // Extract domain with fallback chain: finalDomain -> canonicalUrl -> null
+      const domain = finalDomain 
+        ? getDomainFromUrl(finalDomain) 
+        : getDomainFromUrl(canonicalUrl) ?? null
 
       let savedId: string
       let savedCreatedAt: Date
@@ -1565,30 +1652,54 @@ export class DiscoveryEngineV21 {
         savedId = `shadow:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`
         savedCreatedAt = new Date()
       } else {
-        const savedItem = await prisma.discoveredContent.create({
-          data: {
+        try {
+          const savedItem = await prisma.discoveredContent.create({
+            data: {
+              patchId,
+              canonicalUrl,
+              title: extracted.title,
+              sourceUrl: canonicalUrl,
+              domain,
+              publishDate: candidate.meta?.publishDate ?? null,
+              category: (candidate.meta?.category as string | undefined) || null,
+              isControversy,
+              isHistory,
+              relevanceScore: synthesis.relevanceScore,
+              qualityScore: synthesis.qualityScore,
+              whyItMatters: synthesis.whyItMatters,
+              summary: synthesis.whyItMatters,
+              facts: synthesis.facts as unknown as Prisma.JsonArray,
+              quotes: synthesis.quotes as unknown as Prisma.JsonArray,
+              provenance: synthesis.provenance as unknown as Prisma.JsonArray,
+              hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
+              contentHash: hashString
+            }
+          })
+          savedId = savedItem.id
+          savedCreatedAt = savedItem.createdAt
+        } catch (error: any) {
+          // Log the error with full context but don't crash the loop
+          console.error('[Discovery Engine] Failed to save discovered content:', {
+            error: error.message,
+            code: error.code,
             patchId,
             canonicalUrl,
+            domain,
             title: extracted.title,
-            sourceUrl: canonicalUrl,
-            domain: finalDomain,
-            publishDate: candidate.meta?.publishDate ?? null,
-            category: (candidate.meta?.category as string | undefined) || null,
-            isControversy,
-            isHistory,
-            relevanceScore: synthesis.relevanceScore,
-            qualityScore: synthesis.qualityScore,
-            whyItMatters: synthesis.whyItMatters,
-            summary: synthesis.whyItMatters,
-            facts: synthesis.facts as unknown as Prisma.JsonArray,
-            quotes: synthesis.quotes as unknown as Prisma.JsonArray,
-            provenance: synthesis.provenance as unknown as Prisma.JsonArray,
-            hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
-            contentHash: hashString
-          } as any
-        })
-        savedId = savedItem.id
-        savedCreatedAt = savedItem.createdAt
+            payload: {
+              patchId,
+              canonicalUrl,
+              domain,
+              title: extracted.title,
+              sourceUrl: canonicalUrl,
+              publishDate: candidate.meta?.publishDate ?? null,
+              category: (candidate.meta?.category as string | undefined) || null
+            }
+          })
+          
+          // Re-throw to let caller handle (will be caught and logged as skip)
+          throw new Error(`save_failed: ${error.message}`)
+        }
       }
 
       await incrementSaveCounters(this.redisPatchId, {

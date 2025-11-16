@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient';
-import { canonicalizeUrlFast } from '@/lib/discovery/canonicalize';
+import { canonicalizeUrlFast, getDomainFromUrl } from '@/lib/discovery/canonicalize';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -165,13 +165,7 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
       }
 
       const canonicalUrl = canonicalizeUrlFast(sourceUrl);
-      const domain = (() => {
-        try {
-          return new URL(sourceUrl).hostname.replace(/^www\./, '');
-        } catch {
-          return 'unknown';
-        }
-      })();
+      const domain = getDomainFromUrl(sourceUrl) ?? getDomainFromUrl(canonicalUrl) ?? null;
       const urlSlug = `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Math.random().toString(36).slice(2, 8)}`
       const metadata: Prisma.JsonObject = {
         tags: Array.isArray(item.tags) ? item.tags : [],

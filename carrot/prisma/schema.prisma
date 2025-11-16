@@ -756,7 +756,7 @@ model DiscoveredContent {
   canonicalUrl   String   @map("canonical_url")
   title          String
   sourceUrl      String   @map("source_url")
-  domain         String
+  domain         String?  @db.Text
   publishDate    DateTime? @map("publish_date")
   category       String?  // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
   isControversy  Boolean  @default(false) @map("is_controversy")
@@ -777,6 +777,7 @@ model DiscoveredContent {
 
   @@index([patchId])
   @@index([contentHash])
+  @@index([domain])
   @@unique([patchId, canonicalUrl])
   @@map("discovered_content")
 }

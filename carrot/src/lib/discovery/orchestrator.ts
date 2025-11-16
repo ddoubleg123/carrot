@@ -4,7 +4,7 @@
  */
 
 import { Prisma } from '@prisma/client'
-import { canonicalize, canonicalizeUrlFast } from './canonicalize'
+import { canonicalize, canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
 import { DeduplicationChecker, EnhancedDeduplicationChecker, SimHash } from './deduplication'
 import { SearchFrontier } from './frontier'
 import { RelevanceEngine } from './relevance'
@@ -1355,6 +1355,10 @@ export class DiscoveryOrchestrator {
     const contentUrl = `/patch/${this.groupHandle}/content/${urlSlug}`
     
     const canonicalUrl = item.canonicalUrl || canonicalizeUrlFast(item.url)
+    // Extract domain with fallback: item.domain -> item.url -> canonicalUrl -> null
+    const domain = item.domain 
+      ? getDomainFromUrl(item.domain) 
+      : getDomainFromUrl(item.url) ?? getDomainFromUrl(canonicalUrl) ?? null
 
     try {
       const savedItem = await prisma.discoveredContent.create({
@@ -1363,13 +1367,7 @@ export class DiscoveryOrchestrator {
           title: item.title,
           sourceUrl: item.url,
           canonicalUrl,
-          domain: item.domain || (() => {
-            try {
-              return new URL(item.url).hostname.replace(/^www\./, '')
-            } catch {
-              return 'unknown'
-            }
-          })(),
+          domain,
           category: 'article',
           summary: item.summary || item.content.substring(0, 240),
           whyItMatters: '',
@@ -1433,7 +1431,7 @@ export class DiscoveryOrchestrator {
           relevanceScore: savedItem.relevanceScore || 0
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         console.warn('[Discovery Orchestrator] Duplicate canonical URL skipped', {
           patchId: this.groupId,
@@ -1441,6 +1439,20 @@ export class DiscoveryOrchestrator {
         })
         throw new Error('Duplicate discovered content')
       }
+      
+      // Log domain-related errors with full context
+      if (error?.message?.includes('domain') || error?.code === 'P2003') {
+        console.error('[Discovery Orchestrator] Failed to save discovered content (domain error):', {
+          error: error.message,
+          code: error.code,
+          patchId: this.groupId,
+          canonicalUrl,
+          domain,
+          title: item.title,
+          url: item.url
+        })
+      }
+      
       throw error
     }
   }

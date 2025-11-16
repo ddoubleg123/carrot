@@ -47,6 +47,12 @@ export function canonicalizeUrlFast(rawUrl: string | null | undefined): string {
 
     url.hash = ''
     url.hostname = url.hostname.replace(/^www\./, '').toLowerCase()
+    // Normalise common variant paths
+    url.pathname = url.pathname
+      .replace(/\/amp(\/|$)/i, '/')
+      .replace(/\/mobile(\/|$)/i, '/')
+      .replace(/\/print(\/|$)/i, '/')
+      .replace(/\/m\//i, '/')
 
     const entries: [string, string][] = []
     url.searchParams.forEach((value, key) => {
@@ -165,6 +171,29 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
       redirectChain,
       finalDomain: normalizedFallback.startsWith('http') ? new URL(normalizedFallback).hostname : 'unknown'
     };
+  }
+}
+
+/**
+ * Extract domain from URL safely, returning null on parse failure.
+ * Strips www. prefix and normalizes to lowercase.
+ * 
+ * @param url - URL string to extract domain from
+ * @returns Domain string (without www) or null if parsing fails
+ */
+export function getDomainFromUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') {
+    return null
+  }
+
+  try {
+    // Handle relative URLs by assuming https://
+    const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url.trim())
+    const resolved = hasProtocol ? url.trim() : `https://${url.trim().replace(/^\/\//, '')}`
+    const urlObj = new URL(resolved)
+    return urlObj.hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return null
   }
 }
 

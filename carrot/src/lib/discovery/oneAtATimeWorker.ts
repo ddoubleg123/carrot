@@ -7,7 +7,7 @@ import { Prisma } from '@prisma/client'
 import { BullsDiscoveryOrchestrator, DiscoveredSource } from './bullsDiscoveryOrchestrator'
 import { getGroupProfile } from './groupProfiles'
 import { canonicalize } from './canonicalization'
-import { canonicalizeUrlFast } from './canonicalize'
+import { canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
 import { SimHash } from './deduplication'
 
 export interface WorkerState {
@@ -282,6 +282,11 @@ export class OneAtATimeWorker {
     const { prisma } = await import('@/lib/prisma')
     
     const canonicalUrl = source.canonicalUrl || canonicalizeUrlFast(source.url)
+    // Extract domain with fallback: source.metadata.domain -> source.url -> canonicalUrl -> null
+    const domain = source.metadata?.domain
+      ? getDomainFromUrl(source.metadata.domain)
+      : getDomainFromUrl(source.url) ?? getDomainFromUrl(canonicalUrl) ?? null
+    
     try {
       const savedItem = await prisma.discoveredContent.create({
         data: {
@@ -291,13 +296,7 @@ export class OneAtATimeWorker {
           whyItMatters: '',
           sourceUrl: source.url,
           canonicalUrl,
-          domain: source.metadata.domain || (() => {
-            try {
-              return new URL(source.url).hostname.replace(/^www\./, '')
-            } catch {
-              return 'unknown'
-            }
-          })(),
+          domain,
           category: (source.type as any) || 'article',
           relevanceScore: source.relevanceScore ?? 0.5,
           qualityScore: 0,
@@ -325,7 +324,7 @@ export class OneAtATimeWorker {
       
       return { id: savedItem.id }
       
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         console.warn('[OneAtATimeWorker] Duplicate canonical URL skipped', {
           patchId,
@@ -333,7 +332,22 @@ export class OneAtATimeWorker {
         })
         throw new Error('Duplicate discovered content')
       }
-      console.error('[OneAtATimeWorker] Database save error:', error)
+      
+      // Log domain-related errors with full context
+      if (error?.message?.includes('domain') || error?.code === 'P2003') {
+        console.error('[OneAtATimeWorker] Failed to save discovered content (domain error):', {
+          error: error.message,
+          code: error.code,
+          patchId,
+          canonicalUrl,
+          domain,
+          title: source.title,
+          url: source.url
+        })
+      } else {
+        console.error('[OneAtATimeWorker] Database save error:', error)
+      }
+      
       throw error
     }
   }

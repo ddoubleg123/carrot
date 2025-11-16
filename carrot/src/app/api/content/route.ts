@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import prisma from '@/lib/prisma';
 import { chooseCanonical } from '@/lib/ingest/canonical';
-import { canonicalizeUrlFast } from '@/lib/discovery/canonicalize';
+import { canonicalizeUrlFast, getDomainFromUrl } from '@/lib/discovery/canonicalize';
 import { deepseekAudit } from '@/lib/audit/deepseek';
 import { relevanceScore } from '@/lib/router/relevance';
 import { transcribeWithVosk } from '@/lib/asr/vosk';
@@ -59,13 +59,7 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
           qualityScore: 0,
           sourceUrl: url,
           canonicalUrl,
-          domain: (() => {
-            try {
-              return url ? new URL(url).hostname.replace(/^www\./, '') : 'manual';
-            } catch {
-              return 'manual';
-            }
-          })(),
+          domain: getDomainFromUrl(url) ?? getDomainFromUrl(canonicalUrl) ?? null,
           metadata: {
             source: 'manual',
             notes: submittedNotes,
