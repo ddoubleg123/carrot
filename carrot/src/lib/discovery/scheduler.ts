@@ -16,6 +16,8 @@ const DEFAULT_WIKI_SHARE_MAX = Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ??
 const QPS_PER_HOST_DEFAULT = Number(process.env.DISCOVERY_V2_QPS_PER_HOST ?? 0.5)
 const CANONICAL_COOLDOWN_MS = Number(process.env.DISCOVERY_V2_CANONICAL_COOLDOWN_MS ?? 30 * 60 * 1000)
 const CANONICAL_HIT_THRESHOLD_MS = Number(process.env.DISCOVERY_V2_CANONICAL_HIT_THRESHOLD_MS ?? 5 * 60 * 1000)
+const HOST_ATTEMPT_CAP_DEFAULT = Number(process.env.DISCOVERY_V2_HOST_ATTEMPT_CAP ?? 40)
+const RUN_ATTEMPT_CAP_DEFAULT = Number(process.env.DISCOVERY_V2_RUN_ATTEMPT_CAP ?? 300)
 
 export interface WikiGuardState {
   active: boolean
@@ -61,26 +63,42 @@ export class SchedulerGuards {
   private successRates = new Map<string, SuccessRateStats>()
   private lastSuccessPersist = 0
   private wikiShareMax = DEFAULT_WIKI_SHARE_MAX
-  private patchId: string
+  private redisPatchId: string
+  private logicalPatchId: string
   private canonicalHits = new Map<string, { firstSeen: number; attempts: number; cooldownUntil?: number }>()
   private hostThrottle: Map<string, number> = new Map()
   private qpsPerHost = QPS_PER_HOST_DEFAULT
+  private hostAttemptTotals = new Map<string, number>()
+  private totalAttemptCount = 0
+  private hostAttemptCap = HOST_ATTEMPT_CAP_DEFAULT
+  private runAttemptCap = RUN_ATTEMPT_CAP_DEFAULT
+  private throttleHits = new Map<string, number>()
 
   constructor(
     options: {
       patchId: string
+      redisPatchId: string
       now?: () => number
       wikiShareMax?: number
       qpsPerHost?: number
+      hostAttemptCap?: number
+      runAttemptCap?: number
     }
   ) {
     this.opts = { now: options.now }
-    this.patchId = options.patchId
+    this.logicalPatchId = options.patchId
+    this.redisPatchId = options.redisPatchId
     if (typeof options.wikiShareMax === 'number') {
       this.wikiShareMax = options.wikiShareMax
     }
     if (typeof options.qpsPerHost === 'number' && options.qpsPerHost > 0) {
       this.qpsPerHost = options.qpsPerHost
+    }
+    if (typeof options.hostAttemptCap === 'number' && options.hostAttemptCap > 0) {
+      this.hostAttemptCap = options.hostAttemptCap
+    }
+    if (typeof options.runAttemptCap === 'number' && options.runAttemptCap > 0) {
+      this.runAttemptCap = options.runAttemptCap
     }
   }
 
@@ -104,11 +122,18 @@ export class SchedulerGuards {
   recordAttempt(sample: AttemptSample): void {
     const timestamp = sample.timestamp ?? this.now()
     const windowStart = timestamp - WIKI_WINDOW_MS
-    this.attempts.push({ ...sample, timestamp })
+    const hostKey = sample.host ? sample.host.toLowerCase() : null
+    this.attempts.push({ ...sample, host: hostKey, timestamp })
     this.attempts = this.attempts.filter((entry) => entry.timestamp >= windowStart)
 
-    this.hostHistory.push({ timestamp, host: sample.host })
+    this.hostHistory.push({ timestamp, host: hostKey })
     this.hostHistory = this.hostHistory.filter((entry) => entry.timestamp >= timestamp - WIKI_WINDOW_MS)
+
+    if (hostKey) {
+      const next = (this.hostAttemptTotals.get(hostKey) ?? 0) + 1
+      this.hostAttemptTotals.set(hostKey, next)
+    }
+    this.totalAttemptCount += 1
 
     const wikiAttempts = this.attempts.filter((entry) => entry.isWikipedia)
     const share = this.attempts.length ? wikiAttempts.length / this.attempts.length : 0
@@ -127,14 +152,15 @@ export class SchedulerGuards {
 
   updateSuccessRate(host: string | null | undefined, outcome: 'success' | 'failure'): SuccessRateStats | null {
     if (!host) return null
+    const key = host.toLowerCase()
     const timestamp = this.now()
-    const existing = this.successRates.get(host) ?? { ema: 0.5, updatedAt: timestamp }
+    const existing = this.successRates.get(key) ?? { ema: 0.5, updatedAt: timestamp }
     const delta = outcome === 'success' ? 1 : 0
     const alpha = 2 / (1 + 7) // smoothing factor for approx weekly lookback
     const decayFactor = this.computeDecay(existing.updatedAt, timestamp)
     const ema = alpha * delta + (1 - alpha) * (existing.ema * decayFactor)
     const next = { ema, updatedAt: timestamp }
-    this.successRates.set(host, next)
+    this.successRates.set(key, next)
     return next
   }
 
@@ -153,10 +179,11 @@ export class SchedulerGuards {
     isContested: boolean
   }): CandidateEvaluation {
     const { candidate, host, isContested } = args
+    const normalisedHost = host ? host.toLowerCase() : null
     const now = this.now()
     const wikiState = this.getWikiGuardState()
 
-    if (wikiState.active && host && host.endsWith('wikipedia.org')) {
+    if (wikiState.active && normalisedHost && normalisedHost.endsWith('wikipedia.org')) {
       return {
         action: 'requeue',
         candidate: {
@@ -167,7 +194,29 @@ export class SchedulerGuards {
       }
     }
 
-    const hostEvaluation = this.applyHostSuccessBias(candidate, host)
+    if (normalisedHost && this.isHostOverCap(normalisedHost)) {
+      return {
+        action: 'requeue',
+        candidate: {
+          ...candidate,
+          priority: candidate.priority - 25
+        },
+        reason: 'host_cap'
+      }
+    }
+
+    if (normalisedHost && normalisedHost.endsWith('wikipedia.org') && this.getHostDiversityCount() < 3) {
+      return {
+        action: 'requeue',
+        candidate: {
+          ...candidate,
+          priority: candidate.priority - 30
+        },
+        reason: 'wiki_low_diversity'
+      }
+    }
+
+    const hostEvaluation = this.applyHostSuccessBias(candidate, normalisedHost)
     if (hostEvaluation) {
       return hostEvaluation
     }
@@ -183,7 +232,7 @@ export class SchedulerGuards {
       }
     }
 
-    if (host && this.isHostThrottled(host, now)) {
+    if (normalisedHost && this.isHostThrottled(normalisedHost, now)) {
       return {
         action: 'requeue',
         candidate: {
@@ -250,6 +299,40 @@ export class SchedulerGuards {
     return hosts.size
   }
 
+  getHostAttemptCount(host: string | null): number {
+    if (!host) return 0
+    return this.hostAttemptTotals.get(host.toLowerCase()) ?? 0
+  }
+
+  isHostOverCap(host: string | null): boolean {
+    if (!host) return false
+    return this.getHostAttemptCount(host) >= this.hostAttemptCap
+  }
+
+  getHostAttemptCap(): number {
+    return this.hostAttemptCap
+  }
+
+  hasReachedRunCap(): boolean {
+    return this.totalAttemptCount >= this.runAttemptCap
+  }
+
+  getTotalAttemptCount(): number {
+    return this.totalAttemptCount
+  }
+
+  getRunAttemptCap(): number {
+    return this.runAttemptCap
+  }
+
+  getThrottleSnapshot(): Record<string, number> {
+    return Object.fromEntries(this.throttleHits.entries())
+  }
+
+  getHostAttemptSnapshot(): Record<string, number> {
+    return Object.fromEntries(this.hostAttemptTotals.entries())
+  }
+
   needsReseed(): boolean {
     const wikiState = this.getWikiGuardState()
     if (wikiState.active) return true
@@ -278,28 +361,31 @@ export class SchedulerGuards {
   }
 
   async hydrateFromRedis(): Promise<void> {
-    const successRates = await loadSuccessRates(this.patchId)
+    const successRates = await loadSuccessRates(this.redisPatchId)
     this.hydrateSuccessRates(successRates)
   }
 
   async persistSuccessRate(host: string, outcome: 'success' | 'failure'): Promise<void> {
     if (!host) return
+    const key = host.toLowerCase()
     const now = this.now()
-    const stats = this.updateSuccessRate(host, outcome)
+    const stats = this.updateSuccessRate(key, outcome)
     if (!stats) return
     if (now - this.lastSuccessPersist < 5_000) return
     this.lastSuccessPersist = now
-    await setSuccessRate(this.patchId, host, stats)
+    await setSuccessRate(this.redisPatchId, key, stats)
   }
 
   private isHostThrottled(host: string, now: number): boolean {
-    const prev = this.hostThrottle.get(host) ?? 0
+    const key = host.toLowerCase()
+    const prev = this.hostThrottle.get(key) ?? 0
     const minInterval = 1000 / Math.max(this.qpsPerHost, 0.01)
     if (now - prev < minInterval) {
-      this.hostThrottle.set(host, now)
+      this.hostThrottle.set(key, now)
+      this.throttleHits.set(key, (this.throttleHits.get(key) ?? 0) + 1)
       return true
     }
-    this.hostThrottle.set(host, now)
+    this.hostThrottle.set(key, now)
     return false
   }
 
@@ -336,21 +422,21 @@ export class SchedulerGuards {
   }
 
   async handleZeroSave(attempts: number): Promise<'ok' | 'warning' | 'paused'> {
-    const zeroSave = await getZeroSaveDiagnostics(this.patchId)
+    const zeroSave = await getZeroSaveDiagnostics(this.redisPatchId)
     if (attempts >= 40) {
       if (!zeroSave || zeroSave.status !== 'paused') {
-        await setZeroSaveDiagnostics(this.patchId, {
+        await setZeroSaveDiagnostics(this.redisPatchId, {
           status: 'paused',
           attempts,
           issuedAt: new Date().toISOString(),
           reason: 'zero_save_autopause'
         })
-        await setRunState(this.patchId, 'paused')
+        await setRunState(this.logicalPatchId, 'paused')
       }
       return 'paused'
     } else if (attempts >= 25) {
       if (!zeroSave || zeroSave.status === 'ok') {
-        await setZeroSaveDiagnostics(this.patchId, {
+        await setZeroSaveDiagnostics(this.redisPatchId, {
           status: 'warning',
           attempts,
           issuedAt: new Date().toISOString(),
@@ -359,7 +445,7 @@ export class SchedulerGuards {
       }
       return 'warning'
     } else if (zeroSave && zeroSave.status !== 'ok') {
-      await clearZeroSaveDiagnostics(this.patchId)
+      await clearZeroSaveDiagnostics(this.redisPatchId)
     }
     return 'ok'
   }

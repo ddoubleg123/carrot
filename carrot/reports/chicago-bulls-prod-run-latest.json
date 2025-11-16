@@ -1,0 +1,110 @@
+{
+  "runId": "cmi0xauli00014srgivdpotvy",
+  "attempts": 10,
+  "first20Hosts": [
+    "nbcuniversal.com",
+    "nbcuniversal.com",
+    "www.nbcchicago.com",
+    "www.forbes.com",
+    "www.chicagotribune.com",
+    "disneyprivacycenter.com",
+    "en.wikipedia.org",
+    "www.basketball-reference.com",
+    "www.espn.com"
+  ],
+  "distinctHostCount": 8,
+  "ttfAttempts": null,
+  "wikiSharePercent": 11.11,
+  "controversy": {
+    "attemptRatio": 0.33,
+    "saveRatio": 0,
+    "windowSize": 9
+  },
+  "whyRejected": [
+    {
+      "reason": "scheduler_guard",
+      "count": 7
+    },
+    {
+      "reason": "ref_out",
+      "count": 3
+    },
+    {
+      "reason": "near_duplicate",
+      "count": 2
+    },
+    {
+      "reason": "planner_query",
+      "count": 1
+    },
+    {
+      "reason": "redis_seen",
+      "count": 1
+    }
+  ],
+  "autoPauses": [
+    {
+      "ts": "2025-11-15T23:45:46.100Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": false,
+        "hostDiversity": 1
+      }
+    },
+    {
+      "ts": "2025-11-15T23:44:38.402Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": false,
+        "hostDiversity": 1
+      }
+    },
+    {
+      "ts": "2025-11-15T23:43:52.306Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": false,
+        "hostDiversity": 1
+      }
+    },
+    {
+      "ts": "2025-11-15T23:35:04.980Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 1
+      }
+    },
+    {
+      "ts": "2025-11-15T23:34:37.362Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 3
+      }
+    },
+    {
+      "ts": "2025-11-15T23:34:06.546Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 3
+      }
+    },
+    {
+      "ts": "2025-11-15T23:34:03.473Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 3
+      }
+    }
+  ],
+  "paywallEvents": 0,
+  "zeroSave": {
+    "warning": false,
+    "paused": false,
+    "attempts": 10
+  },
+  "heroEligible": false
+}

@@ -4,9 +4,14 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
   enabled: process.env.ANALYZE === 'true',
 });
 
+const isShadow = process.env.DISCOVERY_V2_SHADOW_MODE === 'true';
+
 const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
+  eslint: {
+    ignoreDuringBuilds: isShadow,
+  },
   // Force HTTP/1.1 for all requests with aggressive settings
   experimental: {
     serverActions: {

@@ -42,6 +42,7 @@ export interface DiscoveryCardPayload {
   contested: DiscoveryContested | null
   contestedClaim?: string
   hero?: DiscoveryHero | null
+  heroScore?: number
   relevanceScore: number
   qualityScore: number
   viewSourceOk: boolean

@@ -302,6 +302,49 @@ export class DiscoveryOrchestrator {
       return 0
     }
 
+    const isDirectoryOrListingPage = (url: string): boolean => {
+      try {
+        const urlObj = new URL(url)
+        const pathname = urlObj.pathname.toLowerCase()
+        const hostname = urlObj.hostname.toLowerCase()
+
+        if (pathname.includes('/privacy') || hostname.includes('privacy')) return true
+        if (pathname === '/' || pathname.match(/^\/[^\/]+\/$/)) return true
+
+        const directoryPatterns = [
+          /\/tag\//,
+          /\/category\//,
+          /\/archive\//,
+          /\/sitemap/,
+          /\/feed/,
+          /\/rss/,
+          /\/news\/?$/,
+          /\/articles\/?$/,
+          /\/blog\/?$/,
+          /\/sites\/[^\/]+\/?$/,
+          /\/sports\/[^\/]+\/?$/,
+          /\/sports\/[^\/]+\/[^\/]+\/?$/,
+          /\/nba\/[^\/]+\/?$/
+        ]
+        if (directoryPatterns.some((p) => p.test(pathname))) return true
+
+        const segments = pathname.split('/').filter(Boolean)
+        if (pathname.endsWith('/') && segments.length >= 2) return true
+
+        if (segments.length >= 2) {
+          const last = segments[segments.length - 1]
+          const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles', 'bulls']
+          if (categoryWords.includes(last) || last.length < 5) return true
+          const hasSportsPath = pathname.includes('/sports/') || pathname.includes('/nba/')
+          const looksLikeArticleSlug = /\d{4}|\d{2}-\d{2}|article|story|post/.test(last)
+          if (hasSportsPath && !looksLikeArticleSlug && last.length > 5 && last.length < 30) return true
+        }
+        return false
+      } catch {
+        return false
+      }
+    }
+
     const seedsSorted = [...plan.seedCandidates].sort((a, b) => {
       const priorityA = a.priority ?? 999
       const priorityB = b.priority ?? 999
@@ -318,6 +361,8 @@ export class DiscoveryOrchestrator {
 
     for (const candidate of seedsSorted) {
       if (!candidate.url) continue
+      // Skip directory/listing pages to avoid fetch: content_too_short
+      if (isDirectoryOrListingPage(candidate.url)) continue
       const isContested = candidate.stance === 'contested' || candidate.isControversy === true
       if (isContested) {
         if (contestedCount >= 5) continue

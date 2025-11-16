@@ -3,7 +3,7 @@
  * Manages seen URLs, content hashes, frontier queue, and active runs
  */
 
-import Redis from 'ioredis'
+import Redis, { RedisOptions } from 'ioredis'
 import { resolvePatch, SHADOW_SENTINEL, PatchKeyParts } from './keys'
 
 let redisClient: Redis | null = null
@@ -73,6 +73,7 @@ const PAYWALL_BRANCH_KEY = (patchId: string) => {
   return shadow ? `discovery:shadow:paywall:${id}` : `discovery:paywall:${id}`
 }
 const METRICS_TTL_SECONDS = 60 * 60 * 6
+const HASHES_TTL_SECONDS = 14 * 24 * 60 * 60
 
 async function getRedisClient() {
   if (!redisClient) {
@@ -80,7 +81,32 @@ async function getRedisClient() {
     if (!url) {
       throw new Error('REDIS_URL must be set for discovery redis utilities')
     }
-    redisClient = new Redis(url)
+    const parsed = new URL(url)
+    const isTls = parsed.protocol === 'rediss:'
+    const options: RedisOptions = {
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : undefined,
+      username: parsed.username || undefined,
+      password: parsed.password || undefined,
+      lazyConnect: false,
+      connectTimeout: 10_000,
+      enableReadyCheck: false,
+      keepAlive: 30_000,
+      retryStrategy(times) {
+        const delay = Math.min(times * 500, 5_000)
+        return delay
+      },
+      tls: isTls
+        ? {
+            rejectUnauthorized: false,
+            servername: parsed.hostname
+          }
+        : undefined
+    }
+    redisClient = new Redis(options)
+    redisClient.on('error', (error) => {
+      console.error('[Redis] connection error', error)
+    })
   }
   return redisClient
 }
@@ -138,11 +164,12 @@ export async function markContentHash(patchId: string, contentHash: string): Pro
   const timestamp = Date.now()
 
   await client.zadd(key, timestamp, contentHash)
+  await client.expire(key, HASHES_TTL_SECONDS)
 
-  // Keep only last 1k entries
+  // Keep only last 2k entries
   const count = await client.zcard(key)
-  if (count > 1000) {
-    await client.zremrangebyrank(key, 0, count - 1000)
+  if (count > 2000) {
+    await client.zremrangebyrank(key, 0, count - 2000)
   }
 }
 

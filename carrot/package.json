@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "cross-env PORT=3005 NEXT_TELEMETRY_DISABLED=1 node server.js",
     "build": "next build",
+    "build:shadow": "cross-env DISCOVERY_V2_SHADOW_MODE=true npm run lint:v2 && npm run test:v2 && next build",
     "start": "NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
     "lint": "npm run lint:v2",

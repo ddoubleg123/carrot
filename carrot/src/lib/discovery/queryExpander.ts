@@ -1,7 +1,9 @@
 import { canonicalizeUrlFast } from './canonicalize'
 import type { FrontierItem } from '@/lib/redis/discovery'
+import { extractOutgoingLinks, extractWikipediaReferences } from './wikiUtils'
 
-const MAX_RESULTS_PER_QUERY = 8
+const MAX_RESULTS_PER_QUERY = 10
+const MIN_RESULTS_PER_QUERY = 5
 const MAX_RESULTS_PER_HOST = 2
 const GENERAL_UNLOCK_ATTEMPTS = 15
 const FIVE_MINUTES = 5 * 60 * 1000
@@ -28,6 +30,12 @@ export interface QueryExpansionSuggestion {
 export interface QueryExpansionResult {
   suggestions: QueryExpansionSuggestion[]
   deferredGeneral: boolean
+}
+
+export interface QueryExpansionOptions {
+  candidate: FrontierItem
+  attempt: number
+  totalDequeues?: number
 }
 
 export interface CooldownRecord {
@@ -95,6 +103,48 @@ function normaliseHost(host: string | null | undefined): string | null {
 
 function slugifyWikipediaTitle(title: string): string {
   return encodeURIComponent(title.trim().replace(/\s+/g, '_'))
+}
+
+async function harvestWikipediaCitations(title: string): Promise<QueryExpansionSuggestion[]> {
+  if (!title || typeof fetch !== 'function') return []
+  const slug = slugifyWikipediaTitle(title)
+  const sourceUrl = `https://en.wikipedia.org/wiki/${slug}`
+  const endpoint = `https://en.wikipedia.org/api/rest_v1/page/html/${slug}`
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        accept: 'text/html'
+      }
+    })
+    if (!response.ok) {
+      return []
+    }
+    const html = await response.text()
+    const references = extractWikipediaReferences(html, sourceUrl, 20)
+    const referenceSet = new Set(references)
+    if (references.length < MAX_RESULTS_PER_QUERY) {
+      const outgoing = extractOutgoingLinks(html, sourceUrl, 40)
+      const supplemental = outgoing.offHost
+        .filter((url) => !referenceSet.has(url))
+        .slice(0, MAX_RESULTS_PER_QUERY - references.length)
+      supplemental.forEach((url) => referenceSet.add(url))
+    }
+    const combined = Array.from(referenceSet).slice(0, MAX_RESULTS_PER_QUERY)
+    return combined.map((url, index) => ({
+      url,
+      sourceType: 'wiki_citation',
+      host: normaliseHost(url),
+      keywords: [title],
+      priorityOffset: 80 - index * 4,
+      metadata: {
+        reason: 'wiki_citation',
+        parent: sourceUrl
+      }
+    }))
+  } catch {
+    return []
+  }
 }
 
 function formatDateForQuery(date: string | undefined): string | undefined {
@@ -352,11 +402,11 @@ function shouldKeepSuggestion(suggestion: QueryExpansionSuggestion): boolean {
   return isDeepLinkUrl(suggestion.url)
 }
 
-export function expandPlannerQuery(options: {
-  candidate: FrontierItem
-  attempt: number
-}): QueryExpansionResult {
-  const { candidate, attempt } = options
+export async function expandPlannerQuery({
+  candidate,
+  attempt,
+  totalDequeues
+}: QueryExpansionOptions): Promise<QueryExpansionResult> {
   const provider = candidate.provider as QueryProvider
   let suggestions: QueryExpansionSuggestion[] = []
   const hostCounts = new Map<string | null, number>()
@@ -375,15 +425,7 @@ export function expandPlannerQuery(options: {
     case 'query:wikipedia': {
       const title = typeof candidate.cursor === 'string' ? candidate.cursor : ''
       if (!title) break
-      const slug = slugifyWikipediaTitle(title)
-      addSuggestion({
-        url: `https://en.wikipedia.org/wiki/${slug}`,
-        sourceType: 'wikipedia',
-        host: 'wikipedia.org',
-        keywords: [title],
-        priorityOffset: 40,
-        metadata: {}
-      })
+      suggestions = await harvestWikipediaCitations(title)
       break
     }
     case 'query:official': {
@@ -450,6 +492,29 @@ export function expandPlannerQuery(options: {
   }
 
   suggestions = suggestions.filter(shouldKeepSuggestion)
+
+  if (typeof totalDequeues === 'number' && totalDequeues < 30) {
+    suggestions = suggestions.filter((suggestion) => !suggestion.host?.endsWith('wikipedia.org'))
+  }
+
+  if (provider !== 'query:wikipedia') {
+    const nonWikiHosts = new Set(
+      suggestions
+        .map((suggestion) => suggestion.host)
+        .filter((host): host is string => Boolean(host && !host.endsWith('wikipedia.org')))
+    )
+
+    if (suggestions.length > MAX_RESULTS_PER_QUERY) {
+      suggestions = suggestions.slice(0, MAX_RESULTS_PER_QUERY)
+    }
+
+    if (suggestions.length < MIN_RESULTS_PER_QUERY || nonWikiHosts.size < 3) {
+      deferredGeneral = true
+      suggestions = []
+    }
+  } else {
+    suggestions = suggestions.slice(0, MAX_RESULTS_PER_QUERY)
+  }
 
   return {
     suggestions,
@@ -553,6 +618,7 @@ export const QueryExpanderConstants = {
   GENERAL_UNLOCK_ATTEMPTS,
   MAX_RESULTS_PER_HOST,
   MAX_RESULTS_PER_QUERY,
+  MIN_RESULTS_PER_QUERY,
   FIVE_MINUTES,
   THIRTY_MINUTES
 }

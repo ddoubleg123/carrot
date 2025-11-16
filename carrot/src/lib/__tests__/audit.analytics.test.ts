@@ -74,7 +74,8 @@ describe('audit analytics helpers', () => {
 
     expect(analytics.ttfSeconds).toBe(5)
     expect(analytics.zeroSave).toMatchObject({ status: 'warning', attempts: 26 })
-    expect(analytics.paywallBranches).toHaveLength(1)
+    expect(analytics.paywallBranches.raw).toHaveLength(1)
+    expect(Object.keys(analytics.paywallBranches.summary)).toHaveLength(1)
   })
 })
 

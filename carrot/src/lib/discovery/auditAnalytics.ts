@@ -71,6 +71,21 @@ export function buildTopCandidates(items: AuditItem[]): Array<{ url: string; ang
 
 export function buildAnalytics(items: AuditItem[], snapshot: any, extras: BuildAnalyticsExtras) {
   const { paywallBranches, zeroSaveDiagnostics, seedsVsQueries, whyRejected, robotsDecisions, topCandidates } = extras
+  const paywallSummary = paywallBranches.reduce<Record<string, { attempts: number; successes: number; failures: number }>>((acc, entry) => {
+    const [prefix, branch] = entry.includes(':') ? entry.split(':', 2) : ['attempt', entry]
+    const key = branch || 'canonical'
+    if (!acc[key]) {
+      acc[key] = { attempts: 0, successes: 0, failures: 0 }
+    }
+    if (prefix === 'success') {
+      acc[key].successes += 1
+    } else if (prefix === 'fail') {
+      acc[key].failures += 1
+    } else {
+      acc[key].attempts += 1
+    }
+    return acc
+  }, {})
   const distinctHosts = new Set<string>()
   const hostStats = new Map<string, { attempts: number; saved: number }>()
   let wikiSum = 0
@@ -78,6 +93,19 @@ export function buildAnalytics(items: AuditItem[], snapshot: any, extras: BuildA
   let contestedAttempts = 0
   let contestedSaves = 0
   let savesInWindow = 0
+
+  const canonicalCooldownEvents = items
+    .filter(
+      (item) =>
+        item?.decisions?.reason === 'canonical_cooldown' ||
+        item?.meta?.reason === 'canonical_cooldown' ||
+        item?.step === 'cooldown'
+    )
+    .slice(0, 10)
+    .map((item) => ({
+      url: item?.candidateUrl || item?.meta?.finalUrl || '',
+      ts: (item as any)?.ts ?? null
+    }))
 
   items.slice(0, 20).forEach((item) => {
     const host = extractHost(item?.candidateUrl || item?.meta?.finalUrl || '')
@@ -135,12 +163,29 @@ export function buildAnalytics(items: AuditItem[], snapshot: any, extras: BuildA
       httpCacheHits: telemetry.httpCacheHits ?? 0,
       jsLiteUsage: telemetry.jsLiteUsage ?? 0
     },
-    paywallBranches,
+    paywallBranches: {
+      raw: paywallBranches,
+      summary: paywallSummary
+    },
     zeroSave: zeroSaveDiagnostics ?? snapshot?.metrics?.zeroSave ?? null,
     seedsVsQueries,
-    whyRejected,
+    whyRejected: whyRejected.slice(0, 5),
     robotsDecisions,
-    topCandidates
+    topCandidates,
+    first20Hosts: snapshot?.metrics?.first20Hosts ?? [],
+    first20HostCount: snapshot?.metrics?.first20HostCount ?? null,
+    first12Angles: snapshot?.metrics?.first12Angles ?? {},
+    first12Viewpoints: snapshot?.metrics?.first12Viewpoints ?? {},
+    quotaStatus: snapshot?.metrics?.quotaStatus ?? {},
+    hookAttemptCounts: snapshot?.metrics?.hookAttemptCounts ?? {},
+    hostThrottleHits: snapshot?.metrics?.hostThrottleHits ?? {},
+    hostAttemptSnapshot: snapshot?.metrics?.hostAttemptSnapshot ?? {},
+    hostAttemptCap: snapshot?.metrics?.hostAttemptCap ?? null,
+    runAttemptCap: snapshot?.metrics?.runAttemptCap ?? null,
+    totalAttempts: snapshot?.metrics?.totalAttempts ?? null,
+    heroGate: snapshot?.metrics?.heroGate ?? { eligible: false },
+    canonicalCooldowns: canonicalCooldownEvents,
+    wikiGuardActive: snapshot?.metrics?.wikiGuardActive ?? false
   }
 }
 

@@ -444,13 +444,18 @@ export default function AuditPage(props: AuditPageProps) {
       seedsVsQueries: serverAnalytics.seedsVsQueries ?? computedAnalytics.seedsVsQueries
     }
   }, [computedAnalytics, serverAnalytics])
-  const seedsVsQueries = analytics.seedsVsQueries
   const wikiSharePercent = analytics.wikiShare.toFixed(1)
-  const paywallBranches: string[] = serverAnalytics?.paywallBranches ?? []
+  const seedsVsQueries = analytics.seedsVsQueries ?? { seeds: 0, queries: 0 }
+  const paywallBranchesRaw: string[] = serverAnalytics?.paywallBranches?.raw ?? []
+  const paywallBranchSummary = (serverAnalytics?.paywallBranches?.summary ?? {}) as Record<
+    string,
+    { attempts: number; successes: number; failures: number }
+  >
   const ttfSeconds =
     serverAnalytics?.ttfSeconds ??
     (typeof run?.metrics?.timeToFirstMs === 'number' ? Math.round(run.metrics.timeToFirstMs / 1000) : null)
-  const distinctHosts = serverAnalytics?.distinctHosts ?? analytics.hosts.length
+  const distinctHosts =
+    serverAnalytics?.first20HostCount ?? serverAnalytics?.distinctHosts ?? analytics.hosts.length
   const controversyAttemptRatio =
     serverAnalytics?.controversy?.attemptRatio !== undefined
       ? serverAnalytics.controversy.attemptRatio
@@ -468,6 +473,18 @@ export default function AuditPage(props: AuditPageProps) {
   const whyRejected: Array<{ reason: string; count: number }> = serverAnalytics?.whyRejected ?? []
   const robotsDecisions: Array<{ url?: string | null; rule?: string | null }> = serverAnalytics?.robotsDecisions ?? []
   const topCandidates: Array<{ url: string; angle?: string | null; savedAt?: string | null }> = serverAnalytics?.topCandidates ?? []
+  const first20HostsList: string[] = serverAnalytics?.first20Hosts ?? []
+  const first12Angles = (serverAnalytics?.first12Angles ?? {}) as Record<string, number>
+  const first12Viewpoints = (serverAnalytics?.first12Viewpoints ?? {}) as Record<string, number>
+  const quotaStatus = serverAnalytics?.quotaStatus ?? {}
+  const hookAttemptCounts = (serverAnalytics?.hookAttemptCounts ?? {}) as Record<string, number>
+  const hostThrottleHits = (serverAnalytics?.hostThrottleHits ?? {}) as Record<string, number>
+  const canonicalCooldowns: Array<{ url: string; ts: any }> = serverAnalytics?.canonicalCooldowns ?? []
+  const heroGate: { eligible: boolean; supportDomain?: string | null; counterDomain?: string | null; score?: number | null } =
+    serverAnalytics?.heroGate ?? { eligible: false }
+  const totalAttemptsMetric = serverAnalytics?.totalAttempts ?? analytics.totalAttempts ?? null
+  const hostAttemptCap = serverAnalytics?.hostAttemptCap ?? null
+  const runAttemptCap = serverAnalytics?.runAttemptCap ?? null
 
   const handleExport = useCallback(async () => {
     try {
@@ -750,18 +767,138 @@ export default function AuditPage(props: AuditPageProps) {
         </Card>
 
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Paywall branch attempts</p>
-          <ul className="mt-3 space-y-2 text-xs text-slate-700">
-            {paywallBranches.length > 0 ? (
-              paywallBranches.map((entry, index) => (
-                <li key={`${entry}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">
-                  <span className="font-medium text-slate-700">{entry}</span>
-                </li>
-              ))
-            ) : (
-              <li className="text-xs text-slate-500">No paywall branches recorded yet.</li>
+          <p className="text-xs uppercase tracking-wide text-slate-500">First-wave coverage</p>
+          <div className="mt-3 space-y-3 text-xs text-slate-600">
+            <div className="flex items-center justify-between">
+              <span>First 20 hosts</span>
+              <span className={quotaStatus.first20Hosts ? 'font-semibold text-emerald-600' : 'font-semibold text-amber-600'}>
+                {distinctHosts} {quotaStatus.first20Hosts ? 'met' : 'needs diversity'}
+              </span>
+            </div>
+            {first20HostsList.length > 0 && (
+              <div className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-500">
+                {first20HostsList.join(', ')}
+              </div>
             )}
-          </ul>
+            <div className="flex items-center justify-between">
+              <span>First 12 angles</span>
+              <span className={quotaStatus.first12Angles ? 'font-semibold text-emerald-600' : 'font-semibold text-amber-600'}>
+                {Object.keys(first12Angles).length} {quotaStatus.first12Angles ? 'met' : 'insufficient'}
+              </span>
+            </div>
+            {Object.keys(first12Angles).length > 0 && (
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {Object.entries(first12Angles).map(([angleName, count]) => (
+                  <span key={angleName} className="rounded-md bg-slate-50 px-2 py-1 text-slate-500">
+                    {angleName}: {count as number}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span>First 12 viewpoints</span>
+              <span className={quotaStatus.first12Viewpoints ? 'font-semibold text-emerald-600' : 'font-semibold text-amber-600'}>
+                {Object.keys(first12Viewpoints).length} {quotaStatus.first12Viewpoints ? 'met' : 'needs spread'}
+              </span>
+            </div>
+            {Object.keys(first12Viewpoints).length > 0 && (
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {Object.entries(first12Viewpoints).map(([viewpointName, count]) => (
+                  <span key={viewpointName} className="rounded-md bg-slate-50 px-2 py-1 text-slate-500">
+                    {viewpointName}: {count as number}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span>Hook attempts ≥ 2 (first 20)</span>
+              <span className={quotaStatus.hookAttempts ? 'font-semibold text-emerald-600' : 'font-semibold text-amber-600'}>
+                {Object.keys(hookAttemptCounts).length > 0 ? (quotaStatus.hookAttempts ? 'met' : 'needs repeats') : '—'}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Paywall branch attempts</p>
+          <div className="mt-3 space-y-2 text-xs text-slate-700">
+            {Object.keys(paywallBranchSummary).length > 0 ? (
+              <ul className="space-y-2">
+                {Object.entries(paywallBranchSummary).map(([branch, stats]) => (
+                  <li key={branch} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span className="font-medium text-slate-700">{branch}</span>
+                    <span className="text-[11px] uppercase tracking-wide text-slate-500">
+                      {stats.successes} success · {stats.failures} fail · {stats.attempts} attempts
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-500">No paywall branches recorded yet.</p>
+            )}
+            {paywallBranchesRaw.length > 0 && (
+              <div className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-500">
+                <p className="mb-1 font-semibold uppercase tracking-wide text-slate-600">Recent log</p>
+                <ul className="space-y-1">
+                  {paywallBranchesRaw.slice(0, 6).map((entry, index) => (
+                    <li key={`${entry}-${index}`}>{entry}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Guard activity & hero gate</p>
+          <div className="mt-3 space-y-3 text-xs text-slate-600">
+            <div className="flex items-center justify-between">
+              <span>Total attempts (cap)</span>
+              <span className="font-semibold text-slate-700">
+                {totalAttemptsMetric ?? '—'} / {runAttemptCap ?? '∞'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Per-host cap</span>
+              <span className="font-semibold text-slate-700">{hostAttemptCap ?? '—'}</span>
+            </div>
+            <div>
+              <p className="font-semibold uppercase tracking-wide text-slate-500">Host throttles</p>
+              {Object.keys(hostThrottleHits).length > 0 ? (
+                <ul className="mt-1 space-y-1 text-[11px] text-slate-500">
+                  {Object.entries(hostThrottleHits).map(([host, count]) => (
+                    <li key={host}>{host}: {count as number}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-slate-400">No throttles recorded.</p>
+              )}
+            </div>
+            <div>
+              <p className="font-semibold uppercase tracking-wide text-slate-500">Canonical cooldowns</p>
+              {canonicalCooldowns.length > 0 ? (
+                <ul className="mt-1 space-y-1 text-[11px] text-slate-500">
+                  {canonicalCooldowns.map((entry, index) => (
+                    <li key={`${entry.url}-${index}`}>{entry.url || 'unknown url'}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-slate-400">No cooldowns recorded.</p>
+              )}
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="font-semibold uppercase tracking-wide text-slate-500">Hero gate</p>
+              <p className="mt-1 text-slate-600">
+                {heroGate.eligible ? 'Eligible for hero generation' : 'Waiting for support + counter symmetry'}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Score: {heroGate?.score !== undefined ? heroGate.score : '—'}
+                {heroGate.supportDomain && heroGate.counterDomain && (
+                  <> · {heroGate.supportDomain} vs {heroGate.counterDomain}</>
+                )}
+              </p>
+            </div>
+          </div>
         </Card>
 
         <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

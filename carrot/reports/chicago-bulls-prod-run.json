@@ -1,0 +1,68 @@
+{
+  "runId": "cmi0vydk200014srklnz1863y",
+  "attempts": 7,
+  "first20Hosts": [
+    "www.chicagotribune.com",
+    "theathletic.com",
+    "disneyprivacycenter.com",
+    "en.wikipedia.org",
+    "www.espn.com",
+    "www.nba.com",
+    "www.basketball-reference.com"
+  ],
+  "distinctHostCount": 7,
+  "ttfAttempts": null,
+  "wikiSharePercent": 14.29,
+  "controversy": {
+    "attemptRatio": 0.29,
+    "saveRatio": 0,
+    "windowSize": 7
+  },
+  "whyRejected": [
+    {
+      "reason": "scheduler_guard",
+      "count": 2
+    },
+    {
+      "reason": "near_duplicate",
+      "count": 2
+    },
+    {
+      "reason": "ref_out",
+      "count": 1
+    },
+    {
+      "reason": "redis_seen",
+      "count": 1
+    },
+    {
+      "reason": "vetter_parse",
+      "count": 1
+    }
+  ],
+  "autoPauses": [
+    {
+      "ts": "2025-11-15T22:57:55.860Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 1
+      }
+    },
+    {
+      "ts": "2025-11-15T22:56:54.845Z",
+      "meta": {
+        "reason": "scheduler_guard",
+        "wikiGuard": true,
+        "hostDiversity": 2
+      }
+    }
+  ],
+  "paywallEvents": 0,
+  "zeroSave": {
+    "warning": false,
+    "paused": false,
+    "attempts": 7
+  },
+  "heroEligible": false
+}

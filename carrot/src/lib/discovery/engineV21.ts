@@ -16,7 +16,6 @@ import {
   markAngleCovered,
   getCoveredAngles,
   clearPlan,
-  markContestedCovered,
   incrementSaveCounters,
   getSaveCounters,
   clearSaveCounters,
@@ -33,7 +32,7 @@ import type { FrontierItem } from '@/lib/redis/discovery'
 import { SimHash } from './deduplication'
 import { DiscoveryPlan, PlannerSeedCandidate } from './planner'
 import { vetSource, VetterResult } from './vetter'
-import { DiscoveryCardPayload } from '@/types/discovery-card'
+import { DiscoveryCardPayload, type DiscoveryHero } from '@/types/discovery-card'
 import { evaluateAcceptance, type AcceptanceCard, type AcceptanceResult } from './acceptance'
 import {
   expandPlannerQuery,
@@ -51,6 +50,7 @@ import {
   isDiscoveryV2WriteModeEnabled
 } from './flags'
 import { buildPaywallPlan } from './paywall'
+import { extractOutgoingLinks, extractWikipediaReferences } from './wikiUtils'
 
 interface EngineOptions {
   patchId: string
@@ -86,6 +86,17 @@ interface Metrics {
   acceptance?: AcceptanceResult
 }
 
+type HeroViewpointClass = 'support' | 'counter' | 'neutral'
+
+interface HeroGateEntry {
+  domain: string | null
+  viewpointClass: HeroViewpointClass
+  rawViewpoint?: string | null
+  isSfw: boolean
+  publishDate?: string | null
+  savedAt: number
+}
+
 const FETCH_TIMEOUT_MS = Number(process.env.DISCOVERY_V2_FETCH_TIMEOUT_MS ?? 6500)
 const FETCH_USER_AGENT = 'Mozilla/5.0 (compatible; CarrotBot/2.1)'
 const MIN_CONTENT_LENGTH = Number(process.env.DISCOVERY_V2_MIN_CONTENT_LENGTH ?? 450)
@@ -102,8 +113,11 @@ const NON_PROVIDER_FAILURE_REASONS = new Set([
   'query_expanded',
   'query_deferred',
   'query_no_results',
+  'query_insufficient_results',
   'run_suspended',
-  'canonical_cooldown'
+  'canonical_cooldown',
+  'host_cap',
+  'run_cap'
 ])
 
 class PaywallBlockedError extends Error {
@@ -209,6 +223,7 @@ export class DiscoveryEngineV21 {
   private metricsMutationQueue: Promise<void> = Promise.resolve()
   private runSignatures = new Set<string>()
   private wikiRefCache = new Set<string>()
+  private refOutCache = new Set<string>()
   private attemptedControversy = 0
   private attemptedTotal = 0
   private contestedKeywords = new Set<string>()
@@ -223,6 +238,23 @@ export class DiscoveryEngineV21 {
   private zeroSaveAutoPaused = false
   private shadowMode = false
   private redisPatchId: string
+  private firstTwentyHosts: string[] = []
+  private firstTwelveAngles: string[] = []
+  private firstTwelveViewpoints: string[] = []
+  private hookAttemptCounts = new Map<string, number>()
+  private hostThrottleHits: Record<string, number> = {}
+  private heroGateMap = new Map<string, HeroGateEntry[]>()
+  private lastHeroGateEvaluation: {
+    eligible: boolean
+    supportDomain?: string | null
+    counterDomain?: string | null
+    score?: number | null
+  } = {
+    eligible: false
+  }
+  private earlyHostReseedTriggered = false
+  private midWaveReseedTriggered = false
+  private fullQuotaReseedTriggered = false
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
@@ -231,7 +263,8 @@ export class DiscoveryEngineV21 {
     this.shadowMode = isDiscoveryV2ShadowModeEnabled() && !isDiscoveryV2WriteModeEnabled()
     this.redisPatchId = this.shadowMode ? `shadow::${options.patchId}` : options.patchId
     this.scheduler = new SchedulerGuards({
-      patchId: this.redisPatchId,
+      patchId: options.patchId,
+      redisPatchId: this.redisPatchId,
       wikiShareMax: Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ?? 0.3),
       qpsPerHost: Number(process.env.DISCOVERY_V2_QPS_PER_HOST ?? 0.5)
     })
@@ -305,9 +338,17 @@ export class DiscoveryEngineV21 {
       this.contestedKeywords = this.buildContestedKeywords(this.plan)
       this.runSignatures.clear()
       this.wikiRefCache.clear()
+      this.refOutCache.clear()
       this.attemptedControversy = 0
       this.attemptedTotal = 0
       this.lastRunState = 'live'
+      this.firstTwentyHosts = []
+      this.firstTwelveAngles = []
+      this.firstTwelveViewpoints = []
+      this.hookAttemptCounts.clear()
+      this.hostThrottleHits = {}
+      this.heroGateMap.clear()
+      this.lastHeroGateEvaluation = { eligible: false }
       const seedsCount = Math.min(Array.isArray(this.plan.seedCandidates) ? this.plan.seedCandidates.length : 0, 10)
       this.telemetry = {
         seedsEnqueued: seedsCount,
@@ -441,6 +482,7 @@ export class DiscoveryEngineV21 {
     const now = Date.now()
     const host = this.resolveHost(candidate)
     const isContested = this.isControversyCandidate(candidate)
+    this.recordFirstWaveStats(host, candidate)
     this.scheduler.recordAttempt({
       timestamp: now,
       host,
@@ -449,7 +491,32 @@ export class DiscoveryEngineV21 {
     })
     this.wikiGuardState = this.scheduler.getWikiGuardState()
     this.controversyWindow = this.scheduler.getControversyWindow()
+    this.hostThrottleHits = this.scheduler.getThrottleSnapshot()
     await this.incrementMetric('candidatesProcessed')
+
+    if (host && this.scheduler.getHostAttemptCount(host) > this.scheduler.getHostAttemptCap()) {
+      await this.emitAudit('guard', 'fail', {
+        candidateUrl: candidate.cursor,
+        provider: candidate.provider,
+        meta: { reason: 'host_cap', host, cap: this.scheduler.getHostAttemptCap() }
+      })
+      this.structuredLog('host_cap_guard', { host, cap: this.scheduler.getHostAttemptCap() })
+      return
+    }
+
+    const totalAttempts = this.scheduler.getTotalAttemptCount()
+    const runCap = this.scheduler.getRunAttemptCap()
+    if (totalAttempts > runCap) {
+      this.structuredLog('run_cap_guard', { attempts: totalAttempts, cap: runCap })
+      await this.emitAudit('guard', 'fail', {
+        candidateUrl: candidate.cursor,
+        provider: candidate.provider,
+        meta: { reason: 'run_cap', cap: runCap, attempts: totalAttempts }
+      })
+      this.stopRequested = true
+      return
+    }
+
     const depth = await frontierSize(redisPatchId).catch(() => 0)
     this.metricsTracker.updateFrontierDepth(typeof depth === 'number' ? depth : 0)
     const countersBefore = await getSaveCounters(redisPatchId)
@@ -463,7 +530,7 @@ export class DiscoveryEngineV21 {
     this.emitMetricsSnapshot(frontierDepth)
     await this.handleZeroSaveSlo()
     if (this.scheduler.needsReseed()) {
-      await this.triggerReseed(coveredAngles)
+      await this.triggerReseed(coveredAngles, 'scheduler_guard')
     }
   }
 
@@ -551,79 +618,111 @@ export class DiscoveryEngineV21 {
     }
   }
 
-  private async enqueueWikipediaReferences(rawHtml: string | undefined, sourceUrl: string): Promise<void> {
+  private async enqueueWikipediaReferences(
+    rawHtml: string | undefined,
+    sourceUrl: string,
+    parent: FrontierItem
+  ): Promise<void> {
     if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) return
     if (this.wikiRefCache.has(sourceUrl)) return
     this.wikiRefCache.add(sourceUrl)
 
-    let sourceHost: string | null = null
-    try {
-      sourceHost = new URL(sourceUrl).hostname.toLowerCase()
-    } catch {
-      sourceHost = null
-    }
+    const citations = extractWikipediaReferences(rawHtml, sourceUrl, 20)
+    if (!citations.length) return
 
-    const referencesMatch = rawHtml.match(/<ol[^>]*class="[^"]*references[^"]*"[^>]*>([\s\S]*?)<\/ol>/i)
-    if (!referencesMatch) return
+    await this.enqueueRefOutLinks(citations, parent, sourceUrl, 'wikipedia')
+  }
 
-    const refMatches = referencesMatch[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
-    if (!refMatches.length) return
+  private async enqueueHtmlOutgoingReferences(
+    rawHtml: string | undefined,
+    sourceUrl: string,
+    parent: FrontierItem
+  ): Promise<void> {
+    if (!rawHtml) return
 
-    const added = new Set<string>()
-    const tasks: Array<Promise<void>> = []
+    const { offHost, sameHost } = extractOutgoingLinks(rawHtml, sourceUrl, 40)
+    const ordered = [...offHost, ...sameHost].slice(0, 20)
+    if (!ordered.length) return
 
-    for (const ref of refMatches) {
-      const hrefMatch = ref.match(/href="([^"#]+)"/i)
-      if (!hrefMatch) continue
-      let href = hrefMatch[1]
-      if (!href) continue
+    await this.enqueueRefOutLinks(ordered, parent, sourceUrl, 'html')
+  }
 
+  private async enqueueRefOutLinks(
+    links: string[],
+    parent: FrontierItem,
+    sourceUrl: string,
+    context: 'wikipedia' | 'html'
+  ): Promise<void> {
+    const sourceHost = (() => {
       try {
-        if (!href.startsWith('http')) {
-          href = new URL(href, sourceUrl).toString()
-        }
+        return new URL(sourceUrl).hostname.toLowerCase()
       } catch {
-        continue
+        return null
       }
+    })()
 
-      if (href.includes('wikipedia.org')) {
-        continue
-      }
+    const viewpoint = (parent.meta?.viewpoint as string | undefined) ?? (parent.meta?.stance as string | undefined)
+    const angleCategory = (parent.meta?.angleCategory as string | undefined) ?? parent.meta?.angle
+    const enqueued: string[] = []
 
-      const canonical = canonicalizeUrlFast(href)
-      if (!canonical || added.has(canonical)) continue
-      try {
-        if (sourceHost) {
-          const canonicalHost = new URL(canonical).hostname.toLowerCase()
-          if (canonicalHost === sourceHost) {
-            continue
-          }
+    await Promise.all(
+      links.map(async (rawUrl, index) => {
+        const canonical = canonicalizeUrlFast(rawUrl)
+        if (!canonical) return
+        if (this.refOutCache.has(canonical) || this.seedCanonicalUrls.has(canonical)) return
+        if (this.isWikipediaUrl(canonical)) return
+
+        let parsed: URL
+        try {
+          parsed = new URL(canonical)
+        } catch {
+          return
         }
-      } catch {
-        // ignore host parsing issues
-      }
-      added.add(canonical)
-      if (added.size >= 20) break
 
-      tasks.push(
-        addToFrontier(this.redisPatchId, {
-          id: `wiki_ref:${Date.now()}:${Math.random()}`,
-          provider: 'wiki_ref',
+        const segments = parsed.pathname.split('/').filter(Boolean)
+        if (segments.length < 2) return
+
+        // Skip directory/listing pages and privacy pages
+        if (this.isDirectoryOrListingPage(canonical)) return
+
+        this.refOutCache.add(canonical)
+        this.seedCanonicalUrls.add(canonical)
+
+        const item: FrontierItem = {
+          id: `ref_out:${Date.now()}:${Math.random()}`,
+          provider: 'direct',
           cursor: canonical,
-          priority: 180 - added.size * 2,
+          priority: parent.priority - 6 - index * 2,
+          angle: parent.angle ?? undefined,
           meta: {
-            sourceType: 'web',
-            reason: 'wiki_ref',
-            from: sourceUrl,
-            planIndex: null
+            reason: context === 'wikipedia' ? 'ref_out_wiki' : 'ref_out',
+            parent: sourceUrl,
+            parentHost: sourceHost ?? null,
+            hookId: parent.meta?.hookId,
+            viewpoint,
+            angleCategory,
+            originatingProvider: parent.provider,
+            originatingReason: parent.meta?.reason,
+            minPubDate: parent.meta?.minPubDate
           }
-        })
-      )
-    }
+        }
 
-    if (tasks.length) {
-      await Promise.all(tasks)
-    }
+        await addToFrontier(this.redisPatchId, item)
+        enqueued.push(canonical)
+      })
+    )
+
+    if (!enqueued.length) return
+
+    this.structuredLog('ref_out_enqueued', {
+      source: sourceUrl,
+      count: enqueued.length,
+      context
+    })
+    await this.emitAudit('ref_out_expand', 'ok', {
+      candidateUrl: sourceUrl,
+      meta: { enqueued, context }
+    })
   }
 
   private normaliseHost(input: string | null | undefined): string | null {
@@ -640,6 +739,79 @@ export class DiscoveryEngineV21 {
     }
   }
 
+  private isDirectoryOrListingPage(url: string): boolean {
+    try {
+      const urlObj = new URL(url)
+      const pathname = urlObj.pathname.toLowerCase()
+      const hostname = urlObj.hostname.toLowerCase()
+      
+      // Privacy policy pages
+      if (pathname.includes('/privacy') || hostname.includes('privacy')) {
+        return true
+      }
+      
+      // URLs ending with just a slash (directory)
+      if (pathname === '/' || pathname.match(/^\/[^\/]+\/$/)) {
+        return true
+      }
+      
+      // Common directory/listing patterns
+      const directoryPatterns = [
+        /\/tag\//,
+        /\/category\//,
+        /\/archive\//,
+        /\/sitemap/,
+        /\/feed/,
+        /\/rss/,
+        /\/news\/?$/,
+        /\/articles\/?$/,
+        /\/blog\/?$/,
+        /\/sites\/[^\/]+\/?$/,
+        /\/sports\/[^\/]+\/?$/,  // /sports/category/ (single category level)
+        /\/sports\/[^\/]+\/[^\/]+\/?$/,  // /sports/category/team/ (team directory)
+        /\/nba\/[^\/]+\/?$/,  // /nba/category/ (single category level)
+      ]
+      
+      if (directoryPatterns.some(pattern => pattern.test(pathname))) {
+        return true
+      }
+      
+      // Check if path looks like a listing (ends with category but no article slug)
+      const pathSegments = pathname.split('/').filter(Boolean)
+      
+      // If URL ends with / and has 2+ segments, likely a directory
+      if (pathname.endsWith('/') && pathSegments.length >= 2) {
+        return true
+      }
+      
+      // Check for category-like patterns
+      if (pathSegments.length >= 2) {
+        const lastSegment = pathSegments[pathSegments.length - 1]
+        const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles', 'bulls']
+        
+        // If last segment is a category word or very short, likely a listing
+        if (categoryWords.includes(lastSegment) || lastSegment.length < 5) {
+          return true
+        }
+        
+        // If path contains /sports/ or /nba/ and ends with a team/category name (not an article slug)
+        const hasSportsPath = pathname.includes('/sports/') || pathname.includes('/nba/')
+        if (hasSportsPath) {
+          // Team/category names are usually lowercase with hyphens, no dates/numbers
+          const looksLikeArticleSlug = /\d{4}|\d{2}-\d{2}|article|story|post/.test(lastSegment)
+          if (!looksLikeArticleSlug && lastSegment.length > 5 && lastSegment.length < 30) {
+            // Likely a team/category name, not an article
+            return true
+          }
+        }
+      }
+      
+      return false
+    } catch {
+      return false
+    }
+  }
+
   private resolveHost(candidate: FrontierItem): string | null {
     const metaHost = typeof candidate.meta?.host === 'string' ? candidate.meta.host : undefined
     if (metaHost && metaHost.length > 0) {
@@ -652,6 +824,37 @@ export class DiscoveryEngineV21 {
     } catch {
       return null
     }
+  }
+
+  private recordFirstWaveStats(host: string | null, candidate: FrontierItem): void {
+    if (host && this.firstTwentyHosts.length < 20) {
+      this.firstTwentyHosts.push(host)
+    }
+
+    const angleCategory = (candidate.meta?.angleCategory as string | undefined) ?? (candidate.meta?.angle as string | undefined) ?? candidate.angle
+    if (angleCategory && this.firstTwelveAngles.length < 12) {
+      this.firstTwelveAngles.push(angleCategory)
+    }
+
+    const viewpoint = (candidate.meta?.viewpoint as string | undefined) ?? (candidate.meta?.stance as string | undefined)
+    if (viewpoint && this.firstTwelveViewpoints.length < 12) {
+      this.firstTwelveViewpoints.push(viewpoint)
+    }
+
+    const hookId = typeof candidate.meta?.hookId === 'string' ? candidate.meta.hookId : undefined
+    if (hookId && this.firstTwentyHosts.length < 20) {
+      this.hookAttemptCounts.set(hookId, (this.hookAttemptCounts.get(hookId) ?? 0) + 1)
+    }
+  }
+
+  private toCountMap(values: string[], limit: number): Record<string, number> {
+    const acc = new Map<string, number>()
+    for (let i = 0; i < values.length && i < limit; i += 1) {
+      const value = values[i]
+      if (!value) continue
+      acc.set(value, (acc.get(value) ?? 0) + 1)
+    }
+    return Object.fromEntries(acc.entries())
   }
 
   private shouldRecordFailure(reason?: string): boolean {
@@ -673,14 +876,23 @@ export class DiscoveryEngineV21 {
     }
   }
 
-  private async triggerReseed(coveredAngles: Set<string>): Promise<void> {
+  private async triggerReseed(coveredAngles: Set<string>, reason: string): Promise<void> {
     try {
       const reseeded = await this.expandFrontierIfNeeded(this.redisPatchId, coveredAngles)
       if (reseeded) {
         this.structuredLog('reseed_triggered', {
-          reason: 'scheduler_guard',
+          reason,
           hostDiversity: this.scheduler.getHostDiversityCount(),
           wikiGuard: this.wikiGuardState.active
+        })
+        await this.emitAudit('reseed', 'ok', {
+          provider: 'scheduler',
+          candidateUrl: null,
+          meta: {
+            reason,
+            hostDiversity: this.scheduler.getHostDiversityCount(),
+            wikiGuard: this.wikiGuardState.active
+          }
         })
       }
     } catch (error) {
@@ -736,6 +948,54 @@ export class DiscoveryEngineV21 {
   }
 
   private emitMetricsSnapshot(frontierDepth: number): void {
+    const first20Hosts = this.firstTwentyHosts.slice(0, 20)
+    const distinctFirst20Hosts = Array.from(new Set(first20Hosts))
+    const first12AngleCounts = this.toCountMap(this.firstTwelveAngles, 12)
+    const first12ViewpointCounts = this.toCountMap(this.firstTwelveViewpoints, 12)
+
+    // Logs-only SLO alerts
+    try {
+      // Zero-save thresholds (warn@25, error/pause@40)
+      if (this.metrics.itemsSaved === 0) {
+        if (this.metrics.candidatesProcessed === 25) {
+          console.warn(
+            `[Discovery SLO] zero-save warning@25 attempts (handle=${this.options.patchHandle}, run=${this.options.runId})`
+          )
+        } else if (this.metrics.candidatesProcessed === 40) {
+          console.error(
+            `[Discovery SLO] zero-save pause@40 attempts (handle=${this.options.patchHandle}, run=${this.options.runId})`
+          )
+        }
+      }
+
+      // Host diversity: <6 distinct hosts in first 20 dequeues
+      if (first20Hosts.length >= 20 && distinctFirst20Hosts.length < 6) {
+        console.warn(
+          `[Discovery SLO] low host diversity in first-20 (distinct=${distinctFirst20Hosts.length}) (handle=${this.options.patchHandle}, run=${this.options.runId})`
+        )
+      }
+
+      // Wikipedia share >30% in rolling window
+      const wikiShareMax = Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ?? 0.3)
+      if (this.wikiGuardState.share > wikiShareMax) {
+        console.warn(
+          `[Discovery SLO] high wiki share (${(this.wikiGuardState.share * 100).toFixed(
+            1
+          )}%) (handle=${this.options.patchHandle}, run=${this.options.runId})`
+        )
+      }
+    } catch {
+      // best-effort logging only
+    }
+    const hookAttemptCounts = Object.fromEntries(this.hookAttemptCounts.entries())
+    const hookValues = Object.values(hookAttemptCounts) as number[]
+    const totalAttempts = this.scheduler.getTotalAttemptCount()
+    const first20HostTargetMet = first20Hosts.length >= 20 ? distinctFirst20Hosts.length >= 6 : false
+    const first12AngleTargetMet = this.firstTwelveAngles.length >= 12 ? Object.keys(first12AngleCounts).length >= 4 : false
+    const first12ViewpointTargetMet = this.firstTwelveViewpoints.length >= 12 ? Object.keys(first12ViewpointCounts).length >= 3 : false
+    const hooksAttemptTargetMet = first20Hosts.length >= 20 && hookValues.length > 0
+      ? hookValues.every((value) => value >= 2)
+      : false
     this.eventStream.metrics({
       frontier: frontierDepth,
       duplicates: this.metrics.duplicates,
@@ -749,7 +1009,24 @@ export class DiscoveryEngineV21 {
       controversyAttemptRatio: this.controversyWindow.attemptRatio,
       controversySaveRatio: this.controversyWindow.saveRatio,
       zeroSaveWarning: this.zeroSaveWarningIssued,
-      zeroSavePaused: this.zeroSaveAutoPaused
+      zeroSavePaused: this.zeroSaveAutoPaused,
+      first20Hosts,
+      first20HostCount: distinctFirst20Hosts.length,
+      first12Angles: first12AngleCounts,
+      first12Viewpoints: first12ViewpointCounts,
+      hookAttemptCounts,
+      hostThrottleHits: this.hostThrottleHits,
+      hostAttemptSnapshot: this.scheduler.getHostAttemptSnapshot(),
+      hostAttemptCap: this.scheduler.getHostAttemptCap(),
+      runAttemptCap: this.scheduler.getRunAttemptCap(),
+      totalAttempts,
+      heroGate: this.lastHeroGateEvaluation,
+      quotaStatus: {
+        first20Hosts: first20HostTargetMet,
+        first12Angles: first12AngleTargetMet,
+        first12Viewpoints: first12ViewpointTargetMet,
+        hookAttempts: hooksAttemptTargetMet
+      }
     })
   }
 
@@ -791,16 +1068,24 @@ export class DiscoveryEngineV21 {
         await this.recordSuccessOutcome(result.host, 'failure')
       }
     }
-
-    if (result.paywallBranch) {
-      await pushPaywallBranch(this.redisPatchId, result.paywallBranch).catch(() => undefined)
-    }
   }
 
   private async expandQueryCandidate(candidate: FrontierItem): Promise<string> {
     const { patchId } = this.options
     const attempts = Number(candidate.meta?.queryAttempts ?? 0)
-    const expansion = expandPlannerQuery({ candidate, attempt: attempts })
+    const expansion = await expandPlannerQuery({
+      candidate,
+      attempt: attempts,
+      totalDequeues: this.scheduler.getTotalAttemptCount()
+    })
+
+    const extractHostFromUrl = (rawUrl: string): string | null => {
+      try {
+        return new URL(rawUrl).hostname.toLowerCase()
+      } catch {
+        return null
+      }
+    }
 
     const filterResult = await filterQuerySuggestions(expansion.suggestions, {
       patchId,
@@ -812,14 +1097,27 @@ export class DiscoveryEngineV21 {
     const accepted = filterResult.accepted
     const skipped = filterResult.skipped
 
-    for (let index = 0; index < accepted.length; index += 1) {
-      const item = accepted[index]
-      await this.enqueueQuerySuggestion(candidate, item, index)
+    const hostSet = new Set<string>()
+    accepted.forEach((item) => {
+      const host = item.suggestion.host ?? extractHostFromUrl(item.suggestion.url)
+      if (host && !host.endsWith('wikipedia.org')) {
+        hostSet.add(host)
+      }
+    })
+
+    const meetsMinimum = accepted.length >= QueryExpanderConstants.MIN_RESULTS_PER_QUERY
+    const meetsHostMix = hostSet.size >= 3
+
+    let enqueuedCount = 0
+    if (meetsMinimum && meetsHostMix) {
+      for (let index = 0; index < accepted.length; index += 1) {
+        const item = accepted[index]
+        await this.enqueueQuerySuggestion(candidate, item, index)
+      }
+      enqueuedCount = accepted.length
+      this.telemetry.queriesExpanded += enqueuedCount
     }
 
-    if (accepted.length > 0) {
-      this.telemetry.queriesExpanded += accepted.length
-    }
     if (skipped.length > 0) {
       this.telemetry.queryExpansionSkipped += skipped.length
     }
@@ -833,32 +1131,38 @@ export class DiscoveryEngineV21 {
       candidateUrl: typeof candidate.cursor === 'string' ? candidate.cursor : undefined,
       provider: candidate.provider,
       meta: {
-        generated: accepted.length,
+        generated: enqueuedCount,
         skipped: skippedByReason,
         deferredGeneral: expansion.deferredGeneral,
-        attempts
+        attempts,
+        hostMix: hostSet.size,
+        meetsThresholds: meetsMinimum && meetsHostMix
       }
     })
 
     this.structuredLog('query_expand', {
       provider: candidate.provider,
-      generated: accepted.length,
+      generated: enqueuedCount,
       skipped: skippedByReason,
       deferredGeneral: expansion.deferredGeneral,
-      attempts
+      attempts,
+      hostMix: hostSet.size,
+      meetsThresholds: meetsMinimum && meetsHostMix
     })
 
     await this.persistMetricsSnapshot('running', this.lastCounters, {
       queryExpansion: {
         provider: candidate.provider,
-        accepted: accepted.length,
+        accepted: enqueuedCount,
         skipped: skippedByReason,
         deferred: expansion.deferredGeneral,
-        attempts
+        attempts,
+        hostMix: hostSet.size,
+        meetsThresholds: meetsMinimum && meetsHostMix
       }
     })
 
-    if (accepted.length > 0) {
+    if (enqueuedCount > 0) {
       return 'query_expanded'
     }
 
@@ -868,6 +1172,14 @@ export class DiscoveryEngineV21 {
         await this.requeueQueryCandidate(candidate, attempts + 1)
       }
       return 'query_deferred'
+    }
+
+    if (!meetsMinimum || !meetsHostMix) {
+      this.telemetry.queryDeferred += 1
+      if (attempts + 1 <= QueryExpanderConstants.GENERAL_UNLOCK_ATTEMPTS) {
+        await this.requeueQueryCandidate(candidate, attempts + 1)
+      }
+      return 'query_insufficient_results'
     }
 
     return 'query_no_results'
@@ -999,6 +1311,18 @@ export class DiscoveryEngineV21 {
         await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'content_too_short')
+        // Pre-harvest: if we have HTML but content is short (directory/listing),
+        // extract outgoing links and enqueue them before dropping.
+        try {
+          if (extracted?.rawHtml) {
+            if (this.isWikipediaUrl(canonicalUrl)) {
+              await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
+            }
+            await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
+          }
+        } catch {
+          // ignore harvesting errors
+        }
         this.structuredLog('content_short', {
           url: canonicalUrl,
           provider: candidate.provider,
@@ -1034,8 +1358,10 @@ export class DiscoveryEngineV21 {
       this.runSignatures.add(signature)
 
       if (this.isWikipediaUrl(canonicalUrl)) {
-        await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl)
+        await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
       }
+
+      await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
 
       if (!this.hasEntityMention(extracted)) {
         await this.incrementMetric('dropped')
@@ -1172,31 +1498,57 @@ export class DiscoveryEngineV21 {
         })
       }
 
-      this.eventStream.stage('hero', { url: canonicalUrl })
-      this.eventStream.searching('hero')
-      const hero = await this.heroPipeline.assignHero({
-        title: extracted.title,
-        summary: synthesis.whyItMatters,
-        topic: this.options.patchName,
-        entity: this.plan?.topic
-      })
-
-      if (hero?.source === 'skeleton') {
-        await enqueueHeroRetry({
-          patchId,
-          runId: this.options.runId,
-          url: canonicalUrl,
-          title: extracted.title
-        }).catch(() => undefined)
-        this.structuredLog('hero_retry_queued', {
-          url: canonicalUrl,
-          provider: candidate.provider
-        })
+      const viewpointRaw = (candidate.meta?.viewpoint as string | undefined) ?? (candidate.meta?.stance as string | undefined) ?? null
+      const heroKey = this.resolveHeroKey(candidate)
+      const heroEntry: HeroGateEntry = {
+        domain: finalDomain ?? hostHint ?? null,
+        viewpointClass: this.classifyViewpoint(viewpointRaw),
+        rawViewpoint: viewpointRaw,
+        isSfw: synthesis.isSfw !== false,
+        publishDate: synthesis.publishDate ?? (candidate.meta?.publishDate as string | undefined) ?? null,
+        savedAt: Date.now()
       }
+      const heroEligibility = this.evaluateHeroEligibility(heroKey, heroEntry)
+      const heroScore = this.computeHeroScore({
+        isControversy: candidate.meta?.isControversy === true,
+        publishDate: heroEntry.publishDate,
+        credibilityTier: candidate.meta?.credibilityTier as number | undefined,
+        noveltySignals: candidate.meta?.noveltySignals,
+        host: heroEntry.domain,
+        viewpointClass: heroEntry.viewpointClass,
+        viewpointEligible: heroEligibility.eligible
+      })
+      this.lastHeroGateEvaluation = { ...heroEligibility, score: heroScore }
 
-      const contestedClaim = this.resolveContestedClaim(synthesis.contested)
-      if (contestedClaim) {
-        await markContestedCovered(this.options.runId, contestedClaim).catch(() => undefined)
+      let hero: DiscoveryHero | null = null
+      if (heroEligibility.eligible) {
+        this.eventStream.stage('hero', {
+          url: canonicalUrl,
+          supportDomain: heroEligibility.supportDomain,
+          counterDomain: heroEligibility.counterDomain
+        })
+        this.eventStream.searching('hero')
+        hero = await this.heroPipeline.assignHero({
+          title: extracted.title,
+          summary: synthesis.whyItMatters,
+          topic: this.options.patchName,
+          entity: this.plan?.topic
+        })
+
+        if (hero?.source === 'skeleton') {
+          await enqueueHeroRetry({
+            patchId,
+            runId: this.options.runId,
+            url: canonicalUrl,
+            title: extracted.title
+          }).catch(() => undefined)
+          this.structuredLog('hero_retry_queued', {
+            url: canonicalUrl,
+            provider: candidate.provider
+          })
+        }
+      } else {
+        this.eventStream.stage('hero', { url: canonicalUrl, eligible: false })
       }
 
       await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
@@ -1217,6 +1569,7 @@ export class DiscoveryEngineV21 {
           data: {
             patchId,
             canonicalUrl,
+            title: extracted.title,
             sourceUrl: canonicalUrl,
             domain: finalDomain,
             publishDate: candidate.meta?.publishDate ?? null,
@@ -1267,8 +1620,9 @@ export class DiscoveryEngineV21 {
         quotes: synthesis.quotes,
         provenance: synthesis.provenance,
         contested: synthesis.contested,
-        contestedClaim: contestedClaim || undefined,
+        contestedClaim: this.resolveContestedClaim(synthesis.contested),
         hero: hero ? { url: hero.url, source: hero.source } : null,
+        heroScore,
         relevanceScore: synthesis.relevanceScore,
         qualityScore: synthesis.qualityScore,
         viewSourceOk,
@@ -1293,7 +1647,7 @@ export class DiscoveryEngineV21 {
           angle,
           heroSource: hero?.source,
           contested: synthesis.contested,
-          contestedClaim
+          contestedClaim: this.resolveContestedClaim(synthesis.contested)
         }
       })
 
@@ -1333,6 +1687,7 @@ export class DiscoveryEngineV21 {
       if (angle) {
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
+      this.storeHeroEntry(heroKey, heroEntry)
       return { saved: true, angle, host, paywallBranch }
     } catch (error) {
       if (error instanceof RobotsBlockedError) {
@@ -1441,6 +1796,7 @@ export class DiscoveryEngineV21 {
         url: branch.url,
         canonical: canonicalUrl
       })
+      await pushPaywallBranch(this.redisPatchId, `attempt:${branch.branch}`).catch(() => undefined)
 
       try {
         const response = await this.fetchWithRetry(
@@ -1459,6 +1815,7 @@ export class DiscoveryEngineV21 {
           if (statusKind === 'paywall') {
             this.telemetry.paywall++
             lastError = new PaywallBlockedError(`status:${response.status}`)
+            await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
             continue
           }
           if (statusKind === 'robots') {
@@ -1479,10 +1836,12 @@ export class DiscoveryEngineV21 {
         if (this.isPaywallHtml(html)) {
           this.telemetry.paywall++
           lastError = new PaywallBlockedError('paywall_html')
+          await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           continue
         }
         const extracted = this.extractHtmlContent(html)
         this.telemetry.htmlExtracted++
+        await pushPaywallBranch(this.redisPatchId, `success:${branch.branch}`).catch(() => undefined)
         return {
           extracted: { ...extracted, rawHtml: html },
           branch: branch.branch,
@@ -1494,12 +1853,15 @@ export class DiscoveryEngineV21 {
         }
         if (error instanceof PaywallBlockedError) {
           lastError = error
+          await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           continue
         }
         if (error instanceof RobotsBlockedError) {
+          await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           throw error
         }
         lastError = error
+        await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
       }
     }
 
@@ -1613,6 +1975,23 @@ export class DiscoveryEngineV21 {
     return false
   }
 
+  private normaliseAngleLabel(value: string | undefined): string {
+    return (value ?? '').trim().toLowerCase()
+  }
+
+  private getHostFromUrl(url: string | undefined): string | null {
+    if (!url) return null
+    try {
+      return new URL(url).hostname.toLowerCase()
+    } catch {
+      return null
+    }
+  }
+
+  private isWikipediaHost(host: string | null): boolean {
+    return Boolean(host && host.endsWith('wikipedia.org'))
+  }
+
   private async expandFrontierIfNeeded(patchId: string, coveredAngles: Set<string>): Promise<boolean> {
     if (!this.plan) {
       return false
@@ -1633,12 +2012,30 @@ export class DiscoveryEngineV21 {
       if (overControversy && seed.isControversy) score -= 20
       if (needHistory && seed.isHistory) score += 25
       if (!seed.isControversy && needControversy) score -= 5
-      return { seed, score }
+      const host = this.getHostFromUrl(seed.url)
+      const isWiki = this.isWikipediaHost(host)
+      if (isWiki) {
+        score -= 90
+      } else {
+        score += 18
+      }
+      return { seed, score, host, isWiki }
     })
 
-    const availableSeeds = uncoveredAngles.length
-      ? candidateSeeds.filter(({ seed }) => uncoveredAngles.some((angle) => angle.angle === seed.angle))
+    const normalisedUncoveredAngles = uncoveredAngles.map((angle) => this.normaliseAngleLabel(angle.angle))
+
+    let availableSeeds = uncoveredAngles.length
+      ? candidateSeeds.filter(({ seed }) => normalisedUncoveredAngles.includes(this.normaliseAngleLabel(seed.angle)))
       : candidateSeeds
+
+    if (!availableSeeds.length) {
+      availableSeeds = candidateSeeds
+    }
+
+    const nonWikiSeeds = availableSeeds.filter(({ isWiki }) => !isWiki)
+    if (nonWikiSeeds.length > 0) {
+      availableSeeds = nonWikiSeeds
+    }
 
     if (!availableSeeds.length) {
       return false
@@ -1881,5 +2278,134 @@ export class DiscoveryEngineV21 {
       return { message: error.message, stack: error.stack }
     }
     return { message: String(error) }
+  }
+
+  private resolveHeroKey(candidate: FrontierItem): string {
+    if (typeof candidate.meta?.hookId === 'string' && candidate.meta.hookId.length) {
+      return candidate.meta.hookId
+    }
+    if (typeof candidate.meta?.angleCategory === 'string' && candidate.meta.angleCategory.length) {
+      return candidate.meta.angleCategory
+    }
+    if (typeof candidate.meta?.angle === 'string' && candidate.meta.angle.length) {
+      return candidate.meta.angle
+    }
+    return 'global'
+  }
+
+  private classifyViewpoint(viewpoint?: string | null): HeroViewpointClass {
+    if (!viewpoint) return 'neutral'
+    const normalised = viewpoint.toLowerCase()
+    if (/counter|oppose|critic|anti|minority|dissent|contested/.test(normalised)) {
+      return 'counter'
+    }
+    if (/support|pro|establish|majority|government|official/.test(normalised)) {
+      return 'support'
+    }
+    return 'neutral'
+  }
+
+  private isWithinMonths(dateInput: string | null | undefined, months: number): boolean {
+    if (!dateInput) return false
+    const parsed = new Date(dateInput)
+    if (Number.isNaN(parsed.getTime())) return false
+    const threshold = new Date()
+    threshold.setMonth(threshold.getMonth() - months)
+    return parsed >= threshold
+  }
+
+  private isHeroEntryEligible(entry: HeroGateEntry): boolean {
+    return entry.isSfw && this.isWithinMonths(entry.publishDate ?? null, 24)
+  }
+
+  private computeRecencyScore(dateInput: string | null): number {
+    if (!dateInput) return 0.5
+    const parsed = new Date(dateInput)
+    if (Number.isNaN(parsed.getTime())) return 0.5
+    const diffDays = (Date.now() - parsed.getTime()) / (1000 * 60 * 60 * 24)
+    if (diffDays <= 30) return 1
+    if (diffDays <= 180) return 0.85
+    if (diffDays <= 365) return 0.7
+    if (diffDays <= 730) return 0.5
+    return 0.3
+  }
+
+  private evaluateHeroEligibility(
+    key: string,
+    candidateEntry: HeroGateEntry
+  ): { eligible: boolean; supportDomain?: string | null; counterDomain?: string | null } {
+    const existing = this.heroGateMap.get(key) ?? []
+    const combined = [...existing, candidateEntry]
+    const supportEntries = combined.filter((entry) => entry.viewpointClass === 'support')
+    const counterEntries = combined.filter((entry) => entry.viewpointClass === 'counter')
+
+    for (const support of supportEntries) {
+      if (!this.isHeroEntryEligible(support) || !support.domain) continue
+      for (const counter of counterEntries) {
+        if (!this.isHeroEntryEligible(counter) || !counter.domain) continue
+        if (support.domain !== counter.domain) {
+          return { eligible: true, supportDomain: support.domain, counterDomain: counter.domain }
+        }
+      }
+    }
+
+    return { eligible: false }
+  }
+
+  private storeHeroEntry(key: string, entry: HeroGateEntry): void {
+    const entries = this.heroGateMap.get(key) ?? []
+    entries.push(entry)
+    if (entries.length > 10) {
+      entries.shift()
+    }
+    this.heroGateMap.set(key, entries)
+  }
+
+  private computeHeroScore(args: {
+    isControversy: boolean
+    publishDate?: string | null
+    credibilityTier?: number
+    noveltySignals?: unknown
+    host: string | null
+    viewpointClass: HeroViewpointClass
+    viewpointEligible: boolean
+  }): number {
+    const controversyScore = args.isControversy ? 1 : 0.4
+    const recencyScore = this.computeRecencyScore(args.publishDate ?? null)
+    const authorityScore = this.computeAuthorityScore(args.credibilityTier)
+    const noveltyScore = Array.isArray(args.noveltySignals) && args.noveltySignals.length > 0 ? 1 : 0.5
+    const successScore = this.getHostSuccessEma(args.host)
+    const viewpointScore = args.viewpointEligible
+      ? 1
+      : args.viewpointClass !== 'neutral'
+        ? 0.7
+        : 0.4
+
+    const score =
+      0.3 * controversyScore +
+      0.2 * recencyScore +
+      0.2 * authorityScore +
+      0.1 * noveltyScore +
+      0.1 * successScore +
+      0.1 * viewpointScore
+
+    return Number(score.toFixed(3))
+  }
+
+  private computeAuthorityScore(tier?: number): number {
+    if (tier === 1) return 1
+    if (tier === 2) return 0.75
+    if (tier === 3) return 0.5
+    return 0.4
+  }
+
+  private getHostSuccessEma(host: string | null): number {
+    if (!host) return 0.5
+    const snapshot = this.scheduler.getSuccessRatesSnapshot()
+    const record = snapshot[host] ?? snapshot[host.toLowerCase()]
+    if (record && typeof record.ema === 'number') {
+      return Math.max(0, Math.min(1, record.ema))
+    }
+    return 0.5
   }
 }

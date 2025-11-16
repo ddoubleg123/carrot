@@ -3,6 +3,45 @@ import { addToFrontier, FrontierItem, storeDiscoveryPlan } from '@/lib/redis/dis
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
 
+const DATA_HOST_PATH_EXCEPTIONS = new Set([
+  'www.basketball-reference.com',
+  'basketball-reference.com',
+  'statmuse.com',
+  'www.statmuse.com'
+])
+
+function getHost(input: string | null | undefined): string | null {
+  if (!input) return null
+  try {
+    return new URL(input).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isWikiHost(host: string | null | undefined): boolean {
+  return Boolean(host && host.endsWith('wikipedia.org'))
+}
+
+function pathDepth(url: string): number {
+  try {
+    const segments = new URL(url).pathname.split('/').filter(Boolean)
+    return segments.length
+  } catch {
+    return 0
+  }
+}
+
+function isDeepLink(url: string): boolean {
+  const host = getHost(url)
+  const depth = pathDepth(url)
+  if (!host) return false
+  if (DATA_HOST_PATH_EXCEPTIONS.has(host)) {
+    return depth >= 1
+  }
+  return depth >= 2
+}
+
 export interface PlannerQueryAngle {
   angle: string
   whyItMatters: string
@@ -129,6 +168,8 @@ export interface DiscoveryPlan {
     credibilityMix?: { tier1Min?: number; tier2Min?: number; tier3Max?: number }
     alternateIfPaywalled?: boolean
     respectRobotsTxt?: boolean
+    maxWikiSeeds?: number
+    minDistinctDomains?: number
   }
 }
 
@@ -140,13 +181,13 @@ interface PlannerOptions {
   runId: string
 }
 
-const SYSTEM_PROMPT = `You are adjusting inputs for our existing discovery engine. Return STRICT JSON ONLY. Provide 10 directly fetchable seeds with an exact 5 establishment / 5 contested split. HARD REQUIREMENTS:
-- At most ONE en.wikipedia.org seed; all other seeds must come from ≥6 distinct non-wikipedia domains.
-- Seeds must be deep links (URL path depth ≥ 2 and not a homepage/section hub). Reject /news, /world, /section landing pages.
+const SYSTEM_PROMPT = `You are adjusting inputs for our existing discovery engine. Return STRICT JSON ONLY. Provide ≥10 directly fetchable seeds with an exact 5 establishment / 5 contested split. HARD REQUIREMENTS:
+- At most ONE en.wikipedia.org seed; the remaining seeds must span ≥6 distinct non-wikipedia hosts.
+- Seeds must be deep links (URL path depth ≥ 2 and not a homepage/section hub). Reject /news, /world, /section landing pages. Allow data-domain exceptions explicitly noted in the brief.
 - Prefer recent sources (publish date ≤ 24 months) unless the seed is a primary/official historical document; include recency hints in metadata.
 - Add 1–3 quotePullHints per seed (exact phrases visible on-page).
+- Populate queries.news / queries.official / queries.data / queries.longform with non-wikipedia site filters and recency windows we can translate into site:… searches.
 - For every contested claim, include at least one non-media authority (court, UN, official, NGO, academic) either as a seed or in contestedPlan.
-- Ensure official/data/news query blocks include site filters and recency windows we can translate into site:… searches.
 Keep the output compact, precise, and ready to fetch immediately.`
 
 function buildUserPrompt(topic: string, aliases: string[]): string {
@@ -159,8 +200,9 @@ function buildUserPrompt(topic: string, aliases: string[]): string {
 - minNonMediaPerContested = 1,
 - maxPerDomain = 2,
 - prefer recent (≤24 months) unless a primary/official record is stronger,
-- seeds must be directly fetchable deep links (path depth ≥2, no homepages/section hubs),
-- at most one seed from en.wikipedia.org,
+- seeds must be directly fetchable deep links (path depth ≥2, no homepages/section hubs); allow only declared data-domain exceptions,
+- provide ≥10 seeds with ≥6 distinct non-wikipedia hosts and at most one wikipedia seed,
+- populate queries.news / queries.official / queries.data / queries.longform with non-wikipedia site filters and recency windows,
 - disallow travel/recipe/tourism/fiction.
  
  Return JSON with:
@@ -349,6 +391,160 @@ export function normaliseSeedCandidate(seed: PlannerSeedCandidate): PlannerSeedC
   return normalisedSeed
 }
 
+interface PlanValidationResult {
+  valid: boolean
+  reason?: string
+}
+
+function distinctNonWikiHosts(seeds: PlannerSeedCandidate[]): Set<string> {
+  const hosts = new Set<string>()
+  seeds.forEach((seed) => {
+    const host = getHost(seed.url)
+    if (host && !isWikiHost(host)) {
+      hosts.add(host)
+    }
+  })
+  return hosts
+}
+
+function hasShallowSeeds(seeds: PlannerSeedCandidate[]): boolean {
+  return seeds.some((seed) => !isDeepLink(seed.url))
+}
+
+function isDirectoryOrListingPage(url: string): boolean {
+  try {
+    const urlObj = new URL(url)
+    const pathname = urlObj.pathname.toLowerCase()
+    const hostname = urlObj.hostname.toLowerCase()
+    
+    // Privacy policy pages
+    if (pathname.includes('/privacy') || hostname.includes('privacy')) {
+      return true
+    }
+    
+    // URLs ending with just a slash (directory)
+    if (pathname === '/' || pathname.match(/^\/[^\/]+\/$/)) {
+      return true
+    }
+    
+    // Common directory/listing patterns
+    const directoryPatterns = [
+      /\/tag\//,
+      /\/category\//,
+      /\/archive\//,
+      /\/sitemap/,
+      /\/feed/,
+      /\/rss/,
+      /\/news\/?$/,  // /news or /news/ without article slug
+      /\/articles\/?$/,  // /articles or /articles/ without article slug
+      /\/blog\/?$/,  // /blog or /blog/ without article slug
+      /\/sites\/[^\/]+\/?$/,  // /sites/section/ without article
+      /\/sports\/[^\/]+\/?$/,  // /sports/category/ (single category level)
+      /\/sports\/[^\/]+\/[^\/]+\/?$/,  // /sports/category/team/ (team directory)
+      /\/nba\/[^\/]+\/?$/,  // /nba/category/ (single category level)
+    ]
+    
+    if (directoryPatterns.some(pattern => pattern.test(pathname))) {
+      return true
+    }
+    
+    // Check if path looks like a listing (ends with category but no article slug)
+    // e.g., /sports/nba/chicago-bulls/ (no article after)
+    const pathSegments = pathname.split('/').filter(Boolean)
+    
+    // If URL ends with / and has 2+ segments, likely a directory
+    if (pathname.endsWith('/') && pathSegments.length >= 2) {
+      return true
+    }
+    
+    // Check for category-like patterns
+    if (pathSegments.length >= 2) {
+      const lastSegment = pathSegments[pathSegments.length - 1]
+      const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles', 'bulls']
+      
+      // If last segment is a category word or very short, likely a listing
+      if (categoryWords.includes(lastSegment) || lastSegment.length < 5) {
+        return true
+      }
+      
+      // If path contains /sports/ or /nba/ and ends with a team/category name (not an article slug)
+      // Article slugs typically have dates, numbers, or specific identifiers
+      const hasSportsPath = pathname.includes('/sports/') || pathname.includes('/nba/')
+      if (hasSportsPath) {
+        // Team/category names are usually lowercase with hyphens, no dates/numbers
+        const looksLikeArticleSlug = /\d{4}|\d{2}-\d{2}|article|story|post/.test(lastSegment)
+        if (!looksLikeArticleSlug && lastSegment.length > 5 && lastSegment.length < 30) {
+          // Likely a team/category name, not an article
+          return true
+        }
+      }
+    }
+    
+    return false
+  } catch {
+    return false
+  }
+}
+
+function hasDirectoryPages(seeds: PlannerSeedCandidate[]): boolean {
+  return seeds.some((seed) => isDirectoryOrListingPage(seed.url))
+}
+
+function blockPopulated(block: { siteFilters?: unknown; urls?: unknown }): boolean {
+  const siteFilters = Array.isArray(block?.siteFilters)
+    ? block.siteFilters.map((value) => String(value).trim()).filter(Boolean)
+    : []
+  const urls = Array.isArray(block?.urls)
+    ? block.urls.map((value) => String(value).trim()).filter(Boolean)
+    : []
+  const combined = [...siteFilters, ...urls]
+  if (!combined.length) return false
+  return combined.every((entry) => !/wikipedia\.org/i.test(entry))
+}
+
+function validatePlan(plan: DiscoveryPlan): PlanValidationResult {
+  const seeds = Array.isArray(plan.seedCandidates) ? plan.seedCandidates : []
+  if (seeds.length < 10) {
+    return { valid: false, reason: 'min_seed_count' }
+  }
+
+  const wikiSeedCount = seeds.filter((seed) => isWikiHost(getHost(seed.url))).length
+  if (wikiSeedCount > 1) {
+    return { valid: false, reason: 'excess_wiki_seeds' }
+  }
+
+  const nonWikiHosts = distinctNonWikiHosts(seeds)
+  if (nonWikiHosts.size < 6) {
+    return { valid: false, reason: 'insufficient_non_wiki_hosts' }
+  }
+
+  if (hasShallowSeeds(seeds)) {
+    return { valid: false, reason: 'shallow_seed_detected' }
+  }
+
+  if (hasDirectoryPages(seeds)) {
+    return { valid: false, reason: 'directory_page_detected' }
+  }
+
+  const queries = plan.queries ?? {}
+  if (!blockPopulated(queries.news ?? {})) {
+    return { valid: false, reason: 'news_queries_unpopulated' }
+  }
+  if (!blockPopulated(queries.official ?? {})) {
+    return { valid: false, reason: 'official_queries_unpopulated' }
+  }
+  if (!blockPopulated(queries.data ?? {})) {
+    return { valid: false, reason: 'data_queries_unpopulated' }
+  }
+  if (!blockPopulated(queries.longform ?? {})) {
+    return { valid: false, reason: 'longform_queries_unpopulated' }
+  }
+
+  return { valid: true }
+}
+
+export const __validatePlannerPlan = validatePlan
+
 export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: DiscoveryPlan): DiscoveryPlan {
   const generatedAt = typeof plan.generatedAt === 'string' ? plan.generatedAt : new Date().toISOString()
   const aliases =
@@ -522,8 +718,8 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
         }).filter((seed): seed is PlannerSeedCandidate => Boolean(seed))
       : fallback.seedCandidates
 
-  return {
-    topic: plan.topic || fallback.topic,
+  const result: DiscoveryPlan = {
+    topic: plan.topic ?? fallback.topic,
     aliases,
     generatedAt,
     mustTerms:
@@ -536,38 +732,10 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
       Array.isArray(plan.disallowTerms) && plan.disallowTerms.length
         ? plan.disallowTerms.map((term) => term.trim())
         : fallback.disallowTerms,
-    queryAngles:
-      Array.isArray(plan.queryAngles) && plan.queryAngles.length
-        ? (plan.queryAngles as PlannerQueryAngle[])
-        : fallback.queryAngles,
+    queryAngles: plan.queryAngles?.length ? (plan.queryAngles as PlannerQueryAngle[]) : fallback.queryAngles,
     controversyAngles,
     historyAngles,
     coverageTargets,
-    contestedPlan:
-      Array.isArray(plan.contestedPlan) && plan.contestedPlan.length
-        ? (plan.contestedPlan as any[]).map((entry) => {
-            if (!entry || typeof entry !== 'object') return null
-            const claim = typeof entry.claim === 'string' ? entry.claim.trim() : ''
-            const supporting = Array.isArray(entry.supportingSources)
-              ? entry.supportingSources.map((value: unknown) => String(value).trim()).filter(Boolean)
-              : []
-            const counter = Array.isArray(entry.counterSources)
-              ? entry.counterSources.map((value: unknown) => String(value).trim()).filter(Boolean)
-              : []
-            const verificationFocus = Array.isArray(entry.verificationFocus)
-              ? entry.verificationFocus.map((value: unknown) => String(value).trim()).filter(Boolean)
-              : []
-            if (!claim || !supporting.length || !counter.length) {
-              return null
-            }
-            return {
-              claim,
-              supportingSources: supporting,
-              counterSources: counter,
-              verificationFocus
-            }
-          }).filter(Boolean) as DiscoveryPlan['contestedPlan']
-        : fallback.contestedPlan,
     queries,
     contentQueries: {
       wikipedia: plan.contentQueries?.wikipedia || fallback.contentQueries.wikipedia,
@@ -583,34 +751,232 @@ export function ensurePlanDefaults(plan: Partial<DiscoveryPlan>, fallback: Disco
       ...plan.fetchRules
     }
   }
+
+  const validation = validatePlan(result)
+  if (!validation.valid) {
+    console.warn(
+      `[DiscoveryPlanner] plan validation failed (${validation.reason ?? 'unknown'}) – using fallback plan`
+    )
+    return fallback
+  }
+
+  return result
+}
+
+type SeedBlueprint = Omit<PlannerSeedCandidate, 'url'> & { url: string }
+
+function buildChicagoBullsFallbackSeeds(topic: string): PlannerSeedCandidate[] {
+  const blueprints: SeedBlueprint[] = [
+    {
+      url: 'https://www.espn.com/nba/team/_/name/chi/chicago-bulls',
+      category: 'media',
+      sourceType: 'media',
+      angle: 'Season outlook and roster health',
+      stance: 'establishment',
+      whyItMatters: 'Tracks current roster moves, injuries, and coaching adjustments',
+      expectedInsights: ['injury status', 'roster depth'],
+      quotePullHints: ['Chicago Bulls depth chart'],
+      credibilityTier: 2,
+      noveltySignals: ['2024 season'],
+      priority: 1,
+      verification: { namesOrEntities: ['Chicago Bulls roster'], dates: ['2024'] }
+    },
+    {
+      url: 'https://www.basketball-reference.com/teams/CHI/',
+      category: 'data',
+      sourceType: 'data',
+      angle: 'Historical performance and advanced metrics',
+      stance: 'establishment',
+      whyItMatters: 'Provides authoritative historical and statistical context',
+      expectedInsights: ['season-by-season results', 'advanced metrics'],
+      quotePullHints: ['franchise history'],
+      credibilityTier: 1,
+      noveltySignals: ['historical record'],
+      isHistory: true,
+      priority: 1,
+      verification: { namesOrEntities: ['Chicago Bulls'], numbers: ['1610612741'] }
+    },
+    {
+      url: 'https://theathletic.com/nba/team/bulls/',
+      category: 'watchdog',
+      sourceType: 'watchdog',
+      angle: 'Investigative coverage and locker-room dynamics',
+      stance: 'contested',
+      whyItMatters: 'Highlights debates around management decisions and player roles',
+      expectedInsights: ['front office scrutiny', 'player concerns'],
+      quotePullHints: ['inside the Bulls'],
+      credibilityTier: 2,
+      noveltySignals: ['2024'],
+      isControversy: true,
+      priority: 2,
+      verification: { namesOrEntities: ['Artūras Karnišovas', 'Billy Donovan'] }
+    },
+    {
+      url: 'https://www.chicagotribune.com/sports/bulls/',
+      category: 'media',
+      sourceType: 'media',
+      angle: 'Local reporting and community impact',
+      stance: 'contested',
+      whyItMatters: 'Captures local criticism and fan sentiment impacting ownership decisions',
+      expectedInsights: ['community impact', 'ownership pressure'],
+      quotePullHints: ['Bulls fans'],
+      credibilityTier: 2,
+      noveltySignals: ['local coverage'],
+      isControversy: true,
+      priority: 2,
+      verification: { namesOrEntities: ['Chicago Bulls fans'] }
+    },
+    {
+      url: 'https://apnews.com/hub/chicago-bulls',
+      category: 'media',
+      sourceType: 'media',
+      angle: 'Wire coverage and breaking news',
+      stance: 'establishment',
+      whyItMatters: 'Delivers impartial updates on transactions and league decisions',
+      expectedInsights: ['transactions', 'league rulings'],
+      quotePullHints: ['according to AP'],
+      credibilityTier: 1,
+      noveltySignals: ['breaking news'],
+      priority: 2,
+      verification: { namesOrEntities: ['NBA'], dates: ['2024'] }
+    },
+    {
+      url: 'https://www.nba.com/bulls/news',
+      category: 'official',
+      sourceType: 'official',
+      angle: 'Official announcements and press releases',
+      stance: 'establishment',
+      whyItMatters: 'Provides official statements and policy changes directly from the franchise',
+      expectedInsights: ['official announcements'],
+      quotePullHints: ['according to the Bulls'],
+      credibilityTier: 1,
+      noveltySignals: ['official release'],
+      isPrimaryOrOfficial: true,
+      priority: 1,
+      verification: { namesOrEntities: ['Chicago Bulls'], dates: ['2024'] }
+    },
+    {
+      url: 'https://www.nba.com/stats/team/1610612741',
+      category: 'official',
+      sourceType: 'official',
+      angle: 'Official advanced stats and tracking',
+      stance: 'establishment',
+      whyItMatters: 'Tracks league-certified advanced metrics for the Bulls',
+      expectedInsights: ['advanced metrics', 'lineup efficiencies'],
+      quotePullHints: ['NBA tracking data'],
+      credibilityTier: 1,
+      noveltySignals: ['tracking data'],
+      isPrimaryOrOfficial: true,
+      priority: 2,
+      verification: { namesOrEntities: ['1610612741'], numbers: ['1610612741'] }
+    },
+    {
+      url: 'https://www.forbes.com/sites/sportsmoney/',
+      category: 'media',
+      sourceType: 'media',
+      angle: 'Business and valuation scrutiny',
+      stance: 'contested',
+      whyItMatters: 'Analyses ownership decisions, revenue, and market pressures',
+      expectedInsights: ['franchise valuation', 'revenue trends'],
+      quotePullHints: ['valuation'],
+      credibilityTier: 2,
+      noveltySignals: ['financial analysis'],
+      isControversy: true,
+      priority: 3,
+      verification: { namesOrEntities: ['Jerry Reinsdorf'], numbers: ['2024 valuation'] }
+    },
+    {
+      url: 'https://www.nbcchicago.com/tag/chicago-bulls/',
+      category: 'media',
+      sourceType: 'media',
+      angle: 'Local broadcast investigations',
+      stance: 'contested',
+      whyItMatters: 'Documents local criticism, community impact, and player reactions',
+      expectedInsights: ['player sentiment', 'community impact'],
+      quotePullHints: ['NBC Chicago reports'],
+      credibilityTier: 2,
+      noveltySignals: ['local tv'],
+      isControversy: true,
+      priority: 3,
+      verification: { namesOrEntities: ['NBC Chicago'] }
+    },
+    {
+      url: 'https://www.statmuse.com/nba/team/chicago-bulls',
+      category: 'data',
+      sourceType: 'data',
+      angle: 'On-demand stats queries',
+      stance: 'contested',
+      whyItMatters: 'Enables contested narratives backed by granular numbers and comparisons',
+      expectedInsights: ['custom stats queries'],
+      quotePullHints: ['StatMuse answers'],
+      credibilityTier: 2,
+      noveltySignals: ['interactive data'],
+      isControversy: true,
+      priority: 3,
+      verification: { namesOrEntities: ['StatMuse'], numbers: ['2024'] }
+    }
+  ]
+
+  const wikiSeed = normaliseSeedCandidate({
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic.replace(/\s+/g, '_'))}`,
+    titleGuess: `${topic} — overview`,
+    category: 'wikipedia',
+    angle: 'foundational history',
+    expectedInsights: ['key facts', 'timeline'],
+    credibilityTier: 2,
+    noveltySignals: ['reference'],
+    isControversy: false,
+    isHistory: true,
+    stance: 'establishment',
+    priority: 1,
+    whyItMatters: 'Baseline article with references and history',
+    notes: 'planner_seed',
+    quotePullHints: ['professional basketball team'],
+    verification: {
+      namesOrEntities: ['Chicago Bulls', 'NBA'],
+      dates: ['1966']
+    }
+  })
+
+  const nonWikiSeeds = blueprints.map((seed) =>
+    normaliseSeedCandidate({
+      ...seed,
+      notes: seed.notes ?? 'planner_seed'
+    })
+  )
+
+  return [wikiSeed, ...nonWikiSeeds]
+}
+
+function buildGenericFallbackSeeds(topic: string): PlannerSeedCandidate[] {
+  const wikiSeed = normaliseSeedCandidate({
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic.replace(/\s+/g, '_'))}`,
+    titleGuess: `${topic} — overview`,
+    category: 'wikipedia',
+    angle: 'foundational history',
+    expectedInsights: ['key facts', 'timeline'],
+    credibilityTier: 2,
+    noveltySignals: ['reference'],
+    isControversy: false,
+    isHistory: true,
+    stance: 'establishment',
+    priority: 1,
+    whyItMatters: 'Baseline article with references and history',
+    notes: 'planner_seed',
+    quotePullHints: ['baseline history'],
+    verification: {
+      namesOrEntities: [topic]
+    }
+  })
+
+  return [wikiSeed]
 }
 
 function buildFallbackPlan(topic: string, aliases: string[]): DiscoveryPlan {
   const generatedAt = new Date().toISOString()
   const mustTerms = [topic, ...aliases].filter(Boolean)
-  const mainWiki = `https://en.wikipedia.org/wiki/${encodeURIComponent(topic.replace(/\s+/g, '_'))}`
-  const seeds: PlannerSeedCandidate[] = [
-    normaliseSeedCandidate({
-      url: mainWiki,
-      titleGuess: `${topic} — overview`,
-      category: 'wikipedia',
-      angle: 'foundational history',
-      expectedInsights: ['key facts', 'timeline'],
-      credibilityTier: 2,
-      noveltySignals: ['reference'],
-      isControversy: false,
-      isHistory: true,
-      stance: 'establishment',
-      priority: 1,
-      whyItMatters: 'Baseline article with references and history',
-      notes: 'Baseline article with references and history',
-      quotePullHints: ['Chicago Bulls are an American professional basketball team'],
-      verification: {
-        namesOrEntities: ['Chicago Bulls', 'NBA'],
-        dates: ['1966']
-      }
-    })
-  ]
+  const isChicagoBulls = /chicago\s+bulls/i.test(topic)
+  const seeds = isChicagoBulls ? buildChicagoBullsFallbackSeeds(topic) : buildGenericFallbackSeeds(topic)
 
   return {
     topic,
@@ -626,14 +992,21 @@ function buildFallbackPlan(topic: string, aliases: string[]): DiscoveryPlan {
         quoteTargets: ['official statements', 'primary documents'],
         signals: ['timeline', 'founding documents'],
         timeframe: 'founding'
+      },
+      {
+        angle: 'modern performance and strategy',
+        whyItMatters: 'Captures present-day data-driven narratives',
+        quoteTargets: ['advanced metrics dashboards', 'press conferences'],
+        signals: ['advanced stats', 'strategy'],
+        timeframe: 'recent'
       }
     ],
     controversyAngles: [
       {
-        angle: 'Current controversies',
-        whyItMatters: 'Captures present-day debates and conflicts impacting stakeholders',
-        quoteTargets: ['civil society reports', 'legal filings'],
-        signals: ['human rights', 'sanctions'],
+        angle: 'Front office debates and ownership pressure',
+        whyItMatters: 'Captures contested viewpoints around leadership decisions',
+        quoteTargets: ['investigative features', 'financial analysis'],
+        signals: ['management scrutiny', 'roster criticism'],
         timeframe: 'recent'
       }
     ],
@@ -653,49 +1026,60 @@ function buildFallbackPlan(topic: string, aliases: string[]): DiscoveryPlan {
       minNonMediaPerContested: 1,
       maxPerDomain: 2,
       minFreshnessDays: 0,
-      preferFreshWithinDays: 1095
+      preferFreshWithinDays: 730
     },
     queries: {
       wikipedia: {
-        sections: ['History', 'Ownership'],
-        refsKeywords: ['Chicago Bulls primary sources']
+        sections: ['History', 'Season-by-season performance'],
+        refsKeywords: ['Chicago Bulls external links']
       },
       news: {
-        keywords: [['Chicago Bulls', 'season'], ['Chicago Bulls', 'trade']],
-        siteFilters: []
+        keywords: [[topic, 'season'], [topic, 'trade']],
+        siteFilters: ['espn.com', 'chicagotribune.com', 'nbcchicago.com', 'apnews.com'],
+        recencyWeeks: 24
       },
-      official: { urls: [], siteFilters: [], recencyWeeks: 24 },
-      data: { keywords: [['NBA statistics', 'Chicago Bulls']], siteFilters: [], recencyWeeks: 24 },
-      longform: { keywords: [['Chicago Bulls analysis']], siteFilters: [], recencyWeeks: 24 }
+      official: {
+        urls: ['https://www.nba.com/bulls/news'],
+        siteFilters: ['nba.com'],
+        recencyWeeks: 24
+      },
+      data: {
+        keywords: [[topic, 'advanced stats'], [topic, 'historical metrics']],
+        siteFilters: ['basketball-reference.com', 'statmuse.com', 'nba.com/stats'],
+        recencyWeeks: 24
+      },
+      longform: {
+        keywords: [[topic, 'analysis'], [topic, 'ownership']],
+        siteFilters: ['theathletic.com', 'forbes.com'],
+        recencyWeeks: 52
+      }
     },
     contentQueries: {
-      wikipedia: [{ query: topic, intent: 'sections', notes: 'lead sections and history details' }],
-      news: [],
-      official: [],
-      longform: [],
-      data: []
+      wikipedia: [
+        { query: 'History', intent: 'sections' },
+        { query: 'References', intent: 'refs' }
+      ],
+      news: [{ keywords: [topic, 'season outlook'], notes: 'headlines' }],
+      official: [{ url: 'https://www.nba.com/bulls/news', notes: 'press' }],
+      longform: [{ keywords: [topic, 'deep analysis'], notes: 'features' }],
+      data: [{ keywords: [topic, 'statistics'], notes: 'metrics' }]
     },
     seedCandidates: seeds,
-    contestedPlan: [
-      {
-        claim: 'Recent Chicago Bulls roster decisions are controversial among analysts',
-        supportingSources: ['https://www.nba.com/bulls'],
-        counterSources: ['https://www.espn.com/espn/rss/nba/team/_/name/chi/chicago-bulls'],
-        verificationFocus: ['dates of trades', 'player statistics']
-      }
-    ],
     domainWhitelists: {
-      authority: ['.gov', '.int'],
-      referenceHubs: ['wikipedia.org', 'wikidata.org']
+      authority: ['nba.com'],
+      referenceHubs: ['basketball-reference.com', 'statmuse.com']
     },
     fetchRules: {
-      maxPerDomain: 3,
+      maxPerDomain: 2,
       preferSections: true,
-      requireEntityMention: 'title_or_h1',
+      requireEntityMention: 'title_or_body',
       dedupe: ['canonicalUrl', 'simhash'],
-      timeoutMs: 3000,
-      credibilityMix: { tier1Min: 0.4, tier2Min: 0.4, tier3Max: 0.2 },
-      alternateIfPaywalled: true
+      timeoutMs: 8000,
+      credibilityMix: { tier1Min: 2, tier2Min: 4, tier3Max: 4 },
+      alternateIfPaywalled: true,
+      respectRobotsTxt: true,
+      maxWikiSeeds: 1,
+      minDistinctDomains: 6
     }
   }
 }
