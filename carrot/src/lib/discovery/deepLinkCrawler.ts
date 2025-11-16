@@ -435,7 +435,7 @@ export async function extractContent(html: string, finalUrl: string): Promise<Cr
           canonical,
           outlinks: outlinks.slice(0, 50)
         },
-        metrics: { extractedLength: text.length, fallback: true }
+        metrics: { extractedLength: text.length, fallback: 1 }
       }
     }
 
@@ -823,13 +823,10 @@ export class DeepLinkCrawler {
     // Store summary for API access (server-side only)
     if (typeof window === 'undefined') {
       try {
-        // Dynamic import to avoid circular dependencies
-        const routeModule = await import('@/app/api/runs/[id]/route')
-        if (routeModule.storeRunSummary) {
-          routeModule.storeRunSummary(this.runId, this.summary)
-        }
+        const { storeRunSummary } = await import('./crawlerStore')
+        storeRunSummary(this.runId, this.summary)
       } catch {
-        // Ignore if route not available or import fails
+        // Ignore if store not available
       }
     }
 
