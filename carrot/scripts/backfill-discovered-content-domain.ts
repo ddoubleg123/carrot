@@ -64,16 +64,19 @@ async function backfillDomain() {
       }
     }
 
-    // Batch update
+    // Batch update - only update domain field
     if (updates.length > 0) {
-      await Promise.all(
-        updates.map(({ id, domain }) =>
-          prisma.discoveredContent.update({
-            where: { id },
-            data: { domain }
-          })
-        )
-      )
+      for (const { id, domain } of updates) {
+        try {
+          await prisma.$executeRaw`
+            UPDATE discovered_content 
+            SET domain = ${domain} 
+            WHERE id = ${id}
+          `
+        } catch (error) {
+          console.warn(`[Backfill] Failed to update row ${id}:`, error)
+        }
+      }
       totalUpdated += updates.length
       console.log(`[Backfill] Updated ${updates.length} rows in this batch`)
     } else {
@@ -96,7 +99,9 @@ async function backfillDomain() {
 
   // Final statistics
   const remainingNull = await prisma.discoveredContent.count({
-    where: { domain: null }
+    where: { 
+      domain: null
+    }
   })
 
   const totalRows = await prisma.discoveredContent.count()
