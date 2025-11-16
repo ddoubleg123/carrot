@@ -17,6 +17,7 @@
     "health-check": "curl -f http://localhost:3005/api/health || exit 1",
     "backfill-images": "tsx scripts/backfill-hero-images.ts",
     "backfill:domain": "tsx scripts/backfill-discovered-content-domain.ts",
+    "crawler:run": "tsx scripts/run-crawler-once.ts",
     "inspect-images": "tsx scripts/inspect-patch-images.ts",
     "test": "jest",
     "test:v2": "jest --runTestsByPath src/lib/__tests__/paywall.plan.test.ts src/lib/__tests__/scheduler.guards.test.ts src/lib/__tests__/vetter.defamation.test.ts src/lib/__tests__/audit.analytics.test.ts src/lib/__tests__/redis.namespace.test.ts src/lib/__tests__/planner.prompt.test.ts src/lib/__tests__/vetter.prompt.test.ts --passWithNoTests"

@@ -259,6 +259,10 @@ export class DiscoveryEngineV21 {
   private earlyHostReseedTriggered = false
   private midWaveReseedTriggered = false
   private fullQuotaReseedTriggered = false
+  private reseedAttempts = 0
+  private readonly MAX_RESEED_ATTEMPTS = Number(process.env.CRAWLER_MAX_ATTEMPTS_PER_STEP || 3)
+  private lastReseedTime = 0
+  private reseedBackoffMs = 100
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
@@ -533,8 +537,24 @@ export class DiscoveryEngineV21 {
     const frontierDepth = typeof depth === 'number' ? depth : 0
     this.emitMetricsSnapshot(frontierDepth)
     await this.handleZeroSaveSlo()
-    if (this.scheduler.needsReseed()) {
-      await this.triggerReseed(coveredAngles, 'scheduler_guard')
+    // Circuit breaker: prevent infinite reseed loops
+    if (this.scheduler.needsReseed() && this.reseedAttempts < this.MAX_RESEED_ATTEMPTS) {
+      const now = Date.now()
+      const timeSinceLastReseed = now - this.lastReseedTime
+      const backoffWithJitter = this.reseedBackoffMs + Math.random() * 250
+      
+      if (timeSinceLastReseed >= backoffWithJitter) {
+        await this.triggerReseed(coveredAngles, 'scheduler_guard')
+        this.reseedAttempts++
+        this.lastReseedTime = now
+        this.reseedBackoffMs = Math.min(this.reseedBackoffMs * 2, 5000) // Exponential backoff, max 5s
+      }
+    } else if (this.scheduler.needsReseed() && this.reseedAttempts >= this.MAX_RESEED_ATTEMPTS) {
+      this.structuredLog('reseed_circuit_breaker', {
+        reason: 'max_reseed_attempts_reached',
+        attempts: this.reseedAttempts,
+        maxAttempts: this.MAX_RESEED_ATTEMPTS
+      })
     }
   }
 
@@ -881,13 +901,25 @@ export class DiscoveryEngineV21 {
   }
 
   private async triggerReseed(coveredAngles: Set<string>, reason: string): Promise<void> {
+    // Circuit breaker check
+    if (this.reseedAttempts >= this.MAX_RESEED_ATTEMPTS) {
+      this.structuredLog('reseed_blocked', {
+        reason: 'circuit_breaker',
+        attempts: this.reseedAttempts,
+        maxAttempts: this.MAX_RESEED_ATTEMPTS
+      })
+      return
+    }
+
     try {
       const reseeded = await this.expandFrontierIfNeeded(this.redisPatchId, coveredAngles)
       if (reseeded) {
         this.structuredLog('reseed_triggered', {
           reason,
           hostDiversity: this.scheduler.getHostDiversityCount(),
-          wikiGuard: this.wikiGuardState.active
+          wikiGuard: this.wikiGuardState.active,
+          attempt: this.reseedAttempts + 1,
+          maxAttempts: this.MAX_RESEED_ATTEMPTS
         })
         await this.emitAudit('reseed', 'ok', {
           provider: 'scheduler',
@@ -895,12 +927,17 @@ export class DiscoveryEngineV21 {
           meta: {
             reason,
             hostDiversity: this.scheduler.getHostDiversityCount(),
-            wikiGuard: this.wikiGuardState.active
+            wikiGuard: this.wikiGuardState.active,
+            attempt: this.reseedAttempts + 1
           }
         })
       }
     } catch (error) {
       console.warn('[EngineV21] Failed to trigger reseed', error)
+      this.structuredLog('reseed_failed', {
+        reason: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 
