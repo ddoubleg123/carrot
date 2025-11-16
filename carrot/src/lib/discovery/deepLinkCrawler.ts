@@ -697,7 +697,7 @@ export class DeepLinkCrawler {
           status: 'retry',
           candidateUrl: candidate.url,
           error: fetchResult.error,
-          retryCount: retryCount + 1
+          meta: { retryCount: retryCount + 1 }
         })
         return this.processCandidate(candidate, retryCount + 1)
       }
