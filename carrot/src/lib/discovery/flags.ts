@@ -1,3 +1,12 @@
+export function getBool(key: string, defaultValue: boolean): boolean {
+  const raw = process.env[key]
+  if (raw === undefined || raw === null) return defaultValue
+  const norm = String(raw).trim().toLowerCase()
+  return norm === '1' || norm === 'true' || norm === 'yes' || norm === 'on'
+}
+
+export const DEEP_LINK_SCRAPER = getBool('DEEP_LINK_SCRAPER', true)
+
 import {
   OPEN_EVIDENCE_V2,
   DISCOVERY_V21,
