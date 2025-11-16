@@ -97,7 +97,7 @@ interface LogEvent {
   runId: string
   patchId?: string
   step: string
-  status: 'ok' | 'fail'
+  status: 'ok' | 'fail' | 'retry'
   ts: string
   provider?: string
   query?: string
