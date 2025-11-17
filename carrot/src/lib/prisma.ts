@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
 import { slog } from './log';
@@ -63,21 +63,21 @@ export const prisma =
   })
 
 // Hook into Prisma events for slow query detection
-// Note: Prisma event types are complex, using @ts-expect-error for event hooks
-// @ts-expect-error - Prisma event types are not fully exposed in TypeScript
-prisma.$on('query', (e: any) => {
+// Properly typed query event (no 'as any')
+prisma.$on('query', (e: Prisma.QueryEvent) => {
   if (e.duration > 200) {
     slog('warn', {
       step: 'db',
-      result: 'slow_query',
+      type: 'slow_query',
       duration_ms: e.duration,
+      target: e.target,
       query: e.query?.slice(0, 120),
+      params: e.params?.slice(0, 120),
     })
   }
 })
 
-// @ts-expect-error - Prisma event types are not fully exposed in TypeScript
-prisma.$on('error', (e: any) => {
+prisma.$on('error', (e: Prisma.LogEvent) => {
   slog('error', {
     step: 'db',
     result: 'error',
@@ -85,8 +85,7 @@ prisma.$on('error', (e: any) => {
   })
 })
 
-// @ts-expect-error - Prisma event types are not fully exposed in TypeScript
-prisma.$on('warn', (e: any) => {
+prisma.$on('warn', (e: Prisma.LogEvent) => {
   slog('warn', {
     step: 'db',
     result: 'warn',

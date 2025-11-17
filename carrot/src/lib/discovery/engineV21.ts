@@ -248,6 +248,7 @@ export class DiscoveryEngineV21 {
   private hookAttemptCounts = new Map<string, number>()
   private hostThrottleHits: Record<string, number> = {}
   private heartbeatTimer?: NodeJS.Timeout
+  private startTime?: number
   private heroGateMap = new Map<string, HeroGateEntry[]>()
   private lastHeroGateEvaluation: {
     eligible: boolean
@@ -325,17 +326,31 @@ export class DiscoveryEngineV21 {
   }
 
   private startHeartbeat(): void {
-    const interval = Number(process.env.DISCOVERY_HEARTBEAT_MS || 30000)
-    this.heartbeatTimer = setInterval(() => {
+    const interval = Number(process.env.DISCOVERY_HEARTBEAT_MS || 15000)
+    this.heartbeatTimer = setInterval(async () => {
       try {
-        const { slog } = require('@/lib/log')
-        const { pushEvent } = require('./eventRing')
+        const { slog } = await import('@/lib/log')
+        const { pushEvent } = await import('./eventRing')
+        const { frontierSize } = await import('@/lib/redis/discovery')
+        
+        const queueLen = await frontierSize(this.redisPatchId).catch(() => -1)
+        const uptime_s = Math.floor((Date.now() - (this.startTime || Date.now())) / 1000)
+        
         const logObj = {
-          step: 'heartbeat',
+          step: 'discovery',
+          msg: 'heartbeat',
           job_id: this.options.patchId,
           run_id: this.options.runId,
+          queue_len: queueLen,
+          uptime_s,
+          fetched: this.metrics.candidatesProcessed,
+          enqueued: this.telemetry.queriesExpanded,
+          deduped: this.metrics.duplicates,
+          skipped: this.telemetry.robotsBlock + this.telemetry.paywall,
+          persisted: this.metrics.itemsSaved,
+          errors: this.metrics.failures,
         }
-        slog('debug', logObj)
+        slog('info', logObj)
         pushEvent(logObj)
       } catch {
         // Non-fatal if logging fails
@@ -352,6 +367,7 @@ export class DiscoveryEngineV21 {
 
   async start(): Promise<void> {
     const { patchId, patchName, runId } = this.options
+    this.startTime = Date.now()
 
     this.eventStream.start(patchId, runId)
     this.structuredLog('run_start', {
@@ -359,6 +375,23 @@ export class DiscoveryEngineV21 {
       runId,
       patchName
     })
+
+    // Structured logging for start
+    try {
+      const { slog } = await import('@/lib/log')
+      const { pushEvent } = await import('./eventRing')
+      const logObj = {
+        step: 'discovery',
+        msg: 'start',
+        job_id: patchId,
+        run_id: runId,
+        patchName,
+      }
+      slog('info', logObj)
+      pushEvent(logObj)
+    } catch {
+      // Non-fatal
+    }
 
     // Start heartbeat
     this.startHeartbeat()
@@ -422,17 +455,58 @@ export class DiscoveryEngineV21 {
       await this.persistMetricsSnapshot('running', this.lastCounters, { event: 'start' })
       await this.discoveryLoop(coveredAngles)
 
-      if (this.stopRequested) {
-        await this.emitRunComplete('suspended')
-      } else {
-        await this.emitRunComplete('completed')
+      const status = this.stopRequested ? 'suspended' : 'completed'
+      await this.emitRunComplete(status)
+      
+      // Structured logging for stop
+      try {
+        const { slog } = await import('@/lib/log')
+        const { pushEvent } = await import('./eventRing')
+        const duration_s = this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : 0
+        const logObj = {
+          step: 'discovery',
+          msg: 'stop',
+          job_id: this.options.patchId,
+          run_id: this.options.runId,
+          status,
+          duration_s,
+          fetched: this.metrics.candidatesProcessed,
+          enqueued: this.telemetry.queriesExpanded,
+          deduped: this.metrics.duplicates,
+          skipped: this.telemetry.robotsBlock + this.telemetry.paywall,
+          persisted: this.metrics.itemsSaved,
+          errors: this.metrics.failures,
+        }
+        slog('info', logObj)
+        pushEvent(logObj)
+      } catch {
+        // Non-fatal
       }
     } catch (error) {
       console.error('[EngineV21] Fatal error in discovery engine:', error)
       await this.emitRunComplete('error', error)
       this.eventStream.error('Discovery engine failed', error)
+      
+      // Structured logging for fatal error
+      try {
+        const { slog } = await import('@/lib/log')
+        const { pushEvent } = await import('./eventRing')
+        const logObj = {
+          step: 'discovery',
+          msg: 'fatal',
+          job_id: this.options.patchId,
+          run_id: this.options.runId,
+          error: error instanceof Error ? error.message : String(error),
+        }
+        slog('error', logObj)
+        pushEvent(logObj)
+      } catch {
+        // Non-fatal
+      }
+      
       throw error
     } finally {
+      this.stopHeartbeat()
       await clearPlan(runId).catch(console.error)
     }
   }
@@ -460,6 +534,27 @@ export class DiscoveryEngineV21 {
         if (!expanded) {
           await this.persistMetricsSnapshot('running', this.lastCounters, { reason: 'frontier_empty' })
           this.eventStream.idle('Frontier empty')
+          
+          // Log idle state
+          try {
+            const { slog } = await import('@/lib/log')
+            const { pushEvent } = await import('./eventRing')
+            const { frontierSize } = await import('@/lib/redis/discovery')
+            const queueLen = await frontierSize(redisPatchId).catch(() => 0)
+            const logObj = {
+              step: 'discovery',
+              msg: 'idle',
+              job_id: this.options.patchId,
+              run_id: this.options.runId,
+              queue_len: queueLen,
+              reason: 'frontier_empty',
+            }
+            slog('info', logObj)
+            pushEvent(logObj)
+          } catch {
+            // Non-fatal
+          }
+          
           break
         }
         continue
@@ -1321,6 +1416,25 @@ export class DiscoveryEngineV21 {
           url: canonicalUrl,
           provider: candidate.provider
         })
+        
+        // Structured logging for skip
+        try {
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            step: 'discovery',
+            msg: 'skip',
+            job_id: this.options.patchId,
+            run_id: this.options.runId,
+            url: canonicalUrl?.slice(0, 200),
+            reason: 'redis_seen',
+          }
+          slog('info', logObj)
+          pushEvent(logObj)
+        } catch {
+          // Non-fatal
+        }
+        
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
@@ -1438,6 +1552,25 @@ export class DiscoveryEngineV21 {
               await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
             }
             await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
+            
+            // Log extract event (links extracted)
+            try {
+              const { slog } = await import('@/lib/log')
+              const { pushEvent } = await import('./eventRing')
+              const linksCount = extracted.outlinks?.length || 0
+              const logObj = {
+                step: 'discovery',
+                msg: 'extract',
+                job_id: this.options.patchId,
+                run_id: this.options.runId,
+                url: canonicalUrl?.slice(0, 200),
+                links: linksCount,
+              }
+              slog('info', logObj)
+              pushEvent(logObj)
+            } catch {
+              // Non-fatal
+            }
           }
         } catch {
           // ignore harvesting errors
@@ -1747,17 +1880,17 @@ export class DiscoveryEngineV21 {
           savedId = savedItem.id
           savedCreatedAt = savedItem.createdAt
           
-          // Structured logging for successful save
+          // Structured logging for successful save (persist)
           const { slog } = await import('@/lib/log')
           const { pushEvent } = await import('./eventRing')
           const logObj = {
-            step: 'save',
-            result: 'ok',
+            step: 'discovery',
+            msg: 'persist',
             job_id: this.options.patchId,
             run_id: this.options.runId,
-            db_action: 'create',
+            url: canonicalUrl?.slice(0, 200),
+            id: savedId,
             duration_ms: Date.now() - t,
-            candidate_url: canonicalUrl?.slice(0, 200),
           }
           slog('info', logObj)
           pushEvent(logObj)
@@ -1933,6 +2066,25 @@ export class DiscoveryEngineV21 {
           provider: candidate.provider,
           ...diagnostics
         })
+        
+        // Structured logging for skip (robots)
+        try {
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            step: 'discovery',
+            msg: 'skip',
+            job_id: this.options.patchId,
+            run_id: this.options.runId,
+            url: error.meta.url?.slice(0, 200),
+            reason: 'robots_blocked',
+          }
+          slog('info', logObj)
+          pushEvent(logObj)
+        } catch {
+          // Non-fatal
+        }
+        
         await this.emitAudit('robots', 'fail', {
           candidateUrl: candidate.cursor,
           provider: candidate.provider,
@@ -1949,6 +2101,25 @@ export class DiscoveryEngineV21 {
           url: candidate.cursor,
           provider: candidate.provider
         })
+        
+        // Structured logging for skip (paywall)
+        try {
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            step: 'discovery',
+            msg: 'skip',
+            job_id: this.options.patchId,
+            run_id: this.options.runId,
+            url: candidate.cursor?.slice(0, 200),
+            reason: 'paywall_blocked',
+          }
+          slog('info', logObj)
+          pushEvent(logObj)
+        } catch {
+          // Non-fatal
+        }
+        
         await this.emitAudit('fetch', 'fail', {
           candidateUrl: candidate.cursor,
           provider: candidate.provider,

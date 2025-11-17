@@ -8,7 +8,7 @@
     "build:shadow": "cross-env DISCOVERY_V2_SHADOW_MODE=true npm run lint:v2 && npm run test:v2 && next build",
     "start": "NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
-    "lint": "npm run lint:v2",
+    "lint": "eslint --max-warnings=0 \"src/lib/discovery/{engineV21,planner,queryExpander,scheduler,paywall,vetter,auditAnalytics}.ts\" \"src/app/**/discovery/**\" \"src/app/**/audit/**\"",
     "lint:v2": "eslint --max-warnings=0 \"src/lib/discovery/{engineV21,planner,queryExpander,scheduler,paywall,vetter,auditAnalytics}.ts\" \"src/app/**/discovery/**\" \"src/app/**/audit/**\"",
     "lint:all": "eslint .",
     "type-check": "tsc --noEmit",

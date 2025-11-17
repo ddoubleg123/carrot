@@ -10,7 +10,7 @@ const nextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
   eslint: {
-    ignoreDuringBuilds: isShadow,
+    ignoreDuringBuilds: false, // Always run ESLint in production builds
   },
   // Force HTTP/1.1 for all requests with aggressive settings
   experimental: {
