@@ -4,8 +4,8 @@
  */
 
 export interface DiscoveryEvent {
-  ts: string
-  level: string
+  ts?: string
+  level?: string
   step?: string
   result?: string
   err_code?: string
@@ -18,7 +18,13 @@ const ring: DiscoveryEvent[] = []
 const MAX_SIZE = 500
 
 export function pushEvent(e: DiscoveryEvent): void {
-  ring.push(e)
+  // Ensure ts and level are set if missing
+  const event: DiscoveryEvent = {
+    ts: new Date().toISOString(),
+    level: 'info',
+    ...e,
+  }
+  ring.push(event)
   if (ring.length > MAX_SIZE) {
     ring.shift()
   }
