@@ -65,7 +65,7 @@ export const prisma =
 // Hook into Prisma events for slow query detection
 // Note: Prisma's TypeScript types don't fully expose event types, so we use type assertions
 // The events are enabled in the PrismaClient configuration above
-prisma.$on('query' as any, (e: Prisma.QueryEvent) => {
+;(prisma.$on as any)('query', (e: Prisma.QueryEvent) => {
   if (e.duration > 200) {
     slog('warn', {
       step: 'db',
@@ -78,7 +78,7 @@ prisma.$on('query' as any, (e: Prisma.QueryEvent) => {
   }
 })
 
-prisma.$on('error' as any, (e: Prisma.LogEvent) => {
+;(prisma.$on as any)('error', (e: Prisma.LogEvent) => {
   slog('error', {
     step: 'db',
     result: 'error',
@@ -86,7 +86,7 @@ prisma.$on('error' as any, (e: Prisma.LogEvent) => {
   })
 })
 
-prisma.$on('warn' as any, (e: Prisma.LogEvent) => {
+;(prisma.$on as any)('warn', (e: Prisma.LogEvent) => {
   slog('warn', {
     step: 'db',
     result: 'warn',
