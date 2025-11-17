@@ -51,6 +51,10 @@ services:
         value: dev_ingest_secret
       - key: WORKER_PUBLIC_URL
         value: https://carrot-worker.onrender.com
+      - key: INTERNAL_ENRICH_TOKEN
+        value: 4bb80990b778a43420a53bdc4d8b0152c40a191e9dc6f4b1fcfaa419983dcdde
+      - key: ENRICH_BASE_URL
+        value: https://carrot-app.onrender.com
       # Optimize for production
       - key: NEXT_TELEMETRY_DISABLED
         value: 1
