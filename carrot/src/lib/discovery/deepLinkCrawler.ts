@@ -160,14 +160,28 @@ export async function expandQueries(
 ): Promise<CrawlerResult<string[]>> {
   const queries: string[] = []
 
+  // Log inputs safely (redact PII)
+  const keywordPreview = input.keywords?.slice(0, 5).map(k => k.length > 20 ? k.substring(0, 20) + '...' : k) || []
+  const notesPreview = input.notes ? (input.notes.length > 50 ? input.notes.substring(0, 50) + '...' : input.notes) : undefined
+  console.info('[expandQueries] Input summary:', {
+    keywordCount: input.keywords?.length || 0,
+    keywords: keywordPreview,
+    hasNotes: !!input.notes,
+    notesPreview
+  })
+
   // Try provider first
   if (opts.provider && input.keywords && input.keywords.length > 0) {
     try {
       const providerQueries = await opts.provider(input.keywords)
       if (Array.isArray(providerQueries) && providerQueries.length > 0) {
         queries.push(...providerQueries.filter(q => typeof q === 'string' && q.trim()))
+        console.info('[expandQueries] Provider generated queries:', providerQueries.length)
+      } else {
+        console.warn('[expandQueries] Provider returned 0 queries')
       }
     } catch (error: any) {
+      console.warn('[expandQueries] Provider error:', error.message)
       // Fall through to fallback
     }
   }
@@ -184,17 +198,19 @@ export async function expandQueries(
 
   // Fallback 1: Build from keywords
   if (queries.length === 0 && input.keywords && input.keywords.length > 0) {
+    console.warn('[expandQueries] Using fallback: building queries from keywords')
     const keywordQueries = input.keywords
       .filter(k => k.length > 2)
       .map(k => `"${k}"`)
     
     // Add site filters for high-signal domains
-    const highSignalDomains = ['nba.com', 'espn.com', 'theathletic.com', 'sportingnews.com', 'bleacherreport.com']
-    for (const domain of highSignalDomains) {
+    const highSignalDomains = ['reuters.com', 'apnews.com', 'bbc.com', 'theguardian.com', 'nytimes.com']
+    for (const domain of highSignalDomains.slice(0, 3)) {
       keywordQueries.push(`${input.keywords[0]} site:${domain}`)
     }
     
     queries.push(...keywordQueries)
+    console.info('[expandQueries] Generated fallback queries from keywords:', queries.length)
   }
 
   // Fallback 2: Extract from notes

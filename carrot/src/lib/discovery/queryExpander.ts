@@ -516,6 +516,59 @@ export async function expandPlannerQuery({
     suggestions = suggestions.slice(0, MAX_RESULTS_PER_QUERY)
   }
 
+  // Fallback: If no suggestions and we have keywords, generate safe fallback queries
+  if (suggestions.length === 0 && !deferredGeneral) {
+    const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
+    const topic = keywords[0] || typeof candidate.cursor === 'string' ? candidate.cursor : 'breaking news'
+    
+    if (topic && topic.trim()) {
+      const normalizedTopic = topic.trim().toLowerCase()
+      console.warn('[queryExpander] Providers returned 0 suggestions; using fallback queries for topic:', normalizedTopic)
+      
+      // Generate fallback queries with high-signal domains
+      const fallbackDomains = ['reuters.com', 'apnews.com', 'bbc.com', 'theguardian.com', 'nytimes.com']
+      for (const domain of fallbackDomains.slice(0, 3)) {
+        const googleSearch = new URL('https://www.google.com/search')
+        googleSearch.searchParams.set('q', `${normalizedTopic} site:${domain}`)
+        googleSearch.searchParams.set('tbm', 'nws')
+        suggestions.push({
+          url: googleSearch.toString(),
+          sourceType: 'fallback',
+          host: normaliseHost(domain),
+          keywords: [normalizedTopic],
+          priorityOffset: 5, // Lower priority than regular queries
+          metadata: { reason: 'fallback_seed', domain }
+        })
+      }
+      
+      // Add one generic query
+      const genericSearch = new URL('https://www.google.com/search')
+      genericSearch.searchParams.set('q', normalizedTopic)
+      genericSearch.searchParams.set('tbm', 'nws')
+      suggestions.push({
+        url: genericSearch.toString(),
+        sourceType: 'fallback',
+        host: null,
+        keywords: [normalizedTopic],
+        priorityOffset: 0,
+        metadata: { reason: 'fallback_generic' }
+      })
+      
+      console.info('[queryExpander] Generated fallback queries:', suggestions.length)
+    }
+  }
+
+  // Log inputs safely (redact PII)
+  const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
+  const redactedKeywords = keywords.slice(0, 5).map(k => k.length > 20 ? k.substring(0, 20) + '...' : k)
+  console.info('[queryExpander] Input summary:', {
+    provider,
+    topic: redactedKeywords[0] || 'none',
+    keywordCount: keywords.length,
+    hints: redactedKeywords.slice(0, 3),
+    generated: suggestions.length
+  })
+
   return {
     suggestions,
     deferredGeneral

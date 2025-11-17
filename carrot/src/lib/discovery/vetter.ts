@@ -306,6 +306,39 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     throw new Error('deepseek_vetter_pii_detected')
   }
 
+  // Enforce publish date presence for off-wiki pages
+  const publishDate: string | undefined = typeof parsed.publishDate === 'string' ? parsed.publishDate.trim() : undefined
+  if (!publishDate) {
+    throw new Error('publish_date_missing')
+  }
+
+  // Enforce anchored evidence on all facts
+  for (const fact of facts) {
+    if (!fact.evidence || !Array.isArray(fact.evidence) || fact.evidence.length === 0) {
+      throw new Error('anchor_missing')
+    }
+    const ok = fact.evidence.some((e) => !!(e.anchor?.cssPath || e.anchor?.xpath))
+    if (!ok) {
+      throw new Error('anchor_missing')
+    }
+  }
+
+  // Cap quoted words to <= 100
+  const quotedWordCountCalc = Number(parsed.quotedWordCount ?? quotes.reduce((sum, quote) => sum + quote.text.split(/\s+/).filter(Boolean).length, 0))
+  if (quotedWordCountCalc > 100) {
+    // Non-fatal: trim quotes list to 100 words total
+    let remaining = 100
+    const trimmed: typeof quotes = []
+    for (const q of quotes) {
+      const words = q.text.split(/\s+/).filter(Boolean)
+      if (remaining <= 0) break
+      const take = Math.min(words.length, remaining)
+      trimmed.push({ ...q, text: words.slice(0, take).join(' ') })
+      remaining -= take
+    }
+    parsed.quotes = trimmed
+  }
+
   for (const fact of facts) {
     if (mentionsCriminalKeyword(fact.value) && !hasTierCitation(fact.citation)) {
       throw new Error('deepseek_vetter_defamation_guard')
@@ -324,12 +357,22 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     qualityScore: Number(parsed.qualityScore ?? 0),
     whyItMatters: typeof parsed.whyItMatters === 'string' ? parsed.whyItMatters.trim() : '',
     facts,
-    quotes,
+    quotes: normaliseArray(parsed.quotes, (quote) => {
+      if (!quote || typeof quote !== 'object') return null
+      if (typeof quote.text !== 'string' || typeof quote.citation !== 'string') {
+        return null
+      }
+      return {
+        text: quote.text.trim(),
+        speaker: typeof quote.speaker === 'string' ? quote.speaker.trim() : undefined,
+        citation: quote.citation.trim()
+      }
+    }),
     provenance: provenance.length ? provenance : [args.url],
     contested: contestedValue && contestedValue.note ? contestedValue : null,
-    quotedWordCount: Number(parsed.quotedWordCount ?? quotes.reduce((sum, quote) => sum + quote.text.split(/\s+/).filter(Boolean).length, 0)),
+    quotedWordCount: Number(parsed.quotedWordCount ?? 0),
     isSfw: parsed.isSfw !== false,
-    publishDate: typeof parsed.publishDate === 'string' ? parsed.publishDate.trim() : undefined
+    publishDate
   }
 }
 

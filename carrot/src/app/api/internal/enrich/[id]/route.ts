@@ -7,14 +7,38 @@ import { resolveHero } from '@/lib/media/resolveHero'
  * Internal API to enrich discovered content with hero images
  * POST /api/internal/enrich/[id]
  * Body: { sourceUrl?, assetUrl?, type }
+ * Auth: X-Internal-Token header must match INTERNAL_ENRICH_TOKEN env var
  */
+export const runtime = 'nodejs' // avoid Edge if using Node libs
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Auth check
+    const token = request.headers.get('x-internal-token')
+    const expectedToken = process.env.INTERNAL_ENRICH_TOKEN
+    
+    if (!expectedToken) {
+      console.warn('[Enrich API] INTERNAL_ENRICH_TOKEN not configured')
+      return NextResponse.json({ error: 'Service not configured' }, { status: 503 })
+    }
+    
+    if (!token || token !== expectedToken) {
+      console.warn('[Enrich API] Unauthorized request', { 
+        hasToken: !!token,
+        tokenLength: token?.length 
+      })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
-    const body = await request.json()
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    const body = await request.json().catch(() => ({} as any))
     const { sourceUrl, assetUrl, type } = body
 
     console.log('[Enrich API] Processing content:', { id, type, sourceUrl: sourceUrl?.substring(0, 50) })
@@ -75,11 +99,15 @@ export async function POST(
 
       console.log('[Enrich API] Successfully enriched content:', id, 'source:', heroResult.source)
 
+      // Return 202 to indicate async processing
       return NextResponse.json({
+        ok: true,
         success: true,
         message: 'Content enriched successfully',
-        hero: heroPayload
-      })
+        hero: heroPayload,
+        queued: true,
+        id
+      }, { status: 202 })
 
     } catch (error) {
       console.error('[Enrich API] Hero resolution failed:', error)
