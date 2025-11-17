@@ -1782,7 +1782,7 @@ export class DiscoveryEngineV21 {
             // Treat duplicate as success (skip)
             savedId = `dup:${canonicalUrl}`
             savedCreatedAt = new Date()
-            return { saved: true, reason: 'duplicate', id: savedId }
+            return { saved: true, reason: 'duplicate' }
           }
           
           // Other errors
