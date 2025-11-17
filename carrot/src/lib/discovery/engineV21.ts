@@ -1551,13 +1551,21 @@ export class DiscoveryEngineV21 {
             if (this.isWikipediaUrl(canonicalUrl)) {
               await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
             }
+            // Extract and count links for logging
+            let linksCount = 0
+            try {
+              const { offHost, sameHost } = extractOutgoingLinks(extracted.rawHtml, canonicalUrl, 40)
+              linksCount = (offHost?.length || 0) + (sameHost?.length || 0)
+            } catch {
+              // Non-fatal if link extraction fails
+            }
+            
             await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
             
             // Log extract event (links extracted)
             try {
               const { slog } = await import('@/lib/log')
               const { pushEvent } = await import('./eventRing')
-              const linksCount = extracted.outlinks?.length || 0
               const logObj = {
                 step: 'discovery',
                 msg: 'extract',
