@@ -333,7 +333,7 @@ export class DiscoveryEngineV21 {
         const logObj = {
           step: 'heartbeat',
           job_id: this.options.patchId,
-          run_id: this.runId,
+          run_id: this.options.runId,
         }
         slog('debug', logObj)
         pushEvent(logObj)
