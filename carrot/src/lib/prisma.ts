@@ -63,7 +63,8 @@ export const prisma =
   })
 
 // Hook into Prisma events for slow query detection
-prisma.$on('query', (e: any) => {
+// Note: Prisma event types are complex, using type assertion for event hooks
+prisma.$on('query' as any, (e: any) => {
   if (e.duration > 200) {
     slog('warn', {
       step: 'db',
@@ -74,7 +75,7 @@ prisma.$on('query', (e: any) => {
   }
 })
 
-prisma.$on('error', (e: any) => {
+prisma.$on('error' as any, (e: any) => {
   slog('error', {
     step: 'db',
     result: 'error',
@@ -82,7 +83,7 @@ prisma.$on('error', (e: any) => {
   })
 })
 
-prisma.$on('warn', (e: any) => {
+prisma.$on('warn' as any, (e: any) => {
   slog('warn', {
     step: 'db',
     result: 'warn',
