@@ -43,11 +43,12 @@ export async function GET(request: NextRequest) {
     // Test database connectivity (if DATABASE_URL is available)
     if (process.env.DATABASE_URL) {
       try {
-        // Simple connectivity test - just check if the URL is valid
-        const url = new URL(process.env.DATABASE_URL);
-        connectivityTests.database = true;
+        const { prisma } = await import('@/lib/prisma')
+        await prisma.$queryRaw`SELECT 1`
+        connectivityTests.database = true
       } catch (error) {
-        console.warn('Database connectivity test failed:', error);
+        console.warn('Database connectivity test failed:', error)
+        connectivityTests.database = false
       }
     }
 
@@ -89,6 +90,8 @@ export async function GET(request: NextRequest) {
     healthInfo.status = isHealthy ? 'healthy' : 'degraded';
 
     return NextResponse.json({
+      ok: connectivityTests.database,
+      db: connectivityTests.database,
       ...healthInfo,
       connectivity: connectivityTests,
       // Add some diagnostic information

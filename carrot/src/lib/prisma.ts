@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
+import { slog } from './log';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient | undefined };
 
@@ -52,10 +53,43 @@ try {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ['query', 'info', 'warn', 'error'],
+    log: [
+      { level: 'error', emit: 'event' },
+      { level: 'warn', emit: 'event' },
+      { level: 'info', emit: 'event' },
+      { level: 'query', emit: 'event' },
+    ],
     ...(resolvedDbUrl ? { datasources: { db: { url: resolvedDbUrl } } } : {}),
-  });
+  })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Hook into Prisma events for slow query detection
+prisma.$on('query', (e: any) => {
+  if (e.duration > 200) {
+    slog('warn', {
+      step: 'db',
+      result: 'slow_query',
+      duration_ms: e.duration,
+      query: e.query?.slice(0, 120),
+    })
+  }
+})
+
+prisma.$on('error', (e: any) => {
+  slog('error', {
+    step: 'db',
+    result: 'error',
+    message: e.message?.slice(0, 200),
+  })
+})
+
+prisma.$on('warn', (e: any) => {
+  slog('warn', {
+    step: 'db',
+    result: 'warn',
+    message: e.message?.slice(0, 200),
+  })
+})
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export default prisma;

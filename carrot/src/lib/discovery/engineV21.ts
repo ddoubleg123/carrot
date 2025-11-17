@@ -247,6 +247,7 @@ export class DiscoveryEngineV21 {
   private firstTwelveViewpoints: string[] = []
   private hookAttemptCounts = new Map<string, number>()
   private hostThrottleHits: Record<string, number> = {}
+  private heartbeatTimer?: NodeJS.Timeout
   private heroGateMap = new Map<string, HeroGateEntry[]>()
   private lastHeroGateEvaluation: {
     eligible: boolean
@@ -320,6 +321,33 @@ export class DiscoveryEngineV21 {
     if (this.stopRequested) return
     this.stopRequested = true
     this.eventStream.stop()
+    this.stopHeartbeat()
+  }
+
+  private startHeartbeat(): void {
+    const interval = Number(process.env.DISCOVERY_HEARTBEAT_MS || 30000)
+    this.heartbeatTimer = setInterval(() => {
+      try {
+        const { slog } = require('@/lib/log')
+        const { pushEvent } = require('./eventRing')
+        const logObj = {
+          step: 'heartbeat',
+          job_id: this.options.patchId,
+          run_id: this.runId,
+        }
+        slog('debug', logObj)
+        pushEvent(logObj)
+      } catch {
+        // Non-fatal if logging fails
+      }
+    }, interval)
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = undefined
+    }
   }
 
   async start(): Promise<void> {
@@ -331,6 +359,9 @@ export class DiscoveryEngineV21 {
       runId,
       patchName
     })
+
+    // Start heartbeat
+    this.startHeartbeat()
 
     try {
       this.priorityBurstProcessed = false
@@ -1690,6 +1721,7 @@ export class DiscoveryEngineV21 {
         savedCreatedAt = new Date()
       } else {
         try {
+          const t = Date.now()
           const savedItem = await prisma.discoveredContent.create({
             data: {
               patchId,
@@ -1714,7 +1746,59 @@ export class DiscoveryEngineV21 {
           })
           savedId = savedItem.id
           savedCreatedAt = savedItem.createdAt
+          
+          // Structured logging for successful save
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            step: 'save',
+            result: 'ok',
+            job_id: this.options.patchId,
+            run_id: this.runId,
+            db_action: 'create',
+            duration_ms: Date.now() - t,
+            candidate_url: canonicalUrl?.slice(0, 200),
+          }
+          slog('info', logObj)
+          pushEvent(logObj)
         } catch (error: any) {
+          const t = Date.now()
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          
+          // Prisma P2002 unique constraint -> duplicate
+          if (error?.code === 'P2002') {
+            const logObj = {
+              step: 'save',
+              result: 'skip',
+              err_code: 'E_DUP',
+              job_id: this.options.patchId,
+              run_id: this.runId,
+              duration_ms: Date.now() - t,
+              candidate_url: canonicalUrl?.slice(0, 200),
+            }
+            slog('warn', logObj)
+            pushEvent(logObj)
+            // Treat duplicate as success (skip)
+            savedId = `dup:${canonicalUrl}`
+            savedCreatedAt = new Date()
+            return { saved: true, reason: 'duplicate', id: savedId }
+          }
+          
+          // Other errors
+          const logObj = {
+            step: 'save',
+            result: 'error',
+            err_code: error?.code || 'E_DB',
+            job_id: this.options.patchId,
+            run_id: this.runId,
+            duration_ms: Date.now() - t,
+            candidate_url: canonicalUrl?.slice(0, 200),
+            message: error.message?.slice(0, 200),
+          }
+          slog('error', logObj)
+          pushEvent(logObj)
+          
           // Log the error with full context but don't crash the loop
           console.error('[Discovery Engine] Failed to save discovered content:', {
             error: error.message,

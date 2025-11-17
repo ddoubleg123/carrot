@@ -523,7 +523,25 @@ export async function expandPlannerQuery({
     
     if (topic && topic.trim()) {
       const normalizedTopic = topic.trim().toLowerCase()
-      console.warn('[queryExpander] Providers returned 0 suggestions; using fallback queries for topic:', normalizedTopic)
+      
+      // Structured logging for fallback
+      try {
+        const { slog } = await import('@/lib/log')
+        const { pushEvent } = await import('./eventRing')
+        const logObj = {
+          step: 'query_expand',
+          result: 'fallback',
+          job_id: candidate.meta?.patchId as string | undefined,
+          run_id: candidate.meta?.runId as string | undefined,
+          attempt,
+          topic: normalizedTopic.slice(0, 100),
+          count: 0,
+        }
+        slog('warn', logObj)
+        pushEvent(logObj)
+      } catch {
+        // Non-fatal if logging fails
+      }
       
       // Generate fallback queries with high-signal domains
       const fallbackDomains = ['reuters.com', 'apnews.com', 'bbc.com', 'theguardian.com', 'nytimes.com']
@@ -554,20 +572,56 @@ export async function expandPlannerQuery({
         metadata: { reason: 'fallback_generic' }
       })
       
-      console.info('[queryExpander] Generated fallback queries:', suggestions.length)
+      // Log fallback success
+      try {
+        const { slog } = await import('@/lib/log')
+        const { pushEvent } = await import('./eventRing')
+        const logObj = {
+          step: 'query_expand',
+          result: 'fallback',
+          job_id: candidate.meta?.patchId as string | undefined,
+          run_id: candidate.meta?.runId as string | undefined,
+          attempt,
+          count: suggestions.length,
+        }
+        slog('info', logObj)
+        pushEvent(logObj)
+      } catch {
+        // Non-fatal
+      }
     }
   }
 
-  // Log inputs safely (redact PII)
+  // Log inputs safely (redact PII) - structured logging
   const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
   const redactedKeywords = keywords.slice(0, 5).map(k => k.length > 20 ? k.substring(0, 20) + '...' : k)
-  console.info('[queryExpander] Input summary:', {
-    provider,
-    topic: redactedKeywords[0] || 'none',
-    keywordCount: keywords.length,
-    hints: redactedKeywords.slice(0, 3),
-    generated: suggestions.length
-  })
+  
+  try {
+    const { slog } = await import('@/lib/log')
+    const { pushEvent } = await import('./eventRing')
+    const logObj = {
+      step: 'query_expand',
+      result: suggestions.length > 0 ? 'ok' : 'empty',
+      job_id: candidate.meta?.patchId as string | undefined,
+      run_id: candidate.meta?.runId as string | undefined,
+      provider,
+      attempt,
+      topic: redactedKeywords[0] || 'none',
+      keywordCount: keywords.length,
+      generated: suggestions.length,
+    }
+    slog('info', logObj)
+    pushEvent(logObj)
+  } catch {
+    // Non-fatal if logging fails
+    console.info('[queryExpander] Input summary:', {
+      provider,
+      topic: redactedKeywords[0] || 'none',
+      keywordCount: keywords.length,
+      hints: redactedKeywords.slice(0, 3),
+      generated: suggestions.length
+    })
+  }
 
   return {
     suggestions,
