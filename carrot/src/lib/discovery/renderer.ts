@@ -67,7 +67,20 @@ export async function renderWithPlaywright(url: string): Promise<{
 
   try {
     // Dynamic import to avoid breaking if Playwright isn't installed
-    const { chromium } = await import('playwright')
+    let playwright: any
+    try {
+      playwright = await import('playwright')
+    } catch (importError) {
+      return {
+        html: '',
+        text: '',
+        title: '',
+        success: false,
+        error: 'playwright_not_installed'
+      }
+    }
+    
+    const { chromium } = playwright
     
     const browser = await chromium.launch({
       headless: true,

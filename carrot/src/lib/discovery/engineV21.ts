@@ -1986,21 +1986,10 @@ export class DiscoveryEngineV21 {
           const fairUseQuote = extractFairUseQuote(extracted.rawHtml || '', extracted.text || '')
           const paraphraseResult = await summarizeParaphrase(extracted.text || '', extracted.title)
           
-          // Enhance quotes array with fair-use quote if available
-          let enhancedQuotes = synthesis.quotes || []
-          if (fairUseQuote) {
-            enhancedQuotes = [
-              ...(Array.isArray(enhancedQuotes) ? enhancedQuotes : []),
-              {
-                quote: fairUseQuote.quoteText,
-                quoteHtml: fairUseQuote.quoteHtml,
-                quoteWordCount: fairUseQuote.quoteWordCount,
-                quoteStartChar: fairUseQuote.quoteStartChar,
-                quoteEndChar: fairUseQuote.quoteEndChar,
-                context: 'fair_use_extract'
-              }
-            ]
-          }
+          // Fair-use quote stored in metadata (not in quotes array which expects VetterQuote format)
+          // VetterQuote format: { text: string, speaker?: string, citation: string }
+          // Fair-use quote has different structure, so we keep it separate in metadata
+          const enhancedQuotes = synthesis.quotes || []
           
           // Enhance summary with paraphrase points
           const summaryWithParaphrase = paraphraseResult.summaryPoints.length > 0
