@@ -60,7 +60,8 @@ model UserPref {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  // directUrl is optional - only needed for migrations in some environments
+  // directUrl = env("DIRECT_DATABASE_URL")
 }
 
 /// Visual style used by audio poster visualizer
@@ -780,6 +781,54 @@ model DiscoveredContent {
   @@index([domain])
   @@unique([patchId, canonicalUrl])
   @@map("discovered_content")
+}
+
+// Crawler raw page storage (Phase 1: Foundation)
+model CrawlerPage {
+  id              String   @id @default(cuid())
+  url             String   @unique @db.Text
+  domain          String   @db.Text
+  status          String   // "pending" | "fetched" | "failed" | "extracted"
+  firstSeenAt     DateTime @default(now()) @map("first_seen_at")
+  lastProcessedAt DateTime? @map("last_processed_at")
+  textHash        String?  @map("text_hash") @db.Text
+  bytes           Int?     @default(0)
+  httpStatus      Int?     @map("http_status")
+  reasonCode      String?  @map("reason_code") @db.Text // "robots_blocked" | "timeout" | "dns_error" | "http_403" | "paywall" | "content_too_short"
+  rawHtml         String?  @db.Text @map("raw_html")
+  extractedText   String?  @db.Text @map("extracted_text")
+  canonicalUrl    String?  @map("canonical_url") @db.Text
+  
+  extraction CrawlerExtraction?
+
+  @@index([domain])
+  @@index([status])
+  @@index([textHash])
+  @@index([firstSeenAt])
+  @@index([lastProcessedAt])
+  @@map("crawler_pages")
+}
+
+// LLM extraction results (Phase 4: LLM Extractor)
+model CrawlerExtraction {
+  id                String   @id @default(cuid())
+  pageId            String   @unique @map("page_id")
+  topic             String   @db.Text
+  sourceUrl         String   @map("source_url") @db.Text
+  title             String   @db.Text
+  top10Facts        Json     @map("top_10_facts") // string[]
+  quotedPassages    Json     @map("quoted_passages") // Array<{quote: string, context_note: string}>
+  paraphraseSummary String   @db.Text @map("paraphrase_summary")
+  controversialFlags Json?  @map("controversial_flags") // string[] | null
+  metadata          Json     // {domain: string, crawl_timestamp: string, char_count: number}
+  createdAt         DateTime @default(now()) @map("created_at")
+  
+  page CrawlerPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([topic])
+  @@index([sourceUrl])
+  @@index([createdAt])
+  @@map("crawler_extractions")
 }
 
 // Discovery Audit Trail Models

@@ -72,8 +72,13 @@ const PAYWALL_BRANCH_KEY = (patchId: string) => {
   const { id, shadow } = resolvePatch(patchId)
   return shadow ? `discovery:shadow:paywall:${id}` : `discovery:paywall:${id}`
 }
+
+// Crawler global seen-set (cross-run, not patch-specific)
+const CRAWLER_SEEN_KEY = (urlHash: string) => `crawler:seen:url:${urlHash}`
+
 const METRICS_TTL_SECONDS = 60 * 60 * 6
 const HASHES_TTL_SECONDS = 14 * 24 * 60 * 60
+const CRAWLER_SEEN_TTL_SECONDS = 10 * 24 * 60 * 60 // 10 days default (7-14 day range)
 
 async function getRedisClient() {
   if (!redisClient) {
@@ -129,6 +134,31 @@ export async function markAsSeen(patchId: string, canonicalUrl: string, ttlDays:
   const key = SEEN_KEY(patchId)
   await client.sadd(key, canonicalUrl)
   await client.expire(key, ttlDays * 24 * 60 * 60)
+}
+
+/**
+ * Crawler: Check if URL has been seen globally (cross-run dedupe)
+ * Uses URL hash for efficient storage
+ */
+export async function isCrawlerUrlSeen(urlHash: string): Promise<boolean> {
+  const client = await getRedisClient()
+  const key = CRAWLER_SEEN_KEY(urlHash)
+  const result = await client.exists(key)
+  return result === 1
+}
+
+/**
+ * Crawler: Mark URL as seen globally with TTL (7-14 days)
+ * Uses URL hash for efficient storage
+ */
+export async function markCrawlerUrlSeen(
+  urlHash: string,
+  ttlSeconds: number = CRAWLER_SEEN_TTL_SECONDS
+): Promise<void> {
+  const client = await getRedisClient()
+  const key = CRAWLER_SEEN_KEY(urlHash)
+  // Use SET with EX for atomic set+expire
+  await client.set(key, '1', 'EX', ttlSeconds)
 }
 
 /**
