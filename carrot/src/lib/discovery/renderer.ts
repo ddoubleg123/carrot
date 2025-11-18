@@ -166,7 +166,7 @@ export async function renderWithPlaywright(url: string): Promise<{
         }
       }
       
-      return largestBlock || document.body.innerText.trim()
+      return largestBlock || (document.body as HTMLElement).innerText?.trim() || document.body.textContent?.trim() || ''
     })
     
     await browser.close()
