@@ -15,6 +15,7 @@ import { crawlerConfig } from './config'
 import { CRAWLER_PRIORITY_V2, EXTRACTOR_V2 } from '../discovery/flags'
 import { slog } from '../log'
 import { inc, histogram, gauge } from '../metrics'
+import { prisma } from '../prisma'
 
 interface CrawlerRunOptions {
   topic: string
@@ -105,6 +106,52 @@ export class CrawlerOrchestrator {
       
       const duration = Math.floor((Date.now() - (this.startTime || 0)) / 1000)
       const stats = this.crawler.getStats()
+      
+      // Zero results debug alert
+      if (this.extractionCount === 0 && stats.fetched > 0) {
+        const recentPages = await prisma.crawlerPage.findMany({
+          where: {
+            firstSeenAt: {
+              gte: new Date(Date.now() - crawlerConfig.zeroAlertWindowMin * 60 * 1000),
+            },
+          },
+          select: {
+            url: true,
+            reasonCode: true,
+            status: true,
+          },
+          take: 10,
+          orderBy: { firstSeenAt: 'desc' },
+        })
+        
+        const reasonCounts: Record<string, number> = {}
+        recentPages.forEach(p => {
+          if (p.reasonCode) {
+            reasonCounts[p.reasonCode] = (reasonCounts[p.reasonCode] || 0) + 1
+          }
+        })
+        
+        const topReasons = Object.entries(reasonCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([reason, count]) => ({ reason, count }))
+        
+        slog('warn', {
+          service: 'crawler',
+          step: 'zero_results_alert',
+          action: 'alert',
+          status: 'warning',
+          topic,
+          fetched: stats.fetched,
+          extracted: this.extractionCount,
+          top_reasons: topReasons,
+          last_10_urls: recentPages.map(p => ({
+            url: p.url?.slice(0, 100),
+            reason: p.reasonCode,
+            status: p.status,
+          })),
+        })
+      }
       
       const result: CrawlerRunResult = {
         success: true,
