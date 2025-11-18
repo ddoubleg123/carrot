@@ -254,7 +254,7 @@ export async function processExtractionQueue(): Promise<void> {
   
   try {
     // Load page from database
-    const page = await prisma.crawlerPage.findUnique({
+    const page = await (prisma as any).crawlerPage.findUnique({
       where: { id: pageId },
       select: {
         id: true,
@@ -303,7 +303,7 @@ export async function processExtractionQueue(): Promise<void> {
     }
     
     // Persist to database
-    await prisma.crawlerExtraction.create({
+    await (prisma as any).crawlerExtraction.create({
       data: {
         pageId: page.id,
         topic: extraction.topic,
@@ -320,7 +320,7 @@ export async function processExtractionQueue(): Promise<void> {
     })
     
     // Update page status
-    await prisma.crawlerPage.update({
+    await (prisma as any).crawlerPage.update({
       where: { id: page.id },
       data: { status: 'extracted' },
     })

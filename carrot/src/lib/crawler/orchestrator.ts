@@ -109,7 +109,7 @@ export class CrawlerOrchestrator {
       
       // Zero results debug alert
       if (this.extractionCount === 0 && stats.fetched > 0) {
-        const recentPages = await prisma.crawlerPage.findMany({
+        const recentPages = await (prisma as any).crawlerPage.findMany({
           where: {
             firstSeenAt: {
               gte: new Date(Date.now() - crawlerConfig.zeroAlertWindowMin * 60 * 1000),
@@ -125,7 +125,7 @@ export class CrawlerOrchestrator {
         })
         
         const reasonCounts: Record<string, number> = {}
-        recentPages.forEach(p => {
+        recentPages.forEach((p: any) => {
           if (p.reasonCode) {
             reasonCounts[p.reasonCode] = (reasonCounts[p.reasonCode] || 0) + 1
           }
@@ -145,7 +145,7 @@ export class CrawlerOrchestrator {
           fetched: stats.fetched,
           extracted: this.extractionCount,
           top_reasons: topReasons,
-          last_10_urls: recentPages.map(p => ({
+          last_10_urls: recentPages.map((p: any) => ({
             url: p.url?.slice(0, 100),
             reason: p.reasonCode,
             status: p.status,

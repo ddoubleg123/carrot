@@ -12,8 +12,20 @@ export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if CrawlerPage model exists (Prisma client may need regeneration)
+    if (!('crawlerPage' in prisma)) {
+      return NextResponse.json(
+        { 
+          error: 'Prisma client not regenerated',
+          message: 'Run: npx prisma generate',
+          hint: 'The CrawlerPage and CrawlerExtraction models need to be added to the Prisma client'
+        },
+        { status: 503 }
+      )
+    }
+    
     // Get last 50 pages
-    const pages = await prisma.crawlerPage.findMany({
+    const pages = await (prisma as any).crawlerPage.findMany({
       orderBy: { firstSeenAt: 'desc' },
       take: 50,
       select: {
@@ -30,7 +42,7 @@ export async function GET(request: NextRequest) {
     })
     
     // Get recent extractions (for sparkline)
-    const extractions = await prisma.crawlerExtraction.findMany({
+    const extractions = await (prisma as any).crawlerExtraction.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: {
@@ -42,20 +54,20 @@ export async function GET(request: NextRequest) {
     
     // Calculate statistics
     const totalPages = pages.length
-    const fetched = pages.filter(p => p.status === 'fetched').length
-    const failed = pages.filter(p => p.status === 'failed').length
-    const extracted = pages.filter(p => p.status === 'extracted').length
+    const fetched = pages.filter((p: any) => p.status === 'fetched').length
+    const failed = pages.filter((p: any) => p.status === 'failed').length
+    const extracted = pages.filter((p: any) => p.status === 'extracted').length
     
-    const wikiPages = pages.filter(p => p.domain?.includes('wikipedia.org')).length
+    const wikiPages = pages.filter((p: any) => p.domain?.includes('wikipedia.org')).length
     const nonWikiPages = totalPages - wikiPages
     const wikiPercent = totalPages > 0 ? (wikiPages / totalPages) * 100 : 0
     
-    const shortText = pages.filter(p => (p.extractedText?.length || 0) < 500).length
+    const shortText = pages.filter((p: any) => (p.extractedText?.length || 0) < 500).length
     const shortTextPercent = totalPages > 0 ? (shortText / totalPages) * 100 : 0
     
     // Reason code counts
     const reasonCounts: Record<string, number> = {}
-    pages.forEach(p => {
+    pages.forEach((p: any) => {
       if (p.reasonCode) {
         reasonCounts[p.reasonCode] = (reasonCounts[p.reasonCode] || 0) + 1
       }
@@ -63,7 +75,7 @@ export async function GET(request: NextRequest) {
     
     // Domain counts
     const domainCounts: Record<string, number> = {}
-    pages.forEach(p => {
+    pages.forEach((p: any) => {
       if (p.domain) {
         domainCounts[p.domain] = (domainCounts[p.domain] || 0) + 1
       }
@@ -87,7 +99,7 @@ export async function GET(request: NextRequest) {
     for (let i = 23; i >= 0; i--) {
       const hourStart = new Date(now - (i + 1) * 60 * 60 * 1000)
       const hourEnd = new Date(now - i * 60 * 60 * 1000)
-      const count = extractions.filter(e => {
+      const count = extractions.filter((e: any) => {
         const ts = new Date(e.createdAt).getTime()
         return ts >= hourStart.getTime() && ts < hourEnd.getTime()
       }).length
@@ -124,7 +136,7 @@ export async function GET(request: NextRequest) {
         discovery: discoveryDepth,
         extraction: extractionDepth,
       },
-      last50: pages.map(p => ({
+      last50: pages.map((p: any) => ({
         id: p.id,
         url: p.url?.slice(0, 100),
         domain: p.domain,

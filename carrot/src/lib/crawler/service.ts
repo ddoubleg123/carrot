@@ -412,7 +412,7 @@ export class CrawlerService {
     
       // Check for duplicate content (text hash)
       if (fetchResult.textHash) {
-        const existing = await prisma.crawlerPage.findFirst({
+        const existing = await (prisma as any).crawlerPage.findFirst({
           where: { textHash: fetchResult.textHash },
           select: { id: true },
         })
@@ -435,7 +435,7 @@ export class CrawlerService {
     
     // Persist to database
     try {
-      const page = await prisma.crawlerPage.create({
+      const page = await (prisma as any).crawlerPage.create({
         data: {
           url: fetchResult.canonicalUrl,
           domain: fetchResult.domain,
@@ -515,7 +515,7 @@ export class CrawlerService {
         })
         
         // Enqueue for extraction
-        const { enqueueExtraction } = await import('./extractor')
+        const { enqueueExtraction } = await import('./queues')
         await enqueueExtraction(page.id, topic, fetchResult.canonicalUrl)
       }
     } catch (error: any) {
