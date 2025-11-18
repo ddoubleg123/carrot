@@ -106,7 +106,7 @@ export async function renderWithPlaywright(url: string): Promise<{
     })
     
     // Block images/video/fonts to save bandwidth
-    await context.route('**/*', (route) => {
+    await context.route('**/*', (route: any) => {
       const resourceType = route.request().resourceType()
       if (['image', 'media', 'font'].includes(resourceType)) {
         route.abort()
