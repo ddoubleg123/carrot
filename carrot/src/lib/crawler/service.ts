@@ -492,8 +492,8 @@ export class CrawlerService {
         })
         
         // Enqueue for extraction
-        // TODO: Phase 4 - LLM extractor will handle this
-        // await enqueueExtraction(page.id, topic, fetchResult.canonicalUrl)
+        const { enqueueExtraction } = await import('./extractor')
+        await enqueueExtraction(page.id, topic, fetchResult.canonicalUrl)
       }
     } catch (error: any) {
       this.stats.errors++
