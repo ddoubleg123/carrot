@@ -262,7 +262,8 @@ export class DiscoveryEngineV21 {
   private midWaveReseedTriggered = false
   private fullQuotaReseedTriggered = false
   private reseedAttempts = 0
-  private readonly MAX_RESEED_ATTEMPTS = Number(process.env.CRAWLER_MAX_ATTEMPTS_PER_STEP || 3)
+  // Raise circuit breaker threshold during debug - allow more reseed attempts before hard-stop
+  private readonly MAX_RESEED_ATTEMPTS = Number(process.env.CRAWLER_MAX_RESEED_ATTEMPTS || 10)
   private lastReseedTime = 0
   private reseedBackoffMs = 100
 
@@ -1408,13 +1409,126 @@ export class DiscoveryEngineV21 {
         meta: { domain: finalDomain }
       })
 
-      if (await isSeen(redisPatchId, canonicalUrl)) {
+      // For Wikipedia pages: extract outlinks BEFORE checking if seen
+      // This ensures we mine Wikipedia as a launchpad for deep links
+      const isWiki = this.isWikipediaUrl(canonicalUrl)
+      if (isWiki && DEEP_LINK_SCRAPER) {
+        // Fetch content first to extract outlinks
+        const fetchResult = await this.fetchAndExtractContent({
+          canonicalUrl,
+          candidate,
+          host
+        }).catch(() => null)
+        
+        if (fetchResult?.extracted?.rawHtml) {
+          const WIKI_OUTLINK_LIMIT = Number(process.env.CRAWL_WIKI_OUTLINK_LIMIT || 25)
+          const refs = await extractOffHostLinks(fetchResult.extracted.rawHtml, canonicalUrl, { maxLinks: WIKI_OUTLINK_LIMIT })
+          let enqueued = 0
+          for (const ref of refs) {
+            if (!passesDeepLinkFilters(ref.url, ref.sourceHost)) continue
+            const item: FrontierItem = {
+              id: `wiki_out:${Date.now()}:${Math.random()}`,
+              provider: 'direct',
+              cursor: ref.url,
+              priority: (candidate.priority ?? 300) - 5 - enqueued,
+              angle: candidate.angle ?? undefined,
+              meta: {
+                reason: 'wiki_outlink',
+                parent: canonicalUrl,
+                parentHost: host,
+                hookId: candidate.meta?.hookId,
+                viewpoint: (candidate.meta?.viewpoint as string | undefined) ?? (candidate.meta?.stance as string | undefined),
+                angleCategory: (candidate.meta?.angleCategory as string | undefined) ?? candidate.meta?.angle,
+                originatingProvider: candidate.provider,
+                originatingReason: candidate.meta?.reason,
+                seed_processed: true // Mark that we've processed this seed for outlinks
+              }
+            }
+            await addToFrontier(this.redisPatchId, item)
+            enqueued++
+          }
+          if (enqueued > 0) {
+            this.structuredLog('wiki_outlinks_enqueued', { 
+              source: canonicalUrl, 
+              count: enqueued,
+              limit: WIKI_OUTLINK_LIMIT
+            })
+          }
+          // Now mark as seen AFTER extracting outlinks
+          await markAsSeen(redisPatchId, canonicalUrl).catch(() => undefined)
+          await this.emitAudit('wiki_processed', 'ok', { 
+            candidateUrl: canonicalUrl,
+            outlinks_enqueued: enqueued
+          })
+          await this.persistMetricsSnapshot('running', countersBefore)
+          return { saved: false, reason: 'wiki_launchpad_processed', angle, host }
+        }
+      }
+
+      // Fast skip check with timestamp
+      const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
+      const seenCheck = await isSeenWithTimestamp(redisPatchId, canonicalUrl, 24) // 24h fast skip
+      
+      if (seenCheck.seen) {
+        // Fast skip if crawled < 24h ago
+        if (seenCheck.canSkip) {
+          // Track fast skips in first 10 candidates to ensure we don't waste time
+          const isFirst10 = this.metrics.candidatesProcessed < 10
+          if (isFirst10) {
+            this.structuredLog('fast_skip_first10', {
+              url: canonicalUrl,
+              provider: candidate.provider,
+              candidate_number: this.metrics.candidatesProcessed + 1,
+              last_crawled_at: seenCheck.lastCrawledAt,
+              hours_ago: seenCheck.lastCrawledAt ? Math.round((Date.now() - seenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
+            })
+          }
+          
+          this.structuredLog('fast_skip', {
+            url: canonicalUrl,
+            provider: candidate.provider,
+            last_crawled_at: seenCheck.lastCrawledAt,
+            hours_ago: seenCheck.lastCrawledAt ? Math.round((Date.now() - seenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
+          })
+          
+          // Structured logging for fast skip
+          try {
+            const { slog } = await import('@/lib/log')
+            const { pushEvent } = await import('./eventRing')
+            const logObj = {
+              step: 'discovery',
+              msg: 'skip',
+              job_id: this.options.patchId,
+              run_id: this.options.runId,
+              url: canonicalUrl?.slice(0, 200),
+              reason: 'fast_skip_24h',
+              last_crawled_at: seenCheck.lastCrawledAt,
+              candidate_number: this.metrics.candidatesProcessed + 1,
+            }
+            slog('info', logObj)
+            pushEvent(logObj)
+          } catch {
+            // Non-fatal
+          }
+          
+          await this.emitAudit('duplicate_check', 'fail', {
+            candidateUrl: canonicalUrl,
+            provider: candidate.provider,
+            decisions: { action: 'drop', reason: 'fast_skip_24h', lastCrawledAt: seenCheck.lastCrawledAt }
+          })
+          this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'fast_skip_24h' })
+          await this.persistMetricsSnapshot('running', countersBefore)
+          return { saved: false, reason: 'fast_skip_24h', angle, host }
+        }
+        
+        // Regular duplicate (seen but > 24h ago, allow retry)
         await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
         this.structuredLog('duplicate_seen', {
           url: canonicalUrl,
-          provider: candidate.provider
+          provider: candidate.provider,
+          last_crawled_at: seenCheck.lastCrawledAt
         })
         
         // Structured logging for skip
@@ -1428,6 +1542,7 @@ export class DiscoveryEngineV21 {
             run_id: this.options.runId,
             url: canonicalUrl?.slice(0, 200),
             reason: 'redis_seen',
+            last_crawled_at: seenCheck.lastCrawledAt,
           }
           slog('info', logObj)
           pushEvent(logObj)
@@ -1438,7 +1553,7 @@ export class DiscoveryEngineV21 {
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
-          decisions: { action: 'drop', reason: 'redis_seen' }
+          decisions: { action: 'drop', reason: 'redis_seen', lastCrawledAt: seenCheck.lastCrawledAt }
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'redis_seen' })
         await this.persistMetricsSnapshot('running', countersBefore)
@@ -1863,6 +1978,35 @@ export class DiscoveryEngineV21 {
       } else {
         try {
           const t = Date.now()
+          
+          // Extract fair-use quote and paraphrase summary
+          const { extractFairUseQuote } = await import('./fairUse')
+          const { summarizeParaphrase } = await import('./paraphrase')
+          
+          const fairUseQuote = extractFairUseQuote(extracted.rawHtml || '', extracted.text || '')
+          const paraphraseResult = await summarizeParaphrase(extracted.text || '', extracted.title)
+          
+          // Enhance quotes array with fair-use quote if available
+          let enhancedQuotes = synthesis.quotes || []
+          if (fairUseQuote) {
+            enhancedQuotes = [
+              ...(Array.isArray(enhancedQuotes) ? enhancedQuotes : []),
+              {
+                quote: fairUseQuote.quoteText,
+                quoteHtml: fairUseQuote.quoteHtml,
+                quoteWordCount: fairUseQuote.quoteWordCount,
+                quoteStartChar: fairUseQuote.quoteStartChar,
+                quoteEndChar: fairUseQuote.quoteEndChar,
+                context: 'fair_use_extract'
+              }
+            ]
+          }
+          
+          // Enhance summary with paraphrase points
+          const summaryWithParaphrase = paraphraseResult.summaryPoints.length > 0
+            ? `${synthesis.whyItMatters}\n\nKey points:\n${paraphraseResult.summaryPoints.map(p => `• ${p}`).join('\n')}`
+            : synthesis.whyItMatters
+          
           const savedItem = await prisma.discoveredContent.create({
             data: {
               patchId,
@@ -1877,12 +2021,23 @@ export class DiscoveryEngineV21 {
               relevanceScore: synthesis.relevanceScore,
               qualityScore: synthesis.qualityScore,
               whyItMatters: synthesis.whyItMatters,
-              summary: synthesis.whyItMatters,
+              summary: summaryWithParaphrase,
               facts: synthesis.facts as unknown as Prisma.JsonArray,
-              quotes: synthesis.quotes as unknown as Prisma.JsonArray,
+              quotes: enhancedQuotes as unknown as Prisma.JsonArray,
               provenance: synthesis.provenance as unknown as Prisma.JsonArray,
               hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
-              contentHash: hashString
+              contentHash: hashString,
+              // Store fair-use quote and paraphrase in metadata
+              metadata: {
+                fairUseQuote: fairUseQuote ? {
+                  quoteHtml: fairUseQuote.quoteHtml,
+                  quoteWordCount: fairUseQuote.quoteWordCount,
+                  quoteStartChar: fairUseQuote.quoteStartChar,
+                  quoteEndChar: fairUseQuote.quoteEndChar
+                } : null,
+                summaryPoints: paraphraseResult.summaryPoints,
+                summaryWordCount: paraphraseResult.wordCount
+              } as Prisma.JsonObject
             }
           })
           savedId = savedItem.id
@@ -2243,34 +2398,171 @@ export class DiscoveryEngineV21 {
         }
 
         this.telemetry.directFetchOk++
-        const html = await response.text()
+        let html = await response.text()
         if (this.isPaywallHtml(html)) {
           this.telemetry.paywall++
           lastError = new PaywallBlockedError('paywall_html')
           await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           continue
         }
-        const extracted = this.extractHtmlContent(html)
+        
+        // Try initial extraction
+        let extracted = this.extractHtmlContent(html)
+        const initialTextLength = extracted.text.length
+        let renderUsed = false
+        
+        // Check if JS rendering is needed
+        const domain = this.getHostFromUrl(branch.url)
+        const { isJsDomain, needsJsRendering, renderWithPlaywright } = await import('./renderer')
+        
+        if ((isJsDomain(domain) || needsJsRendering(html, initialTextLength)) && initialTextLength < 600) {
+          // Try Playwright renderer
+          this.structuredLog('render_attempt', {
+            url: branch.url,
+            domain,
+            initial_text_len: initialTextLength,
+            html_bytes: html.length
+          })
+          
+          const renderResult = await renderWithPlaywright(branch.url)
+          renderUsed = true
+          
+          if (renderResult.success && renderResult.text.length > initialTextLength) {
+            // Use rendered content
+            html = renderResult.html
+            extracted = this.extractHtmlContent(html)
+            // Override title if renderer found a better one
+            if (renderResult.title && renderResult.title !== 'Untitled') {
+              extracted.title = renderResult.title
+            }
+            // Use rendered text if it's longer
+            if (renderResult.text.length > extracted.text.length) {
+              extracted.text = renderResult.text
+            }
+            
+            this.telemetry.htmlExtracted++
+            this.structuredLog('render_success', {
+              url: branch.url,
+              text_len: extracted.text.length,
+              title: extracted.title.slice(0, 100)
+            })
+          } else {
+            // Renderer failed or didn't improve - use original extraction
+            this.structuredLog('render_failed', {
+              url: branch.url,
+              error: renderResult.error || 'no_improvement',
+              initial_len: initialTextLength,
+              rendered_len: renderResult.text.length
+            })
+            
+            // If still empty, mark as extractor_empty
+            if (extracted.text.length < 100) {
+              throw new Error('extractor_empty')
+            }
+          }
+        }
+        
         this.telemetry.htmlExtracted++
         await pushPaywallBranch(this.redisPatchId, `success:${branch.branch}`).catch(() => undefined)
+        
+        // Structured logging for successful fetch
+        const fetchStartTime = Date.now()
+        try {
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            run_id: this.options.runId,
+            step: 'fetch',
+            url: branch.url?.slice(0, 200),
+            source: candidate.provider,
+            status: 'ok',
+            http_status: response.status,
+            paywall: false,
+            robots: 'allowed',
+            render_used: renderUsed,
+            html_bytes: html?.length || 0,
+            text_bytes: extracted?.text?.length || 0,
+            failure_reason: null,
+            duration_ms: Date.now() - fetchStartTime
+          }
+          slog('info', logObj)
+          pushEvent(logObj)
+        } catch {
+          // Non-fatal
+        }
+        
         return {
           extracted: { ...extracted, rawHtml: html },
           branch: branch.branch,
           finalUrl: response.url ?? branch.url
         }
       } catch (error) {
+        const errorStartTime = Date.now()
+        let failureReason = 'unknown_error'
+        let httpStatus: number | null = null
+        let paywall = false
+        let robots = 'allowed'
+        let renderUsed = false
+        
         if ((error as Error)?.name === 'AbortError') {
           this.telemetry.timeout++
+          failureReason = 'render_timeout'
         }
         if (error instanceof PaywallBlockedError) {
           lastError = error
+          paywall = true
+          failureReason = 'paywall_blocked'
           await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           continue
         }
         if (error instanceof RobotsBlockedError) {
+          robots = 'disallow'
+          failureReason = 'robots_disallow'
           await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           throw error
         }
+        // Handle extractor_empty error
+        if (error instanceof Error && error.message === 'extractor_empty') {
+          failureReason = 'extractor_empty'
+          this.structuredLog('extractor_empty', {
+            url: branch.url,
+            domain: this.getHostFromUrl(branch.url),
+            html_bytes: html?.length || 0
+          })
+          lastError = new Error('extractor_empty')
+          await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
+          continue
+        }
+        if (error instanceof Error && error.message.startsWith('fetch_failed_')) {
+          httpStatus = parseInt(error.message.replace('fetch_failed_', '')) || null
+          failureReason = 'http_error'
+        }
+        
+        // Structured logging for every URL failure
+        try {
+          const { slog } = await import('@/lib/log')
+          const { pushEvent } = await import('./eventRing')
+          const logObj = {
+            run_id: this.options.runId,
+            step: 'fetch',
+            url: branch.url?.slice(0, 200),
+            source: candidate.provider,
+            status: 'fail',
+            http_status: httpStatus,
+            paywall,
+            robots,
+            render_used: renderUsed,
+            html_bytes: html?.length || 0,
+            text_bytes: extracted?.text?.length || 0,
+            failure_reason: failureReason,
+            duration_ms: Date.now() - errorStartTime
+          }
+          slog('warn', logObj)
+          pushEvent(logObj)
+        } catch {
+          // Non-fatal
+        }
+        
         lastError = error
         await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
       }

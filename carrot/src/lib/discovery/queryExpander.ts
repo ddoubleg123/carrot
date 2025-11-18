@@ -516,79 +516,135 @@ export async function expandPlannerQuery({
     suggestions = suggestions.slice(0, MAX_RESULTS_PER_QUERY)
   }
 
-  // Fallback: If no suggestions and we have keywords, generate safe fallback queries
-  if (suggestions.length === 0 && !deferredGeneral) {
-    const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
-    const topic = keywords[0] || typeof candidate.cursor === 'string' ? candidate.cursor : 'breaking news'
+  // Fallback: If no suggestions or fewer than 10, generate guaranteed fallback queries
+  const MIN_SEEDS_PER_CYCLE = Number(process.env.CRAWL_MIN_SEEDS_PER_CYCLE || 10)
+  const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
+  const topic = keywords[0] || (typeof candidate.cursor === 'string' ? candidate.cursor : '') || 'breaking news'
+  
+  if (topic && topic.trim() && (suggestions.length === 0 || suggestions.length < MIN_SEEDS_PER_CYCLE)) {
+    const normalizedTopic = topic.trim()
     
-    if (topic && topic.trim()) {
-      const normalizedTopic = topic.trim().toLowerCase()
-      
-      // Structured logging for fallback
-      try {
-        const { slog } = await import('@/lib/log')
-        const { pushEvent } = await import('./eventRing')
-        const logObj = {
-          step: 'query_expand',
-          result: 'fallback',
-          job_id: candidate.meta?.patchId as string | undefined,
-          run_id: candidate.meta?.runId as string | undefined,
-          attempt,
-          topic: normalizedTopic.slice(0, 100),
-          count: 0,
-        }
-        slog('warn', logObj)
-        pushEvent(logObj)
-      } catch {
-        // Non-fatal if logging fails
+    // Structured logging for fallback
+    try {
+      const { slog } = await import('@/lib/log')
+      const { pushEvent } = await import('./eventRing')
+      const logObj = {
+        step: 'query_expand',
+        result: 'fallback',
+        job_id: candidate.meta?.patchId as string | undefined,
+        run_id: candidate.meta?.runId as string | undefined,
+        attempt,
+        topic: normalizedTopic.slice(0, 100),
+        existing_count: suggestions.length,
+        target_count: MIN_SEEDS_PER_CYCLE,
       }
-      
-      // Generate fallback queries with high-signal domains
-      const fallbackDomains = ['reuters.com', 'apnews.com', 'bbc.com', 'theguardian.com', 'nytimes.com']
-      for (const domain of fallbackDomains.slice(0, 3)) {
-        const googleSearch = new URL('https://www.google.com/search')
-        googleSearch.searchParams.set('q', `${normalizedTopic} site:${domain}`)
-        googleSearch.searchParams.set('tbm', 'nws')
-        suggestions.push({
-          url: googleSearch.toString(),
-          sourceType: 'fallback',
-          host: normaliseHost(domain),
-          keywords: [normalizedTopic],
-          priorityOffset: 5, // Lower priority than regular queries
-          metadata: { reason: 'fallback_seed', domain }
-        })
-      }
-      
-      // Add one generic query
-      const genericSearch = new URL('https://www.google.com/search')
-      genericSearch.searchParams.set('q', normalizedTopic)
-      genericSearch.searchParams.set('tbm', 'nws')
+      slog('warn', logObj)
+      pushEvent(logObj)
+    } catch {
+      // Non-fatal if logging fails
+    }
+    
+    // Generate fallback queries using templated patterns (always emit ≥10)
+    const fallbackTemplates = [
+      `site:espn.com ${normalizedTopic}`,
+      `site:nba.com ${normalizedTopic}`,
+      `site:theathletic.com ${normalizedTopic}`,
+      `site:basketball-reference.com ${normalizedTopic}`,
+      `site:chicagotribune.com ${normalizedTopic}`,
+      `${normalizedTopic} controversy`,
+      `${normalizedTopic} history`,
+      `${normalizedTopic} scandal`,
+      `${normalizedTopic} trade rumor`,
+      `${normalizedTopic} coach interview`,
+    ]
+    
+    // Add site-specific queries first
+    const siteQueries = [
+      { site: 'espn.com', query: `site:espn.com ${normalizedTopic}` },
+      { site: 'nba.com', query: `site:nba.com ${normalizedTopic}` },
+      { site: 'theathletic.com', query: `site:theathletic.com ${normalizedTopic}` },
+      { site: 'basketball-reference.com', query: `site:basketball-reference.com ${normalizedTopic}` },
+      { site: 'chicagotribune.com', query: `site:chicagotribune.com ${normalizedTopic}` },
+    ]
+    
+    for (const { site, query } of siteQueries) {
+      if (suggestions.length >= MIN_SEEDS_PER_CYCLE) break
+      const googleSearch = new URL('https://www.google.com/search')
+      googleSearch.searchParams.set('q', query)
+      googleSearch.searchParams.set('tbm', 'nws')
       suggestions.push({
-        url: genericSearch.toString(),
+        url: googleSearch.toString(),
+        sourceType: 'fallback',
+        host: normaliseHost(site),
+        keywords: [normalizedTopic],
+        priorityOffset: 5,
+        metadata: { reason: 'fallback_seed', domain: site }
+      })
+    }
+    
+    // Add topic-variant queries
+    const topicVariants = [
+      `${normalizedTopic} controversy`,
+      `${normalizedTopic} history`,
+      `${normalizedTopic} scandal`,
+      `${normalizedTopic} trade rumor`,
+      `${normalizedTopic} coach interview`,
+    ]
+    
+    for (const variant of topicVariants) {
+      if (suggestions.length >= MIN_SEEDS_PER_CYCLE) break
+      const googleSearch = new URL('https://www.google.com/search')
+      googleSearch.searchParams.set('q', variant)
+      googleSearch.searchParams.set('tbm', 'nws')
+      suggestions.push({
+        url: googleSearch.toString(),
         sourceType: 'fallback',
         host: null,
         keywords: [normalizedTopic],
-        priorityOffset: 0,
-        metadata: { reason: 'fallback_generic' }
+        priorityOffset: 3,
+        metadata: { reason: 'fallback_variant', variant }
       })
-      
-      // Log fallback success
-      try {
-        const { slog } = await import('@/lib/log')
-        const { pushEvent } = await import('./eventRing')
-        const logObj = {
-          step: 'query_expand',
-          result: 'fallback',
-          job_id: candidate.meta?.patchId as string | undefined,
-          run_id: candidate.meta?.runId as string | undefined,
-          attempt,
-          count: suggestions.length,
+    }
+    
+    // Ensure we have at least MIN_SEEDS_PER_CYCLE
+    if (suggestions.length < MIN_SEEDS_PER_CYCLE) {
+      // Add generic topic queries to reach minimum
+      const remaining = MIN_SEEDS_PER_CYCLE - suggestions.length
+      for (let i = 0; i < remaining; i++) {
+        const googleSearch = new URL('https://www.google.com/search')
+        googleSearch.searchParams.set('q', normalizedTopic)
+        googleSearch.searchParams.set('tbm', 'nws')
+        if (i > 0) {
+          googleSearch.searchParams.set('start', String(i * 10)) // Pagination
         }
-        slog('info', logObj)
-        pushEvent(logObj)
-      } catch {
-        // Non-fatal
+        suggestions.push({
+          url: googleSearch.toString(),
+          sourceType: 'fallback',
+          host: null,
+          keywords: [normalizedTopic],
+          priorityOffset: 0,
+          metadata: { reason: 'fallback_generic', page: i + 1 }
+        })
       }
+    }
+    
+    // Log fallback success
+    try {
+      const { slog } = await import('@/lib/log')
+      const { pushEvent } = await import('./eventRing')
+      const logObj = {
+        step: 'query_expand',
+        result: 'fallback',
+        job_id: candidate.meta?.patchId as string | undefined,
+        run_id: candidate.meta?.runId as string | undefined,
+        attempt,
+        count: suggestions.length,
+        topic: normalizedTopic.slice(0, 100),
+      }
+      slog('info', logObj)
+      pushEvent(logObj)
+    } catch {
+      // Non-fatal
     }
   }
 

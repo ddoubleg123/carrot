@@ -982,6 +982,11 @@ export class DiscoveryOrchestrator {
         // For citations, the cursor is the URL itself
         return [candidate.cursor]
       
+      case 'direct':
+        // For direct seeds, the cursor is the URL itself - route to HTTP fetcher
+        // This will be handled by the engine's processCandidate which uses HttpFetcher
+        return [candidate.cursor]
+      
       default:
         console.warn(`[Discovery Orchestrator] Unknown source: ${candidate.source}`)
         return []

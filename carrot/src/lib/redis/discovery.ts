@@ -118,22 +118,62 @@ async function getRedisClient() {
 
 /**
  * Check if URL has been seen for this patch
+ * Returns {seen: boolean, lastCrawledAt: number | null, canSkip: boolean}
+ * canSkip is true if URL was crawled < 24h ago (fast skip)
  */
-export async function isSeen(patchId: string, canonicalUrl: string): Promise<boolean> {
+export async function isSeenWithTimestamp(
+  patchId: string, 
+  canonicalUrl: string,
+  fastSkipHours: number = 24
+): Promise<{seen: boolean; lastCrawledAt: number | null; canSkip: boolean}> {
   const client = await getRedisClient()
   const key = SEEN_KEY(patchId)
-  const result = await client.sismember(key, canonicalUrl)
-  return result === 1
+  const timestampKey = `${key}:ts:${canonicalUrl}`
+  
+  // Check if seen
+  const isMember = await client.sismember(key, canonicalUrl)
+  if (isMember === 0) {
+    return { seen: false, lastCrawledAt: null, canSkip: false }
+  }
+  
+  // Get last crawled timestamp
+  const timestampStr = await client.get(timestampKey)
+  const lastCrawledAt = timestampStr ? parseInt(timestampStr, 10) : null
+  
+  // Fast skip if crawled < fastSkipHours ago
+  const now = Date.now()
+  const canSkip = lastCrawledAt && (now - lastCrawledAt) < (fastSkipHours * 60 * 60 * 1000)
+  
+  return { seen: true, lastCrawledAt, canSkip: canSkip || false }
 }
 
 /**
- * Mark URL as seen for this patch
+ * Check if URL has been seen for this patch (backward compatible)
  */
-export async function markAsSeen(patchId: string, canonicalUrl: string, ttlDays: number = 30): Promise<void> {
+export async function isSeen(patchId: string, canonicalUrl: string): Promise<boolean> {
+  const result = await isSeenWithTimestamp(patchId, canonicalUrl)
+  return result.seen
+}
+
+/**
+ * Mark URL as seen for this patch with timestamp
+ */
+export async function markAsSeen(
+  patchId: string, 
+  canonicalUrl: string, 
+  ttlDays: number = 30
+): Promise<void> {
   const client = await getRedisClient()
   const key = SEEN_KEY(patchId)
+  const timestampKey = `${key}:ts:${canonicalUrl}`
+  const now = Date.now()
+  
+  // Add to seen set
   await client.sadd(key, canonicalUrl)
   await client.expire(key, ttlDays * 24 * 60 * 60)
+  
+  // Store timestamp with same TTL
+  await client.set(timestampKey, now.toString(), 'EX', ttlDays * 24 * 60 * 60)
 }
 
 /**

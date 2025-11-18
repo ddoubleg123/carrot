@@ -20,6 +20,16 @@
 - `DISCOVERY_CONCURRENCY` - Concurrent discovery workers (default: `3`)
 - `EXTRACTION_CONCURRENCY` - Concurrent extraction workers (default: `2`)
 
+## New Environment Variables (Deep-Link Crawler)
+
+- `CRAWL_RENDER_ENABLED` - Enable Playwright renderer for JS sites (default: `false`, set to `true` to enable)
+- `CRAWL_RENDER_TIMEOUT_MS` - Playwright navigation timeout in milliseconds (default: `16000`)
+- `CRAWL_MIN_SEEDS_PER_CYCLE` - Minimum seeds to emit per query expansion cycle (default: `10`)
+- `CRAWL_WIKI_OUTLINK_LIMIT` - Max outlinks to extract from Wikipedia pages (default: `25`)
+- `CRAWL_SEEN_TTL_DAYS` - TTL for seen URLs cache in days (default: `7`)
+- `CRAWL_RETRY_SOFTFAIL` - Allow retry for soft failures (timeout, extractor_empty) (default: `true`)
+- `CRAWLER_MAX_RESEED_ATTEMPTS` - Max reseed attempts before circuit breaker (default: `10`, raised from 3)
+
 ## Feature Flags
 
 - `CRAWLER_PRIORITY_V2` - Enable new priority scoring system (default: `true`)
