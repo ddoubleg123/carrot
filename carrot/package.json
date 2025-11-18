@@ -18,6 +18,7 @@
     "backfill-images": "tsx scripts/backfill-hero-images.ts",
     "backfill:domain": "tsx scripts/backfill-discovered-content-domain.ts",
     "crawler:run": "tsx scripts/run-crawler-once.ts",
+    "crawler:test": "tsx scripts/run-crawler-test.ts",
     "report:zero": "tsx scripts/report-zero.ts",
     "smoke:enrich": "tsx scripts/smoke-enrich-prod.ts",
     "inspect-images": "tsx scripts/inspect-patch-images.ts",
