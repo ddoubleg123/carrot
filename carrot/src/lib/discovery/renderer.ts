@@ -159,7 +159,7 @@ export async function renderWithPlaywright(url: string): Promise<{
       let largestSize = 0
       
       for (const el of allElements) {
-        const text = el.innerText.trim()
+        const text = (el as HTMLElement).innerText?.trim() || el.textContent?.trim() || ''
         if (text.length > largestSize && text.length > 200) {
           largestSize = text.length
           largestBlock = text
