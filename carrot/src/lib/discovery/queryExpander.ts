@@ -518,6 +518,7 @@ export async function expandPlannerQuery({
 
   // Fallback: If no suggestions or fewer than 10, generate guaranteed fallback queries
   const MIN_SEEDS_PER_CYCLE = Number(process.env.CRAWL_MIN_SEEDS_PER_CYCLE || 10)
+  // Declare keywords at function scope for use in logging below
   const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
   const topic = keywords[0] || (typeof candidate.cursor === 'string' ? candidate.cursor : '') || 'breaking news'
   
@@ -649,7 +650,7 @@ export async function expandPlannerQuery({
   }
 
   // Log inputs safely (redact PII) - structured logging
-  const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
+  // Use keywords already declared earlier in function scope
   const redactedKeywords = keywords.slice(0, 5).map(k => k.length > 20 ? k.substring(0, 20) + '...' : k)
   
   try {
