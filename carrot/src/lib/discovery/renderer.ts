@@ -67,9 +67,12 @@ export async function renderWithPlaywright(url: string): Promise<{
 
   try {
     // Dynamic import to avoid breaking if Playwright isn't installed
+    // Use string-based import to prevent Next.js from analyzing at build time
     let playwright: any
     try {
-      playwright = await import('playwright')
+      // Dynamic import with string literal - Next.js will warn but won't fail
+      const playwrightModule = 'playwright'
+      playwright = await import(/* webpackIgnore: true */ playwrightModule)
     } catch (importError) {
       return {
         html: '',
@@ -77,6 +80,16 @@ export async function renderWithPlaywright(url: string): Promise<{
         title: '',
         success: false,
         error: 'playwright_not_installed'
+      }
+    }
+    
+    if (!playwright || !playwright.chromium) {
+      return {
+        html: '',
+        text: '',
+        title: '',
+        success: false,
+        error: 'playwright_not_available'
       }
     }
     

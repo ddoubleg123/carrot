@@ -2353,6 +2353,9 @@ export class DiscoveryEngineV21 {
       })
       await pushPaywallBranch(this.redisPatchId, `attempt:${branch.branch}`).catch(() => undefined)
 
+      // Declare html outside try block so it's available in catch
+      let html: string | null = null
+      
       try {
         const response = await this.fetchWithRetry(
           branch.url,
@@ -2387,7 +2390,7 @@ export class DiscoveryEngineV21 {
         }
 
         this.telemetry.directFetchOk++
-        let html = await response.text()
+        html = await response.text()
         if (this.isPaywallHtml(html)) {
           this.telemetry.paywall++
           lastError = new PaywallBlockedError('paywall_html')
