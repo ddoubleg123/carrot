@@ -2353,8 +2353,9 @@ export class DiscoveryEngineV21 {
       })
       await pushPaywallBranch(this.redisPatchId, `attempt:${branch.branch}`).catch(() => undefined)
 
-      // Declare html outside try block so it's available in catch
+      // Declare variables outside try block so they're available in catch
       let html: string | null = null
+      let extracted: ExtractedContent | null = null
       
       try {
         const response = await this.fetchWithRetry(
@@ -2399,15 +2400,28 @@ export class DiscoveryEngineV21 {
         }
         
         // Try initial extraction
-        let extracted = this.extractHtmlContent(html)
+        extracted = this.extractHtmlContent(html)
         const initialTextLength = extracted.text.length
         let renderUsed = false
         
         // Check if JS rendering is needed
         const domain = this.getHostFromUrl(branch.url)
-        const { isJsDomain, needsJsRendering, renderWithPlaywright } = await import('./renderer')
+        // Dynamic import with error handling for optional Playwright
+        let isJsDomain: ((domain: string | null) => boolean) | null = null
+        let needsJsRendering: ((html: string, textLength: number) => boolean) | null = null
+        let renderWithPlaywright: ((url: string) => Promise<any>) | null = null
         
-        if ((isJsDomain(domain) || needsJsRendering(html, initialTextLength)) && initialTextLength < 600) {
+        try {
+          const rendererModule = await import('./renderer')
+          isJsDomain = rendererModule.isJsDomain
+          needsJsRendering = rendererModule.needsJsRendering
+          renderWithPlaywright = rendererModule.renderWithPlaywright
+        } catch {
+          // Playwright not available, skip rendering
+        }
+        
+        if (isJsDomain && needsJsRendering && renderWithPlaywright && 
+            (isJsDomain(domain) || needsJsRendering(html, initialTextLength)) && initialTextLength < 600) {
           // Try Playwright renderer
           this.structuredLog('render_attempt', {
             url: branch.url,
@@ -2472,7 +2486,7 @@ export class DiscoveryEngineV21 {
             paywall: false,
             robots: 'allowed',
             render_used: renderUsed,
-            html_bytes: html?.length || 0,
+            html_bytes: html ? html.length : 0,
             text_bytes: extracted?.text?.length || 0,
             failure_reason: null,
             duration_ms: Date.now() - fetchStartTime
@@ -2519,7 +2533,7 @@ export class DiscoveryEngineV21 {
           this.structuredLog('extractor_empty', {
             url: branch.url,
             domain: this.getHostFromUrl(branch.url),
-            html_bytes: html?.length || 0
+            html_bytes: html ? html.length : 0
           })
           lastError = new Error('extractor_empty')
           await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
@@ -2544,8 +2558,8 @@ export class DiscoveryEngineV21 {
             paywall,
             robots,
             render_used: renderUsed,
-            html_bytes: html?.length || 0,
-            text_bytes: extracted?.text?.length || 0,
+            html_bytes: html ? html.length : 0,
+            text_bytes: extracted?.text ? extracted.text.length : 0,
             failure_reason: failureReason,
             duration_ms: Date.now() - errorStartTime
           }

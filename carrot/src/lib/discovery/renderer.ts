@@ -67,12 +67,12 @@ export async function renderWithPlaywright(url: string): Promise<{
 
   try {
     // Dynamic import to avoid breaking if Playwright isn't installed
-    // Use string-based import to prevent Next.js from analyzing at build time
+    // Use require in try-catch to prevent webpack from statically analyzing
     let playwright: any
     try {
-      // Dynamic import with string literal - Next.js will warn but won't fail
-      const playwrightModule = 'playwright'
-      playwright = await import(/* webpackIgnore: true */ playwrightModule)
+      // Use require which webpack won't try to bundle if it fails
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      playwright = require('playwright')
     } catch (importError) {
       return {
         html: '',
