@@ -34,6 +34,7 @@ import {
 import { crawlerConfig } from './config'
 import { CRAWLER_PRIORITY_V2 } from '../discovery/flags'
 import { slog } from '../log'
+import { inc, histogram, gauge } from '../metrics'
 
 const FETCH_TIMEOUT_MS = crawlerConfig.fetchTimeoutMs
 const USER_AGENT = crawlerConfig.userAgent
@@ -171,6 +172,7 @@ async function fetchPage(url: string): Promise<FetchResult> {
     // Check robots.txt
     const robotsCheck = await checkRobotsTxt(url)
     if (!robotsCheck.allowed) {
+      inc('robots_blocked', 1, { domain })
       return {
         success: false,
         url,
@@ -222,6 +224,12 @@ async function fetchPage(url: string): Promise<FetchResult> {
     
     const duration = Date.now() - startTime
     
+    // Metrics
+    inc('crawl_ok', 1, { domain })
+    histogram('fetch_duration_ms', duration, { domain })
+    histogram('text_len', extractedText.length, { domain })
+    histogram('outlinks_per_page', 0, { domain }) // Will be updated after extraction
+    
     // Log fetch success
     slog('info', {
       service: 'crawler',
@@ -248,29 +256,34 @@ async function fetchPage(url: string): Promise<FetchResult> {
       bytes,
       textHash,
     }
-  } catch (error: any) {
-    const duration = Date.now() - startTime
-    let reasonCode = 'unknown_error'
-    
-    if (error.name === 'AbortError' || error.message?.includes('timeout')) {
-      reasonCode = 'timeout'
-    } else if (error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
-      reasonCode = 'dns_error'
-    } else if (error.message?.includes('ECONNREFUSED')) {
-      reasonCode = 'connection_refused'
-    }
-    
-    slog('error', {
-      service: 'crawler',
-      step: 'fetch',
-      url: url.slice(0, 200),
-      domain,
-      action: 'fetch',
-      status: 'error',
-      reason_code: reasonCode,
-      duration_ms: duration,
-      error: error.message?.slice(0, 200),
-    })
+    } catch (error: any) {
+      const duration = Date.now() - startTime
+      let reasonCode = 'unknown_error'
+      
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        reasonCode = 'timeout'
+        inc('timeout', 1, { domain })
+      } else if (error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
+        reasonCode = 'dns_error'
+        inc('dns_error', 1, { domain })
+      } else if (error.message?.includes('ECONNREFUSED')) {
+        reasonCode = 'connection_refused'
+        inc('connection_refused', 1, { domain })
+      }
+      
+      inc('crawl_fail', 1, { domain, reason: reasonCode })
+      
+      slog('error', {
+        service: 'crawler',
+        step: 'fetch',
+        url: url.slice(0, 200),
+        domain,
+        action: 'fetch',
+        status: 'error',
+        reason_code: reasonCode,
+        duration_ms: duration,
+        error: error.message?.slice(0, 200),
+      })
     
     return {
       success: false,
@@ -320,6 +333,7 @@ export class CrawlerService {
     // Check if already seen (cross-run dedupe)
     if (await isCrawlerUrlSeen(urlHash)) {
       this.stats.deduped++
+      inc('duplicate_content', 1, { domain })
       slog('info', {
         service: 'crawler',
         step: 'dedupe',
@@ -351,6 +365,7 @@ export class CrawlerService {
     // Wikipedia cap check
     if (isWikipedia && this.stats.wikiCount >= crawlerConfig.wikiCap) {
       this.stats.skipped++
+      inc('wiki_skipped_after_cap', 1)
       slog('info', {
         service: 'crawler',
         step: 'wiki_cap',
@@ -360,6 +375,10 @@ export class CrawlerService {
         status: 'wiki_cap_reached',
       })
       return
+    }
+    
+    if (isWikipedia) {
+      inc('wiki_seen', 1)
     }
     
     // Fetch page
@@ -391,27 +410,28 @@ export class CrawlerService {
     // Mark as seen
     await markCrawlerUrlSeen(urlHash)
     
-    // Check for duplicate content (text hash)
-    if (fetchResult.textHash) {
-      const existing = await prisma.crawlerPage.findFirst({
-        where: { textHash: fetchResult.textHash },
-        select: { id: true },
-      })
-      
-      if (existing) {
-        this.stats.deduped++
-        slog('info', {
-          service: 'crawler',
-          step: 'content_dedupe',
-          url: url.slice(0, 200),
-          domain,
-          action: 'skip',
-          status: 'duplicate_content',
-          reason_code: 'text_hash_match',
+      // Check for duplicate content (text hash)
+      if (fetchResult.textHash) {
+        const existing = await prisma.crawlerPage.findFirst({
+          where: { textHash: fetchResult.textHash },
+          select: { id: true },
         })
-        return
+        
+        if (existing) {
+          this.stats.deduped++
+          inc('duplicate_content', 1, { domain })
+          slog('info', {
+            service: 'crawler',
+            step: 'content_dedupe',
+            url: url.slice(0, 200),
+            domain,
+            action: 'skip',
+            status: 'duplicate_content',
+            reason_code: 'text_hash_match',
+          })
+          return
+        }
       }
-    }
     
     // Persist to database
     try {
@@ -479,6 +499,9 @@ export class CrawlerService {
         }
         
         this.stats.enqueued += enqueuedCount
+        
+        inc('outlinks_enqueued', enqueuedCount, { domain: fetchResult.domain })
+        histogram('outlinks_per_page', enqueuedCount, { domain: fetchResult.domain })
         
         slog('info', {
           service: 'crawler',

@@ -170,6 +170,11 @@ export async function extractFromPage(
     
     const duration = Date.now() - startTime
     
+    // Metrics
+    const { inc, histogram } = await import('../metrics')
+    inc('extraction_ok', 1, { domain })
+    histogram('parse_duration_ms', duration, { domain })
+    
     slog('info', {
       service: 'crawler',
       step: 'extract',
@@ -185,6 +190,9 @@ export async function extractFromPage(
   } catch (error: any) {
     const duration = Date.now() - startTime
     const errorMessage = error.message || String(error)
+    
+    const { inc } = await import('../metrics')
+    inc('extraction_fail', 1, { domain, reason: errorMessage.slice(0, 50) })
     
     slog('error', {
       service: 'crawler',
