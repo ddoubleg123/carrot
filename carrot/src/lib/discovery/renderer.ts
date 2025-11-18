@@ -67,12 +67,12 @@ export async function renderWithPlaywright(url: string): Promise<{
 
   try {
     // Dynamic import to avoid breaking if Playwright isn't installed
-    // Use require in try-catch to prevent webpack from statically analyzing
+    // Use eval to prevent webpack from statically analyzing the require
     let playwright: any
     try {
-      // Use require which webpack won't try to bundle if it fails
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      playwright = require('playwright')
+      // Use eval to prevent webpack from analyzing at build time
+      // eslint-disable-next-line no-eval
+      playwright = eval('require')('playwright')
     } catch (importError) {
       return {
         html: '',

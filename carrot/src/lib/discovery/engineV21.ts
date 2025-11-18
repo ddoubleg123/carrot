@@ -2433,25 +2433,29 @@ export class DiscoveryEngineV21 {
           const renderResult = await renderWithPlaywright(branch.url)
           renderUsed = true
           
-          if (renderResult.success && renderResult.text.length > initialTextLength) {
+          if (renderResult.success && renderResult.text.length > initialTextLength && renderResult.html) {
             // Use rendered content
             html = renderResult.html
-            extracted = this.extractHtmlContent(html)
-            // Override title if renderer found a better one
-            if (renderResult.title && renderResult.title !== 'Untitled') {
-              extracted.title = renderResult.title
-            }
-            // Use rendered text if it's longer
-            if (renderResult.text.length > extracted.text.length) {
-              extracted.text = renderResult.text
+            if (html) {
+              extracted = this.extractHtmlContent(html)
+              // Override title if renderer found a better one
+              if (renderResult.title && renderResult.title !== 'Untitled') {
+                extracted.title = renderResult.title
+              }
+              // Use rendered text if it's longer
+              if (renderResult.text.length > extracted.text.length) {
+                extracted.text = renderResult.text
+              }
             }
             
-            this.telemetry.htmlExtracted++
-            this.structuredLog('render_success', {
-              url: branch.url,
-              text_len: extracted.text.length,
-              title: extracted.title.slice(0, 100)
-            })
+            if (extracted) {
+              this.telemetry.htmlExtracted++
+              this.structuredLog('render_success', {
+                url: branch.url,
+                text_len: extracted.text.length,
+                title: extracted.title.slice(0, 100)
+              })
+            }
           } else {
             // Renderer failed or didn't improve - use original extraction
             this.structuredLog('render_failed', {
@@ -2462,10 +2466,15 @@ export class DiscoveryEngineV21 {
             })
             
             // If still empty, mark as extractor_empty
-            if (extracted.text.length < 100) {
+            if (extracted && extracted.text.length < 100) {
               throw new Error('extractor_empty')
             }
           }
+        }
+        
+        // Ensure extracted is not null before proceeding
+        if (!extracted) {
+          throw new Error('extractor_empty')
         }
         
         this.telemetry.htmlExtracted++
@@ -2487,7 +2496,7 @@ export class DiscoveryEngineV21 {
             robots: 'allowed',
             render_used: renderUsed,
             html_bytes: html ? html.length : 0,
-            text_bytes: extracted?.text?.length || 0,
+            text_bytes: extracted.text ? extracted.text.length : 0,
             failure_reason: null,
             duration_ms: Date.now() - fetchStartTime
           }
@@ -2498,7 +2507,7 @@ export class DiscoveryEngineV21 {
         }
         
         return {
-          extracted: { ...extracted, rawHtml: html },
+          extracted: { ...extracted, rawHtml: html || '' },
           branch: branch.branch,
           finalUrl: response.url ?? branch.url
         }
