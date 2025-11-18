@@ -7,6 +7,10 @@ export function getBool(key: string, defaultValue: boolean): boolean {
 
 export const DEEP_LINK_SCRAPER = getBool('DEEP_LINK_SCRAPER', true)
 
+// Crawler refactor feature flags (Phase 9: Deployment & Safety)
+export const CRAWLER_PRIORITY_V2 = getBool('CRAWLER_PRIORITY_V2', true)
+export const EXTRACTOR_V2 = getBool('EXTRACTOR_V2', true)
+
 import {
   OPEN_EVIDENCE_V2,
   DISCOVERY_V21,
