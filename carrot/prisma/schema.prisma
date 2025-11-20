@@ -4,37 +4,37 @@ generator client {
 
 // ===== Append-only Training Models =====
 model TrainingPlan {
-  id         String   @id @default(cuid())
-  agentId    String
-  topics     String   // JSON stringified string[]
-  options    String   // JSON stringified TrainingPlanOptions
-  status     String
-  totals     String   // JSON stringified totals
-  topicPages String   // JSON stringified Record<string, number>
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  tasks      TrainingTask[]
+  id          String           @id @default(cuid())
+  agentId     String
+  topics      String // JSON stringified string[]
+  options     String // JSON stringified TrainingPlanOptions
+  status      String
+  totals      String // JSON stringified totals
+  topicPages  String // JSON stringified Record<string, number>
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  tasks       TrainingTask[]
   discoveries DiscoveryEntry[]
 }
 
 model TrainingTask {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   planId       String
   agentId      String
   topic        String
   page         Int
   status       String
-  itemsFed     Int      @default(0)
-  itemsDropped Int      @default(0)
-  attempts     Int      @default(0)
+  itemsFed     Int          @default(0)
+  itemsDropped Int          @default(0)
+  attempts     Int          @default(0)
   lastError    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   plan         TrainingPlan @relation(fields: [planId], references: [id])
 }
 
 model DiscoveryEntry {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   planId     String
   topic      String
   page       Int
@@ -42,17 +42,17 @@ model DiscoveryEntry {
   title      String?
   sourceType String?
   status     String
-  ts         DateTime @default(now())
+  ts         DateTime     @default(now())
   plan       TrainingPlan @relation(fields: [planId], references: [id])
 }
 
 // Playback/user preferences synchronized across devices
 model UserPref {
-  userId         String  @id
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  captionsDefault Boolean @default(true)
-  reducedMotion   Boolean @default(false)
-  autoplay        Boolean @default(true)
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  captionsDefault Boolean  @default(true)
+  reducedMotion   Boolean  @default(false)
+  autoplay        Boolean  @default(true)
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
 }
@@ -144,10 +144,10 @@ model User {
   postLikes         PostLike[]
   postSaves         PostSave[]
   // Patch system relations
-  createdPatches    Patch[] @relation("PatchCreator")
-  addedSources      Source[] @relation("SourceAdder")
-  patchPosts        PatchPost[] @relation("PatchPostAuthor")
-  patchMemberships  PatchMember[] @relation("PatchMembers")
+  createdPatches    Patch[]            @relation("PatchCreator")
+  addedSources      Source[]           @relation("SourceAdder")
+  patchPosts        PatchPost[]        @relation("PatchPostAuthor")
+  patchMemberships  PatchMember[]      @relation("PatchMembers")
   // New patch system relations
   patchThemes       UserPatchTheme[]
   patchFollowers    Follower[]
@@ -155,7 +155,7 @@ model User {
 }
 
 model Post {
-  id                  String   @id @default(cuid())
+  id                  String       @id @default(cuid())
   content             String
   userId              String
   /// Stable seed for poster visualizer (palette, motion)
@@ -174,34 +174,34 @@ model Post {
   emoji               String?
   carrotText          String?
   stickText           String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
   /// Edit metadata
   editedAt            DateTime?
-  editCount           Int       @default(0)
+  editCount           Int          @default(0)
   lastEditedBy        String?
   thumbnailUrl        String?
   videoUrl            String?
   /// Durable Firebase Storage location for path-mode playback (avoids signed URL expiry)
-  videoBucket         String?   @db.VarChar(191)
+  videoBucket         String?      @db.VarChar(191)
   videoPath           String?
   /// Cloudflare Stream fields
-  cfUid               String?  @map("cf_uid")
-  cfStatus            String?  @map("cf_status")
-  cfDurationSec       Float?   @map("cf_duration_sec")
-  cfWidth             Int?     @map("cf_width")
-  cfHeight            Int?     @map("cf_height")
-  cfPlaybackUrlHls    String?  @map("cf_playback_url_hls")
-  captionVttUrl       String?  @map("caption_vtt_url")
-  User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cfUid               String?      @map("cf_uid")
+  cfStatus            String?      @map("cf_status")
+  cfDurationSec       Float?       @map("cf_duration_sec")
+  cfWidth             Int?         @map("cf_width")
+  cfHeight            Int?         @map("cf_height")
+  cfPlaybackUrlHls    String?      @map("cf_playback_url_hls")
+  captionVttUrl       String?      @map("caption_vtt_url")
+  User                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Comments relation
   comments            Comment[]
   // Engagement
   likes               PostLike[]
   saves               PostSave[]
 
-  @@map("posts")
   @@index([videoBucket, videoPath])
+  @@map("posts")
 }
 
 model OnboardingQuestion {
@@ -281,9 +281,9 @@ model SourceAsset {
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
   // Opposite relation fields
-  userVideos          UserVideo[]
-  videoVariants       VideoVariant[]
-  ingestionJobs       IngestionJob[]
+  userVideos    UserVideo[]
+  videoVariants VideoVariant[]
+  ingestionJobs IngestionJob[]
 
   @@unique([platform, externalId], name: "platform_external_id")
   @@index([contentHash])
@@ -354,25 +354,25 @@ model IngestionJob {
 /// MEDIA LIBRARY MODELS
 
 model MediaAsset {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  type        String
-  url         String
-  storagePath String?  @map("storage_path")
-  thumbUrl    String?  @map("thumb_url")
-  thumbPath   String?  @map("thumb_path")
-  title       String?
-  hidden      Boolean  @default(false)
-  source      String?
-  durationSec Float?   @map("duration_sec")
-  width       Int?
-  height      Int?
-  inUseCount  Int      @default(0) @map("in_use_count")
-  cfUid       String?  @map("cf_uid")
-  cfStatus    String?  @map("cf_status")
-  captionVttUrl String? @map("caption_vtt_url")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  type          String
+  url           String
+  storagePath   String?  @map("storage_path")
+  thumbUrl      String?  @map("thumb_url")
+  thumbPath     String?  @map("thumb_path")
+  title         String?
+  hidden        Boolean  @default(false)
+  source        String?
+  durationSec   Float?   @map("duration_sec")
+  width         Int?
+  height        Int?
+  inUseCount    Int      @default(0) @map("in_use_count")
+  cfUid         String?  @map("cf_uid")
+  cfStatus      String?  @map("cf_status")
+  captionVttUrl String?  @map("caption_vtt_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   labels      MediaAssetLabel[]
@@ -444,8 +444,8 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  post  Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([userId])
@@ -485,35 +485,35 @@ model PostSave {
 
 // Patch system models for Reddit/Wikipedia-style group pages
 model Patch {
-  id          String   @id @default(cuid())
-  handle      String   @unique
-  title       String
-  tagline     String?  // Short one-liner for header
-  description String
-  rules       String?
-  tags        String[]
-  theme       String?  // 'light' | 'warm' | 'stone' - background variant
-  createdBy   String   @map("created_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  entity      Json?    @map("entity")
-  guide       Json?
-  sourcesWhitelist Json? @map("sources_whitelist")
+  id               String   @id @default(cuid())
+  handle           String   @unique
+  title            String
+  tagline          String? // Short one-liner for header
+  description      String
+  rules            String?
+  tags             String[]
+  theme            String? // 'light' | 'warm' | 'stone' - background variant
+  createdBy        String   @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  entity           Json?    @map("entity")
+  guide            Json?
+  sourcesWhitelist Json?    @map("sources_whitelist")
 
   // Relations
-  creator User @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  facts   Fact[]
-  events  Event[]
-  sources Source[]
-  posts   PatchPost[]
-  members PatchMember[]
+  creator           User                @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  facts             Fact[]
+  events            Event[]
+  sources           Source[]
+  posts             PatchPost[]
+  members           PatchMember[]
   // New relations
-  userThemes       UserPatchTheme[]
-  followers        Follower[]
-  botSubscriptions BotSubscription[]
+  userThemes        UserPatchTheme[]
+  followers         Follower[]
+  botSubscriptions  BotSubscription[]
   discoveredContent DiscoveredContent[]
-    discoveryRuns DiscoveryRun[]
-    discoveryAudits DiscoveryAudit[]
+  discoveryRuns     DiscoveryRun[]
+  discoveryAudits   DiscoveryAudit[]
 
   @@index([handle])
   @@index([createdBy])
@@ -521,13 +521,13 @@ model Patch {
 }
 
 model Fact {
-  id       String @id @default(cuid())
-  patchId  String @map("patch_id")
+  id       String  @id @default(cuid())
+  patchId  String  @map("patch_id")
   label    String
   value    String
   sourceId String? @map("source_id")
 
-  patch  Patch  @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  patch  Patch   @relation(fields: [patchId], references: [id], onDelete: Cascade)
   source Source? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@index([patchId])
@@ -535,17 +535,17 @@ model Fact {
 }
 
 model Event {
-  id         String   @id @default(cuid())
-  patchId    String   @map("patch_id")
-  title      String
-  dateStart  DateTime @map("date_start")
-  dateEnd    DateTime? @map("date_end")
-  summary    String
-  media      Json?    // { type: 'image' | 'video', url: string, alt?: string }
-  tags       String[]
-  sourceIds  String[] @map("source_ids")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String    @id @default(cuid())
+  patchId   String    @map("patch_id")
+  title     String
+  dateStart DateTime  @map("date_start")
+  dateEnd   DateTime? @map("date_end")
+  summary   String
+  media     Json? // { type: 'image' | 'video', url: string, alt?: string }
+  tags      String[]
+  sourceIds String[]  @map("source_ids")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   patch   Patch    @relation(fields: [patchId], references: [id], onDelete: Cascade)
   sources Source[] @relation("EventSources")
@@ -567,10 +567,10 @@ model Source {
   citeMeta    Json?     @map("cite_meta") // { title, url, author?, publisher?, publishedAt? }
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  patch   Patch   @relation(fields: [patchId], references: [id], onDelete: Cascade)
-  adder   User    @relation("SourceAdder", fields: [addedBy], references: [id], onDelete: Cascade)
-  facts   Fact[]
-  events  Event[] @relation("EventSources")
+  patch  Patch   @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  adder  User    @relation("SourceAdder", fields: [addedBy], references: [id], onDelete: Cascade)
+  facts  Fact[]
+  events Event[] @relation("EventSources")
 
   @@index([patchId])
   @@index([addedBy])
@@ -584,10 +584,10 @@ model PatchPost {
   type      PostType
   title     String?
   body      String?
-  media     Json?    // { type: 'image' | 'video', url: string, alt?: string }
+  media     Json? // { type: 'image' | 'video', url: string, alt?: string }
   url       String?
   tags      String[]
-  metrics   Json     // { likes: number, comments: number, reposts: number, views: number }
+  metrics   Json // { likes: number, comments: number, reposts: number, views: number }
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -601,11 +601,11 @@ model PatchPost {
 }
 
 model PatchMember {
-  id        String   @id @default(cuid())
-  patchId   String   @map("patch_id")
-  userId    String   @map("user_id")
-  role      String   @default("member") // member, moderator, admin
-  joinedAt  DateTime @default(now()) @map("joined_at")
+  id       String   @id @default(cuid())
+  patchId  String   @map("patch_id")
+  userId   String   @map("user_id")
+  role     String   @default("member") // member, moderator, admin
+  joinedAt DateTime @default(now()) @map("joined_at")
 
   patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
   user  User  @relation("PatchMembers", fields: [userId], references: [id], onDelete: Cascade)
@@ -628,40 +628,40 @@ enum PostType {
 model Agent {
   id                String   @id @default(cuid())
   name              String
-  persona           String   // Detailed personality and expertise description
+  persona           String // Detailed personality and expertise description
   domainExpertise   String[] // Taxonomy tags for expertise areas
   associatedPatches String[] // Group pages or topic areas this agent covers
-  vectorDbRef       String?  // Reference to vector DB collection
-  knowledgeProfile  Json?    // Current belief map or knowledge profile
-  feedSubscriptions Json?    // RSS feeds, webhooks, etc.
+  vectorDbRef       String? // Reference to vector DB collection
+  knowledgeProfile  Json? // Current belief map or knowledge profile
+  feedSubscriptions Json? // RSS feeds, webhooks, etc.
   metadata          Json     @default("{}") // Council membership, visibility, training enabled, etc.
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   // Relations
-  memories     AgentMemory[]
-  feedEvents   AgentFeedEvent[]
+  memories      AgentMemory[]
+  feedEvents    AgentFeedEvent[]
   conversations AgentConversation[]
 
   @@map("agents")
 }
 
 model AgentMemory {
-  id          String   @id @default(cuid())
-  agentId     String   @map("agent_id")
-  content     String   // The actual memory content
-  embedding   Float[]  // Vector embedding of the content
-  sourceType  String   // "url", "file", "post", "manual", etc.
-  sourceUrl   String?  // Original source URL
-  sourceTitle String?  // Title of the source
+  id           String   @id @default(cuid())
+  agentId      String   @map("agent_id")
+  content      String // The actual memory content
+  embedding    Float[] // Vector embedding of the content
+  sourceType   String // "url", "file", "post", "manual", etc.
+  sourceUrl    String? // Original source URL
+  sourceTitle  String? // Title of the source
   sourceAuthor String? // Author of the source
-  tags        String[] // Topic tags, sentiment, bias labels, etc.
-  confidence  Float    @default(1.0) // Confidence score for this memory
-  threadId    String?  // Associated Carrot group page thread ID
-  topicId     String?  // Associated topic ID
-  fedBy       String?  // User ID who fed this memory
-  createdAt   DateTime @default(now())
+  tags         String[] // Topic tags, sentiment, bias labels, etc.
+  confidence   Float    @default(1.0) // Confidence score for this memory
+  threadId     String? // Associated Carrot group page thread ID
+  topicId      String? // Associated topic ID
+  fedBy        String? // User ID who fed this memory
+  createdAt    DateTime @default(now())
 
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
@@ -671,12 +671,12 @@ model AgentMemory {
 model AgentFeedEvent {
   id          String   @id @default(cuid())
   agentId     String   @map("agent_id")
-  eventType   String   // "feed", "forget", "reweight", etc.
-  content     String   // Description of what was fed
-  sourceUrl   String?  // Source URL if applicable
-  sourceTitle String?  // Source title if applicable
+  eventType   String // "feed", "forget", "reweight", etc.
+  content     String // Description of what was fed
+  sourceUrl   String? // Source URL if applicable
+  sourceTitle String? // Source title if applicable
   memoryIds   String[] // IDs of memories created/affected
-  fedBy       String?  // User ID who performed the action
+  fedBy       String? // User ID who performed the action
   metadata    Json     @default("{}") // Additional event metadata
   createdAt   DateTime @default(now())
 
@@ -686,14 +686,14 @@ model AgentFeedEvent {
 }
 
 model AgentConversation {
-  id          String   @id @default(cuid())
-  agentId     String   @map("agent_id")
-  threadId    String?  // Carrot thread ID if connected
-  query       String   // The user's query
-  response    String   // Agent's response
-  context     Json?    // Additional context for the conversation
-  memoryIds   String[] // Memory IDs that influenced this response
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  agentId   String   @map("agent_id")
+  threadId  String? // Carrot thread ID if connected
+  query     String // The user's query
+  response  String // Agent's response
+  context   Json? // Additional context for the conversation
+  memoryIds String[] // Memory IDs that influenced this response
+  createdAt DateTime @default(now())
 
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
@@ -705,8 +705,8 @@ model UserPatchTheme {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   patchId   String   @map("patch_id")
-  mode      String   // 'preset' | 'image'
-  preset    String?  // 'light' | 'warm' | 'stone' | 'civic' | 'ink'
+  mode      String // 'preset' | 'image'
+  preset    String? // 'light' | 'warm' | 'stone' | 'civic' | 'ink'
   imageUrl  String?  @map("image_url")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -752,53 +752,87 @@ model BotSubscription {
 
 // AI-Discovered Content for Patches
 model DiscoveredContent {
-  id             String   @id @default(cuid())
-  patchId        String   @map("patch_id")
-  canonicalUrl   String   @map("canonical_url")
+  id             String    @id @default(cuid())
+  patchId        String    @map("patch_id")
+  canonicalUrl   String    @map("canonical_url")
   title          String
-  sourceUrl      String   @map("source_url")
-  domain         String?  @db.Text
+  sourceUrl      String    @map("source_url")
+  sourceDomain   String?   @map("source_domain") @db.VarChar(255)
+  domain         String?   @db.Text
   publishDate    DateTime? @map("publish_date")
-  category       String?  // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
-  isControversy  Boolean  @default(false) @map("is_controversy")
-  isHistory      Boolean  @default(false) @map("is_history")
-  relevanceScore Float    @map("relevance_score") @default(0.0)
-  qualityScore   Float    @map("quality_score") @default(0.0)
-  whyItMatters   String?  @map("why_it_matters")
+  category       String? // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
+  isControversy  Boolean   @default(false) @map("is_controversy")
+  isHistory      Boolean   @default(false) @map("is_history")
+  relevanceScore Float     @default(0.0) @map("relevance_score")
+  qualityScore   Float     @default(0.0) @map("quality_score")
+  whyItMatters   String?   @map("why_it_matters")
   summary        String?
   facts          Json?
   quotes         Json?
   provenance     Json?
   hero           Json?
   metadata       Json?
-  contentHash    String?  @map("content_hash")
-  createdAt      DateTime @default(now()) @map("created_at")
+  contentHash    String?   @map("content_hash")
+  // New fields for robust crawler
+  rawHtml        Bytes?    @map("raw_html")
+  textContent    String?   @map("text_content") @db.Text
+  keyFacts       Json?     @map("key_facts") // array of strings
+  notableQuotes  Json?     @map("notable_quotes") // array of {quote:string, attribution?:string, sourceUrl?:string}
+  isUseful       Boolean?  @map("is_useful") // relevance heuristic
+  lastCrawledAt  DateTime? @map("last_crawled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
 
+  @@unique([patchId, canonicalUrl])
   @@index([patchId])
   @@index([contentHash])
   @@index([domain])
-  @@unique([patchId, canonicalUrl])
+  @@index([sourceDomain])
+  @@index([lastCrawledAt])
   @@map("discovered_content")
+}
+
+// Crawl Frontier for durable dedupe across runs
+model CrawlFrontier {
+  url           String    @id @db.Text
+  source        String? // 'wikipedia', 'news', 'blog', etc.
+  firstSeenAt   DateTime  @default(now()) @map("first_seen_at")
+  lastTriedAt   DateTime? @map("last_tried_at")
+  status        String    @default("pending") // pending|success|failed|skipped
+  failReason    String?   @map("fail_reason") @db.Text
+  depth         Int       @default(0)
+  parentUrl     String?   @map("parent_url") @db.Text
+  normalizedUrl String    @unique @map("normalized_url") @db.Text
+  retryCount    Int       @default(0) @map("retry_count")
+  robotsAllowed Boolean?  @map("robots_allowed")
+  httpStatus    Int?      @map("http_status")
+  contentType   String?   @map("content_type") @db.VarChar(255)
+  title         String?   @db.Text
+  sha256        String?   @db.VarChar(64) // body hash for change detection
+
+  @@index([status, lastTriedAt])
+  @@index([depth])
+  @@index([normalizedUrl])
+  @@map("crawl_frontier")
 }
 
 // Crawler raw page storage (Phase 1: Foundation)
 model CrawlerPage {
-  id              String   @id @default(cuid())
-  url             String   @unique @db.Text
-  domain          String   @db.Text
-  status          String   // "pending" | "fetched" | "failed" | "extracted"
-  firstSeenAt     DateTime @default(now()) @map("first_seen_at")
+  id              String    @id @default(cuid())
+  url             String    @unique @db.Text
+  domain          String    @db.Text
+  status          String // "pending" | "fetched" | "failed" | "extracted"
+  firstSeenAt     DateTime  @default(now()) @map("first_seen_at")
   lastProcessedAt DateTime? @map("last_processed_at")
-  textHash        String?  @map("text_hash") @db.Text
-  bytes           Int?     @default(0)
-  httpStatus      Int?     @map("http_status")
-  reasonCode      String?  @map("reason_code") @db.Text // "robots_blocked" | "timeout" | "dns_error" | "http_403" | "paywall" | "content_too_short"
-  rawHtml         String?  @db.Text @map("raw_html")
-  extractedText   String?  @db.Text @map("extracted_text")
-  canonicalUrl    String?  @map("canonical_url") @db.Text
-  
+  textHash        String?   @map("text_hash") @db.Text
+  bytes           Int?      @default(0)
+  httpStatus      Int?      @map("http_status")
+  reasonCode      String?   @map("reason_code") @db.Text // "robots_blocked" | "timeout" | "dns_error" | "http_403" | "paywall" | "content_too_short"
+  rawHtml         String?   @map("raw_html") @db.Text
+  extractedText   String?   @map("extracted_text") @db.Text
+  canonicalUrl    String?   @map("canonical_url") @db.Text
+
   extraction CrawlerExtraction?
 
   @@index([domain])
@@ -811,18 +845,18 @@ model CrawlerPage {
 
 // LLM extraction results (Phase 4: LLM Extractor)
 model CrawlerExtraction {
-  id                String   @id @default(cuid())
-  pageId            String   @unique @map("page_id")
-  topic             String   @db.Text
-  sourceUrl         String   @map("source_url") @db.Text
-  title             String   @db.Text
-  top10Facts        Json     @map("top_10_facts") // string[]
-  quotedPassages    Json     @map("quoted_passages") // Array<{quote: string, context_note: string}>
-  paraphraseSummary String   @db.Text @map("paraphrase_summary")
-  controversialFlags Json?  @map("controversial_flags") // string[] | null
-  metadata          Json     // {domain: string, crawl_timestamp: string, char_count: number}
-  createdAt         DateTime @default(now()) @map("created_at")
-  
+  id                 String   @id @default(cuid())
+  pageId             String   @unique @map("page_id")
+  topic              String   @db.Text
+  sourceUrl          String   @map("source_url") @db.Text
+  title              String   @db.Text
+  top10Facts         Json     @map("top_10_facts") // string[]
+  quotedPassages     Json     @map("quoted_passages") // Array<{quote: string, context_note: string}>
+  paraphraseSummary  String   @map("paraphrase_summary") @db.Text
+  controversialFlags Json?    @map("controversial_flags") // string[] | null
+  metadata           Json // {domain: string, crawl_timestamp: string, char_count: number}
+  createdAt          DateTime @default(now()) @map("created_at")
+
   page CrawlerPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
   @@index([topic])
@@ -833,14 +867,14 @@ model CrawlerExtraction {
 
 // Discovery Audit Trail Models
 model DiscoveryRun {
-  id        String   @id @default(cuid())
-  patchId   String   @map("patch_id")
-  startedAt DateTime @default(now()) @map("started_at")
+  id        String    @id @default(cuid())
+  patchId   String    @map("patch_id")
+  startedAt DateTime  @default(now()) @map("started_at")
   endedAt   DateTime? @map("ended_at")
-  status    String   // live | completed | aborted | error
-  metrics   Json?    // {timeToFirst, novelRate, dupRate, itemsSaved, ...}
+  status    String // live | completed | aborted | error
+  metrics   Json? // {timeToFirst, novelRate, dupRate, itemsSaved, ...}
 
-  patch Patch           @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  patch  Patch            @relation(fields: [patchId], references: [id], onDelete: Cascade)
   audits DiscoveryAudit[]
 
   @@index([patchId, startedAt])
@@ -851,26 +885,26 @@ model DiscoveryAudit {
   id           String   @id @default(cuid())
   runId        String   @map("run_id")
   patchId      String   @map("patch_id")
-  step         String   // searching|meta|fetch|relevance|quality|dedupe|synthesis|hero|save|error
-  status       String   // pending|ok|fail
+  step         String // searching|meta|fetch|relevance|quality|dedupe|synthesis|hero|save|error
+  status       String // pending|ok|fail
   ts           DateTime @default(now())
-  provider     String?  // rss|wikipedia|official-site|web-search:bing|...
+  provider     String? // rss|wikipedia|official-site|web-search:bing|...
   query        String?  @db.Text
-  candidateUrl String?  @db.Text @map("candidate_url")
-  finalUrl     String?  @db.Text @map("final_url")
-  http         Json?    // {code, contentType, bytes}
-  meta         Json?    // {title,h1,preview,domain,publishedAt}
+  candidateUrl String?  @map("candidate_url") @db.Text
+  finalUrl     String?  @map("final_url") @db.Text
+  http         Json? // {code, contentType, bytes}
+  meta         Json? // {title,h1,preview,domain,publishedAt}
   rulesHit     Json?    @map("rules_hit") // {mustMention:true, primaryPage:false, negativeFilter:false}
-  scores       Json?    // {relevance:0.82, duplicateHitRate:0.12, simhashDistance:7}
-  decisions    Json?    // {reason:"relevance<0.75", action:"drop"} or {reason:"OK", action:"keep"}
-  hashes       Json?    // {contentHash, canonicalUrl}
-  synthesis    Json?    // {whyItMatters, facts[], quotes[], provenance[]}
-  hero         Json?    // {source:"ai|wikimedia|skeleton", url, attribution, durationMs}
-  timings      Json?    // {metaMs, fetchMs, vetMs, synthMs, heroMs, totalMs}
+  scores       Json? // {relevance:0.82, duplicateHitRate:0.12, simhashDistance:7}
+  decisions    Json? // {reason:"relevance<0.75", action:"drop"} or {reason:"OK", action:"keep"}
+  hashes       Json? // {contentHash, canonicalUrl}
+  synthesis    Json? // {whyItMatters, facts[], quotes[], provenance[]}
+  hero         Json? // {source:"ai|wikimedia|skeleton", url, attribution, durationMs}
+  timings      Json? // {metaMs, fetchMs, vetMs, synthMs, heroMs, totalMs}
   error        Json?
 
   run   DiscoveryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  patch Patch           @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  patch Patch        @relation(fields: [patchId], references: [id], onDelete: Cascade)
 
   @@index([runId, ts])
   @@index([patchId])

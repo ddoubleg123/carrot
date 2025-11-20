@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runPipeline } from '@/lib/pipeline'
 
 interface GenerateHeroImageRequest {
-  title: string
-  summary: string
+  title?: string
+  summary?: string
+  topic?: string
+  context?: string
+  description?: string
   sourceDomain?: string
   contentType?: string
   patchTheme?: string
   artisticStyle?: string
   enableHiresFix?: boolean
+  preferredSubjects?: string[]
+  license?: string
 }
 
 // Using new sanitizeInputs + buildPrompt system instead of simple helpers
@@ -17,27 +22,43 @@ export async function POST(request: NextRequest) {
   try {
     const reqBody: GenerateHeroImageRequest = await request.json();
     
-    // Extract fields safely
+    // Extract fields safely - support both old and new contract
     const { 
       title = "", 
       summary = "", 
+      topic = "",
+      context = "",
+      description = "",
       sourceDomain = "",
       contentType = "article",
       patchTheme = "general",
       artisticStyle = "photorealistic", 
-      enableHiresFix = false 
+      enableHiresFix = false,
+      preferredSubjects = [],
+      license = "cc0-or-cc-by"
     } = reqBody;
 
+    // Normalize: use topic/context if provided, otherwise fall back to title/summary
+    const normalizedTitle = topic || title || ""
+    const normalizedSummary = context || description || summary || ""
+
     // Validate required fields
-    if (!title || !summary) {
+    if (!normalizedTitle || !normalizedSummary) {
+      console.warn('[GenerateHeroImage] Validation error:', {
+        received: { title, summary, topic, context, description },
+        normalized: { normalizedTitle, normalizedSummary }
+      })
       return NextResponse.json(
-        { error: 'Title and summary are required' },
+        { 
+          error: 'Title/topic and summary/context are required',
+          details: 'Provide either (title, summary) or (topic, context)'
+        },
         { status: 400 }
       );
     }
 
     // Simple prompt building
-    const positivePrompt = `${title}. ${summary}. ${artisticStyle} style, high quality, detailed, professional photography`;
+    const positivePrompt = `${normalizedTitle}. ${normalizedSummary}. ${artisticStyle} style, high quality, detailed, professional photography`;
     const negativePrompt = "blurry, low quality, distorted, ugly, deformed, bad anatomy, bad proportions, poorly drawn face, poorly drawn eyes, poorly drawn hands, text, watermark, signature, logo, extra limbs, cloned face, disfigured, out of frame, missing fingers, extra fingers, mutated hands";
 
     // Log final configuration for debugging
@@ -45,8 +66,10 @@ export async function POST(request: NextRequest) {
       enableHiresFix,
       positivePrompt: positivePrompt.substring(0, 150) + '...',
       artisticStyle,
-      title,
-      summary
+      title: normalizedTitle,
+      summary: normalizedSummary.substring(0, 100),
+      preferredSubjects,
+      license
     });
 
     console.log(`[AI Image Generator] HD Option: ${enableHiresFix ? "ON" : "OFF"}`);

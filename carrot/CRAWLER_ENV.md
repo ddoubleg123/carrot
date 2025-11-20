@@ -25,10 +25,18 @@
 - `CRAWL_RENDER_ENABLED` - Enable Playwright renderer for JS sites (default: `false`, set to `true` to enable)
 - `CRAWL_RENDER_TIMEOUT_MS` - Playwright navigation timeout in milliseconds (default: `16000`)
 - `CRAWL_MIN_SEEDS_PER_CYCLE` - Minimum seeds to emit per query expansion cycle (default: `10`)
-- `CRAWL_WIKI_OUTLINK_LIMIT` - Max outlinks to extract from Wikipedia pages (default: `25`)
+- `CRAWL_WIKI_OUTLINK_LIMIT` - Max outlinks to extract from Wikipedia pages (default: `50`)
 - `CRAWL_SEEN_TTL_DAYS` - TTL for seen URLs cache in days (default: `7`)
 - `CRAWL_RETRY_SOFTFAIL` - Allow retry for soft failures (timeout, extractor_empty) (default: `true`)
 - `CRAWLER_MAX_RESEED_ATTEMPTS` - Max reseed attempts before circuit breaker (default: `10`, raised from 3)
+
+## New Environment Variables (Production Crawler Fixes)
+
+- `CRAWL_MAX_DEPTH` - Maximum crawl depth for deep-link expansion (default: `2`)
+- `CRAWL_PER_HOST_CONCURRENCY` - Max concurrent requests per host (default: `2`)
+- `CRAWL_GLOBAL_CONCURRENCY` - Global max concurrent requests (default: `6`)
+- `CRAWL_FETCH_CONNECT_TIMEOUT_MS` - Connection timeout in milliseconds (default: `10000`)
+- `CRAWL_FETCH_READ_TIMEOUT_MS` - Read timeout in milliseconds (default: `20000`)
 
 ## Feature Flags
 

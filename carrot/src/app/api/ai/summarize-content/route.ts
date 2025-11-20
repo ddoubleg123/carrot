@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { validateEnrichment, fillEnrichmentDefaults } from '@/lib/discovery/enrichmentContract'
 
 // Validation schema
 const SummarizeContentSchema = z.object({
@@ -109,19 +110,39 @@ Return cleaned, scored, relevant content in JSON format.`
       result = extractContentFromText(content)
     }
 
-    // Validate result structure
-    if (!result.summary || !result.keyFacts || !Array.isArray(result.keyFacts)) {
-      throw new Error('Invalid response structure from LLM')
+    // Validate and enforce enrichment contract
+    const validation = validateEnrichment(result)
+    
+    if (!validation.valid) {
+      console.warn('[summarize-content] Contract validation failed, filling defaults:', validation.errors)
+      // Fill safe defaults
+      const enriched = fillEnrichmentDefaults(result, title, result.summary || '')
+      return NextResponse.json(enriched)
     }
 
     // Clean and validate content
-    result.summary = cleanText(result.summary)
-    result.keyFacts = result.keyFacts.map((fact: string) => cleanText(fact))
-    result.notableQuotes = result.notableQuotes?.map((quote: string) => cleanText(quote)) || []
+    const enriched = validation.data!
+    enriched.summary = cleanText(enriched.summary)
+    enriched.keyFacts = enriched.keyFacts.map(fact => cleanText(fact))
+    enriched.notableQuotes = enriched.notableQuotes.map(quote => {
+      if (typeof quote === 'string') {
+        return { quote: cleanText(quote) }
+      }
+      return {
+        quote: cleanText(quote.quote || ''),
+        attribution: quote.attribution ? cleanText(quote.attribution) : undefined,
+        sourceUrl: quote.sourceUrl
+      }
+    })
+
+    // Hard cap quotes at 2
+    if (enriched.notableQuotes.length > 2) {
+      enriched.notableQuotes = enriched.notableQuotes.slice(0, 2)
+    }
 
     console.log(`[summarize-content] ✅ Successfully processed content for: ${title.substring(0, 50)}`)
 
-    return NextResponse.json(result)
+    return NextResponse.json(enriched)
 
   } catch (error: any) {
     console.error('[summarize-content] Error:', error)
