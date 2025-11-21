@@ -111,17 +111,17 @@ Return cleaned, scored, relevant content in JSON format.`
     }
 
     // Validate and enforce enrichment contract
-    const validation = validateEnrichment(result)
+    const enrichmentValidation = validateEnrichment(result)
     
-    if (!validation.valid) {
-      console.warn('[summarize-content] Contract validation failed, filling defaults:', validation.errors)
+    if (!enrichmentValidation.valid) {
+      console.warn('[summarize-content] Contract validation failed, filling defaults:', enrichmentValidation.errors)
       // Fill safe defaults
       const enriched = fillEnrichmentDefaults(result, title, result.summary || '')
       return NextResponse.json(enriched)
     }
 
     // Clean and validate content
-    const enriched = validation.data!
+    const enriched = enrichmentValidation.data!
     enriched.summary = cleanText(enriched.summary)
     enriched.keyFacts = enriched.keyFacts.map(fact => cleanText(fact))
     enriched.notableQuotes = enriched.notableQuotes.map(quote => {
