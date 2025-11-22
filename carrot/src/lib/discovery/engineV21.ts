@@ -2068,6 +2068,45 @@ export class DiscoveryEngineV21 {
           if (this.discoveryTelemetry) {
             this.discoveryTelemetry.recordPersistOk()
           }
+
+          // Create hero record (idempotent, non-blocking)
+          try {
+            const { upsertHero, logHeroEvent } = await import('./heroUpsert')
+            const heroResult = await upsertHero({
+              patchId: this.options.patchId,
+              contentId: savedItem.id,
+              url: canonicalUrl,
+              canonicalUrl,
+              title: extracted.title,
+              summary: synthesis.whyItMatters,
+              sourceDomain: finalDomain ?? hostHint ?? undefined,
+              extractedText: extracted.text,
+              traceId: this.options.runId
+            })
+            logHeroEvent(heroResult.created ? 'hero_created' : 'hero_skipped_duplicate', {
+              patchId: this.options.patchId,
+              contentId: savedItem.id,
+              url: canonicalUrl,
+              traceId: this.options.runId
+            })
+            // Emit SSE event for hero creation
+            this.eventStream.sendEvent('hero_ready', {
+              contentId: savedItem.id,
+              heroId: heroResult.heroId,
+              created: heroResult.created
+            })
+          } catch (heroError: any) {
+            const { logHeroEvent } = await import('./heroUpsert')
+            logHeroEvent('hero_upsert_error', {
+              patchId: this.options.patchId,
+              contentId: savedItem.id,
+              url: canonicalUrl,
+              traceId: this.options.runId,
+              error: heroError.message
+            })
+            // Don't fail the save if hero creation fails
+            console.warn('[EngineV21] Hero creation failed (non-blocking):', heroError)
+          }
           
           // Structured logging for successful save (persist)
           const { slog } = await import('@/lib/log')

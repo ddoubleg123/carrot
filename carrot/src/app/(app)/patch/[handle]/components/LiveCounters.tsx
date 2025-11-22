@@ -31,13 +31,22 @@ interface MetricsData {
   timestamp: string
 }
 
-const fetcher = async (url: string): Promise<MetricsData> => {
+interface HeroMetricsData {
+  totalHeroes: number
+  readyHeroes: number
+  errorHeroes: number
+  draftHeroes: number
+  totalContent: number
+  heroesWithoutContent: number
+  successRate: number
+}
+
+const fetcher = async (url: string) => {
   const res = await fetch(url)
   if (!res.ok) {
     throw new Error('Failed to fetch metrics')
   }
-  const data = await res.json()
-  return data
+  return res.json()
 }
 
 export default function LiveCounters({ patchHandle, streamCounters }: LiveCountersProps) {
@@ -46,6 +55,15 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
     fetcher,
     {
       refreshInterval: 5000, // Poll every 5 seconds
+      revalidateOnFocus: true
+    }
+  )
+
+  const { data: heroData, error: heroError } = useSWR<HeroMetricsData>(
+    `/api/patches/${patchHandle}/heroes/metrics`,
+    fetcher,
+    {
+      refreshInterval: 5000,
       revalidateOnFocus: true
     }
   )
@@ -63,9 +81,15 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
             description: 'Items processed this run'
           },
           { 
-            label: 'Saved', 
+            label: 'Saved (Sources)', 
             value: metrics?.saved ?? 0,
             description: 'Total saved in DB',
+            highlight: true
+          },
+          { 
+            label: 'Heroes', 
+            value: heroData?.readyHeroes ?? 0,
+            description: 'Ready heroes',
             highlight: true
           },
           { 
@@ -91,6 +115,10 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
           { 
             label: 'Persist OK', 
             value: metrics?.persistOk ?? 0
+          },
+          { 
+            label: 'Hero Errors', 
+            value: heroData?.errorHeroes ?? 0
           }
         ].map((metric) => (
           <div

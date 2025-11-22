@@ -3,10 +3,10 @@
  * Shows real-time discovery progress on the left side
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Play, Square, Pause, RefreshCw, AlertTriangle, Clock } from 'lucide-react'
+import { Play, Square, Pause, RefreshCw, AlertTriangle, Clock, Sync } from 'lucide-react'
 import LiveCounters from './LiveCounters'
 
 type DiscoveryStage = 'searching' | 'vetting' | 'hero' | 'saved' | undefined
@@ -71,6 +71,35 @@ export default function LivePanel({
   onRefresh,
   className = ''
 }: LivePanelProps) {
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const handleSyncHeroes = async () => {
+    if (!patchHandle) return
+    
+    setIsSyncing(true)
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/heroes/backfill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 100, concurrency: 5 })
+      })
+      
+      if (!response.ok) {
+        throw new Error('Backfill failed')
+      }
+      
+      const result = await response.json()
+      console.log('[LivePanel] Hero backfill result:', result)
+      
+      // Refresh the list after backfill
+      await onRefresh()
+    } catch (error) {
+      console.error('[LivePanel] Hero sync failed:', error)
+      alert('Failed to sync heroes. Check console for details.')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
   const getStatusIcon = () => {
     if (error) return <AlertTriangle className="h-4 w-4 text-red-500" />
     if (isActive && !isPaused) return <Play className="h-4 w-4 text-green-500" />
@@ -196,6 +225,28 @@ export default function LivePanel({
             Refresh
           </Button>
         </div>
+
+        {patchHandle && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncHeroes}
+            disabled={isSyncing}
+            className="w-full"
+          >
+            {isSyncing ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <Sync className="mr-2 h-4 w-4" />
+                Sync Saved → Heroes
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {patchHandle && (
