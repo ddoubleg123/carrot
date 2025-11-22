@@ -6,7 +6,7 @@
 import React, { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Play, Square, Pause, RefreshCw, AlertTriangle, Clock, Sync } from 'lucide-react'
+import { Play, Square, Pause, RefreshCw, AlertTriangle, Clock, RotateCw } from 'lucide-react'
 import LiveCounters from './LiveCounters'
 
 type DiscoveryStage = 'searching' | 'vetting' | 'hero' | 'saved' | undefined
@@ -241,7 +241,7 @@ export default function LivePanel({
               </>
             ) : (
               <>
-                <Sync className="mr-2 h-4 w-4" />
+                <RotateCw className="mr-2 h-4 w-4" />
                 Sync Saved → Heroes
               </>
             )}
