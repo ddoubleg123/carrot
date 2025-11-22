@@ -7,6 +7,7 @@ import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Play, Square, Pause, RefreshCw, AlertTriangle, Clock } from 'lucide-react'
+import LiveCounters from './LiveCounters'
 
 type DiscoveryStage = 'searching' | 'vetting' | 'hero' | 'saved' | undefined
 
@@ -24,6 +25,7 @@ interface LivePanelProps {
   totalDuplicates: number
   totalSkipped: number
   totalSaved: number
+  patchHandle?: string
   onStart: () => void | Promise<void>
   onPause: () => void | Promise<void>
   onStop: () => void | Promise<void>
@@ -62,6 +64,7 @@ export default function LivePanel({
   totalDuplicates,
   totalSkipped,
   totalSaved,
+  patchHandle,
   onStart,
   onPause,
   onStop,
@@ -136,7 +139,7 @@ export default function LivePanel({
 
         <div className="mt-3 flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">
-            {itemsFound} saved
+            {itemsFound} processed
           </Badge>
           {lastItemTitle && (
             <span className="max-w-[200px] truncate text-xs text-gray-500">
@@ -195,27 +198,17 @@ export default function LivePanel({
         </div>
       </div>
 
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">Live Counters</h3>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          {[
-            { label: 'Frontier', value: frontierSize },
-            { label: 'De-duped', value: totalDuplicates },
-            { label: 'Skipped', value: totalSkipped },
-            { label: 'Saved', value: totalSaved }
-          ].map((metric) => (
-            <div
-              key={metric.label}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {metric.label}
-              </p>
-              <p className="text-lg font-semibold text-slate-900">{metric.value ?? 0}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      {patchHandle && (
+        <LiveCounters 
+          patchHandle={patchHandle}
+          streamCounters={{
+            frontier: frontierSize,
+            duplicates: totalDuplicates,
+            skipped: totalSkipped,
+            processed: itemsFound
+          }}
+        />
+      )}
 
       <div>
         <h3 className="text-sm font-semibold text-gray-900">Pipeline</h3>

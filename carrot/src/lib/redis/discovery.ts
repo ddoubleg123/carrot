@@ -80,7 +80,7 @@ const METRICS_TTL_SECONDS = 60 * 60 * 6
 const HASHES_TTL_SECONDS = 14 * 24 * 60 * 60
 const CRAWLER_SEEN_TTL_SECONDS = 10 * 24 * 60 * 60 // 10 days default (7-14 day range)
 
-async function getRedisClient() {
+export async function getRedisClient() {
   if (!redisClient) {
     const url = process.env.REDIS_URL
     if (!url) {

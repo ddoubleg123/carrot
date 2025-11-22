@@ -175,6 +175,7 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           totalDuplicates={state.totalDuplicates}
           totalSkipped={state.totalSkipped}
           totalSaved={state.totalSaved}
+          patchHandle={patchHandle}
           onStart={start}
           onPause={pause}
           onStop={stop}
