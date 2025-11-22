@@ -435,6 +435,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
       })
 
       if (content) {
+        const sourceUrl = content.canonicalUrl || content.sourceUrl || ''
         await prisma.hero.upsert({
           where: { contentId },
           update: {
@@ -448,6 +449,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
           create: {
             contentId,
             title: content.title,
+            sourceUrl, // Required field
             status: 'ERROR',
             errorCode,
             errorMessage: error.message?.substring(0, 500) || 'Unknown error',
