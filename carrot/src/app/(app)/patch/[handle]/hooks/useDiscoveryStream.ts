@@ -117,12 +117,39 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch(`/api/patches/${patchHandle}/discovered-content?limit=50`)
+      const url = `/api/patches/${patchHandle}/discovered-content?limit=50`
+      console.log('[DiscoveryStream] Fetching from:', url)
+      
+      const response = await fetch(url, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
+      
+      console.log('[DiscoveryStream] Response status:', response.status, response.statusText)
+      
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('[DiscoveryStream] Response error:', { status: response.status, errorText })
         throw new Error(`Failed to load discovered content: ${response.status}`)
       }
+      
       const data = await response.json()
+      console.log('[DiscoveryStream] Response data:', {
+        success: data.success,
+        itemsCount: Array.isArray(data.items) ? data.items.length : 0,
+        totalItems: data.totalItems,
+        isActive: data.isActive,
+        debug: data.debug
+      })
+      
       const payload: DiscoveryCardPayload[] = Array.isArray(data.items) ? data.items : []
+      
+      if (payload.length === 0 && data.debug) {
+        console.warn('[DiscoveryStream] Empty payload with debug info:', data.debug)
+      }
+      
       setItems(payload)
       setState(prev => ({
         ...prev,
@@ -130,6 +157,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
       }))
     } catch (error) {
       console.error('[DiscoveryStream] Failed to refresh:', error)
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to refresh'
+      }))
     }
   }, [patchHandle])
 

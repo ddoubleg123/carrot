@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Loader2, Plus, Search } from 'lucide-react'
 import { DiscoveryCard } from './DiscoveryCard'
@@ -19,6 +20,19 @@ const INITIAL_BATCH = 6
 export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [visibleItemsCount, setVisibleItemsCount] = useState(INITIAL_BATCH)
   const [selectedItem, setSelectedItem] = useState<DiscoveryCardPayload | null>(null)
+  const [healthData, setHealthData] = useState<any>(null)
+  const searchParams = useSearchParams()
+  const showDebug = searchParams?.get('debug') === '1'
+  
+  // Fetch health data if debug mode
+  useEffect(() => {
+    if (showDebug) {
+      fetch(`/api/patches/${patchHandle}/discovered-content/health`)
+        .then(res => res.json())
+        .then(data => setHealthData(data))
+        .catch(err => console.error('[DiscoveryList] Health fetch failed:', err))
+    }
+  }, [showDebug, patchHandle])
 
   const {
     state,
@@ -31,14 +45,26 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
 
   const dedupedItems = useMemo(() => {
     const seen = new Set<string>()
-    return items.filter((item) => {
+    const filtered = items.filter((item) => {
       if (seen.has(item.canonicalUrl)) {
         return false
       }
       seen.add(item.canonicalUrl)
       return true
     })
-  }, [items])
+    
+    // Debug logging
+    if (showDebug) {
+      console.log('[DiscoveryList] Items processing:', {
+        rawCount: items.length,
+        dedupedCount: filtered.length,
+        patchHandle,
+        sampleIds: filtered.slice(0, 3).map(i => i.id)
+      })
+    }
+    
+    return filtered
+  }, [items, showDebug, patchHandle])
 
   const visibleItems = dedupedItems.slice(0, visibleItemsCount)
   const hasMoreItems = dedupedItems.length > visibleItemsCount
@@ -57,8 +83,83 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
 
   const showEmptyState = !state.isActive && dedupedItems.length === 0 && !state.error
 
+  // Debug panel
+  const debugInfo = showDebug ? {
+    patchHandle,
+    rawItemsCount: items.length,
+    dedupedCount: dedupedItems.length,
+    visibleCount: visibleItems.length,
+    state: {
+      isActive: state.isActive,
+      itemsFound: state.itemsFound,
+      totalSaved: state.totalSaved,
+      totalSkipped: state.totalSkipped,
+      totalDuplicates: state.totalDuplicates
+    },
+    health: healthData
+  } : null
+
   return (
     <section className="space-y-6">
+      {showDebug && debugInfo && (
+        <div className="rounded-lg border-2 border-orange-500 bg-orange-50 p-4 text-sm">
+          <h3 className="font-bold mb-2">🐛 Debug Panel (?debug=1)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="font-semibold">Patch Handle</div>
+              <div className="text-xs font-mono">{debugInfo.patchHandle}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Raw Items</div>
+              <div className="text-lg font-bold">{debugInfo.rawItemsCount}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Deduped</div>
+              <div className="text-lg font-bold">{debugInfo.dedupedCount}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Visible</div>
+              <div className="text-lg font-bold">{debugInfo.visibleCount}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Total Saved</div>
+              <div className="text-lg font-bold">{debugInfo.state.totalSaved}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Total Skipped</div>
+              <div className="text-lg font-bold">{debugInfo.state.totalSkipped}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Total Duplicates</div>
+              <div className="text-lg font-bold">{debugInfo.state.totalDuplicates}</div>
+            </div>
+            <div>
+              <div className="font-semibold">Is Active</div>
+              <div className="text-lg font-bold">{debugInfo.state.isActive ? 'Yes' : 'No'}</div>
+            </div>
+            {debugInfo.health && (
+              <>
+                <div>
+                  <div className="font-semibold">DB Count</div>
+                  <div className="text-lg font-bold">{debugInfo.health.count || 0}</div>
+                </div>
+                <div>
+                  <div className="font-semibold">Sample Count</div>
+                  <div className="text-lg font-bold">{debugInfo.health.sampleCount || 0}</div>
+                </div>
+              </>
+            )}
+          </div>
+          {debugInfo.health && (
+            <div className="mt-4 pt-4 border-t border-orange-300">
+              <div className="font-semibold mb-2">Health Endpoint:</div>
+              <div className="text-xs font-mono bg-white p-2 rounded overflow-auto max-h-32">
+                {JSON.stringify(debugInfo.health, null, 2)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <LivePanel
           isActive={state.isActive}
