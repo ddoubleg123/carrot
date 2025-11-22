@@ -119,10 +119,11 @@ export async function GET(
       
       if (heroRelation && heroRelation.status === 'READY') {
         // Use Hero table data (preferred)
+        // Map to DiscoveryHero format - use 'ai' as source since it's from our enrichment system
         heroRaw = {
           url: heroRelation.imageUrl || null,
-          source: heroRelation.imageUrl ? 'hero-table' : 'none',
-          license: 'unknown',
+          source: heroRelation.imageUrl ? 'ai' : 'skeleton', // Use 'ai' for enriched images, 'skeleton' if no image
+          license: 'generated',
           enrichedAt: new Date().toISOString()
         }
       } else if (heroJson) {
