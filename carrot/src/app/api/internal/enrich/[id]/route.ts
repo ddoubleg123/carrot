@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { resolveHero } from '@/lib/media/resolveHero'
+import { enrichContentId } from '@/lib/enrichment/worker'
 
 /**
  * Internal API to enrich discovered content with hero images
  * POST /api/internal/enrich/[id]
- * Body: { sourceUrl?, assetUrl?, type }
+ * Body: (optional, not used - contentId from URL)
  * Auth: X-Internal-Token header must match INTERNAL_ENRICH_TOKEN env var
  */
 export const runtime = 'nodejs' // avoid Edge if using Node libs
@@ -38,91 +37,50 @@ export async function POST(
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    const body = await request.json().catch(() => ({} as any))
-    const { sourceUrl, assetUrl, type } = body
+    console.log('[Enrich API] Processing content:', { id })
 
-    console.log('[Enrich API] Processing content:', { id, type, sourceUrl: sourceUrl?.substring(0, 50) })
-
-    // Get the content item
-    const content = await prisma.discoveredContent.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        category: true,
-        sourceUrl: true,
-        summary: true,
-        hero: true
-      }
+    // Check if hero already exists and is READY
+    const existingHero = await prisma.hero.findUnique({
+      where: { contentId: id },
+      select: { id: true, status: true }
     })
 
-    if (!content) {
-      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
-    }
-
-    // Skip if already enriched
-    const existingHero = content.hero as any
-    if (existingHero?.url && existingHero?.source) {
+    if (existingHero && existingHero.status === 'READY') {
       console.log('[Enrich API] Content already enriched:', id)
       return NextResponse.json({ 
         success: true, 
         message: 'Already enriched',
-        hero: existingHero 
+        heroId: existingHero.id
       })
     }
 
-    try {
-      // Resolve hero image using 4-tier pipeline
-      const heroResult = await resolveHero({
-        url: sourceUrl || content.sourceUrl || undefined,
-        type: (type || content.category || 'article') as any,
-        assetUrl,
-        title: content.summary ? content.summary.slice(0, 80) : undefined,
-        summary: content.summary || undefined
-      })
+    // Run enrichment
+    const result = await enrichContentId(id)
 
-      const heroPayload: Prisma.JsonObject = {
-        url: heroResult.hero,
-        source: heroResult.source,
-        license: heroResult.license,
-        blurDataURL: heroResult.blurDataURL,
-        dominantColor: heroResult.dominant,
-        enrichedAt: new Date().toISOString(),
-        origin: 'internal-enrich'
-      }
-
-      await prisma.discoveredContent.update({
-        where: { id },
-        data: { 
-          hero: heroPayload
-        }
-      })
-
-      console.log('[Enrich API] Successfully enriched content:', id, 'source:', heroResult.source)
-
-      // Return 202 to indicate async processing
+    if (result.ok) {
       return NextResponse.json({
         ok: true,
         success: true,
         message: 'Content enriched successfully',
-        hero: heroPayload,
-        queued: true,
-        id
-      }, { status: 202 })
-
-    } catch (error) {
-      console.error('[Enrich API] Hero resolution failed:', error)
-      
+        heroId: result.heroId,
+        traceId: result.traceId
+      }, { status: 200 })
+    } else {
+      // Still return 200 but indicate error status
       return NextResponse.json({
+        ok: false,
         success: false,
-        error: 'Hero resolution failed',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 })
+        error: result.errorMessage,
+        errorCode: result.errorCode,
+        traceId: result.traceId,
+        note: 'Hero record created with ERROR status for retry'
+      }, { status: 200 })
     }
 
   } catch (error) {
     console.error('[Enrich API] Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

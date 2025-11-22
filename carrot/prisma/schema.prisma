@@ -782,7 +782,8 @@ model DiscoveredContent {
   lastCrawledAt  DateTime? @map("last_crawled_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  patch      Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  heroRecord Hero? @relation("HeroToContent") // One-to-one relation (renamed to avoid conflict with JSON hero field)
 
   @@unique([patchId, canonicalUrl])
   @@index([patchId])
@@ -815,6 +816,38 @@ model CrawlFrontier {
   @@index([depth])
   @@index([normalizedUrl])
   @@map("crawl_frontier")
+}
+
+// Hero enrichment for DiscoveredContent
+model Hero {
+  id             String     @id @default(cuid())
+  contentId      String     @unique @map("content_id") // FK to DiscoveredContent.id
+  title          String     @db.Text
+  excerpt        String?    @db.Text // Paraphrased summary (no quotes)
+  quoteHtml      String?    @map("quote_html") @db.Text // ≤2 paragraphs, ≤1200 chars
+  quoteCharCount Int?       @default(0) @map("quote_char_count")
+  imageUrl       String?    @map("image_url") @db.Text // Nullable - hero can exist without image
+  sourceUrl      String     @map("source_url") @db.Text // Canonical URL that was read
+  status         HeroStatus @default(DRAFT)
+  errorCode      String?    @map("error_code") @db.VarChar(50) // PAYWALL, TIMEOUT, etc.
+  errorMessage   String?    @map("error_message") @db.Text
+  traceId        String?    @map("trace_id") @db.VarChar(64) // For observability
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  content DiscoveredContent @relation("HeroToContent", fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
+  @@index([status])
+  @@index([traceId])
+  @@index([createdAt])
+  @@map("heroes")
+}
+
+enum HeroStatus {
+  DRAFT // Being processed
+  READY // Successfully enriched
+  ERROR // Failed (but hero record exists for retry)
 }
 
 // Crawler raw page storage (Phase 1: Foundation)

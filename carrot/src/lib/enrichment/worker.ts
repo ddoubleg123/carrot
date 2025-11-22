@@ -1,0 +1,483 @@
+/**
+ * Hero enrichment worker
+ * Fetches deep links, extracts content, generates quotes/summaries, and creates Hero records
+ */
+
+import { prisma } from '@/lib/prisma'
+import { createResilientFetch } from '@/lib/retryUtils'
+import { JSDOM } from 'jsdom'
+import { v4 as uuidv4 } from 'uuid'
+
+// Dynamic import for Readability (may not be installed)
+let Readability: any = null
+try {
+  const readabilityModule = require('@mozilla/readability')
+  Readability = readabilityModule.Readability || readabilityModule.default?.Readability || readabilityModule
+} catch {
+  // Readability not available, will use fallback
+}
+
+export interface EnrichmentResult {
+  ok: boolean
+  heroId?: string
+  traceId: string
+  phase: 'fetch' | 'extract' | 'summarize' | 'quote' | 'image' | 'upsert'
+  errorCode?: string
+  errorMessage?: string
+  durationMs: number
+}
+
+interface ExtractedContent {
+  title: string
+  author?: string
+  publishDate?: Date
+  mainText: string
+  paragraphs: string[]
+  canonicalUrl?: string
+}
+
+const FETCH_TIMEOUT_MS = 10000 // 10s
+const MAX_QUOTE_CHARS = 1200
+const MAX_QUOTE_PARAGRAPHS = 2
+
+/**
+ * Structured logging helper
+ */
+function log(phase: string, meta: Record<string, any>) {
+  const logEntry = {
+    ts: Date.now(),
+    phase,
+    ...meta
+  }
+  console.log(JSON.stringify(logEntry))
+}
+
+/**
+ * Fetch deep link HTML with timeout and retry
+ */
+async function fetchDeepLink(url: string, traceId: string): Promise<{ html: string; finalUrl: string }> {
+  const startTime = Date.now()
+  log('fetch', { traceId, url: url.substring(0, 100), phase: 'start' })
+
+  try {
+    const fetchWithRetry = createResilientFetch({
+      maxRetries: 2,
+      retryDelay: 1000,
+      timeout: FETCH_TIMEOUT_MS
+    })
+
+    const response = await fetchWithRetry(url, {
+      headers: {
+        'User-Agent': 'CarrotCrawler/1.0 (+contact@example.com)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      }
+    })
+
+    const durationMs = Date.now() - startTime
+
+    if (!response.ok) {
+      const errorCode = response.status >= 400 && response.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX'
+      log('fetch', { traceId, url, ok: false, httpStatus: response.status, durationMs, errorCode })
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const html = await response.text()
+    const finalUrl = response.url || url
+
+    log('fetch', { traceId, url, ok: true, httpStatus: response.status, durationMs, bytes: html.length })
+    return { html, finalUrl }
+  } catch (error: any) {
+    const durationMs = Date.now() - startTime
+    const errorCode = error.message?.includes('timeout') ? 'TIMEOUT' : 
+                     error.message?.includes('401') || error.message?.includes('403') ? 'PAYWALL' :
+                     error.message?.includes('404') ? 'HTTP_4XX' : 'FETCH_ERROR'
+    
+    log('fetch', { traceId, url, ok: false, durationMs, errorCode, errorMessage: error.message?.substring(0, 200) })
+    throw error
+  }
+}
+
+/**
+ * Extract content using Mozilla Readability with fallback
+ */
+function extractContent(html: string, url: string, traceId: string): ExtractedContent {
+  const startTime = Date.now()
+  log('extract', { traceId, url: url.substring(0, 100), phase: 'start' })
+
+  try {
+    const dom = new JSDOM(html, { url })
+    
+    let article: any = null
+    
+    // Try Readability first
+    if (Readability) {
+      try {
+        const reader = new Readability(dom.window.document)
+        article = reader.parse()
+      } catch (readabilityError) {
+        log('extract', { traceId, note: 'Readability failed, using fallback', error: readabilityError instanceof Error ? readabilityError.message : 'Unknown' })
+      }
+    }
+
+    // Fallback to DOM heuristics
+    if (!article) {
+      const doc = dom.window.document
+      const title = doc.querySelector('title')?.textContent || 
+                   doc.querySelector('h1')?.textContent || 
+                   doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                   'Untitled'
+      
+      // Try to find main content
+      const mainContent = doc.querySelector('article') || 
+                         doc.querySelector('main') ||
+                         doc.querySelector('[role="main"]') ||
+                         doc.querySelector('.content') ||
+                         doc.body
+
+      const textContent = mainContent.textContent || ''
+      article = {
+        title,
+        textContent
+      }
+    }
+
+    // Extract paragraphs
+    const textContent = article.textContent || article.content || ''
+    const paragraphs = textContent
+      .split(/\n\s*\n/)
+      .map(p => p.trim())
+      .filter(p => p.length > 50) // Filter out very short paragraphs
+
+    // Get canonical URL from meta tags
+    const doc = dom.window.document
+    let canonicalUrl = url
+    const canonicalLink = doc.querySelector('link[rel="canonical"]')
+    if (canonicalLink) {
+      const href = canonicalLink.getAttribute('href')
+      if (href) {
+        try {
+          canonicalUrl = new URL(href, url).href
+        } catch {
+          // Invalid URL, use original
+        }
+      }
+    }
+
+    // Try to get publish date from meta tags
+    let publishDate: Date | undefined
+    const pubDateMeta = doc.querySelector('meta[property="article:published_time"]') ||
+                       doc.querySelector('meta[name="publish-date"]')
+    if (pubDateMeta) {
+      const dateStr = pubDateMeta.getAttribute('content')
+      if (dateStr) {
+        publishDate = new Date(dateStr)
+        if (isNaN(publishDate.getTime())) {
+          publishDate = undefined
+        }
+      }
+    }
+
+    // Try to get author
+    let author: string | undefined
+    const authorMeta = doc.querySelector('meta[property="article:author"]') ||
+                     doc.querySelector('meta[name="author"]')
+    if (authorMeta) {
+      author = authorMeta.getAttribute('content') || undefined
+    }
+
+    const durationMs = Date.now() - startTime
+    log('extract', { traceId, ok: true, durationMs, titleLength: article.title?.length || 0, textLength: textContent.length })
+
+    return {
+      title: article.title || 'Untitled',
+      author,
+      publishDate,
+      mainText: textContent,
+      paragraphs,
+      canonicalUrl
+    }
+  } catch (error: any) {
+    const durationMs = Date.now() - startTime
+    log('extract', { traceId, ok: false, durationMs, errorCode: 'PARSE_FAILURE', errorMessage: error.message?.substring(0, 200) })
+    throw error
+  }
+}
+
+/**
+ * Generate quote (≤2 paragraphs, ≤1200 chars) from extracted content
+ */
+function generateQuote(paragraphs: string[], traceId: string): { quoteHtml: string; quoteCharCount: number } {
+  const startTime = Date.now()
+  log('quote', { traceId, phase: 'start', paragraphCount: paragraphs.length })
+
+  // Select up to 2 paragraphs with highest information density
+  const scored = paragraphs
+    .map((p, i) => ({
+      text: p,
+      index: i,
+      score: p.length + (p.match(/[.!?]/g) || []).length * 10 // Prefer longer paragraphs with more sentences
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_QUOTE_PARAGRAPHS)
+
+  let quoteText = scored.map(s => s.text).join('\n\n')
+  
+  // Truncate if too long
+  if (quoteText.length > MAX_QUOTE_CHARS) {
+    quoteText = quoteText.substring(0, MAX_QUOTE_CHARS - 3) + '...'
+  }
+
+  // Convert to HTML (simple paragraph tags)
+  const quoteHtml = quoteText.split('\n\n').map(p => `<p>${p}</p>`).join('')
+
+  const durationMs = Date.now() - startTime
+  log('quote', { traceId, ok: true, durationMs, quoteCharCount: quoteText.length, paragraphCount: scored.length })
+
+  return { quoteHtml, quoteCharCount: quoteText.length }
+}
+
+/**
+ * Generate paraphrased summary (no quotes)
+ */
+function generateSummary(mainText: string, title: string, traceId: string): string {
+  const startTime = Date.now()
+  log('summarize', { traceId, phase: 'start', textLength: mainText.length })
+
+  // Simple extractive summary: take first 2-3 sentences
+  const sentences = mainText.match(/[^.!?]+[.!?]+/g) || []
+  const summary = sentences.slice(0, 3).join(' ').trim()
+
+  // If too short, add more context
+  let finalSummary = summary
+  if (finalSummary.length < 100) {
+    finalSummary = sentences.slice(0, 5).join(' ').trim()
+  }
+
+  // Cap at 240 chars
+  if (finalSummary.length > 240) {
+    finalSummary = finalSummary.substring(0, 237) + '...'
+  }
+
+  const durationMs = Date.now() - startTime
+  log('summarize', { traceId, ok: true, durationMs, summaryLength: finalSummary.length })
+
+  return finalSummary || title // Fallback to title if no summary
+}
+
+/**
+ * Attempt to get image from OpenGraph or article lead image
+ */
+async function getImageUrl(html: string, url: string, traceId: string): Promise<string | null> {
+  const startTime = Date.now()
+  log('image', { traceId, phase: 'start' })
+
+  try {
+    const dom = new JSDOM(html, { url })
+    const doc = dom.window.document
+
+    // Try OpenGraph image first
+    const ogImage = doc.querySelector('meta[property="og:image"]')
+    if (ogImage) {
+      const imageUrl = ogImage.getAttribute('content')
+      if (imageUrl) {
+        try {
+          const fullUrl = new URL(imageUrl, url).href
+          const durationMs = Date.now() - startTime
+          log('image', { traceId, ok: true, durationMs, source: 'og:image' })
+          return fullUrl
+        } catch {
+          // Invalid URL
+        }
+      }
+    }
+
+    // Try article lead image
+    const articleImage = doc.querySelector('article img, .article img, [role="article"] img')
+    if (articleImage) {
+      const imageUrl = articleImage.getAttribute('src')
+      if (imageUrl) {
+        try {
+          const fullUrl = new URL(imageUrl, url).href
+          const durationMs = Date.now() - startTime
+          log('image', { traceId, ok: true, durationMs, source: 'inline' })
+          return fullUrl
+        } catch {
+          // Invalid URL
+        }
+      }
+    }
+
+    // No image found - this is OK, hero can exist without image
+    const durationMs = Date.now() - startTime
+    log('image', { traceId, ok: true, durationMs, source: 'none', note: 'No image found, continuing without image' })
+    return null
+  } catch (error: any) {
+    const durationMs = Date.now() - startTime
+    log('image', { traceId, ok: false, durationMs, errorCode: 'IMAGE_EXTRACT_FAILURE', errorMessage: error.message?.substring(0, 200) })
+    return null // Don't fail hero creation if image extraction fails
+  }
+}
+
+/**
+ * Main enrichment function
+ */
+export async function enrichContentId(contentId: string): Promise<EnrichmentResult> {
+  const traceId = uuidv4()
+  const overallStartTime = Date.now()
+
+  try {
+    // Get content
+    const content = await prisma.discoveredContent.findUnique({
+      where: { id: contentId },
+      select: {
+        id: true,
+        title: true,
+        sourceUrl: true,
+        canonicalUrl: true,
+        textContent: true,
+        rawHtml: true
+      }
+    })
+
+    if (!content) {
+      return {
+        ok: false,
+        traceId,
+        phase: 'fetch',
+        errorCode: 'CONTENT_NOT_FOUND',
+        errorMessage: 'Content not found',
+        durationMs: Date.now() - overallStartTime
+      }
+    }
+
+    const sourceUrl = content.canonicalUrl || content.sourceUrl
+    if (!sourceUrl) {
+      return {
+        ok: false,
+        traceId,
+        phase: 'fetch',
+        errorCode: 'NO_SOURCE_URL',
+        errorMessage: 'No source URL available',
+        durationMs: Date.now() - overallStartTime
+      }
+    }
+
+    // Fetch HTML (or use cached rawHtml if available)
+    let html: string
+    let finalUrl: string = sourceUrl
+
+    if (content.rawHtml) {
+      // Use cached HTML
+      html = Buffer.from(content.rawHtml).toString('utf-8')
+      log('fetch', { traceId, url: sourceUrl, ok: true, httpStatus: 200, durationMs: 0, bytes: html.length, source: 'cached' })
+    } else {
+      // Fetch fresh
+      const fetchResult = await fetchDeepLink(sourceUrl, traceId)
+      html = fetchResult.html
+      finalUrl = fetchResult.finalUrl
+    }
+
+    // Extract content
+    const extracted = extractContent(html, finalUrl, traceId)
+
+    // Generate quote
+    const { quoteHtml, quoteCharCount } = generateQuote(extracted.paragraphs, traceId)
+
+    // Generate summary
+    const excerpt = generateSummary(extracted.mainText, extracted.title, traceId)
+
+    // Attempt image (non-blocking)
+    const imageUrl = await getImageUrl(html, finalUrl, traceId).catch(() => null)
+
+    // Upsert Hero
+    const upsertStartTime = Date.now()
+    log('upsert', { traceId, phase: 'start' })
+
+    const hero = await prisma.hero.upsert({
+      where: { contentId },
+      update: {
+        title: extracted.title,
+        excerpt,
+        quoteHtml,
+        quoteCharCount,
+        imageUrl: imageUrl ?? null,
+        sourceUrl: finalUrl,
+        status: 'READY',
+        updatedAt: new Date()
+      },
+      create: {
+        contentId,
+        title: extracted.title,
+        excerpt,
+        quoteHtml,
+        quoteCharCount,
+        imageUrl: imageUrl ?? null,
+        sourceUrl: finalUrl,
+        status: 'READY',
+        traceId
+      }
+    })
+
+    const upsertDurationMs = Date.now() - upsertStartTime
+    log('upsert', { traceId, ok: true, durationMs: upsertDurationMs, heroId: hero.id })
+
+    return {
+      ok: true,
+      heroId: hero.id,
+      traceId,
+      phase: 'upsert',
+      durationMs: Date.now() - overallStartTime
+    }
+
+  } catch (error: any) {
+    const durationMs = Date.now() - overallStartTime
+    const errorCode = error.message?.includes('401') || error.message?.includes('403') ? 'PAYWALL' :
+                     error.message?.includes('404') ? 'HTTP_4XX' :
+                     error.message?.includes('timeout') ? 'TIMEOUT' :
+                     error.message?.includes('parse') ? 'PARSE_FAILURE' : 'UNKNOWN_ERROR'
+
+    // Still create hero record with ERROR status for retry capability
+    try {
+      const content = await prisma.discoveredContent.findUnique({
+        where: { id: contentId },
+        select: { id: true, title: true, sourceUrl: true, canonicalUrl: true }
+      })
+
+      if (content) {
+        await prisma.hero.upsert({
+          where: { contentId },
+          update: {
+            title: content.title,
+            status: 'ERROR',
+            errorCode,
+            errorMessage: error.message?.substring(0, 500) || 'Unknown error',
+            traceId,
+            updatedAt: new Date()
+          },
+          create: {
+            contentId,
+            title: content.title,
+            status: 'ERROR',
+            errorCode,
+            errorMessage: error.message?.substring(0, 500) || 'Unknown error',
+            traceId
+          }
+        })
+      }
+    } catch (upsertError) {
+      log('upsert', { traceId, ok: false, durationMs: 0, errorCode: 'DB_WRITE_ERROR', errorMessage: upsertError instanceof Error ? upsertError.message : 'Unknown' })
+    }
+
+    log('enrich', { traceId, ok: false, durationMs, errorCode, errorMessage: error.message?.substring(0, 200) })
+
+    return {
+      ok: false,
+      traceId,
+      phase: 'upsert',
+      errorCode,
+      errorMessage: error.message?.substring(0, 500),
+      durationMs
+    }
+  }
+}
+

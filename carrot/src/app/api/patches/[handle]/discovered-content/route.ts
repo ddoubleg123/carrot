@@ -32,7 +32,7 @@ export async function GET(
       return res;
     }
 
-    // Query only DiscoveredContent table (Source table doesn't exist)
+    // Query DiscoveredContent with Heroes (prefer Hero table over JSON hero field)
     const t3 = Date.now();
     const allContent = await prisma.discoveredContent.findMany({
       where: {
@@ -57,9 +57,25 @@ export async function GET(
         facts: true,
         quotes: true,
         provenance: true,
-        hero: true,
+        hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
         qualityScore: true
+      },
+      include: {
+        heroRecord: { // Hero relation (preferred over JSON)
+          select: {
+            id: true,
+            title: true,
+            excerpt: true,
+            quoteHtml: true,
+            quoteCharCount: true,
+            imageUrl: true,
+            sourceUrl: true,
+            status: true,
+            errorCode: true,
+            errorMessage: true
+          }
+        }
       }
     });
     const t4 = Date.now();
@@ -97,7 +113,25 @@ export async function GET(
       const factsRaw = parseJson<DiscoveryFact[]>(item.facts, [])
       const quotesRaw = parseJson<DiscoveryQuote[]>(item.quotes, [])
       const provenanceRaw = parseJson<string[]>(item.provenance, [])
-      const heroRaw = parseJson<DiscoveryHero | null>(item.hero, null)
+      
+      // Prefer Hero table over JSON hero field
+      let heroRaw: DiscoveryHero | null = null
+      const heroRelation = (item as any).heroRecord // Hero relation from include
+      const heroJson = parseJson<DiscoveryHero | null>(item.hero, null) // JSON hero field
+      
+      if (heroRelation && heroRelation.status === 'READY') {
+        // Use Hero table data (preferred)
+        heroRaw = {
+          url: heroRelation.imageUrl || null,
+          source: heroRelation.imageUrl ? 'hero-table' : 'none',
+          license: 'unknown',
+          enrichedAt: new Date().toISOString()
+        }
+      } else if (heroJson) {
+        // Fallback to JSON hero field for backward compatibility
+        heroRaw = heroJson
+      }
+      
       const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
 
       const facts: DiscoveryFact[] = factsRaw.map((fact, index) => {
