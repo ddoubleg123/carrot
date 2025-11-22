@@ -83,8 +83,12 @@ export async function POST(request: NextRequest) {
           return {
             sourceId: source.id,
             ok: false,
+            heroId: undefined,
+            traceId: '',
+            phase: 'upsert' as const,
             errorCode: 'ENRICHMENT_ERROR',
-            errorMessage: error.message
+            errorMessage: error.message,
+            durationMs: 0
           }
         }
       },

@@ -8,14 +8,8 @@ import { createResilientFetch } from '@/lib/retryUtils'
 import { JSDOM } from 'jsdom'
 import { v4 as uuidv4 } from 'uuid'
 
-// Dynamic import for Readability (may not be installed)
-let Readability: any = null
-try {
-  const readabilityModule = require('@mozilla/readability')
-  Readability = readabilityModule.Readability || readabilityModule.default?.Readability || readabilityModule
-} catch {
-  // Readability not available, will use fallback
-}
+// Note: @mozilla/readability is optional - we use DOM fallback
+// The extractContent function will use DOM heuristics if Readability is not available
 
 export interface EnrichmentResult {
   ok: boolean
@@ -106,39 +100,25 @@ function extractContent(html: string, url: string, traceId: string): ExtractedCo
 
   try {
     const dom = new JSDOM(html, { url })
+    const doc = dom.window.document
     
-    let article: any = null
+    // Extract title
+    const title = doc.querySelector('title')?.textContent || 
+                 doc.querySelector('h1')?.textContent || 
+                 doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                 'Untitled'
     
-    // Try Readability first
-    if (Readability) {
-      try {
-        const reader = new Readability(dom.window.document)
-        article = reader.parse()
-      } catch (readabilityError) {
-        log('extract', { traceId, note: 'Readability failed, using fallback', error: readabilityError instanceof Error ? readabilityError.message : 'Unknown' })
-      }
-    }
+    // Try to find main content
+    const mainContent = doc.querySelector('article') || 
+                       doc.querySelector('main') ||
+                       doc.querySelector('[role="main"]') ||
+                       doc.querySelector('.content') ||
+                       doc.body
 
-    // Fallback to DOM heuristics
-    if (!article) {
-      const doc = dom.window.document
-      const title = doc.querySelector('title')?.textContent || 
-                   doc.querySelector('h1')?.textContent || 
-                   doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-                   'Untitled'
-      
-      // Try to find main content
-      const mainContent = doc.querySelector('article') || 
-                         doc.querySelector('main') ||
-                         doc.querySelector('[role="main"]') ||
-                         doc.querySelector('.content') ||
-                         doc.body
-
-      const textContent = mainContent.textContent || ''
-      article = {
-        title,
-        textContent
-      }
+    const textContent = mainContent.textContent || ''
+    const article = {
+      title,
+      textContent
     }
 
     // Extract paragraphs
