@@ -85,8 +85,9 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
     log('fetch', { traceId, url, ok: true, httpStatus: response.status, durationMs, bytes: html.length })
     return { html, finalUrl }
   } catch (error: any) {
+    clearTimeout(timeoutId) // Clean up timeout if still pending
     const durationMs = Date.now() - startTime
-    const errorCode = error.message?.includes('timeout') ? 'TIMEOUT' : 
+    const errorCode = error.name === 'AbortError' || error.message?.includes('timeout') || error.message?.includes('aborted') ? 'TIMEOUT' : 
                      error.message?.includes('401') || error.message?.includes('403') ? 'PAYWALL' :
                      error.message?.includes('404') ? 'HTTP_4XX' : 'FETCH_ERROR'
     
