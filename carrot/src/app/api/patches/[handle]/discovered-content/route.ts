@@ -59,9 +59,7 @@ export async function GET(
         provenance: true,
         hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
-        qualityScore: true
-      },
-      include: {
+        qualityScore: true,
         heroRecord: { // Hero relation (preferred over JSON)
           select: {
             id: true,
