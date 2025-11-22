@@ -378,26 +378,46 @@ export class DiscoveryOrchestrator {
       }
 
       const currentCount = domainCounts.get(domain) ?? 0
-      const domainLimit = selected.length < 10 ? 3 : 2
+      const uniqueDomainCount = domainCounts.size
+      
+      // Guarantee at least 10 distinct domains
+      // If we have < 10 unique domains, allow up to 3 per domain
+      // Once we have 10+ unique domains, limit to 2 per domain
+      const domainLimit = uniqueDomainCount < 10 ? 3 : 2
       if (currentCount >= domainLimit) continue
-
+      
+      // Track unique domains
+      if (!domainCounts.has(domain)) {
+        domainCounts.set(domain, 0)
+      }
       domainCounts.set(domain, currentCount + 1)
       selected.push(candidate as PlannerSeedCandidate)
       if (isContested) contestedCount++
       else establishmentCount++
 
-      if (selected.length >= 10) break
+      // Continue until we have at least 10 unique domains OR 10 items
+      // But prioritize getting 10 unique domains
+      if (domainCounts.size >= 10 && selected.length >= 10) break
     }
 
     if (!selected.length) {
       return 0
     }
 
-    if (selected.length < 10) {
+    const finalUniqueDomainCount = domainCounts.size
+    if (finalUniqueDomainCount < 10) {
       console.warn(
-        '[Initialize Frontier] Planner provided fewer than 10 usable seeds after applying domain/stance constraints',
+        '[Initialize Frontier] Only got',
+        finalUniqueDomainCount,
+        'unique domains (target: 10). Seeds:',
         selected.length
       )
+      // If we have < 5 unique domains, this is a failure condition
+      if (finalUniqueDomainCount < 5) {
+        throw new Error(
+          `Failed to generate sufficient seed diversity: only ${finalUniqueDomainCount} unique domains (minimum: 5)`
+        )
+      }
     }
 
     const seeds = selected.map((seed, index) => {
