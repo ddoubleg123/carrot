@@ -54,18 +54,22 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
   log('fetch', { traceId, url: url.substring(0, 100), phase: 'start' })
 
   try {
-    const fetchWithRetry = createResilientFetch({
-      maxRetries: 2,
-      retryDelay: 1000,
-      timeout: FETCH_TIMEOUT_MS
-    })
+    // Create resilient fetch (no arguments)
+    const resilientFetch = createResilientFetch()
+    
+    // Create AbortController for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
-    const response = await fetchWithRetry(url, {
+    const response = await resilientFetch(url, {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'CarrotCrawler/1.0 (+contact@example.com)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
       }
     })
+    
+    clearTimeout(timeoutId)
 
     const durationMs = Date.now() - startTime
 
