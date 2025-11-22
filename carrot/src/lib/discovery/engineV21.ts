@@ -250,7 +250,7 @@ export class DiscoveryEngineV21 {
   private heartbeatTimer?: NodeJS.Timeout
   private startTime?: number
   private heroGateMap = new Map<string, HeroGateEntry[]>()
-  private telemetry: any | null = null // DiscoveryTelemetry instance
+  private discoveryTelemetry: any | null = null // DiscoveryTelemetry instance
   private lastHeroGateEvaluation: {
     eligible: boolean
     supportDomain?: string | null
@@ -280,18 +280,18 @@ export class DiscoveryEngineV21 {
       wikiShareMax: Number(process.env.DISCOVERY_V2_WIKI_SHARE_MAX ?? 0.3),
       qpsPerHost: Number(process.env.DISCOVERY_V2_QPS_PER_HOST ?? 0.5)
     })
-    // Initialize telemetry (async, but non-blocking)
-    this.initTelemetry().catch(err => {
-      console.warn('[EngineV21] Failed to initialize telemetry:', err)
+    // Initialize discovery telemetry (async, but non-blocking)
+    this.initDiscoveryTelemetry().catch(err => {
+      console.warn('[EngineV21] Failed to initialize discovery telemetry:', err)
     })
   }
 
-  private async initTelemetry() {
+  private async initDiscoveryTelemetry() {
     try {
       const { DiscoveryTelemetry } = await import('./telemetry')
-      this.telemetry = new DiscoveryTelemetry(this.options.patchId, this.options.runId)
+      this.discoveryTelemetry = new DiscoveryTelemetry(this.options.patchId, this.options.runId)
     } catch (error) {
-      console.warn('[EngineV21] Failed to initialize telemetry:', error)
+      console.warn('[EngineV21] Failed to initialize discovery telemetry:', error)
     }
   }
 
@@ -1369,8 +1369,8 @@ export class DiscoveryEngineV21 {
 
   private async processCandidate(candidate: FrontierItem, countersBefore: SaveCounters): Promise<ProcessedCandidateResult> {
     // Record processed
-    if (this.telemetry) {
-      this.telemetry.recordProcessed()
+    if (this.discoveryTelemetry) {
+      this.discoveryTelemetry.recordProcessed()
     }
     const { patchId } = this.options
     const redisPatchId = this.redisPatchId
@@ -1542,8 +1542,8 @@ export class DiscoveryEngineV21 {
         // Regular duplicate (seen but > 24h ago, allow retry)
         await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
-        if (this.telemetry) {
-          this.telemetry.recordDuplicate()
+        if (this.discoveryTelemetry) {
+          this.discoveryTelemetry.recordDuplicate()
         }
         logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
         this.structuredLog('duplicate_seen', {
@@ -1589,8 +1589,8 @@ export class DiscoveryEngineV21 {
         if (existing) {
           await this.incrementMetric('duplicates')
           this.metricsTracker.recordDuplicate()
-          if (this.telemetry) {
-            this.telemetry.recordDuplicate()
+          if (this.discoveryTelemetry) {
+            this.discoveryTelemetry.recordDuplicate()
           }
           logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
           this.structuredLog('duplicate_database', {
@@ -1622,8 +1622,8 @@ export class DiscoveryEngineV21 {
       const paywallBranch = fetchResult.branch
       
       // Record successful extraction
-      if (extracted && this.telemetry) {
-        this.telemetry.recordExtractOk()
+      if (extracted && this.discoveryTelemetry) {
+        this.discoveryTelemetry.recordExtractOk()
       }
       if (paywallBranch && !paywallBranch.startsWith('canonical')) {
         this.structuredLog('paywall_branch_used', {
@@ -1873,8 +1873,8 @@ export class DiscoveryEngineV21 {
       if (synthesis.relevanceScore < minRelevance || synthesis.qualityScore < minQuality) {
         await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
-        if (this.telemetry) {
-          this.telemetry.recordRelevanceFail()
+        if (this.discoveryTelemetry) {
+          this.discoveryTelemetry.recordRelevanceFail()
         }
         logger.logSkip(canonicalUrl, 'score_threshold')
         this.structuredLog('score_threshold', {
@@ -2065,8 +2065,8 @@ export class DiscoveryEngineV21 {
           savedCreatedAt = savedItem.createdAt
           
           // Record telemetry
-          if (this.telemetry) {
-            this.telemetry.recordPersistOk()
+          if (this.discoveryTelemetry) {
+            this.discoveryTelemetry.recordPersistOk()
           }
           
           // Structured logging for successful save (persist)
@@ -2286,8 +2286,8 @@ export class DiscoveryEngineV21 {
       }
 
       if (error instanceof PaywallBlockedError) {
-        if (this.telemetry) {
-          this.telemetry.recordPaywallBlocked()
+        if (this.discoveryTelemetry) {
+          this.discoveryTelemetry.recordPaywallBlocked()
         }
         this.structuredLog('paywall_blocked', {
           url: candidate.cursor,
