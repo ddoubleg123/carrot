@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
       { concurrency }
     )
 
-    const created = results.filter(r => r.ok && r.heroId).length
-    const updated = results.filter(r => r.ok && !r.heroId).length
+    const created = results.filter(r => r.ok && 'heroId' in r && r.heroId).length
+    const updated = results.filter(r => r.ok && (!('heroId' in r) || !r.heroId)).length
     const failed = results.filter(r => !r.ok).length
 
     console.log('[Backfill Heroes] Completed:', { scanned: sources.length, created, updated, failed })

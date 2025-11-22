@@ -8,8 +8,8 @@ import { createResilientFetch } from '@/lib/retryUtils'
 import { JSDOM } from 'jsdom'
 import { v4 as uuidv4 } from 'uuid'
 
-// Note: @mozilla/readability is optional - we use DOM fallback
-// The extractContent function will use DOM heuristics if Readability is not available
+// Note: @mozilla/readability is not installed - we use DOM fallback only
+// The extractContent function uses DOM heuristics for content extraction
 
 export interface EnrichmentResult {
   ok: boolean
@@ -122,14 +122,12 @@ function extractContent(html: string, url: string, traceId: string): ExtractedCo
     }
 
     // Extract paragraphs
-    const textContent = article.textContent || article.content || ''
     const paragraphs = textContent
       .split(/\n\s*\n/)
       .map(p => p.trim())
       .filter(p => p.length > 50) // Filter out very short paragraphs
 
     // Get canonical URL from meta tags
-    const doc = dom.window.document
     let canonicalUrl = url
     const canonicalLink = doc.querySelector('link[rel="canonical"]')
     if (canonicalLink) {
