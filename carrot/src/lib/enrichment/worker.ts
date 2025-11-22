@@ -53,13 +53,16 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
   const startTime = Date.now()
   log('fetch', { traceId, url: url.substring(0, 100), phase: 'start' })
 
+  // Create AbortController for timeout (declare outside try for catch access)
+  const controller = new AbortController()
+  let timeoutId: NodeJS.Timeout | null = null
+
   try {
     // Create resilient fetch (no arguments)
     const resilientFetch = createResilientFetch()
     
-    // Create AbortController for timeout
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    // Set timeout
+    timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
     const response = await resilientFetch(url, {
       signal: controller.signal,
@@ -69,7 +72,10 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
       }
     })
     
-    clearTimeout(timeoutId)
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
 
     const durationMs = Date.now() - startTime
 
@@ -85,7 +91,9 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
     log('fetch', { traceId, url, ok: true, httpStatus: response.status, durationMs, bytes: html.length })
     return { html, finalUrl }
   } catch (error: any) {
-    clearTimeout(timeoutId) // Clean up timeout if still pending
+    if (timeoutId) {
+      clearTimeout(timeoutId) // Clean up timeout if still pending
+    }
     const durationMs = Date.now() - startTime
     const errorCode = error.name === 'AbortError' || error.message?.includes('timeout') || error.message?.includes('aborted') ? 'TIMEOUT' : 
                      error.message?.includes('401') || error.message?.includes('403') ? 'PAYWALL' :
