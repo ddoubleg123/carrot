@@ -41,13 +41,21 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ handle: string }> }
 ) {
-  console.log('[Start Discovery] POST endpoint called');
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  console.log(`[Start Discovery] POST endpoint called [${requestId}]`, {
+    url: request.url,
+    method: request.method,
+    timestamp: new Date().toISOString()
+  })
+  
   const openEvidenceEnabled = isOpenEvidenceV2Enabled();
   const discoveryV21Enabled = isDiscoveryV21Enabled();
   const discoveryV2Enabled = isDiscoveryV2Enabled();
-  console.log('[Start Discovery] Feature flag OPEN_EVIDENCE_V2:', openEvidenceEnabled ? 'enabled' : 'disabled');
-  console.log('[Start Discovery] Feature flag DISCOVERY_V21:', discoveryV21Enabled ? 'enabled' : 'disabled');
-  console.log('[Start Discovery] Feature flag DISCOVERY_V2:', discoveryV2Enabled ? 'enabled' : 'disabled');
+  console.log(`[Start Discovery] [${requestId}] Feature flags:`, {
+    OPEN_EVIDENCE_V2: openEvidenceEnabled,
+    DISCOVERY_V21: discoveryV21Enabled,
+    DISCOVERY_V2: discoveryV2Enabled
+  })
   
   if (isDiscoveryKillSwitchEnabled()) {
     return NextResponse.json(
@@ -61,13 +69,22 @@ export async function POST(
   const isStreaming = url.searchParams.get('stream') === 'true' || request.method === 'GET'
   
   try {
+    console.log(`[Start Discovery] [${requestId}] Starting auth check...`)
     const session = await auth();
-    console.log('[Start Discovery] Session check:', session ? 'Found' : 'Not found');
+    console.log(`[Start Discovery] [${requestId}] Session check:`, {
+      hasSession: !!session,
+      hasUserId: !!session?.user?.id,
+      userId: session?.user?.id?.substring(0, 8) + '...'
+    })
+    
     if (!session?.user?.id) {
+      console.warn(`[Start Discovery] [${requestId}] Unauthorized - no session or user ID`)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log(`[Start Discovery] [${requestId}] Extracting params...`)
     const { handle } = await params;
+    console.log(`[Start Discovery] [${requestId}] Patch handle:`, handle)
     const body = await request.json().catch(() => ({ action: 'start_deepseek_search' }));
     const { action } = body;
 
@@ -186,23 +203,39 @@ export async function POST(
         console.warn('[Start Discovery] Failed to mark discovery run live', error)
       })
 
+      console.log(`[Start Discovery] [${requestId}] Starting discovery engine v2.1...`, {
+        patchId: patch.id,
+        patchHandle: handle,
+        runId: run.id
+      })
+      
       runOpenEvidenceEngine({
         patchId: patch.id,
         patchHandle: handle,
         patchName: patch.title,
         runId: run.id
       }).catch(async (error) => {
-        console.error('[Start Discovery] Discovery v2.1 engine failed', error)
+        console.error(`[Start Discovery] [${requestId}] Discovery v2.1 engine failed:`, {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          patchId: patch.id,
+          runId: run.id
+        })
         await (prisma as any).discoveryRun.update({
           where: { id: run.id },
           data: {
             status: 'error',
             metrics: {
-              error: error instanceof Error ? error.message : String(error)
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined
             }
           }
-        }).catch(() => undefined)
+        }).catch((updateError) => {
+          console.error(`[Start Discovery] [${requestId}] Failed to update run status:`, updateError)
+        })
       })
+      
+      console.log(`[Start Discovery] [${requestId}] Discovery engine started (async)`)
 
       return NextResponse.json({
         status: 'live',
@@ -422,9 +455,21 @@ export async function POST(
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error('[Start Discovery] Error:', { message, error })
+    console.error(`[Start Discovery] [${requestId}] FATAL ERROR:`, {
+      message,
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.substring(0, 1000)
+      } : String(error),
+      timestamp: new Date().toISOString()
+    })
     return NextResponse.json(
-      { error: message },
+      { 
+        error: message,
+        requestId,
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     )
   }
