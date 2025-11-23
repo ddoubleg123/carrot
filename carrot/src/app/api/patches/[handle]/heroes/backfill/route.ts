@@ -27,8 +27,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  const startTime = Date.now()
   try {
     const { handle } = await params
+    console.log('[Heroes Backfill] POST request received', { 
+      handle, 
+      url: request.url,
+      timestamp: new Date().toISOString()
+    })
+    
     const body = await request.json().catch(() => ({}))
     const { limit = 100, concurrency = 5 } = body as { limit?: number; concurrency?: number }
 
