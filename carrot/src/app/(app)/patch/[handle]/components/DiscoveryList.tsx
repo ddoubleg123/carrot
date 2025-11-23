@@ -81,6 +81,8 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
     setSelectedItem(null)
   }
 
+  // Show empty state only if no items AND no error (error means run failed, but items may still exist in DB)
+  // Decouple UI: show items from DB even if current run failed
   const showEmptyState = !state.isActive && dedupedItems.length === 0 && !state.error
 
   // Debug panel
@@ -198,9 +200,12 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <div className="flex items-center gap-2 font-medium">
                 <AlertTriangle className="h-4 w-4" />
-                Discovery stalled
+                Last discovery run failed
               </div>
               <p className="mt-2">{state.error}</p>
+              <p className="mt-1 text-xs text-red-600">
+                Showing saved items from previous runs. Click Retry to start a new discovery run.
+              </p>
               <div className="mt-3 flex gap-2">
                 <Button size="sm" onClick={refresh} variant="outline">
                   Retry

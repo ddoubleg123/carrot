@@ -78,10 +78,60 @@ export default function LivePanel({
     
     setIsSyncing(true)
     try {
-      const response = await fetch(`/api/patches/${patchHandle}/heroes/backfill`, {
+      // Use the new maintenance sync-heroes endpoint
+      const response = await fetch(`/api/maintenance/sync-heroes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 100, concurrency: 5 })
+        body: JSON.stringify({ 
+          patchSlug: patchHandle,
+          limit: 200,
+          concurrency: 5
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Backfill failed')
+      }
+      
+      const result = await response.json()
+      console.log('[LivePanel] Hero sync result:', result)
+      
+      // Show success message
+      alert(`Synced ${result.createdHeroes} heroes (${result.processed} processed, ${result.failed} failed)`)
+      
+      // Refresh the list after backfill
+      await onRefresh()
+      
+      // If there's a nextCursor, offer to continue
+      if (result.nextCursor) {
+        if (confirm(`Processed ${result.processed} items. Continue with next batch?`)) {
+          // Recursively call with next cursor
+          await handleSyncHeroesWithCursor(result.nextCursor)
+        }
+      }
+    } catch (error) {
+      console.error('[LivePanel] Hero sync failed:', error)
+      alert(`Failed to sync heroes: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+  
+  const handleSyncHeroesWithCursor = async (cursor: string) => {
+    if (!patchHandle) return
+    
+    setIsSyncing(true)
+    try {
+      const response = await fetch(`/api/maintenance/sync-heroes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          patchSlug: patchHandle,
+          limit: 200,
+          cursor,
+          concurrency: 5
+        })
       })
       
       if (!response.ok) {
@@ -89,13 +139,20 @@ export default function LivePanel({
       }
       
       const result = await response.json()
-      console.log('[LivePanel] Hero backfill result:', result)
+      console.log('[LivePanel] Hero sync (cursor) result:', result)
       
-      // Refresh the list after backfill
+      // Refresh the list
       await onRefresh()
+      
+      // Continue if there's more
+      if (result.nextCursor && result.processed > 0) {
+        await handleSyncHeroesWithCursor(result.nextCursor)
+      } else {
+        alert(`Sync complete! Total: ${result.createdHeroes} heroes created`)
+      }
     } catch (error) {
-      console.error('[LivePanel] Hero sync failed:', error)
-      alert('Failed to sync heroes. Check console for details.')
+      console.error('[LivePanel] Hero sync (cursor) failed:', error)
+      alert(`Failed to sync heroes: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsSyncing(false)
     }

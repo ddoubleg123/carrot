@@ -117,6 +117,7 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
 
   const refresh = useCallback(async () => {
     try {
+      // Always fetch from API, even if run failed - items exist in DB
       const url = `/api/patches/${patchHandle}/discovered-content?limit=50`
       console.log('[DiscoveryStream] Fetching from:', url)
       
@@ -128,6 +129,8 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
       })
       
       console.log('[DiscoveryStream] Response status:', response.status, response.statusText)
+      
+      // Don't set error state if API returns items - run may have failed but items still exist
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')

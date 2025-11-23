@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { enrichContentId } from '@/lib/enrichment/worker'
+import { logEnrichment } from '@/lib/enrichment/logger'
 
 /**
  * Internal API to enrich discovered content with hero images
@@ -40,11 +41,11 @@ export async function POST(
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    console.log('[Enrich API] Processing content:', { 
-      id, 
-      path: request.nextUrl.pathname,
-      method: request.method,
-      timestamp: new Date().toISOString()
+    logEnrichment({
+      stage: 'enrich',
+      id,
+      status: 'ok',
+      url: request.nextUrl.pathname
     })
 
     // Check if hero already exists and is READY

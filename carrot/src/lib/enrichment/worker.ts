@@ -40,7 +40,8 @@ const MAX_QUOTE_PARAGRAPHS = 2
 function log(phase: string, meta: Record<string, any>) {
   const logEntry = {
     ts: Date.now(),
-    phase,
+    stage: phase as 'search' | 'save' | 'enrich' | 'hero' | 'image' | 'fe',
+    status: meta.ok === false ? 'error' : meta.ok === true ? 'ok' : 'warn',
     ...meta
   }
   console.log(JSON.stringify(logEntry))
@@ -377,8 +378,32 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
     // Generate summary
     const excerpt = generateSummary(extracted.mainText, extracted.title, traceId)
 
-    // Attempt image (non-blocking)
-    const imageUrl = await getImageUrl(html, finalUrl, traceId).catch(() => null)
+    // Attempt image with resilient fallback chain (never fails)
+    let imageUrl: string | null = null
+    try {
+      const { pickImageFallback } = await import('./imageFallback')
+      const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : undefined
+      const imageResult = await pickImageFallback({
+        url: finalUrl,
+        domain: domain || undefined,
+        title: extracted.title,
+        html
+      })
+      imageUrl = imageResult.url
+      log('image', { traceId, ok: true, source: imageResult.source, url: imageUrl.substring(0, 100) })
+    } catch (error: any) {
+      // Fallback to simple extraction if pickImageFallback fails
+      imageUrl = await getImageUrl(html, finalUrl, traceId).catch(() => null)
+      if (!imageUrl) {
+        // Ultimate fallback: domain favicon
+        try {
+          const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : 'example.com'
+          imageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
+        } catch {
+          imageUrl = null // Hero can exist without image
+        }
+      }
+    }
 
     // Upsert Hero
     const upsertStartTime = Date.now()

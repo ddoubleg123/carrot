@@ -787,6 +787,7 @@ model DiscoveredContent {
 
   @@unique([patchId, canonicalUrl])
   @@index([patchId])
+  @@index([patchId, createdAt])
   @@index([contentHash])
   @@index([domain])
   @@index([sourceDomain])

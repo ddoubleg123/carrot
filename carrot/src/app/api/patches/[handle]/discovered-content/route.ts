@@ -12,6 +12,8 @@ export async function GET(
   const { searchParams } = new URL(req.url)
   const limit = parseInt(searchParams.get('limit') || '50')
   const offset = parseInt(searchParams.get('offset') || '0')
+  const cursor = searchParams.get('cursor') // Cursor for pagination (ISO date string or ID)
+  const onlySaved = searchParams.get('onlySaved') === '1' || searchParams.get('onlySaved') === 'true'
   try {
     console.log('[Discovered Content] ===== API CALLED =====');
     const t0 = Date.now();
@@ -32,18 +34,43 @@ export async function GET(
       return res;
     }
 
+    // Build where clause
+    const whereClause: any = {
+      patchId: patch.id
+    }
+    
+    // Cursor-based pagination: if cursor provided, use it instead of offset
+    let orderBy: any[] = [
+      { relevanceScore: 'desc' }, // Most relevant first
+      { createdAt: 'desc' }        // Then by newest
+    ]
+    
+    if (cursor) {
+      // Try to parse as date first
+      const cursorDate = new Date(cursor)
+      if (!isNaN(cursorDate.getTime())) {
+        // Date-based cursor
+        whereClause.OR = [
+          { relevanceScore: { lt: parseFloat(searchParams.get('lastRelevance') || '1') } },
+          {
+            relevanceScore: parseFloat(searchParams.get('lastRelevance') || '1'),
+            createdAt: { lt: cursorDate }
+          }
+        ]
+      } else {
+        // ID-based cursor
+        whereClause.id = { lt: cursor }
+        orderBy = [{ id: 'desc' }]
+      }
+    }
+    
     // Query DiscoveredContent with Heroes (prefer Hero table over JSON hero field)
     const t3 = Date.now();
     const allContent = await prisma.discoveredContent.findMany({
-      where: {
-        patchId: patch.id
-      },
-      orderBy: [
-        { relevanceScore: 'desc' }, // Most relevant first
-        { createdAt: 'desc' }        // Then by newest
-      ],
+      where: whereClause,
+      orderBy,
       take: limit,
-      skip: offset,
+      skip: cursor ? 0 : offset, // Use offset only if no cursor
       select: {
         id: true,
         title: true,
@@ -167,6 +194,9 @@ export async function GET(
       const contestedClaim = metadataRaw?.contestedClaim || contestedValue?.claim
       const viewSourceStatus = typeof metadataRaw?.viewSourceStatus === 'number' ? metadataRaw.viewSourceStatus : undefined
 
+      // Determine hasHero status
+      const hasHero = Boolean(heroRelation && heroRelation.status === 'READY') || Boolean(heroJson)
+      
       return {
         id: item.id,
         title: item.title,
@@ -191,7 +221,11 @@ export async function GET(
         relevanceScore: Number(item.relevanceScore ?? 0),
         qualityScore: Number(item.qualityScore ?? 0),
         viewSourceOk: viewSourceStatus ? viewSourceStatus < 400 : metadataRaw?.viewSourceOk !== false,
-        savedAt: item.createdAt?.toISOString() || new Date().toISOString()
+        savedAt: item.createdAt?.toISOString() || new Date().toISOString(),
+        // Additional fields for frontend
+        hasHero,
+        textLength: (item.textContent?.length || 0),
+        createdAt: item.createdAt?.toISOString() || new Date().toISOString()
       }
     })
 
@@ -252,7 +286,7 @@ export async function GET(
 
     // Debug logging
     const debug = searchParams.get('debug') === '1'
-    const onlySaved = searchParams.get('onlySaved') === '1'
+    // onlySaved already defined at top of function
     
     // If onlySaved=1, filter to items that have been saved (have an id)
     let finalItems = discoveredContent
@@ -260,12 +294,24 @@ export async function GET(
       finalItems = discoveredContent.filter(item => item.id)
     }
     
+    // Get total count for pagination
+    const totalItems = await prisma.discoveredContent.count({
+      where: { patchId: patch.id }
+    })
+    
+    // Determine next cursor
+    const lastItem = finalItems[finalItems.length - 1]
+    const nextCursor = lastItem && finalItems.length === limit
+      ? lastItem.createdAt.toISOString()
+      : null
+    
     const responseData: any = {
       success: true,
       items: finalItems,
       itemsCount: finalItems.length,
-      totalItems: finalItems.length,
-      isActive: finalItems.length > 0
+      totalItems,
+      isActive: finalItems.length > 0,
+      nextCursor
     }
     
     if (debug) {
