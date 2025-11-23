@@ -84,9 +84,9 @@ export async function GET(
         promoted: totalHeroes
       },
       runState: runState ? {
-        isActive: runState.status === 'live',
-        status: runState.status,
-        runId: runState.runId
+        isActive: runState === 'live',
+        status: runState,
+        runId: null // TODO: get runId from Redis if needed
       } : null,
       recentRun: recentRun ? {
         id: recentRun.id,
