@@ -2539,6 +2539,7 @@ export class DiscoveryEngineV21 {
       let html: string | null = null
       let extracted: ExtractedContent | null = null
       const fetchStartTime = Date.now() // Declare at start of loop for use in error handling
+      let renderUsed = false // Declare at start of loop for use in logging
       
       try {
         const response = await this.fetchWithRetry(
@@ -2626,7 +2627,6 @@ export class DiscoveryEngineV21 {
           title: extracted.title?.substring(0, 100)
         })
         const initialTextLength = extracted.text.length
-        let renderUsed = false
         
         // Check if JS rendering is needed
         const domain = this.getHostFromUrl(branch.url)
