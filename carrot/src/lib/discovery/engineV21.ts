@@ -2538,6 +2538,7 @@ export class DiscoveryEngineV21 {
       // Declare variables outside try block so they're available in catch
       let html: string | null = null
       let extracted: ExtractedContent | null = null
+      const fetchStartTime = Date.now() // Declare at start of loop for use in error handling
       
       try {
         const response = await this.fetchWithRetry(
@@ -2586,7 +2587,6 @@ export class DiscoveryEngineV21 {
         }
 
         this.telemetry.directFetchOk++
-        const fetchStartTime = Date.now()
         html = await response.text()
         const fetchDuration = Date.now() - fetchStartTime
         
