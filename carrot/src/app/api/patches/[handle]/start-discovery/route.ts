@@ -230,7 +230,7 @@ export async function POST(
               stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined
             }
           }
-        }).catch((updateError) => {
+        }).catch((updateError: unknown) => {
           console.error(`[Start Discovery] [${requestId}] Failed to update run status:`, updateError)
         })
       })
