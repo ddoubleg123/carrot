@@ -1582,7 +1582,7 @@ export class DiscoveryEngineV21 {
         this.structuredLog('duplicate_seen', {
           url: canonicalUrl,
           provider: candidate.provider,
-          last_crawled_at: seenCheck.lastCrawledAt
+          last_crawled_at: redisSeenCheck.lastCrawledAt
         })
         
         // Structured logging for skip
@@ -1596,7 +1596,7 @@ export class DiscoveryEngineV21 {
             run_id: this.options.runId,
             url: canonicalUrl?.slice(0, 200),
             reason: 'redis_seen',
-            last_crawled_at: seenCheck.lastCrawledAt,
+            last_crawled_at: redisSeenCheck.lastCrawledAt,
           }
           slog('info', logObj)
           pushEvent(logObj)
@@ -1607,7 +1607,7 @@ export class DiscoveryEngineV21 {
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
-          decisions: { action: 'drop', reason: 'redis_seen', lastCrawledAt: seenCheck.lastCrawledAt }
+          decisions: { action: 'drop', reason: 'redis_seen', lastCrawledAt: redisSeenCheck.lastCrawledAt }
         })
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'redis_seen' })
         await this.persistMetricsSnapshot('running', countersBefore)
