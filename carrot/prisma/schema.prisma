@@ -850,6 +850,22 @@ enum HeroStatus {
   ERROR // Failed (but hero record exists for retry)
 }
 
+// Discovery seen tracking for durable duplicate prevention across runs
+model DiscoverySeen {
+  url        String   @id @db.Text
+  firstSeen  DateTime @default(now()) @map("first_seen")
+  lastSeen   DateTime @default(now()) @updatedAt @map("last_seen")
+  lastRunId  String?  @map("last_run_id") @db.VarChar(64)
+  timesSeen  Int      @default(1) @map("times_seen")
+  patchId    String?  @map("patch_id") @db.VarChar(64)
+  domain     String?  @db.VarChar(255)
+
+  @@index([patchId])
+  @@index([domain])
+  @@index([lastSeen])
+  @@map("discovery_seen")
+}
+
 // Crawler raw page storage (Phase 1: Foundation)
 model CrawlerPage {
   id              String    @id @default(cuid())

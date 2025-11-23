@@ -1483,11 +1483,44 @@ export class DiscoveryEngineV21 {
         }
       }
 
-      // Fast skip check with timestamp
+      // Fast skip check with timestamp + durable seen tracking
       const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
-      const seenCheck = await isSeenWithTimestamp(redisPatchId, canonicalUrl, 24) // 24h fast skip
+      const { isUrlSeen, markUrlSeen } = await import('./seenTracker')
       
+      // Check durable seen table first (7-day window)
+      const seenCheck = await isUrlSeen(this.options.patchId, canonicalUrl, this.options.runId)
       if (seenCheck.seen) {
+        const { discoveryLogger } = await import('./structuredLogger')
+        discoveryLogger.seenSkip(canonicalUrl, seenCheck.reason || 'seen', {
+          patchId: this.options.patchId,
+          runId: this.options.runId,
+          lastSeen: seenCheck.lastSeen?.toISOString()
+        })
+        await this.incrementMetric('duplicates')
+        this.metricsTracker.recordDuplicate()
+        if (this.discoveryTelemetry) {
+          this.discoveryTelemetry.recordDuplicate()
+        }
+        logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
+        this.structuredLog('duplicate_seen_durable', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          lastSeen: seenCheck.lastSeen
+        })
+        await this.emitAudit('duplicate_check', 'fail', {
+          candidateUrl: canonicalUrl,
+          provider: candidate.provider,
+          decisions: { action: 'drop', reason: 'seen_durable', lastSeen: seenCheck.lastSeen }
+        })
+        this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'seen_durable' })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: 'seen_durable', angle, host }
+      }
+      
+      // Also check Redis fast skip (24h)
+      const redisSeenCheck = await isSeenWithTimestamp(redisPatchId, canonicalUrl, 24) // 24h fast skip
+      
+      if (redisSeenCheck.seen) {
         // Fast skip if crawled < 24h ago
         if (seenCheck.canSkip) {
           // Track fast skips in first 10 candidates to ensure we don't waste time
@@ -2068,6 +2101,10 @@ export class DiscoveryEngineV21 {
           if (this.discoveryTelemetry) {
             this.discoveryTelemetry.recordPersistOk()
           }
+          
+          // Structured logging
+          const { discoveryLogger } = await import('./structuredLogger')
+          discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
 
           // Create hero record (idempotent, non-blocking)
           try {
@@ -2126,6 +2163,7 @@ export class DiscoveryEngineV21 {
           const t = Date.now()
           const { slog } = await import('@/lib/log')
           const { pushEvent } = await import('./eventRing')
+          const { discoveryLogger } = await import('./structuredLogger')
           
           // Prisma P2002 unique constraint -> duplicate
           if (error?.code === 'P2002') {
@@ -2140,10 +2178,55 @@ export class DiscoveryEngineV21 {
             }
             slog('warn', logObj)
             pushEvent(logObj)
+            discoveryLogger.save(true, undefined, canonicalUrl, candidate.meta?.publishDate?.toString(), 'E_DUP')
             // Treat duplicate as success (skip)
             savedId = `dup:${canonicalUrl}`
             savedCreatedAt = new Date()
             return { saved: true, reason: 'duplicate' }
+          }
+          
+          // Prisma P2022 column mismatch - log schema diff
+          if (error?.code === 'P2022') {
+            const payloadKeys = Object.keys({
+              patchId,
+              canonicalUrl,
+              title: extracted.title,
+              sourceUrl: canonicalUrl,
+              domain,
+              publishDate: candidate.meta?.publishDate ?? null,
+              category: (candidate.meta?.category as string | undefined) || null,
+              isControversy,
+              isHistory,
+              relevanceScore: synthesis.relevanceScore,
+              qualityScore: synthesis.qualityScore,
+              whyItMatters: synthesis.whyItMatters,
+              summary: summaryWithParaphrase,
+              facts: synthesis.facts,
+              quotes: enhancedQuotes,
+              provenance: synthesis.provenance,
+              hero: hero,
+              contentHash: hashString,
+              metadata: {
+                fairUseQuote: fairUseQuote,
+                summaryPoints: paraphraseResult.summaryPoints,
+                summaryWordCount: paraphraseResult.wordCount
+              }
+            })
+            
+            console.error('[Discovery Engine] P2022 Schema mismatch:', {
+              error: error.message,
+              code: error.code,
+              payloadKeys,
+              patchId,
+              canonicalUrl,
+              domain,
+              title: extracted.title
+            })
+            
+            discoveryLogger.save(false, undefined, canonicalUrl, candidate.meta?.publishDate?.toString(), 'P2022', error.message)
+            
+            // Don't crash - continue to next item
+            return { saved: false, reason: 'schema_mismatch' }
           }
           
           // Other errors
@@ -2159,6 +2242,7 @@ export class DiscoveryEngineV21 {
           }
           slog('error', logObj)
           pushEvent(logObj)
+          discoveryLogger.save(false, undefined, canonicalUrl, candidate.meta?.publishDate?.toString(), error?.code || 'E_DB', error.message)
           
           // Log the error with full context but don't crash the loop
           console.error('[Discovery Engine] Failed to save discovered content:', {
@@ -2179,8 +2263,8 @@ export class DiscoveryEngineV21 {
             }
           })
           
-          // Re-throw to let caller handle (will be caught and logged as skip)
-          throw new Error(`save_failed: ${error.message}`)
+          // Don't re-throw - continue to next item
+          return { saved: false, reason: 'save_failed', error: error.message }
         }
       }
 
@@ -2280,6 +2364,11 @@ export class DiscoveryEngineV21 {
       if (angle) {
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
+      
+      // Mark URL as seen in durable tracking
+      const { markUrlSeen } = await import('./seenTracker')
+      await markUrlSeen(this.options.patchId, canonicalUrl, this.options.runId, domain || undefined).catch(() => undefined)
+      
       this.storeHeroEntry(heroKey, heroEntry)
       return { saved: true, angle, host, paywallBranch }
     } catch (error) {
@@ -2328,9 +2417,25 @@ export class DiscoveryEngineV21 {
         if (this.discoveryTelemetry) {
           this.discoveryTelemetry.recordPaywallBlocked()
         }
+        // Get domain for paywall logging
+        let domain = 'unknown'
+        try {
+          if (candidate.cursor) {
+            domain = new URL(candidate.cursor).hostname
+          }
+        } catch {}
+        
+        const { discoveryLogger } = await import('./structuredLogger')
+        discoveryLogger.paywall(candidate.cursor || '', domain, '403', {
+          patchId: this.options.patchId,
+          runId: this.options.runId,
+          provider: candidate.provider
+        })
+        
         this.structuredLog('paywall_blocked', {
           url: candidate.cursor,
-          provider: candidate.provider
+          provider: candidate.provider,
+          domain
         })
         
         // Structured logging for skip (paywall)
@@ -2344,6 +2449,7 @@ export class DiscoveryEngineV21 {
             run_id: this.options.runId,
             url: candidate.cursor?.slice(0, 200),
             reason: 'paywall_blocked',
+            domain
           }
           slog('info', logObj)
           pushEvent(logObj)
@@ -2452,6 +2558,19 @@ export class DiscoveryEngineV21 {
           const statusKind = this.detectPaywallStatus(response)
           if (statusKind === 'paywall') {
             this.telemetry.paywall++
+            const domain = this.getHostFromUrl(branch.url) || 'unknown'
+            const { discoveryLogger } = await import('./structuredLogger')
+            discoveryLogger.paywall(branch.url, domain, `http_${response.status}`, {
+              patchId: this.options.patchId,
+              runId: this.options.runId,
+              branch: branch.branch
+            })
+            discoveryLogger.fetch(false, branch.url, 0, Date.now() - fetchStartTime, 'direct', {
+              patchId: this.options.patchId,
+              runId: this.options.runId,
+              httpStatus: response.status,
+              errorCode: 'PAYWALL'
+            })
             lastError = new PaywallBlockedError(`status:${response.status}`)
             await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
             continue
@@ -2470,16 +2589,45 @@ export class DiscoveryEngineV21 {
         }
 
         this.telemetry.directFetchOk++
+        const fetchStartTime = Date.now()
         html = await response.text()
+        const fetchDuration = Date.now() - fetchStartTime
+        
+        // Structured logging for fetch
+        const { discoveryLogger } = await import('./structuredLogger')
+        discoveryLogger.fetch(true, branch.url, html.length, fetchDuration, renderUsed ? 'playwright' : 'direct', {
+          patchId: this.options.patchId,
+          runId: this.options.runId,
+          httpStatus: response.status,
+          branch: branch.branch
+        })
+        
         if (this.isPaywallHtml(html)) {
           this.telemetry.paywall++
+          const domain = this.getHostFromUrl(branch.url) || 'unknown'
+          discoveryLogger.paywall(branch.url, domain, 'html_detected', {
+            patchId: this.options.patchId,
+            runId: this.options.runId
+          })
           lastError = new PaywallBlockedError('paywall_html')
           await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
           continue
         }
         
         // Try initial extraction
+        const extractStartTime = Date.now()
         extracted = this.extractHtmlContent(html)
+        const extractDuration = Date.now() - extractStartTime
+        const textLength = extracted.text.length
+        const paraCount = extracted.text.split(/\n\n/).filter(p => p.trim().length > 0).length
+        
+        // Structured logging for extract
+        discoveryLogger.extract(true, branch.url, textLength, paraCount, {
+          patchId: this.options.patchId,
+          runId: this.options.runId,
+          extractDuration,
+          title: extracted.title?.substring(0, 100)
+        })
         const initialTextLength = extracted.text.length
         let renderUsed = false
         
@@ -2559,8 +2707,7 @@ export class DiscoveryEngineV21 {
         this.telemetry.htmlExtracted++
         await pushPaywallBranch(this.redisPatchId, `success:${branch.branch}`).catch(() => undefined)
         
-        // Structured logging for successful fetch
-        const fetchStartTime = Date.now()
+        // Additional structured logging (fetch/extract already logged above)
         try {
           const { slog } = await import('@/lib/log')
           const { pushEvent } = await import('./eventRing')
@@ -2576,8 +2723,7 @@ export class DiscoveryEngineV21 {
             render_used: renderUsed,
             html_bytes: html ? html.length : 0,
             text_bytes: extracted.text ? extracted.text.length : 0,
-            failure_reason: null,
-            duration_ms: Date.now() - fetchStartTime
+            failure_reason: null
           }
           slog('info', logObj)
           pushEvent(logObj)

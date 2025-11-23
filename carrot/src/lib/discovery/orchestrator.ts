@@ -405,6 +405,15 @@ export class DiscoveryOrchestrator {
     }
 
     const finalUniqueDomainCount = domainCounts.size
+    const minUniqueDomains = Number(process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || 5)
+    
+    // Log seed generation
+    const { discoveryLogger } = await import('./structuredLogger')
+    discoveryLogger.seed(selected.length, finalUniqueDomainCount, {
+      patchId: this.groupId,
+      runId: this.runId
+    })
+    
     if (finalUniqueDomainCount < 10) {
       console.warn(
         '[Initialize Frontier] Only got',
@@ -412,10 +421,10 @@ export class DiscoveryOrchestrator {
         'unique domains (target: 10). Seeds:',
         selected.length
       )
-      // If we have < 5 unique domains, this is a failure condition
-      if (finalUniqueDomainCount < 5) {
+      // If we have < minUniqueDomains unique domains, this is a failure condition
+      if (finalUniqueDomainCount < minUniqueDomains) {
         throw new Error(
-          `Failed to generate sufficient seed diversity: only ${finalUniqueDomainCount} unique domains (minimum: 5)`
+          `Failed to generate sufficient seed diversity: only ${finalUniqueDomainCount} unique domains (minimum: ${minUniqueDomains})`
         )
       }
     }

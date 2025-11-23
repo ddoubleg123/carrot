@@ -252,11 +252,20 @@ export async function GET(
 
     // Debug logging
     const debug = searchParams.get('debug') === '1'
+    const onlySaved = searchParams.get('onlySaved') === '1'
+    
+    // If onlySaved=1, filter to items that have been saved (have an id)
+    let finalItems = discoveredContent
+    if (onlySaved) {
+      finalItems = discoveredContent.filter(item => item.id)
+    }
+    
     const responseData: any = {
       success: true,
-      items: discoveredContent,
-      isActive: discoveredContent.length > 0,
-      totalItems: discoveredContent.length
+      items: finalItems,
+      itemsCount: finalItems.length,
+      totalItems: finalItems.length,
+      isActive: finalItems.length > 0
     }
     
     if (debug) {
@@ -266,9 +275,11 @@ export async function GET(
         dbQueryCount: allContent.length,
         beforeVerification: beforeVerificationCount,
         afterVerification: discoveredContent.length,
+        finalItems: finalItems.length,
         limit,
         offset,
-        verificationSkipped
+        verificationSkipped,
+        onlySaved
       }
     }
     
