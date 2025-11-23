@@ -1522,7 +1522,7 @@ export class DiscoveryEngineV21 {
       
       if (redisSeenCheck.seen) {
         // Fast skip if crawled < 24h ago
-        if (seenCheck.canSkip) {
+        if (redisSeenCheck.canSkip) {
           // Track fast skips in first 10 candidates to ensure we don't waste time
           const isFirst10 = this.metrics.candidatesProcessed < 10
           if (isFirst10) {
@@ -1530,16 +1530,16 @@ export class DiscoveryEngineV21 {
               url: canonicalUrl,
               provider: candidate.provider,
               candidate_number: this.metrics.candidatesProcessed + 1,
-              last_crawled_at: seenCheck.lastCrawledAt,
-              hours_ago: seenCheck.lastCrawledAt ? Math.round((Date.now() - seenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
+              last_crawled_at: redisSeenCheck.lastCrawledAt,
+              hours_ago: redisSeenCheck.lastCrawledAt ? Math.round((Date.now() - redisSeenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
             })
           }
           
           this.structuredLog('fast_skip', {
             url: canonicalUrl,
             provider: candidate.provider,
-            last_crawled_at: seenCheck.lastCrawledAt,
-            hours_ago: seenCheck.lastCrawledAt ? Math.round((Date.now() - seenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
+            last_crawled_at: redisSeenCheck.lastCrawledAt,
+            hours_ago: redisSeenCheck.lastCrawledAt ? Math.round((Date.now() - redisSeenCheck.lastCrawledAt) / (60 * 60 * 1000) * 10) / 10 : null
           })
           
           // Structured logging for fast skip
@@ -1553,7 +1553,7 @@ export class DiscoveryEngineV21 {
               run_id: this.options.runId,
               url: canonicalUrl?.slice(0, 200),
               reason: 'fast_skip_24h',
-              last_crawled_at: seenCheck.lastCrawledAt,
+              last_crawled_at: redisSeenCheck.lastCrawledAt,
               candidate_number: this.metrics.candidatesProcessed + 1,
             }
             slog('info', logObj)
@@ -1565,7 +1565,7 @@ export class DiscoveryEngineV21 {
           await this.emitAudit('duplicate_check', 'fail', {
             candidateUrl: canonicalUrl,
             provider: candidate.provider,
-            decisions: { action: 'drop', reason: 'fast_skip_24h', lastCrawledAt: seenCheck.lastCrawledAt }
+            decisions: { action: 'drop', reason: 'fast_skip_24h', lastCrawledAt: redisSeenCheck.lastCrawledAt }
           })
           this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'fast_skip_24h' })
           await this.persistMetricsSnapshot('running', countersBefore)
