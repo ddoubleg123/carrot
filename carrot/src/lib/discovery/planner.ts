@@ -1220,23 +1220,66 @@ export const __plannerPrompts = {
   buildUserPrompt
 }
 
-export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
-  if (!Array.isArray(plan.seedCandidates) || plan.seedCandidates.length === 0) {
-    return
+/**
+ * Generate fallback domain pack for sports/basketball topics
+ */
+function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSeedCandidate[] {
+  const topicLower = topic.toLowerCase()
+  const isBasketball = topicLower.includes('bulls') || topicLower.includes('basketball') || topicLower.includes('nba')
+  
+  if (!isBasketball) {
+    // Generic fallback for other topics
+    return [
+      { url: `https://www.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 1 },
+      { url: `https://www.reuters.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2 },
+      { url: `https://apnews.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2 },
+    ] as PlannerSeedCandidate[]
   }
+  
+  // Basketball-specific domain pack
+  const fallbackSeeds: PlannerSeedCandidate[] = [
+    { url: 'https://www.nba.com/bulls/news', category: 'official', angle: 'Official news', priority: 1, sourceType: 'official' },
+    { url: 'https://www.espn.com/nba/team/_/name/chi/chicago-bulls', category: 'media', angle: 'Team coverage', priority: 1 },
+    { url: 'https://www.nbcsports.com/chicago/bulls', category: 'media', angle: 'Local coverage', priority: 2 },
+    { url: 'https://chicago.suntimes.com/bulls', category: 'media', angle: 'Local news', priority: 2 },
+    { url: 'https://www.chicagotribune.com/sports/bulls', category: 'media', angle: 'Local news', priority: 2 },
+    { url: 'https://www.theathletic.com/nba/team/chicago-bulls', category: 'longform', angle: 'Analysis', priority: 2 },
+    { url: 'https://bleacherreport.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 3 },
+    { url: 'https://www.sbnation.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 3 },
+    { url: 'https://www.cbssports.com/nba/teams/CHI/chicago-bulls', category: 'media', angle: 'News', priority: 3 },
+    { url: 'https://sports.yahoo.com/nba/teams/chicago-bulls', category: 'media', angle: 'News', priority: 3 },
+  ]
+  
+  return fallbackSeeds
+}
 
-  const seedsSorted = [...plan.seedCandidates].sort((a, b) => {
-    const priorityA = a.priority ?? 999
-    const priorityB = b.priority ?? 999
-    if (priorityA !== priorityB) return priorityA - priorityB
-    return 0
-  })
+export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
+  const MIN_SEEDS = 10
+  const MIN_UNIQUE_DOMAINS = 5
+  
+  let seedsSorted: PlannerSeedCandidate[] = []
+  if (Array.isArray(plan.seedCandidates) && plan.seedCandidates.length > 0) {
+    seedsSorted = [...plan.seedCandidates].sort((a, b) => {
+      const priorityA = a.priority ?? 999
+      const priorityB = b.priority ?? 999
+      if (priorityA !== priorityB) return priorityA - priorityB
+      return 0
+    })
+  }
+  
+  // If planner returned insufficient seeds, add fallback domain pack
+  if (seedsSorted.length < MIN_SEEDS) {
+    const fallbackSeeds = generateFallbackDomainPack(plan.topic, plan.aliases || [])
+    console.warn(`[Seed Planner] Only ${seedsSorted.length} seeds from planner, adding ${fallbackSeeds.length} fallback seeds`)
+    seedsSorted = [...seedsSorted, ...fallbackSeeds]
+  }
 
   const domainCounts = new Map<string, number>()
   const selectedSeeds: PlannerSeedCandidate[] = []
   let contestedCount = 0
   let establishmentCount = 0
 
+  // First pass: prioritize diversity (up to 3 per domain until we have 5+ unique domains)
   for (const seed of seedsSorted) {
     if (!seed || !seed.url) continue
     const isContested = seed.stance === 'contested' || seed.isControversy === true
@@ -1251,10 +1294,14 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
       domain = new URL(seed.url).hostname.toLowerCase()
     } catch {
       // ignore malformed hostnames
+      continue
     }
 
     const currentCount = domainCounts.get(domain) ?? 0
-    const domainLimit = 2
+    const uniqueDomainCount = domainCounts.size
+    
+    // Dynamic domain limit: allow more per domain until we reach MIN_UNIQUE_DOMAINS
+    const domainLimit = uniqueDomainCount < MIN_UNIQUE_DOMAINS ? 3 : 2
     if (currentCount >= domainLimit) {
       continue
     }
@@ -1264,12 +1311,23 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     if (isContested) contestedCount++
     else establishmentCount++
 
-    if (selectedSeeds.length >= 10) {
+    // Continue until we have MIN_SEEDS AND MIN_UNIQUE_DOMAINS
+    if (selectedSeeds.length >= MIN_SEEDS && uniqueDomainCount + 1 >= MIN_UNIQUE_DOMAINS) {
       break
     }
   }
 
+  const finalUniqueDomainCount = domainCounts.size
+  
+  // Log warning if diversity is low, but don't fail
+  if (finalUniqueDomainCount < MIN_UNIQUE_DOMAINS) {
+    console.warn(`[Seed Planner] seed_frontier_warn: Only ${finalUniqueDomainCount} unique domains (target: ${MIN_UNIQUE_DOMAINS}), but proceeding with ${selectedSeeds.length} seeds`)
+  } else {
+    console.log(`[Seed Planner] ✅ Generated ${selectedSeeds.length} seeds from ${finalUniqueDomainCount} unique domains`)
+  }
+
   if (!selectedSeeds.length) {
+    console.warn('[Seed Planner] No seeds selected, discovery may stall')
     return
   }
 

@@ -48,21 +48,43 @@ export async function GET(
       const stream = new ReadableStream({
         start(controller) {
           const encoder = new TextEncoder()
+          let isClosed = false
+          
+          // Heartbeat to keep connection alive
+          const heartbeatInterval = setInterval(() => {
+            if (isClosed) {
+              clearInterval(heartbeatInterval)
+              return
+            }
+            try {
+              controller.enqueue(encoder.encode(':heartbeat\n\n'))
+            } catch (error) {
+              // Stream may be closed, ignore
+              clearInterval(heartbeatInterval)
+            }
+          }, 10000) // Every 10 seconds
+          
           const unsubscribe = subscribeDiscoveryEvents(runId, (event) => {
+            if (isClosed) return
             const payload = `data: ${JSON.stringify(event)}\n\n`
             try {
               controller.enqueue(encoder.encode(payload))
             } catch (error) {
-              console.error('[Discovery Stream] Failed to enqueue SSE payload', error)
+              // Stream closed, stop sending
+              isClosed = true
+              clearInterval(heartbeatInterval)
+              unsubscribe()
             }
           })
 
           request.signal.addEventListener('abort', () => {
+            isClosed = true
+            clearInterval(heartbeatInterval)
             unsubscribe()
             try {
               controller.close()
             } catch {
-              // ignore
+              // ignore - already closed
             }
           })
         }
@@ -71,8 +93,9 @@ export async function GET(
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no', // Disable nginx buffering
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Headers': 'Cache-Control'
         }
@@ -100,6 +123,23 @@ export async function GET(
     // Create SSE stream
     const stream = new ReadableStream({
       start(controller) {
+        const encoder = new TextEncoder()
+        let isClosed = false
+        
+        // Heartbeat to keep connection alive
+        const heartbeatInterval = setInterval(() => {
+          if (isClosed) {
+            clearInterval(heartbeatInterval)
+            return
+          }
+          try {
+            controller.enqueue(encoder.encode(':heartbeat\n\n'))
+          } catch (error) {
+            // Stream may be closed, ignore
+            clearInterval(heartbeatInterval)
+          }
+        }, 10000) // Every 10 seconds
+        
         const eventStream = new DiscoveryEventStream(controller)
         
         // Start discovery orchestrator
@@ -114,11 +154,15 @@ export async function GET(
         // Start discovery in background
         orchestrator.start().catch(error => {
           console.error('[Discovery Stream] Error:', error)
-          eventStream.error('Discovery failed', error)
+          if (!isClosed) {
+            eventStream.error('Discovery failed', error)
+          }
         })
         
         // Handle client disconnect
         request.signal.addEventListener('abort', () => {
+          isClosed = true
+          clearInterval(heartbeatInterval)
           eventStream.close()
         })
       }
@@ -127,8 +171,9 @@ export async function GET(
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Cache-Control'
       }

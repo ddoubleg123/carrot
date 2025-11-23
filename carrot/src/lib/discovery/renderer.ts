@@ -11,8 +11,9 @@ const JS_DOMAIN_PATTERNS = [
   /sbnation\.com$/i,
 ]
 
-const RENDER_TIMEOUT_MS = Number(process.env.CRAWL_RENDER_TIMEOUT_MS || 16000)
-const RENDER_ENABLED = process.env.CRAWL_RENDER_ENABLED === 'true'
+const RENDER_TIMEOUT_MS = Number(process.env.CRAWL_RENDER_TIMEOUT_MS || 12000)
+// Enable renderer by default for production (can be disabled via env)
+const RENDER_ENABLED = process.env.CRAWL_RENDER_ENABLED !== 'false' && (process.env.RENDERER_ENABLED === 'true' || process.env.CRAWL_RENDER_ENABLED === 'true' || process.env.NODE_ENV === 'production')
 
 /**
  * Check if a domain is known to be JS-driven
