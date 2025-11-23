@@ -2261,7 +2261,7 @@ export class DiscoveryEngineV21 {
           })
           
           // Don't re-throw - continue to next item
-          return { saved: false, reason: 'save_failed', error: error.message }
+          return { saved: false, reason: 'save_failed' }
         }
       }
 
