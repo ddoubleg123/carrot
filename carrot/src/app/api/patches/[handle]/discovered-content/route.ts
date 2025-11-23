@@ -87,6 +87,7 @@ export async function GET(
         hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
         qualityScore: true,
+        textContent: true,
         heroRecord: { // Hero relation (preferred over JSON)
           select: {
             id: true,
