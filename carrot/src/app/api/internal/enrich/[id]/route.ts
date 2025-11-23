@@ -14,6 +14,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const startTime = Date.now()
   try {
     // Auth check
     const token = request.headers.get('x-internal-token')
@@ -27,17 +28,24 @@ export async function POST(
     if (!token || token !== expectedToken) {
       console.warn('[Enrich API] Unauthorized request', { 
         hasToken: !!token,
-        tokenLength: token?.length 
+        tokenLength: token?.length,
+        path: request.nextUrl.pathname
       })
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
     if (!id) {
+      console.warn('[Enrich API] Missing id parameter', { path: request.nextUrl.pathname })
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    console.log('[Enrich API] Processing content:', { id })
+    console.log('[Enrich API] Processing content:', { 
+      id, 
+      path: request.nextUrl.pathname,
+      method: request.method,
+      timestamp: new Date().toISOString()
+    })
 
     // Check if hero already exists and is READY
     const existingHero = await prisma.hero.findUnique({

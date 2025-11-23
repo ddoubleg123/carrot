@@ -516,13 +516,16 @@ export async function expandPlannerQuery({
     suggestions = suggestions.slice(0, MAX_RESULTS_PER_QUERY)
   }
 
-  // Fallback: If no suggestions or fewer than 10, generate guaranteed fallback queries
+  // Fallback: If no suggestions or fewer than minimum, generate guaranteed fallback queries
   const MIN_SEEDS_PER_CYCLE = Number(process.env.CRAWL_MIN_SEEDS_PER_CYCLE || 10)
+  const ABSOLUTE_MIN_QUERIES = 3 // Always emit at least 3 queries to prevent zero-save aborts
   // Declare keywords at function scope for use in logging below
   const keywords = flattenKeywords(candidate.meta?.keywords ?? [])
-  const topic = keywords[0] || (typeof candidate.cursor === 'string' ? candidate.cursor : '') || 'breaking news'
+  const topic = keywords[0] || (typeof candidate.cursor === 'string' ? candidate.cursor : '') || 
+                candidate.meta?.patchHandle || candidate.meta?.patchName || 'breaking news'
   
-  if (topic && topic.trim() && (suggestions.length === 0 || suggestions.length < MIN_SEEDS_PER_CYCLE)) {
+  // Always ensure at least ABSOLUTE_MIN_QUERIES queries, even if topic is generic
+  if (suggestions.length < ABSOLUTE_MIN_QUERIES || (topic && topic.trim() && suggestions.length < MIN_SEEDS_PER_CYCLE)) {
     const normalizedTopic = topic.trim()
     
     // Structured logging for fallback
@@ -607,10 +610,11 @@ export async function expandPlannerQuery({
       })
     }
     
-    // Ensure we have at least MIN_SEEDS_PER_CYCLE
-    if (suggestions.length < MIN_SEEDS_PER_CYCLE) {
+    // Ensure we have at least ABSOLUTE_MIN_QUERIES (always) and MIN_SEEDS_PER_CYCLE (if topic available)
+    const targetCount = topic && topic.trim() && topic !== 'breaking news' ? MIN_SEEDS_PER_CYCLE : ABSOLUTE_MIN_QUERIES
+    if (suggestions.length < targetCount) {
       // Add generic topic queries to reach minimum
-      const remaining = MIN_SEEDS_PER_CYCLE - suggestions.length
+      const remaining = targetCount - suggestions.length
       for (let i = 0; i < remaining; i++) {
         const googleSearch = new URL('https://www.google.com/search')
         googleSearch.searchParams.set('q', normalizedTopic)
