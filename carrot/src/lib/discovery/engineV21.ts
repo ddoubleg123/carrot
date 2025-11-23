@@ -2365,9 +2365,9 @@ export class DiscoveryEngineV21 {
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
       
-      // Mark URL as seen in durable tracking
-      const { markUrlSeen } = await import('./seenTracker')
-      await markUrlSeen(this.options.patchId, canonicalUrl, this.options.runId, domain || undefined).catch(() => undefined)
+      // Mark URL as seen in durable tracking (markUrlSeen already imported above)
+      const { markUrlSeen: markSeen } = await import('./seenTracker')
+      await markSeen(this.options.patchId, canonicalUrl, this.options.runId, domain || undefined).catch(() => undefined)
       
       this.storeHeroEntry(heroKey, heroEntry)
       return { saved: true, angle, host, paywallBranch }
