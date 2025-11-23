@@ -2187,6 +2187,7 @@ export class DiscoveryEngineV21 {
           
           // Prisma P2022 column mismatch - log schema diff
           if (error?.code === 'P2022') {
+            // Use fallback values since these variables may not be in scope if error occurred before they were defined
             const payloadKeys = Object.keys({
               patchId,
               canonicalUrl,
@@ -2200,17 +2201,13 @@ export class DiscoveryEngineV21 {
               relevanceScore: synthesis.relevanceScore,
               qualityScore: synthesis.qualityScore,
               whyItMatters: synthesis.whyItMatters,
-              summary: summaryWithParaphrase,
+              summary: synthesis.whyItMatters, // Fallback to whyItMatters if summaryWithParaphrase not available
               facts: synthesis.facts,
-              quotes: enhancedQuotes,
+              quotes: synthesis.quotes || [], // Fallback to synthesis.quotes if enhancedQuotes not available
               provenance: synthesis.provenance,
               hero: hero,
               contentHash: hashString,
-              metadata: {
-                fairUseQuote: fairUseQuote,
-                summaryPoints: paraphraseResult.summaryPoints,
-                summaryWordCount: paraphraseResult.wordCount
-              }
+              metadata: {} // Simplified metadata for logging
             })
             
             console.error('[Discovery Engine] P2022 Schema mismatch:', {
