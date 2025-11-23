@@ -301,9 +301,11 @@ export async function GET(
     })
     
     // Determine next cursor
+    // Use savedAt (which is createdAt) or fallback to the raw item's createdAt
     const lastItem = finalItems[finalItems.length - 1]
-    const nextCursor = lastItem && finalItems.length === limit
-      ? lastItem.createdAt.toISOString()
+    const lastRawItem = allContent[allContent.length - 1]
+    const nextCursor = lastItem && finalItems.length === limit && lastRawItem
+      ? (lastItem.savedAt || lastRawItem.createdAt.toISOString())
       : null
     
     const responseData: any = {
