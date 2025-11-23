@@ -1255,7 +1255,7 @@ function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSe
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
   const MIN_SEEDS = 10
-  const MIN_UNIQUE_DOMAINS = 5
+  const MIN_UNIQUE_DOMAINS = Number(process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || 8) // Require 8+ domains
   
   let seedsSorted: PlannerSeedCandidate[] = []
   if (Array.isArray(plan.seedCandidates) && plan.seedCandidates.length > 0) {
@@ -1318,6 +1318,9 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
   }
 
   const finalUniqueDomainCount = domainCounts.size
+  
+  // Emit planned_domains_count and planned_urls_count for metrics
+  console.log(`[Seed Planner] planned_domains_count=${finalUniqueDomainCount} planned_urls_count=${selectedSeeds.length}`)
   
   // Log warning if diversity is low, but don't fail
   if (finalUniqueDomainCount < MIN_UNIQUE_DOMAINS) {

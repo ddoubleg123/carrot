@@ -1653,6 +1653,7 @@ export class DiscoveryEngineV21 {
       })
       const extracted = fetchResult.extracted
       const paywallBranch = fetchResult.branch
+      const renderUsed = fetchResult.renderUsed
       
       // Record successful extraction
       if (extracted && this.discoveryTelemetry) {
@@ -1715,12 +1716,21 @@ export class DiscoveryEngineV21 {
           // ignore
         }
       }
-      const wordCount = extracted?.text ? extracted.text.split(/\s+/).filter(Boolean).length : 0
-      const structuredOverride = candidate.meta?.hasStructuredStats === true
-      if (!extracted || (wordCount < MIN_CONTENT_LENGTH && !structuredOverride)) {
+      // Require min content length (800 chars) OR presence of <article>/main nodes
+      const textLength = extracted?.text ? extracted.text.length : 0
+      const hasArticleOrMain = extracted?.rawHtml ? /<(article|main)[\s>]/i.test(extracted.rawHtml) : false
+      const structuredOverride = candidate.meta?.hasStructuredStats === true || hasArticleOrMain
+      const MIN_CHARS = 800
+      if (!extracted || (textLength < MIN_CHARS && !structuredOverride)) {
         await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'content_too_short')
+        this.structuredLog('extract_fail', {
+          url: canonicalUrl,
+          reason: textLength < MIN_CHARS ? 'min_content_length' : 'no_article_main',
+          textLength,
+          hasArticleOrMain
+        })
         // Pre-harvest: if we have HTML but content is short (directory/listing),
         // extract outgoing links and enqueue them before dropping.
         try {
@@ -1991,7 +2001,7 @@ export class DiscoveryEngineV21 {
         this.eventStream.stage('hero', { url: canonicalUrl, eligible: false })
       }
 
-      await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
+      // Don't mark as seen yet - only after successful save
       await markContentHash(this.redisPatchId, hashString).catch(() => undefined)
 
       // Content-level near-duplicate using SimHash (Hamming ≤ 7)
@@ -2082,6 +2092,7 @@ export class DiscoveryEngineV21 {
               hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
               contentHash: hashString,
               // Store fair-use quote and paraphrase in metadata
+              // Also store renderUsed flag for audit tracking
               metadata: {
                 fairUseQuote: fairUseQuote ? {
                   quoteHtml: fairUseQuote.quoteHtml,
@@ -2090,7 +2101,9 @@ export class DiscoveryEngineV21 {
                   quoteEndChar: fairUseQuote.quoteEndChar
                 } : null,
                 summaryPoints: paraphraseResult.summaryPoints,
-                summaryWordCount: paraphraseResult.wordCount
+                summaryWordCount: paraphraseResult.wordCount,
+                renderUsed: renderUsed, // Track if Playwright was used
+                render_ok: renderUsed // For audit page compatibility
               } as Prisma.JsonObject
             }
           })
@@ -2366,6 +2379,9 @@ export class DiscoveryEngineV21 {
       const { markUrlSeen: markSeen } = await import('./seenTracker')
       await markSeen(this.options.patchId, canonicalUrl, this.options.runId, domain || undefined).catch(() => undefined)
       
+      // Mark in Redis seen cache AFTER successful save (for fast 24h dedupe)
+      await markAsSeen(this.redisPatchId, canonicalUrl).catch(() => undefined)
+      
       this.storeHeroEntry(heroKey, heroEntry)
       return { saved: true, angle, host, paywallBranch }
     } catch (error) {
@@ -2518,7 +2534,7 @@ export class DiscoveryEngineV21 {
     canonicalUrl: string
     candidate: FrontierItem
     host: string | null
-  }): Promise<{ extracted: ExtractedContent; branch: string; finalUrl: string }> {
+  }): Promise<{ extracted: ExtractedContent; branch: string; finalUrl: string; renderUsed: boolean }> {
     const { canonicalUrl, candidate } = args
     const plan = buildPaywallPlan({
       canonicalUrl,
@@ -2731,7 +2747,8 @@ export class DiscoveryEngineV21 {
         return {
           extracted: { ...extracted, rawHtml: html || '' },
           branch: branch.branch,
-          finalUrl: response.url ?? branch.url
+          finalUrl: response.url ?? branch.url,
+          renderUsed
         }
       } catch (error) {
         const errorStartTime = Date.now()
