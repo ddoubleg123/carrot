@@ -17,7 +17,7 @@ interface LiveCountersProps {
 }
 
 interface MetricsData {
-  metrics: {
+  metrics?: {
     processed: number
     saved: number
     duplicates: number
@@ -27,8 +27,18 @@ interface MetricsData {
     persistOk: number
     skipped: number
   }
-  frontier: any
-  timestamp: string
+  counters?: {
+    processed: number
+    saved: number
+    heroes: number
+    deduped: number
+    paywall: number
+    extractOk: number
+    renderOk: number
+    promoted: number
+  }
+  frontier?: any
+  timestamp?: string
 }
 
 interface HeroMetricsData {
@@ -51,10 +61,10 @@ const fetcher = async (url: string) => {
 
 export default function LiveCounters({ patchHandle, streamCounters }: LiveCountersProps) {
   const { data, error, isLoading } = useSWR<MetricsData>(
-    `/api/patches/${patchHandle}/discover-metrics`,
+    `/api/patches/${patchHandle}/metrics`,
     fetcher,
     {
-      refreshInterval: 5000, // Poll every 5 seconds
+      refreshInterval: 2000, // Poll every 2 seconds (Phase 6 requirement)
       revalidateOnFocus: true
     }
   )
@@ -68,7 +78,9 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
     }
   )
 
-  const metrics = data?.metrics
+  // Use counters from metrics endpoint (Phase 6: unified metrics)
+  const counters = (data as any)?.counters
+  const metrics = (data as any)?.metrics || {}
 
   return (
     <div>
@@ -77,44 +89,46 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
         {[
           { 
             label: 'Processed', 
-            value: streamCounters?.processed ?? metrics?.processed ?? 0,
+            value: streamCounters?.processed ?? (counters?.processed ?? metrics?.processed ?? 0),
             description: 'Items processed this run'
           },
           { 
             label: 'Saved (Sources)', 
-            value: metrics?.saved ?? 0,
+            value: (counters?.saved ?? metrics?.saved ?? 0) as number,
             description: 'Total saved in DB',
             highlight: true
           },
           { 
             label: 'Heroes', 
-            value: heroData?.readyHeroes ?? 0,
+            value: (counters?.heroes ?? heroData?.readyHeroes ?? 0) as number,
             description: 'Ready heroes',
             highlight: true
           },
           { 
             label: 'De-duped', 
-            value: streamCounters?.duplicates ?? metrics?.duplicates ?? 0
+            value: streamCounters?.duplicates ?? (counters?.deduped ?? metrics?.duplicates ?? 0) as number
           },
           { 
             label: 'Skipped', 
-            value: streamCounters?.skipped ?? metrics?.skipped ?? 0
+            value: streamCounters?.skipped ?? (metrics?.skipped ?? 0) as number
           },
           { 
             label: 'Paywall', 
-            value: metrics?.paywallBlocked ?? 0
+            value: (counters?.paywall ?? metrics?.paywallBlocked ?? 0) as number
           },
           { 
             label: 'Extract OK', 
-            value: metrics?.extractOk ?? 0
+            value: (counters?.extractOk ?? metrics?.extractOk ?? 0) as number
           },
           { 
-            label: 'Relevance Fail', 
-            value: metrics?.relevanceFail ?? 0
+            label: 'Render OK', 
+            value: (counters?.renderOk ?? 0) as number,
+            description: 'Items rendered with Playwright'
           },
           { 
-            label: 'Persist OK', 
-            value: metrics?.persistOk ?? 0
+            label: 'Promoted', 
+            value: (counters?.promoted ?? 0) as number,
+            description: 'Sources promoted to heroes'
           },
           { 
             label: 'Hero Errors', 

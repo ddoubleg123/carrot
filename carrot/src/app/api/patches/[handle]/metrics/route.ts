@@ -36,24 +36,29 @@ export async function GET(
     const runState = await getRunState(patch.id).catch(() => null)
     
     // Get DB counts
-    const [totalSources, totalHeroes, sourcesWithText] = await Promise.all([
+    const [totalSources, totalHeroesResult, sourcesWithTextResult] = await Promise.all([
       prisma.discoveredContent.count({
         where: { patchId: patch.id }
       }),
-      prisma.hero.count({
-        where: { 
-          content: { patchId: patch.id },
-          status: 'READY'
-        }
-      }),
-      prisma.discoveredContent.count({
-        where: {
-          patchId: patch.id,
-          textContent: { not: null },
-          NOT: { textContent: '' }
-        }
-      })
+      // Query heroes via raw SQL since Prisma relation query might have issues
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM heroes h
+        INNER JOIN discovered_content dc ON h.content_id = dc.id
+        WHERE dc.patch_id = ${patch.id}
+        AND h.status = 'READY'
+      `.then(r => Number(r[0]?.count || 0)).catch(() => 0),
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM discovered_content
+        WHERE patch_id = ${patch.id}
+        AND text_content IS NOT NULL
+        AND text_content != ''
+      `.then(r => Number(r[0]?.count || 0)).catch(() => 0)
     ])
+    
+    const totalHeroes = Number(totalHeroesResult || 0)
+    const sourcesWithText = Number(sourcesWithTextResult || 0)
     
     // Get recent run metrics
     const recentRun = await (prisma as any).discoveryRun.findFirst({
@@ -69,18 +74,48 @@ export async function GET(
       }
     })
     
+    // Get run metrics snapshot for more detailed counters
+    const { getRunMetricsSnapshot } = await import('@/lib/redis/discovery')
+    const runMetrics = await getRunMetricsSnapshot(patch.id).catch(() => null)
+    
+    // Count render_ok from metadata (using raw query since Prisma JSON filtering is limited)
+    const sourcesWithRenderResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*) as count
+      FROM discovered_content
+      WHERE patch_id = ${patch.id}
+      AND metadata::jsonb->>'renderUsed' = 'true'
+    `.catch(() => [{ count: BigInt(0) }])
+    const sourcesWithRender = Number(sourcesWithRenderResult[0]?.count || 0)
+    
+    // Extract metrics from runMetrics snapshot (if available)
+    const runMetricsData = runMetrics as any
+    const processedCount = runMetricsData?.candidatesProcessed || runMetricsData?.processed || counters.total || 0
+    const duplicatesCount = runMetricsData?.duplicates || 0
+    const paywallCount = runMetricsData?.paywall || runMetricsData?.paywallBlocked || 0
+    
     return NextResponse.json({
       success: true,
       patchId: patch.id,
       patchHandle: handle,
+      metrics: {
+        processed: processedCount,
+        saved: totalSources,
+        duplicates: duplicatesCount,
+        paywallBlocked: paywallCount,
+        extractOk: sourcesWithText,
+        renderOk: sourcesWithRender,
+        persistOk: totalSources, // All saved items are persisted
+        relevanceFail: runMetricsData?.relevanceFail || 0,
+        skipped: runMetricsData?.skipped || 0
+      },
       counters: {
-        processed: counters.total || 0,
+        processed: processedCount,
         saved: totalSources,
         heroes: totalHeroes,
-        deduped: 0, // TODO: track in Redis
-        paywall: 0, // TODO: track in Redis
+        deduped: duplicatesCount,
+        paywall: paywallCount,
         extractOk: sourcesWithText,
-        renderOk: 0, // TODO: track in Redis
+        renderOk: sourcesWithRender,
         promoted: totalHeroes
       },
       runState: runState ? {
