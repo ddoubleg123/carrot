@@ -1716,18 +1716,21 @@ export class DiscoveryEngineV21 {
           // ignore
         }
       }
-      // Require min content length (800 chars) OR presence of <article>/main nodes
+      // Require min content length (400 chars for partial, 800 for full) OR presence of <article>/main nodes
       const textLength = extracted?.text ? extracted.text.length : 0
       const hasArticleOrMain = extracted?.rawHtml ? /<(article|main)[\s>]/i.test(extracted.rawHtml) : false
       const structuredOverride = candidate.meta?.hasStructuredStats === true || hasArticleOrMain
-      const MIN_CHARS = 800
-      if (!extracted || (textLength < MIN_CHARS && !structuredOverride)) {
+      const MIN_CHARS_FULL = 800
+      const MIN_CHARS_PARTIAL = 400 // Phase 3: treat < 400 as partial, not failure
+      const isPartial = textLength >= MIN_CHARS_PARTIAL && textLength < MIN_CHARS_FULL && !structuredOverride
+      
+      if (!extracted || textLength < MIN_CHARS_PARTIAL) {
         await this.incrementMetric('dropped')
         this.metricsTracker.recordError()
         logger.logSkip(canonicalUrl, 'content_too_short')
         this.structuredLog('extract_fail', {
           url: canonicalUrl,
-          reason: textLength < MIN_CHARS ? 'min_content_length' : 'no_article_main',
+          reason: textLength < MIN_CHARS_PARTIAL ? 'min_content_length' : 'no_article_main',
           textLength,
           hasArticleOrMain
         })
@@ -2071,6 +2074,12 @@ export class DiscoveryEngineV21 {
             ? `${synthesis.whyItMatters}\n\nKey points:\n${paraphraseResult.summaryPoints.map(p => `• ${p}`).join('\n')}`
             : synthesis.whyItMatters
           
+          // Capture fetch metadata for storage
+          const htmlBytes = extracted.rawHtml ? Buffer.from(extracted.rawHtml).length : 0
+          const textBytes = extracted.text?.length || 0
+          const hasArticleOrMain = extracted.rawHtml ? /<(article|main)[\s>]/i.test(extracted.rawHtml) : false
+          const isPartialContent = textBytes >= 400 && textBytes < 800 && !hasArticleOrMain
+          
           const savedItem = await prisma.discoveredContent.create({
             data: {
               patchId,
@@ -2092,7 +2101,7 @@ export class DiscoveryEngineV21 {
               hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
               contentHash: hashString,
               // Store fair-use quote and paraphrase in metadata
-              // Also store renderUsed flag for audit tracking
+              // Also store renderUsed flag and fetch metadata for audit tracking
               metadata: {
                 fairUseQuote: fairUseQuote ? {
                   quoteHtml: fairUseQuote.quoteHtml,
@@ -2103,7 +2112,18 @@ export class DiscoveryEngineV21 {
                 summaryPoints: paraphraseResult.summaryPoints,
                 summaryWordCount: paraphraseResult.wordCount,
                 renderUsed: renderUsed, // Track if Playwright was used
-                render_ok: renderUsed // For audit page compatibility
+                render_ok: renderUsed, // For audit page compatibility
+                // Fetch metadata for observability (Phase 2)
+                fetch_metadata: {
+                  render_used: renderUsed,
+                  branch_used: paywallBranch || 'direct',
+                  status_code: null, // HTTP status (captured in fetch logs)
+                  html_bytes: htmlBytes,
+                  text_bytes: textBytes,
+                  failure_reason: null
+                } as Prisma.JsonObject,
+                // Content status (Phase 3)
+                contentStatus: isPartialContent ? 'partial' : 'full'
               } as Prisma.JsonObject
             }
           })
@@ -2571,7 +2591,8 @@ export class DiscoveryEngineV21 {
 
         if (!response.ok) {
           const statusKind = this.detectPaywallStatus(response)
-          if (statusKind === 'paywall') {
+          // Classify 403/401 as PAYWALL_OR_BLOCK
+          if (statusKind === 'paywall' || response.status === 403 || response.status === 401) {
             this.telemetry.paywall++
             const domain = this.getHostFromUrl(branch.url) || 'unknown'
             const { discoveryLogger } = await import('./structuredLogger')
@@ -2584,7 +2605,8 @@ export class DiscoveryEngineV21 {
               patchId: this.options.patchId,
               runId: this.options.runId,
               httpStatus: response.status,
-              errorCode: 'PAYWALL'
+              errorCode: 'PAYWALL_OR_BLOCK',
+              fetch_class: 'PAYWALL_OR_BLOCK'
             })
             lastError = new PaywallBlockedError(`status:${response.status}`)
             await pushPaywallBranch(this.redisPatchId, `fail:${branch.branch}`).catch(() => undefined)
@@ -2859,11 +2881,30 @@ export class DiscoveryEngineV21 {
   }
 
   private extractHtmlContent(html: string): ExtractedContent {
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
+    // Enhanced title extraction: og:title → title tag → h1
+    let title = 'Untitled'
+    const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
+    if (ogTitleMatch) {
+      title = ogTitleMatch[1].trim()
+    } else {
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+      if (titleMatch) {
+        title = titleMatch[1].trim()
+        // Remove site name suffixes (e.g., " - ESPN")
+        title = title.replace(/\s*[-|]\s*[^-|]+$/, '').trim()
+      } else {
+        // Fallback to h1
+        const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+        if (h1Match) {
+          title = h1Match[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
+      }
+    }
+    
     const langMatch = html.match(/<html[^>]*lang=["']([^"']+)["'][^>]*>/i)
     const lang = langMatch ? langMatch[1].toLowerCase() : undefined
 
+    // Extract headings
     const headingRegex = /<(h1|h2)[^>]*>(.*?)<\/\1>/gi
     const headings: string[] = []
     let headingMatch: RegExpExecArray | null
@@ -2873,21 +2914,93 @@ export class DiscoveryEngineV21 {
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-      if (headingText) {
+      if (headingText && headingText.length > 3) {
         headings.push(headingText)
       }
     }
 
-    const mainMatch = html.match(/<main[\s\S]*?<\/main>/i) || html.match(/<article[\s\S]*?<\/article>/i)
-    const bodyMatch = mainMatch || html.match(/<body[\s\S]*?<\/body>/i)
-    const raw = bodyMatch ? bodyMatch[0] : html
-    const withoutScripts = raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
-    const textBody = withoutScripts
-      .replace(/<\/(p|div|section|br|li)>/gi, '$&\n')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    // Enhanced content extraction: prioritize article/main, prune boilerplate
+    // Remove scripts, styles, and common boilerplate
+    let cleaned = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+      // Remove common boilerplate
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+      // Remove social sharing widgets
+      .replace(/<div[^>]*class=["'][^"']*share["'][^>]*>[\s\S]*?<\/div>/gi, '')
+      .replace(/<div[^>]*class=["'][^"']*social["'][^>]*>[\s\S]*?<\/div>/gi, '')
+
+    // Try article tag first (highest priority)
+    let contentHtml = cleaned.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1]
+    if (!contentHtml) {
+      // Try main tag
+      contentHtml = cleaned.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1]
+    }
+    if (!contentHtml) {
+      // Try body, but exclude common non-content sections
+      const bodyMatch = cleaned.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1]
+      if (bodyMatch) {
+        // Remove common non-content sections from body
+        contentHtml = bodyMatch
+          .replace(/<div[^>]*class=["'][^"']*(?:header|footer|nav|sidebar|menu|ad|advertisement)["'][^>]*>[\s\S]*?<\/div>/gi, '')
+          .replace(/<section[^>]*class=["'][^"']*(?:header|footer|nav|sidebar|menu|ad)["'][^>]*>[\s\S]*?<\/section>/gi, '')
+      }
+    }
+    if (!contentHtml) {
+      contentHtml = cleaned
+    }
+
+    // Extract paragraphs and headings from content
+    const paraMatches = contentHtml.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || []
+    const divMatches = contentHtml.match(/<div[^>]*class=["'][^"']*content["'][^>]*>([\s\S]*?)<\/div>/gi) || []
+    
+    let textParts: string[] = []
+    
+    // Add paragraphs
+    paraMatches.forEach(match => {
+      const text = match
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&[a-z]+;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (text.length > 50) { // Filter short paragraphs (likely boilerplate)
+        textParts.push(text)
+      }
+    })
+    
+    // Add content divs if paragraphs are sparse
+    if (textParts.length < 3 && divMatches.length > 0) {
+      divMatches.forEach(match => {
+        const text = match
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (text.length > 100) {
+          textParts.push(text)
+        }
+      })
+    }
+    
+    // Fallback: extract all text if still empty
+    if (textParts.length === 0) {
+      const allText = contentHtml
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&[a-z]+;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (allText.length > 100) {
+        textParts.push(allText)
+      }
+    }
+
+    const textBody = textParts.join('\n\n')
     const headingTrail = headings.slice(0, 4).join(' > ')
     const text = headingTrail ? `${headingTrail}\n\n${textBody}` : textBody
 

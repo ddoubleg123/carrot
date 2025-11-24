@@ -1,5 +1,6 @@
 import { chatStream } from '@/lib/llm/providers/DeepSeekClient'
-import { addToFrontier, FrontierItem, storeDiscoveryPlan } from '@/lib/redis/discovery'
+import { addToFrontier, FrontierItem, storeDiscoveryPlan, isSeen } from '@/lib/redis/discovery'
+import { DISCOVERY_CONFIG, getMinUniqueDomains } from '@/lib/discovery/config'
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
 
@@ -1236,18 +1237,21 @@ function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSe
     ] as PlannerSeedCandidate[]
   }
   
-  // Basketball-specific domain pack
+  // Basketball-specific domain pack (enhanced with required domains)
   const fallbackSeeds: PlannerSeedCandidate[] = [
     { url: 'https://www.nba.com/bulls/news', category: 'official', angle: 'Official news', priority: 1, sourceType: 'official' },
     { url: 'https://www.espn.com/nba/team/_/name/chi/chicago-bulls', category: 'media', angle: 'Team coverage', priority: 1 },
+    { url: 'https://www.theathletic.com/nba/team/chicago-bulls', category: 'longform', angle: 'Analysis', priority: 1 },
+    { url: 'https://www.cbssports.com/nba/teams/CHI/chicago-bulls', category: 'media', angle: 'News', priority: 1 },
+    { url: 'https://sports.yahoo.com/nba/teams/chicago-bulls', category: 'media', angle: 'News', priority: 1 },
+    { url: 'https://bleacherreport.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 2 },
+    { url: 'https://apnews.com/hub/nba', category: 'media', angle: 'News', priority: 2 },
+    { url: 'https://www.reddit.com/r/chicagobulls', category: 'media', angle: 'Fan discussion', priority: 3 },
+    { url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 3 },
     { url: 'https://www.nbcsports.com/chicago/bulls', category: 'media', angle: 'Local coverage', priority: 2 },
     { url: 'https://chicago.suntimes.com/bulls', category: 'media', angle: 'Local news', priority: 2 },
     { url: 'https://www.chicagotribune.com/sports/bulls', category: 'media', angle: 'Local news', priority: 2 },
-    { url: 'https://www.theathletic.com/nba/team/chicago-bulls', category: 'longform', angle: 'Analysis', priority: 2 },
-    { url: 'https://bleacherreport.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 3 },
     { url: 'https://www.sbnation.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 3 },
-    { url: 'https://www.cbssports.com/nba/teams/CHI/chicago-bulls', category: 'media', angle: 'News', priority: 3 },
-    { url: 'https://sports.yahoo.com/nba/teams/chicago-bulls', category: 'media', angle: 'News', priority: 3 },
   ]
   
   return fallbackSeeds
@@ -1255,7 +1259,7 @@ function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSe
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
   const MIN_SEEDS = 10
-  const MIN_UNIQUE_DOMAINS = Number(process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || 8) // Require 8+ domains
+  const { min: MIN_UNIQUE_DOMAINS, warn: MIN_UNIQUE_DOMAINS_WARN } = getMinUniqueDomains()
   
   let seedsSorted: PlannerSeedCandidate[] = []
   if (Array.isArray(plan.seedCandidates) && plan.seedCandidates.length > 0) {
@@ -1323,8 +1327,8 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
   console.log(`[Seed Planner] planned_domains_count=${finalUniqueDomainCount} planned_urls_count=${selectedSeeds.length}`)
   
   // Log warning if diversity is low, but don't fail
-  if (finalUniqueDomainCount < MIN_UNIQUE_DOMAINS) {
-    console.warn(`[Seed Planner] seed_frontier_warn: Only ${finalUniqueDomainCount} unique domains (target: ${MIN_UNIQUE_DOMAINS}), but proceeding with ${selectedSeeds.length} seeds`)
+  if (finalUniqueDomainCount < MIN_UNIQUE_DOMAINS_WARN) {
+    console.warn(`[Seed Planner] seed_warn_low_diversity: Only ${finalUniqueDomainCount} unique domains (warn threshold: ${MIN_UNIQUE_DOMAINS_WARN}), but proceeding with ${selectedSeeds.length} seeds`)
   } else {
     console.log(`[Seed Planner] ✅ Generated ${selectedSeeds.length} seeds from ${finalUniqueDomainCount} unique domains`)
   }
@@ -1336,7 +1340,24 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
 
   const tasks: Array<Promise<void>> = []
 
-  selectedSeeds.forEach((seed, index) => {
+  // De-dup seeds against Redis frontier:seen set
+  const dedupedSeeds: PlannerSeedCandidate[] = []
+  for (const seed of selectedSeeds) {
+    if (!seed.url) continue
+    
+    // Check if already seen in Redis
+    const alreadySeen = await isSeen(patchId, seed.url)
+    if (alreadySeen) {
+      console.log(`[Seed Planner] Skipping duplicate seed: ${seed.url.substring(0, 80)}`)
+      continue
+    }
+    
+    dedupedSeeds.push(seed)
+  }
+
+  console.log(`[Seed Planner] After de-dup: ${dedupedSeeds.length} seeds (removed ${selectedSeeds.length - dedupedSeeds.length} duplicates)`)
+
+  dedupedSeeds.forEach((seed, index) => {
     if (!seed.url) return
 
     const item: FrontierItem = {
