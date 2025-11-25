@@ -17,6 +17,8 @@ interface LiveCountersProps {
 }
 
 interface MetricsData {
+  success?: boolean
+  message?: string
   metrics?: {
     processed: number
     saved: number
