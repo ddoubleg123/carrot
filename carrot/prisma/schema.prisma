@@ -514,6 +514,7 @@ model Patch {
   discoveredContent DiscoveredContent[]
   discoveryRuns     DiscoveryRun[]
   discoveryAudits   DiscoveryAudit[]
+  seenUrls          SeenUrl[]
 
   @@index([handle])
   @@index([createdBy])
@@ -959,4 +960,20 @@ model DiscoveryAudit {
   @@index([runId, ts])
   @@index([patchId])
   @@map("discovery_audits")
+}
+
+model SeenUrl {
+  id            String   @id @default(cuid())
+  patchId       String   @map("patch_id")
+  urlHash       String   @map("url_hash") @db.VarChar(64) // SHA-256 hash of normalized URL
+  urlNormalized String   @map("url_normalized") @db.Text
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt    DateTime @default(now()) @updatedAt @map("last_seen_at")
+  timesSeen     Int      @default(1) @map("times_seen")
+
+  patch Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, urlHash])
+  @@index([patchId, lastSeenAt])
+  @@map("seen_urls")
 }

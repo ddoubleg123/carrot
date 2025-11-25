@@ -53,10 +53,38 @@ interface HeroMetricsData {
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
+  // Always return JSON, even on error (API returns 200 with success:false)
+  const data = await res.json()
+  // If API returned success:false, return default values instead of throwing
+  if (!data.success && res.status === 200) {
+    return {
+      success: false,
+      metrics: {
+        processed: 0,
+        saved: 0,
+        duplicates: 0,
+        paywallBlocked: 0,
+        extractOk: 0,
+        relevanceFail: 0,
+        persistOk: 0,
+        skipped: 0
+      },
+      counters: {
+        processed: 0,
+        saved: 0,
+        heroes: 0,
+        deduped: 0,
+        paywall: 0,
+        extractOk: 0,
+        renderOk: 0,
+        promoted: 0
+      }
+    }
+  }
   if (!res.ok) {
     throw new Error('Failed to fetch metrics')
   }
-  return res.json()
+  return data
 }
 
 export default function LiveCounters({ patchHandle, streamCounters }: LiveCountersProps) {
@@ -148,15 +176,17 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
             <p className={`text-lg font-semibold ${
               metric.highlight ? 'text-blue-900' : 'text-slate-900'
             }`}>
-              {isLoading ? '...' : error ? '?' : metric.value ?? 0}
+              {isLoading ? '...' : metric.value ?? 0}
             </p>
           </div>
         ))}
       </div>
-      {error && (
-        <p className="mt-2 text-xs text-red-600">
-          Failed to load metrics: {error instanceof Error ? error.message : 'Unknown error'}
-        </p>
+      {(error || (data && !data.success)) && (
+        <div className="mt-2 rounded-md bg-yellow-50 border border-yellow-200 px-2 py-1">
+          <p className="text-xs text-yellow-800">
+            ⚠️ Metrics unavailable: {error instanceof Error ? error.message : (data?.message || 'Unknown error')}
+          </p>
+        </div>
       )}
     </div>
   )

@@ -21,6 +21,7 @@
     "crawler:test": "tsx scripts/run-crawler-test.ts",
     "report:zero": "tsx scripts/report-zero.ts",
     "smoke:enrich": "tsx scripts/smoke-enrich-prod.ts",
+    "smoke:discovery": "tsx scripts/e2e-smoke-discovery.ts",
     "inspect-images": "tsx scripts/inspect-patch-images.ts",
     "test": "jest",
     "test:v2": "jest --runTestsByPath src/lib/__tests__/paywall.plan.test.ts src/lib/__tests__/scheduler.guards.test.ts src/lib/__tests__/vetter.defamation.test.ts src/lib/__tests__/audit.analytics.test.ts src/lib/__tests__/redis.namespace.test.ts src/lib/__tests__/planner.prompt.test.ts src/lib/__tests__/vetter.prompt.test.ts --passWithNoTests"

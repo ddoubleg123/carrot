@@ -1,5 +1,6 @@
 import { chatStream } from '@/lib/llm/providers/DeepSeekClient'
-import { addToFrontier, FrontierItem, storeDiscoveryPlan, isSeen } from '@/lib/redis/discovery'
+import { addToFrontier, FrontierItem, storeDiscoveryPlan } from '@/lib/redis/discovery'
+import { isUrlSeen } from '@/lib/discovery/seenUrl'
 import { DISCOVERY_CONFIG, getMinUniqueDomains } from '@/lib/discovery/config'
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
@@ -1259,6 +1260,8 @@ function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSe
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
   const MIN_SEEDS = 10
+  const TARGET_UNIQUE_DOMAINS = 10
+  const MIN_UNIQUE_DOMAINS_ABSOLUTE = 5 // Never abort below this
   const { min: MIN_UNIQUE_DOMAINS, warn: MIN_UNIQUE_DOMAINS_WARN } = getMinUniqueDomains()
   
   let seedsSorted: PlannerSeedCandidate[] = []
@@ -1283,7 +1286,7 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
   let contestedCount = 0
   let establishmentCount = 0
 
-  // First pass: prioritize diversity (up to 3 per domain until we have 5+ unique domains)
+  // First pass: prioritize diversity (up to 3 per domain until we have TARGET_UNIQUE_DOMAINS)
   for (const seed of seedsSorted) {
     if (!seed || !seed.url) continue
     const isContested = seed.stance === 'contested' || seed.isControversy === true
@@ -1304,8 +1307,8 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     const currentCount = domainCounts.get(domain) ?? 0
     const uniqueDomainCount = domainCounts.size
     
-    // Dynamic domain limit: allow more per domain until we reach MIN_UNIQUE_DOMAINS
-    const domainLimit = uniqueDomainCount < MIN_UNIQUE_DOMAINS ? 3 : 2
+    // Dynamic domain limit: allow more per domain until we reach TARGET_UNIQUE_DOMAINS
+    const domainLimit = uniqueDomainCount < TARGET_UNIQUE_DOMAINS ? 3 : 2
     if (currentCount >= domainLimit) {
       continue
     }
@@ -1315,38 +1318,79 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     if (isContested) contestedCount++
     else establishmentCount++
 
-    // Continue until we have MIN_SEEDS AND MIN_UNIQUE_DOMAINS
-    if (selectedSeeds.length >= MIN_SEEDS && uniqueDomainCount + 1 >= MIN_UNIQUE_DOMAINS) {
+    // Continue until we have MIN_SEEDS AND TARGET_UNIQUE_DOMAINS
+    if (selectedSeeds.length >= MIN_SEEDS && uniqueDomainCount + 1 >= TARGET_UNIQUE_DOMAINS) {
       break
     }
   }
 
+  // Second pass: if we still don't have enough unique domains, expand domain limits
   const finalUniqueDomainCount = domainCounts.size
-  
-  // Emit planned_domains_count and planned_urls_count for metrics
-  console.log(`[Seed Planner] planned_domains_count=${finalUniqueDomainCount} planned_urls_count=${selectedSeeds.length}`)
-  
-  // Log warning if diversity is low, but don't fail
-  if (finalUniqueDomainCount < MIN_UNIQUE_DOMAINS_WARN) {
-    console.warn(`[Seed Planner] seed_warn_low_diversity: Only ${finalUniqueDomainCount} unique domains (warn threshold: ${MIN_UNIQUE_DOMAINS_WARN}), but proceeding with ${selectedSeeds.length} seeds`)
-  } else {
-    console.log(`[Seed Planner] ✅ Generated ${selectedSeeds.length} seeds from ${finalUniqueDomainCount} unique domains`)
+  if (finalUniqueDomainCount < TARGET_UNIQUE_DOMAINS && selectedSeeds.length < MIN_SEEDS * 2) {
+    // Allow more seeds per domain to reach minimum thresholds
+    for (const seed of seedsSorted) {
+      if (selectedSeeds.length >= MIN_SEEDS * 2) break
+      if (!seed || !seed.url) continue
+      
+      // Skip if already selected
+      if (selectedSeeds.some(s => s.url === seed.url)) continue
+      
+      const isContested = seed.stance === 'contested' || seed.isControversy === true
+      if (isContested && contestedCount >= 8) continue
+      if (!isContested && establishmentCount >= 8) continue
+
+      let domain = 'unknown'
+      try {
+        domain = new URL(seed.url).hostname.toLowerCase()
+      } catch {
+        continue
+      }
+
+      const currentCount = domainCounts.get(domain) ?? 0
+      // Allow up to 5 per domain in second pass
+      if (currentCount >= 5) continue
+
+      domainCounts.set(domain, currentCount + 1)
+      selectedSeeds.push(seed as PlannerSeedCandidate)
+      if (isContested) contestedCount++
+      else establishmentCount++
+    }
   }
 
+  const finalCount = domainCounts.size
+  
+  // Emit planned_domains_count and planned_urls_count for metrics
+  console.log(`[Seed Planner] planned_domains_count=${finalCount} planned_urls_count=${selectedSeeds.length}`)
+  
+  // Determine seed diversity level
+  let seedDiversity: 'high' | 'medium' | 'low' = 'high'
+  if (finalCount < MIN_UNIQUE_DOMAINS_ABSOLUTE) {
+    seedDiversity = 'low'
+    console.warn(`[Seed Planner] seed_warn_low_diversity: Only ${finalCount} unique domains (absolute minimum: ${MIN_UNIQUE_DOMAINS_ABSOLUTE}), but proceeding with ${selectedSeeds.length} seeds`)
+  } else if (finalCount < MIN_UNIQUE_DOMAINS_WARN) {
+    seedDiversity = 'medium'
+    console.warn(`[Seed Planner] seed_warn_low_diversity: Only ${finalCount} unique domains (warn threshold: ${MIN_UNIQUE_DOMAINS_WARN}), but proceeding with ${selectedSeeds.length} seeds`)
+  } else {
+    console.log(`[Seed Planner] ✅ Generated ${selectedSeeds.length} seeds from ${finalCount} unique domains`)
+  }
+
+  // NEVER abort - always proceed even with low diversity
   if (!selectedSeeds.length) {
-    console.warn('[Seed Planner] No seeds selected, discovery may stall')
-    return
+    // Last resort: use fallback seeds even if they're shallow
+    const emergencySeeds = generateFallbackDomainPack(plan.topic, plan.aliases || [])
+    console.warn(`[Seed Planner] No seeds selected, using ${emergencySeeds.length} emergency fallback seeds`)
+    selectedSeeds.push(...emergencySeeds.slice(0, MIN_SEEDS))
   }
 
   const tasks: Array<Promise<void>> = []
 
-  // De-dup seeds against Redis frontier:seen set
+  // De-dup seeds against seen URLs (Redis + DB)
   const dedupedSeeds: PlannerSeedCandidate[] = []
   for (const seed of selectedSeeds) {
     if (!seed.url) continue
     
-    // Check if already seen in Redis
-    const alreadySeen = await isSeen(patchId, seed.url)
+    // Check if already seen (Redis + DB)
+    const alreadySeen = await isUrlSeen(patchId, seed.url)
     if (alreadySeen) {
       console.log(`[Seed Planner] Skipping duplicate seed: ${seed.url.substring(0, 80)}`)
       continue

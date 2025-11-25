@@ -3218,12 +3218,36 @@ export class DiscoveryEngineV21 {
 
   private structuredLog(event: string, data: Record<string, unknown>): void {
     try {
+      // Determine phase from event name
+      let phase: string = 'unknown'
+      if (event.includes('seed') || event.includes('planner')) {
+        phase = 'seed'
+      } else if (event.includes('fetch') || event.includes('paywall') || event.includes('render')) {
+        phase = 'fetch'
+      } else if (event.includes('extract') || event.includes('vet') || event.includes('relevance')) {
+        phase = 'extract'
+      } else if (event.includes('save') || event.includes('persist')) {
+        phase = 'save'
+      } else if (event.includes('hero') || event.includes('enrich')) {
+        phase = 'hero'
+      } else if (event.includes('error') || event.includes('fail')) {
+        phase = 'error'
+      }
+      
       const payload = {
         source: 'discovery_engine_v21',
         runId: this.options.runId,
         patchId: this.options.patchId,
+        patchHandle: this.options.patchHandle,
+        phase,
         event,
         timestamp: new Date().toISOString(),
+        counts: {
+          processed: this.metrics.candidatesProcessed,
+          saved: this.metrics.itemsSaved,
+          duplicates: this.metrics.duplicates,
+          failures: this.metrics.failures
+        },
         ...data
       }
       console.log(JSON.stringify(payload))

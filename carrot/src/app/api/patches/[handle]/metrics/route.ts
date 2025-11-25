@@ -1,91 +1,178 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSaveCounters, getRunState } from '@/lib/redis/discovery'
+import { z } from 'zod'
 
 /**
  * GET /api/patches/[handle]/metrics
  * Returns discovery metrics for a patch
+ * Never throws - always returns 200 with success/error status
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const MetricsResponseSchema = z.object({
+  success: z.boolean(),
+  patchId: z.string().optional(),
+  patchHandle: z.string().optional(),
+  message: z.string().optional(),
+  details: z.string().optional(),
+  metrics: z.object({
+    processed: z.number(),
+    saved: z.number(),
+    duplicates: z.number(),
+    paywallBlocked: z.number(),
+    extractOk: z.number(),
+    renderOk: z.number(),
+    persistOk: z.number(),
+    relevanceFail: z.number(),
+    skipped: z.number()
+  }).optional(),
+  counters: z.object({
+    processed: z.number(),
+    saved: z.number(),
+    heroes: z.number(),
+    deduped: z.number(),
+    paywall: z.number(),
+    extractOk: z.number(),
+    renderOk: z.number(),
+    promoted: z.number()
+  }).optional(),
+  runState: z.object({
+    isActive: z.boolean(),
+    status: z.string(),
+    runId: z.string().nullable()
+  }).nullable().optional(),
+  recentRun: z.object({
+    id: z.string(),
+    status: z.string(),
+    metrics: z.any().nullable(),
+    createdAt: z.date().nullable().optional(),
+    startedAt: z.date(),
+    completedAt: z.date().nullable().optional()
+  }).nullable().optional()
+})
+
+type MetricsResponse = z.infer<typeof MetricsResponseSchema>
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
+  let handle: string
   try {
-    const { handle } = await params
-    
+    const resolved = await params
+    handle = resolved.handle
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      message: 'Invalid request parameters',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    } as MetricsResponse, { status: 200 })
+  }
+  
+  try {
     const patch = await prisma.patch.findUnique({
       where: { handle },
       select: { id: true }
     })
     
     if (!patch) {
-      return NextResponse.json({ error: 'Patch not found' }, { status: 404 })
+      return NextResponse.json({
+        success: false,
+        message: 'Patch not found',
+        patchHandle: handle
+      } as MetricsResponse, { status: 200 })
     }
     
-    // Get Redis counters
+    // Get Redis counters with error handling
     const counters = await getSaveCounters(patch.id).catch(() => ({
       total: 0,
       controversy: 0,
       history: 0
     }))
     
-    // Get run state
+    // Get run state with error handling
     const runState = await getRunState(patch.id).catch(() => null)
     
-    // Get DB counts
-    const [totalSources, totalHeroesResult, sourcesWithTextResult] = await Promise.all([
-      prisma.discoveredContent.count({
+    // Get DB counts with individual error handling
+    let totalSources = 0
+    let totalHeroes = 0
+    let sourcesWithText = 0
+    let sourcesWithRender = 0
+    
+    try {
+      totalSources = await prisma.discoveredContent.count({
         where: { patchId: patch.id }
-      }),
-      // Query heroes via raw SQL since Prisma relation query might have issues
-      prisma.$queryRaw<Array<{ count: bigint }>>`
+      })
+    } catch (error) {
+      console.error('[Metrics API] Error counting sources:', error)
+    }
+    
+    try {
+      const totalHeroesResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(*) as count
         FROM heroes h
         INNER JOIN discovered_content dc ON h.content_id = dc.id
         WHERE dc.patch_id = ${patch.id}
         AND h.status = 'READY'
-      `.then(r => Number(r[0]?.count || 0)).catch(() => 0),
-      prisma.$queryRaw<Array<{ count: bigint }>>`
+      `
+      totalHeroes = Number(totalHeroesResult[0]?.count || 0)
+    } catch (error) {
+      console.error('[Metrics API] Error counting heroes:', error)
+    }
+    
+    try {
+      const sourcesWithTextResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(*) as count
         FROM discovered_content
         WHERE patch_id = ${patch.id}
         AND text_content IS NOT NULL
         AND text_content != ''
-      `.then(r => Number(r[0]?.count || 0)).catch(() => 0)
-    ])
+      `
+      sourcesWithText = Number(sourcesWithTextResult[0]?.count || 0)
+    } catch (error) {
+      console.error('[Metrics API] Error counting sources with text:', error)
+    }
     
-    const totalHeroes = Number(totalHeroesResult || 0)
-    const sourcesWithText = Number(sourcesWithTextResult || 0)
+    try {
+      const sourcesWithRenderResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count
+        FROM discovered_content
+        WHERE patch_id = ${patch.id}
+        AND metadata::jsonb->>'renderUsed' = 'true'
+      `
+      sourcesWithRender = Number(sourcesWithRenderResult[0]?.count || 0)
+    } catch (error) {
+      console.error('[Metrics API] Error counting sources with render:', error)
+    }
     
-    // Get recent run metrics
-    const recentRun = await (prisma as any).discoveryRun.findFirst({
-      where: { patchId: patch.id },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        status: true,
-        metrics: true,
-        createdAt: true,
-        startedAt: true,
-        completedAt: true
-      }
-    })
+    // Get recent run metrics - use startedAt instead of createdAt
+    let recentRun = null
+    try {
+      recentRun = await (prisma as any).discoveryRun.findFirst({
+        where: { patchId: patch.id },
+        orderBy: { startedAt: 'desc' }, // Fixed: use startedAt instead of createdAt
+        select: {
+          id: true,
+          status: true,
+          metrics: true,
+          startedAt: true,
+          endedAt: true
+        }
+      })
+    } catch (error) {
+      console.error('[Metrics API] Error fetching recent run:', error)
+    }
     
     // Get run metrics snapshot for more detailed counters
-    const { getRunMetricsSnapshot } = await import('@/lib/redis/discovery')
-    const runMetrics = await getRunMetricsSnapshot(patch.id).catch(() => null)
-    
-    // Count render_ok from metadata (using raw query since Prisma JSON filtering is limited)
-    const sourcesWithRenderResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) as count
-      FROM discovered_content
-      WHERE patch_id = ${patch.id}
-      AND metadata::jsonb->>'renderUsed' = 'true'
-    `.catch(() => [{ count: BigInt(0) }])
-    const sourcesWithRender = Number(sourcesWithRenderResult[0]?.count || 0)
+    let runMetrics = null
+    try {
+      const { getRunMetricsSnapshot } = await import('@/lib/redis/discovery')
+      runMetrics = await getRunMetricsSnapshot(patch.id).catch(() => null)
+    } catch (error) {
+      console.error('[Metrics API] Error fetching run metrics snapshot:', error)
+    }
     
     // Extract metrics from runMetrics snapshot (if available)
     const runMetricsData = runMetrics as any
@@ -93,7 +180,7 @@ export async function GET(
     const duplicatesCount = runMetricsData?.duplicates || 0
     const paywallCount = runMetricsData?.paywall || runMetricsData?.paywallBlocked || 0
     
-    return NextResponse.json({
+    const response: MetricsResponse = {
       success: true,
       patchId: patch.id,
       patchHandle: handle,
@@ -104,7 +191,7 @@ export async function GET(
         paywallBlocked: paywallCount,
         extractOk: sourcesWithText,
         renderOk: sourcesWithRender,
-        persistOk: totalSources, // All saved items are persisted
+        persistOk: totalSources,
         relevanceFail: runMetricsData?.relevanceFail || 0,
         skipped: runMetricsData?.skipped || 0
       },
@@ -121,23 +208,50 @@ export async function GET(
       runState: runState ? {
         isActive: runState === 'live',
         status: runState,
-        runId: null // TODO: get runId from Redis if needed
+        runId: null
       } : null,
       recentRun: recentRun ? {
         id: recentRun.id,
         status: recentRun.status,
         metrics: recentRun.metrics,
-        createdAt: recentRun.createdAt,
         startedAt: recentRun.startedAt,
-        completedAt: recentRun.completedAt
+        completedAt: recentRun.endedAt || null
       } : null
-    })
+    }
+    
+    // Validate response with Zod
+    const validated = MetricsResponseSchema.parse(response)
+    
+    return NextResponse.json(validated, { status: 200 })
   } catch (error) {
     console.error('[Metrics API] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    // Always return 200, never 500
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to fetch metrics',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      metrics: {
+        processed: 0,
+        saved: 0,
+        duplicates: 0,
+        paywallBlocked: 0,
+        extractOk: 0,
+        renderOk: 0,
+        persistOk: 0,
+        relevanceFail: 0,
+        skipped: 0
+      },
+      counters: {
+        processed: 0,
+        saved: 0,
+        heroes: 0,
+        deduped: 0,
+        paywall: 0,
+        extractOk: 0,
+        renderOk: 0,
+        promoted: 0
+      }
+    } as MetricsResponse, { status: 200 })
   }
 }
 
