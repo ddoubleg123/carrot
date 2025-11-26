@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { createResilientFetch } from '@/lib/retryUtils'
 import { JSDOM } from 'jsdom'
 import { v4 as uuidv4 } from 'uuid'
+import { clampFairUseToHtml } from '@/lib/fairUse'
+import { sanitizeLogEntry } from '@/lib/logging/redact'
 
 // Note: @mozilla/readability is not installed - we use DOM fallback only
 // The extractContent function uses DOM heuristics for content extraction
@@ -31,11 +33,9 @@ interface ExtractedContent {
 }
 
 const FETCH_TIMEOUT_MS = 10000 // 10s
-const MAX_QUOTE_CHARS = 1200
-const MAX_QUOTE_PARAGRAPHS = 2
 
 /**
- * Structured logging helper
+ * Structured logging helper with PII redaction
  */
 function log(phase: string, meta: Record<string, any>) {
   const logEntry = {
@@ -44,7 +44,9 @@ function log(phase: string, meta: Record<string, any>) {
     status: meta.ok === false ? 'error' : meta.ok === true ? 'ok' : 'warn',
     ...meta
   }
-  console.log(JSON.stringify(logEntry))
+  // Sanitize log entry before output (redacts sensitive data)
+  const sanitized = sanitizeLogEntry(logEntry)
+  console.log(JSON.stringify(sanitized))
 }
 
 /**
@@ -65,10 +67,14 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
     // Set timeout
     timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
+    // Use proper UA string identifying crawler with domain + contact
+    const userAgent = process.env.CRAWLER_USER_AGENT || 
+      `CarrotCrawler/1.0 (+https://carrot-app.onrender.com; contact@carrot.app)`
+    
     const response = await resilientFetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'CarrotCrawler/1.0 (+contact@example.com)',
+        'User-Agent': userAgent,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
       }
     })
@@ -197,35 +203,21 @@ function extractContent(html: string, url: string, traceId: string): ExtractedCo
 
 /**
  * Generate quote (≤2 paragraphs, ≤1200 chars) from extracted content
+ * Uses centralized fairUse clamp
  */
 function generateQuote(paragraphs: string[], traceId: string): { quoteHtml: string; quoteCharCount: number } {
   const startTime = Date.now()
   log('quote', { traceId, phase: 'start', paragraphCount: paragraphs.length })
 
-  // Select up to 2 paragraphs with highest information density
-  const scored = paragraphs
-    .map((p, i) => ({
-      text: p,
-      index: i,
-      score: p.length + (p.match(/[.!?]/g) || []).length * 10 // Prefer longer paragraphs with more sentences
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_QUOTE_PARAGRAPHS)
-
-  let quoteText = scored.map(s => s.text).join('\n\n')
-  
-  // Truncate if too long
-  if (quoteText.length > MAX_QUOTE_CHARS) {
-    quoteText = quoteText.substring(0, MAX_QUOTE_CHARS - 3) + '...'
-  }
-
-  // Convert to HTML (simple paragraph tags)
-  const quoteHtml = quoteText.split('\n\n').map(p => `<p>${p}</p>`).join('')
+  // Use centralized fair-use clamp
+  const quoteHtml = clampFairUseToHtml('', paragraphs)
+  const quoteText = quoteHtml.replace(/<p>/g, '').replace(/<\/p>/g, '\n\n').trim()
+  const quoteCharCount = quoteText.length
 
   const durationMs = Date.now() - startTime
-  log('quote', { traceId, ok: true, durationMs, quoteCharCount: quoteText.length, paragraphCount: scored.length })
+  log('quote', { traceId, ok: true, durationMs, quoteCharCount, paragraphCount: Math.min(paragraphs.length, 2) })
 
-  return { quoteHtml, quoteCharCount: quoteText.length }
+  return { quoteHtml, quoteCharCount }
 }
 
 /**

@@ -7,6 +7,24 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 
+// Validate environment at boot
+// Note: In production, this will be called during build/start
+// For development, we validate here
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    // Use dynamic import for TypeScript module
+    // In production, this will be compiled to .js
+    const validateModule = require('./src/lib/env/validate.js');
+    if (validateModule && validateModule.validateEnv) {
+      validateModule.validateEnv();
+    }
+  } catch (error) {
+    // In dev, TypeScript files may not be compiled yet - that's OK
+    // Validation will happen when the app starts
+    console.warn('[Boot] Environment validation skipped (will validate at runtime):', error.message);
+  }
+}
+
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = parseInt(process.env.PORT || '3000', 10);

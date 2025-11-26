@@ -1,7 +1,11 @@
 /**
  * Structured logging for enrichment pipeline
  * Emits JSON logs with stage, patchSlug, id, url, status, ms
+ * Includes PII redaction
  */
+
+import { sanitizeLogEntry } from '@/lib/logging/redact'
+import { getCounterStats } from '@/lib/counters/dbTruth'
 
 export interface EnrichmentLog {
   ts?: number // Optional, defaults to Date.now()
@@ -17,51 +21,32 @@ export interface EnrichmentLog {
   [key: string]: any
 }
 
-const counters = {
-  itemsReturned: 0,
-  heroesCreated: 0,
-  imageFallbacks: 0,
-  enrich404: 0,
-  dbMigrateErrors: 0
-}
-
 /**
- * Emit structured log
+ * Emit structured log with PII redaction
  */
 export function logEnrichment(log: EnrichmentLog): void {
   const logEntry = {
     ...log,
     ts: log.ts || Date.now()
   }
-  console.log(JSON.stringify(logEntry))
   
-  // Update counters
-  if (log.stage === 'hero' && log.status === 'ok') {
-    counters.heroesCreated++
-  }
-  if (log.stage === 'image' && log.status === 'warn') {
-    counters.imageFallbacks++
-  }
-  if (log.status === 'error' && log.errorCode === 'ENRICH_404') {
-    counters.enrich404++
-  }
+  // Sanitize log entry before output (redacts sensitive data)
+  const sanitized = sanitizeLogEntry(logEntry)
+  console.log(JSON.stringify(sanitized))
 }
 
 /**
- * Get current counters
+ * Get current counters from DB truth (not run aggregates)
  */
-export function getCounters() {
-  return { ...counters }
+export async function getCounters(patchId?: string) {
+  return await getCounterStats(patchId)
 }
 
 /**
- * Reset counters (for testing)
+ * Reset counters (deprecated - counters now come from DB)
+ * Kept for backward compatibility
  */
 export function resetCounters() {
-  counters.itemsReturned = 0
-  counters.heroesCreated = 0
-  counters.imageFallbacks = 0
-  counters.enrich404 = 0
-  counters.dbMigrateErrors = 0
+  console.warn('[Logger] resetCounters() is deprecated - counters now come from DB truth')
 }
 

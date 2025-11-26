@@ -1,6 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireDebugAuth } from '@/lib/middleware/debugAuth'
 
-export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+export async function GET(request: NextRequest, _ctx: { params: Promise<{}> }) {
+  // Require org-admin auth
+  const authResponse = await requireDebugAuth(request)
+  if (authResponse) return authResponse
+  
+  const _req = request
   const url = new URL(_req.url)
   const sp = url.searchParams
   const rawUrl = sp.get('url')

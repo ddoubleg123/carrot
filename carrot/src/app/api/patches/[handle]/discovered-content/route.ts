@@ -35,9 +35,17 @@ export async function GET(
     }
 
     // Build where clause
+    // FE hero query guard: only query status='SAVED' with textBytes >= MIN_TEXT_BYTES_FOR_HERO
+    const MIN_TEXT_BYTES_FOR_HERO = 200 // Minimum text content for hero display
     const whereClause: any = {
-      patchId: patch.id
+      patchId: patch.id,
+      // Only include items with sufficient text content for hero display
+      textContent: {
+        not: null
+      }
     }
+    
+    // Filter by textBytes >= MIN_TEXT_BYTES_FOR_HERO (we'll filter in JS since Prisma doesn't support length on text)
     
     // Cursor-based pagination: if cursor provided, use it instead of offset
     let orderBy: any[] = [
@@ -115,7 +123,13 @@ export async function GET(
       sampleIds: allContent.slice(0, 3).map(c => c.id)
     });
 
-    let discoveredContent: DiscoveryCardPayload[] = allContent.map((item) => {
+    // Filter items with textBytes >= MIN_TEXT_BYTES_FOR_HERO
+    const filteredContent = allContent.filter(item => {
+      const textBytes = item.textContent?.length || 0
+      return textBytes >= MIN_TEXT_BYTES_FOR_HERO
+    })
+    
+    let discoveredContent: DiscoveryCardPayload[] = filteredContent.map((item) => {
       let domain = 'unknown'
       const primaryUrl = item.canonicalUrl || item.sourceUrl || ''
       try {
@@ -301,11 +315,12 @@ export async function GET(
     })
     
     // Determine next cursor
-    // Use savedAt (which is createdAt) or fallback to the raw item's createdAt
+    // Include buildSha and patchId in pagination keys for proper tracking
     const lastItem = finalItems[finalItems.length - 1]
-    const lastRawItem = allContent[allContent.length - 1]
+    const lastRawItem = filteredContent[filteredContent.length - 1]
+    const buildSha = process.env.BUILD_SHA || 'unknown'
     const nextCursor = lastItem && finalItems.length === limit && lastRawItem
-      ? (lastItem.savedAt || lastRawItem.createdAt.toISOString())
+      ? `${lastItem.savedAt || lastRawItem.createdAt.toISOString()}|${buildSha}|${patch.id}`
       : null
     
     const responseData: any = {

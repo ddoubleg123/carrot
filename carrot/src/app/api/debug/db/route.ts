@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireDebugAuth } from '@/lib/middleware/debugAuth';
 export const runtime = 'nodejs';
 import prisma from '../../../../lib/prisma';
 import path from 'path';
 import fs from 'fs';
 
-export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+export async function GET(request: NextRequest, _ctx: { params: Promise<{}> }) {
+  // Require org-admin auth
+  const authResponse = await requireDebugAuth(request)
+  if (authResponse) return authResponse
   try {
     // Mirror prisma SQLite resolution to report actual DB file being used
     const raw = process.env.DATABASE_URL;

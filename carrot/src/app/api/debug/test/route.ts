@@ -1,6 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireDebugAuth } from '@/lib/middleware/debugAuth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Require org-admin auth
+  const authResponse = await requireDebugAuth(request)
+  if (authResponse) return authResponse
+  
   try {
     // Test basic functionality
     const testData = {
