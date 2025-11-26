@@ -2262,63 +2262,6 @@ export class DiscoveryEngineV21 {
           // Structured logging
           const { discoveryLogger } = await import('./structuredLogger')
           discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
-            data: {
-              patchId,
-              canonicalUrl,
-              title: extracted.title,
-              sourceUrl: canonicalUrl,
-              domain,
-              publishDate: candidate.meta?.publishDate ?? null,
-              category: (candidate.meta?.category as string | undefined) || null,
-              isControversy,
-              isHistory,
-              relevanceScore: synthesis.relevanceScore,
-              qualityScore: synthesis.qualityScore,
-              whyItMatters: synthesis.whyItMatters,
-              summary: summaryWithParaphrase,
-              facts: synthesis.facts as unknown as Prisma.JsonArray,
-              quotes: enhancedQuotes as unknown as Prisma.JsonArray,
-              provenance: synthesis.provenance as unknown as Prisma.JsonArray,
-              hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
-              contentHash: hashString,
-              // Store fair-use quote and paraphrase in metadata
-              // Also store renderUsed flag and fetch metadata for audit tracking
-              metadata: {
-                fairUseQuote: fairUseQuote ? {
-                  quoteHtml: fairUseQuote.quoteHtml,
-                  quoteWordCount: fairUseQuote.quoteWordCount,
-                  quoteStartChar: fairUseQuote.quoteStartChar,
-                  quoteEndChar: fairUseQuote.quoteEndChar
-                } : null,
-                summaryPoints: paraphraseResult.summaryPoints,
-                summaryWordCount: paraphraseResult.wordCount,
-                renderUsed: renderUsed, // Track if Playwright was used
-                render_ok: renderUsed, // For audit page compatibility
-                // Fetch metadata for observability (Phase 2)
-                fetch_metadata: {
-                  render_used: renderUsed,
-                  branch_used: paywallBranch || 'direct',
-                  status_code: null, // HTTP status (captured in fetch logs)
-                  html_bytes: htmlBytes,
-                  text_bytes: textBytes,
-                  failure_reason: null
-                } as Prisma.JsonObject,
-                // Content status (Phase 3)
-                contentStatus: isPartialContent ? 'partial' : 'full'
-              } as Prisma.JsonObject
-            }
-          })
-          savedId = savedItem.id
-          savedCreatedAt = savedItem.createdAt
-          
-          // Record telemetry
-          if (this.discoveryTelemetry) {
-            this.discoveryTelemetry.recordPersistOk()
-          }
-          
-          // Structured logging
-          const { discoveryLogger } = await import('./structuredLogger')
-          discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
           
           // Structured logging for successful save (persist)
           const { slog } = await import('@/lib/log')
