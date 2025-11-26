@@ -5,7 +5,6 @@ import { createHash } from 'crypto'
 import { DiscoveryEventStream } from './streaming'
 import { audit, logger, MetricsTracker } from './logger'
 import { HeroImagePipeline } from './hero-pipeline'
-import { createHash } from 'crypto'
 import {
   popFromFrontier,
   addToFrontier,
