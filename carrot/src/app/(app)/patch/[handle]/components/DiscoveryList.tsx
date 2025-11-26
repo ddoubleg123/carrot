@@ -24,13 +24,27 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const searchParams = useSearchParams()
   const showDebug = searchParams?.get('debug') === '1'
   
-  // Fetch health data if debug mode
+  // Fetch health/debug data if debug mode
   useEffect(() => {
     if (showDebug) {
-      fetch(`/api/patches/${patchHandle}/discovered-content/health`)
-        .then(res => res.json())
-        .then(data => setHealthData(data))
-        .catch(err => console.error('[DiscoveryList] Health fetch failed:', err))
+      // The new API shape includes debug info in the response
+      // We can also fetch metrics for additional debug info
+      Promise.all([
+        fetch(`/api/patches/${patchHandle}/discovered-content?limit=1&debug=1`)
+          .then(res => res.json())
+          .then(data => ({ api: data }))
+          .catch(err => ({ api: null, error: err.message })),
+        fetch(`/api/patches/${patchHandle}/metrics`)
+          .then(res => res.json())
+          .then(data => ({ metrics: data }))
+          .catch(err => ({ metrics: null, error: err.message }))
+      ]).then(([apiData, metricsData]) => {
+        setHealthData({
+          api: apiData.api,
+          metrics: metricsData.metrics,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(err => console.error('[DiscoveryList] Debug fetch failed:', err))
     }
   }, [showDebug, patchHandle])
 
@@ -141,22 +155,64 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             </div>
             {debugInfo.health && (
               <>
-                <div>
-                  <div className="font-semibold">DB Count</div>
-                  <div className="text-lg font-bold">{debugInfo.health.count || 0}</div>
-                </div>
-                <div>
-                  <div className="font-semibold">Sample Count</div>
-                  <div className="text-lg font-bold">{debugInfo.health.sampleCount || 0}</div>
-                </div>
+                {debugInfo.health.api && (
+                  <>
+                    <div>
+                      <div className="font-semibold">API Success</div>
+                      <div className="text-lg font-bold">{debugInfo.health.api.success ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">API Totals</div>
+                      <div className="text-lg font-bold">{debugInfo.health.api.totals?.total || 0}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">Is Active</div>
+                      <div className="text-lg font-bold">{debugInfo.health.api.isActive ? 'Yes' : 'No'}</div>
+                    </div>
+                    {debugInfo.health.api.debug && (
+                      <>
+                        <div>
+                          <div className="font-semibold">Build SHA</div>
+                          <div className="text-xs font-mono">{debugInfo.health.api.debug.buildSha || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold">Last Run ID</div>
+                          <div className="text-xs font-mono">{debugInfo.health.api.debug.lastRunId || 'N/A'}</div>
+                        </div>
+                        {debugInfo.health.api.debug.reasonWhenEmpty && (
+                          <div>
+                            <div className="font-semibold">Empty Reason</div>
+                            <div className="text-xs">{debugInfo.health.api.debug.reasonWhenEmpty}</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+                {debugInfo.health.metrics && (
+                  <>
+                    <div>
+                      <div className="font-semibold">Metrics Success</div>
+                      <div className="text-lg font-bold">{debugInfo.health.metrics.success ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">DB Saved</div>
+                      <div className="text-lg font-bold">{debugInfo.health.metrics.counters?.saved || 0}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">DB Heroes</div>
+                      <div className="text-lg font-bold">{debugInfo.health.metrics.counters?.heroes || 0}</div>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
           {debugInfo.health && (
             <div className="mt-4 pt-4 border-t border-orange-300">
-              <div className="font-semibold mb-2">Health Endpoint:</div>
-              <div className="text-xs font-mono bg-white p-2 rounded overflow-auto max-h-32">
-                {JSON.stringify(debugInfo.health, null, 2)}
+              <div className="font-semibold mb-2">Debug Data (API + Metrics):</div>
+              <div className="text-xs font-mono bg-white p-2 rounded overflow-auto max-h-48">
+                <pre>{JSON.stringify(debugInfo.health, null, 2)}</pre>
               </div>
             </div>
           )}

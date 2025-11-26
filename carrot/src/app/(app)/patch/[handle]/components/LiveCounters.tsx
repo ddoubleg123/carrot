@@ -94,8 +94,15 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
     `/api/patches/${patchHandle}/metrics`,
     fetcher,
     {
-      refreshInterval: 2000, // Poll every 2 seconds (Phase 6 requirement)
-      revalidateOnFocus: true
+      refreshInterval: 2000, // Poll every 2 seconds (DB truth refresh)
+      revalidateOnFocus: true,
+      // Don't throw on error - API returns 200 with success:false
+      onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+        // Only retry on network errors, not API errors
+        if (error.status === 200) return
+        if (retryCount >= 3) return
+        setTimeout(() => revalidate({ retryCount }), 5000)
+      }
     }
   )
 
@@ -108,7 +115,8 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
     }
   )
 
-  // Use counters from metrics endpoint (Phase 6: unified metrics)
+  // Use DB-driven counters from metrics endpoint (DB truth, not run aggregates)
+  // Metrics endpoint returns DB counts, not run-specific counters
   const counters = (data as any)?.counters
   const metrics = (data as any)?.metrics || {}
 
@@ -119,50 +127,65 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
         {[
           { 
             label: 'Processed', 
-            value: streamCounters?.processed ?? (counters?.processed ?? metrics?.processed ?? 0),
-            description: 'Items processed this run'
+            // Prefer DB truth from metrics API, fallback to stream counters
+            value: (counters?.processed ?? metrics?.processed ?? streamCounters?.processed ?? 0) as number,
+            description: 'Items processed (DB truth)'
           },
           { 
             label: 'Saved (Sources)', 
+            // Always use DB truth - counters.saved is from DB count
             value: (counters?.saved ?? metrics?.saved ?? 0) as number,
-            description: 'Total saved in DB',
+            description: 'Total saved in DB (DB truth)',
             highlight: true
           },
           { 
             label: 'Heroes', 
+            // Always use DB truth - counters.heroes is from DB count
             value: (counters?.heroes ?? heroData?.readyHeroes ?? 0) as number,
-            description: 'Ready heroes',
+            description: 'Ready heroes (DB truth)',
             highlight: true
           },
           { 
             label: 'De-duped', 
-            value: streamCounters?.duplicates ?? (counters?.deduped ?? metrics?.duplicates ?? 0) as number
+            // Prefer DB truth, fallback to stream
+            value: (counters?.deduped ?? metrics?.duplicates ?? streamCounters?.duplicates ?? 0) as number,
+            description: 'Duplicates detected (DB truth)'
           },
           { 
             label: 'Skipped', 
-            value: streamCounters?.skipped ?? (metrics?.skipped ?? 0) as number
+            // Prefer DB truth, fallback to stream
+            value: (metrics?.skipped ?? streamCounters?.skipped ?? 0) as number,
+            description: 'Items skipped (DB truth)'
           },
           { 
             label: 'Paywall', 
-            value: (counters?.paywall ?? metrics?.paywallBlocked ?? 0) as number
+            // Always use DB truth
+            value: (counters?.paywall ?? metrics?.paywallBlocked ?? 0) as number,
+            description: 'Paywall blocked (DB truth)'
           },
           { 
             label: 'Extract OK', 
-            value: (counters?.extractOk ?? metrics?.extractOk ?? 0) as number
+            // Always use DB truth - extractOk is from DB count
+            value: (counters?.extractOk ?? metrics?.extractOk ?? 0) as number,
+            description: 'Items with extracted text (DB truth)'
           },
           { 
             label: 'Render OK', 
-            value: (counters?.renderOk ?? 0) as number,
-            description: 'Items rendered with Playwright'
+            // Always use DB truth - renderOk is from DB count
+            value: (counters?.renderOk ?? metrics?.renderOk ?? 0) as number,
+            description: 'Items rendered with Playwright (DB truth)'
           },
           { 
             label: 'Promoted', 
+            // Always use DB truth - promoted is from DB count
             value: (counters?.promoted ?? 0) as number,
-            description: 'Sources promoted to heroes'
+            description: 'Sources promoted to heroes (DB truth)'
           },
           { 
             label: 'Hero Errors', 
-            value: heroData?.errorHeroes ?? 0
+            // Always use DB truth
+            value: (heroData?.errorHeroes ?? 0) as number,
+            description: 'Hero generation errors (DB truth)'
           }
         ].map((metric) => (
           <div
@@ -187,6 +210,9 @@ export default function LiveCounters({ patchHandle, streamCounters }: LiveCounte
         <div className="mt-2 rounded-md bg-yellow-50 border border-yellow-200 px-2 py-1">
           <p className="text-xs text-yellow-800">
             ⚠️ Metrics unavailable: {error instanceof Error ? error.message : (data?.message || 'Unknown error')}
+            {data?.debug && (
+              <span className="ml-1 text-yellow-700">(Debug: {JSON.stringify(data.debug)})</span>
+            )}
           </p>
         </div>
       )}

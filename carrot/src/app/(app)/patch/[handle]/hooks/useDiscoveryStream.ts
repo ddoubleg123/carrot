@@ -118,6 +118,7 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
   const refresh = useCallback(async () => {
     try {
       // Always fetch from API, even if run failed - items exist in DB
+      // Use new API shape with cursor pagination
       const url = `/api/patches/${patchHandle}/discovered-content?limit=50`
       console.log('[DiscoveryStream] Fetching from:', url)
       
@@ -130,22 +131,30 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
       
       console.log('[DiscoveryStream] Response status:', response.status, response.statusText)
       
-      // Don't set error state if API returns items - run may have failed but items still exist
-      
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error')
-        console.error('[DiscoveryStream] Response error:', { status: response.status, errorText })
-        throw new Error(`Failed to load discovered content: ${response.status}`)
-      }
-      
+      // New API shape: { success, items, cursor, hasMore, totals, isActive, debug }
+      // Never throws 500 - always returns 200 with success/error status
       const data = await response.json()
       console.log('[DiscoveryStream] Response data:', {
         success: data.success,
         itemsCount: Array.isArray(data.items) ? data.items.length : 0,
-        totalItems: data.totalItems,
+        totals: data.totals,
         isActive: data.isActive,
+        hasMore: data.hasMore,
         debug: data.debug
       })
+      
+      // Handle error response (success: false but 200 status)
+      if (!data.success) {
+        const errorMsg = data.error?.msg || data.message || 'Failed to load discovered content'
+        console.error('[DiscoveryStream] API returned error:', errorMsg, data.debug)
+        setState(prev => ({
+          ...prev,
+          error: errorMsg
+        }))
+        // Still set items to empty array (don't break UI)
+        setItems([])
+        return
+      }
       
       const payload: DiscoveryCardPayload[] = Array.isArray(data.items) ? data.items : []
       
@@ -153,10 +162,15 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         console.warn('[DiscoveryStream] Empty payload with debug info:', data.debug)
       }
       
+      // Update state with new API shape data
       setItems(payload)
       setState(prev => ({
         ...prev,
-        itemsFound: payload.length
+        itemsFound: payload.length,
+        // Use totals from API (DB truth)
+        totalSaved: data.totals?.total || data.totals?.items || payload.length,
+        // Clear error if we got successful response
+        error: undefined
       }))
     } catch (error) {
       console.error('[DiscoveryStream] Failed to refresh:', error)
@@ -396,6 +410,7 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
           frontierSize: typeof metrics.frontier === 'number' ? metrics.frontier : prev.frontierSize,
           totalDuplicates: typeof metrics.duplicates === 'number' ? metrics.duplicates : prev.totalDuplicates,
           totalSkipped: typeof metrics.skipped === 'number' ? metrics.skipped : prev.totalSkipped,
+          // Prefer DB truth from API refresh over stream metrics
           totalSaved: typeof metrics.saved === 'number' ? metrics.saved : prev.totalSaved,
           runState: metrics.runState ?? prev.runState
         }))
