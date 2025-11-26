@@ -320,7 +320,7 @@ export async function GET(
     // Get last run ID from discovery runs
     const lastRun = await prisma.discoveryRun.findFirst({
       where: { patchId: patch.id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { startedAt: 'desc' },
       select: { id: true, status: true }
     }).catch(() => null)
     
