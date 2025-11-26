@@ -9,7 +9,7 @@ export const DISCOVERY_CONFIG = {
   RENDERER_CONCURRENCY: Number(process.env.DISCOVERY_RENDER_CONCURRENCY || '3'),
   
   // Seed planner settings
-  MIN_UNIQUE_DOMAINS: Number(process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || '5'),
+  MIN_UNIQUE_DOMAINS: Number(process.env.MIN_UNIQUE_DOMAINS || process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || '3'),
   MIN_UNIQUE_DOMAINS_WARN: 8, // Warn below this threshold
   
   // Fetch settings

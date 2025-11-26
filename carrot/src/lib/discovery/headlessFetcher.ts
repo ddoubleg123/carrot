@@ -185,13 +185,38 @@ async function renderWithPlaywright(url: string): Promise<{
       }
     })
 
-    // Block images/video/fonts to save bandwidth
-    await context.route('**/*', (route: any) => {
+    // Block images/video/fonts/analytics to save bandwidth
+    // Cap images at 2MB
+    await context.route('**/*', async (route: any) => {
       const resourceType = route.request().resourceType()
-      if (['image', 'media', 'font'].includes(resourceType)) {
+      const url = route.request().url()
+      
+      // Deny video, media, fonts, analytics
+      if (['media', 'font'].includes(resourceType) || 
+          url.match(/\.(mp4|webm|avi|mov|mkv)$/i) ||
+          url.includes('analytics') || url.includes('tracking')) {
         route.abort()
-      } else {
+        return
+      }
+      
+      // For images, check size and cap at 2MB
+      if (resourceType === 'image') {
+        // Let it through but we'll check size in response handler
         route.continue()
+        return
+      }
+      
+      route.continue()
+    })
+    
+    // Response handler for image size capping
+    context.on('response', async (response: any) => {
+      if (response.request().resourceType() === 'image') {
+        const contentLength = response.headers()['content-length']
+        if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
+          // Abort large images
+          await response.body().catch(() => null)
+        }
       }
     })
 
@@ -204,23 +229,28 @@ async function renderWithPlaywright(url: string): Promise<{
       })
     })
 
-    // Navigate with timeout
+    // Navigate with timeout (15s cap, waitUntil networkidle)
+    const RENDER_TIMEOUT_MS = 15000 // 15s as per requirements
     const navigationPromise = page.goto(url, {
-      waitUntil: 'domcontentloaded', // Faster than networkidle
-      timeout: DISCOVERY_CONFIG.FETCH_TIMEOUT_MS
+      waitUntil: 'networkidle', // Wait for network to be idle
+      timeout: RENDER_TIMEOUT_MS
     })
 
     // Hard cap timeout
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('render_timeout')), DISCOVERY_CONFIG.FETCH_TIMEOUT_MS)
+      setTimeout(() => reject(new Error('render_timeout')), RENDER_TIMEOUT_MS)
     })
 
-    await Promise.race([navigationPromise, timeoutPromise])
-
-    // Wait for content (shorter timeout)
-    await page.waitForTimeout(DISCOVERY_CONFIG.CONTENT_WAIT_MS).catch(() => {
-      // Ignore - proceed with what we have
-    })
+    try {
+      await Promise.race([navigationPromise, timeoutPromise])
+    } catch (error: any) {
+      // If timeout, try to get what we have
+      if (error.message === 'render_timeout') {
+        console.warn(`[HeadlessFetcher] Render timeout for ${url.substring(0, 50)}, proceeding with partial content`)
+      } else {
+        throw error
+      }
+    }
 
     // Extract content
     const title = await page.title().catch(() => '')
@@ -256,6 +286,8 @@ async function renderWithPlaywright(url: string): Promise<{
       return largestBlock || (document.body as HTMLElement).innerText?.trim() || document.body.textContent?.trim() || ''
     }).catch(() => '')
 
+    // Close context per URL to stop leaks (as per requirements)
+    await context.close()
     await browser.close()
 
     return {

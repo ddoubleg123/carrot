@@ -4,6 +4,8 @@ import { isUrlSeen } from '@/lib/discovery/seenUrl'
 import { DISCOVERY_CONFIG, getMinUniqueDomains } from '@/lib/discovery/config'
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
+import { getStaticBullsSeeds, getStaticSeedDomains } from './staticSeeds'
+import { getPatchFeatures } from '@/lib/config/features'
 
 const DATA_HOST_PATH_EXCEPTIONS = new Set([
   'www.basketball-reference.com',
@@ -1279,6 +1281,54 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     const fallbackSeeds = generateFallbackDomainPack(plan.topic, plan.aliases || [])
     console.warn(`[Seed Planner] Only ${seedsSorted.length} seeds from planner, adding ${fallbackSeeds.length} fallback seeds`)
     seedsSorted = [...seedsSorted, ...fallbackSeeds]
+  }
+  
+  // Static seed fallback: if <10 unique domains from LLM, append static seeds
+  const features = getPatchFeatures() // Will get patchHandle from context if available
+  if (features.enableStaticSeeds) {
+    const llmDomains = new Set<string>()
+    seedsSorted.forEach(seed => {
+      try {
+        const domain = new URL(seed.url).hostname.toLowerCase().replace(/^www\./, '')
+        llmDomains.add(domain)
+      } catch {}
+    })
+    
+    if (llmDomains.size < 10) {
+      const staticSeeds = getStaticBullsSeeds()
+      const staticDomains = getStaticSeedDomains()
+      
+      // Add static seeds that aren't already in the list
+      for (const staticSeed of staticSeeds) {
+        if (seedsSorted.length >= MIN_SEEDS * 2) break // Don't add too many
+        
+        const alreadyIncluded = seedsSorted.some(s => {
+          try {
+            const sDomain = new URL(s.url).hostname.toLowerCase().replace(/^www\./, '')
+            return sDomain === staticSeed.domain
+          } catch {
+            return false
+          }
+        })
+        
+        if (!alreadyIncluded) {
+          const seedCandidate: PlannerSeedCandidate = {
+            url: staticSeed.url,
+            titleGuess: staticSeed.title,
+            category: staticSeed.category as any,
+            angle: `Static seed from ${staticSeed.category} source`,
+            sourceType: staticSeed.category === 'official' ? 'official' : 
+                       staticSeed.category === 'data' ? 'data' : 'media',
+            priority: 2,
+            credibilityTier: staticSeed.category === 'official' ? 1 : 2
+          }
+          seedsSorted.push(seedCandidate)
+          llmDomains.add(staticSeed.domain)
+        }
+      }
+      
+      console.log(`[Seed Planner] seed_fallback_applied: true, unique_domains: ${llmDomains.size}, static_seeds_added: ${staticSeeds.length}`)
+    }
   }
 
   const domainCounts = new Map<string, number>()

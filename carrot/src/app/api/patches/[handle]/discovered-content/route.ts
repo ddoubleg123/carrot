@@ -47,10 +47,10 @@ export async function GET(
     
     // Filter by textBytes >= MIN_TEXT_BYTES_FOR_HERO (we'll filter in JS since Prisma doesn't support length on text)
     
-    // Cursor-based pagination: if cursor provided, use it instead of offset
+    // Order by createdAt desc, id desc (as per requirements)
     let orderBy: any[] = [
-      { relevanceScore: 'desc' }, // Most relevant first
-      { createdAt: 'desc' }        // Then by newest
+      { createdAt: 'desc' },
+      { id: 'desc' }
     ]
     
     if (cursor) {
@@ -309,52 +309,64 @@ export async function GET(
       finalItems = discoveredContent.filter(item => item.id)
     }
     
-    // Get total count for pagination
+    // Get total count for pagination (from DB truth)
     const totalItems = await prisma.discoveredContent.count({
-      where: { patchId: patch.id }
+      where: { 
+        patchId: patch.id,
+        textContent: { not: null }
+      }
     })
     
-    // Determine next cursor
-    // Include buildSha and patchId in pagination keys for proper tracking
+    // Get last run ID from discovery runs
+    const lastRun = await prisma.discoveryRun.findFirst({
+      where: { patchId: patch.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true }
+    }).catch(() => null)
+    
+    // Determine next cursor and hasMore
     const lastItem = finalItems[finalItems.length - 1]
     const lastRawItem = filteredContent[filteredContent.length - 1]
     const buildSha = process.env.BUILD_SHA || 'unknown'
-    const nextCursor = lastItem && finalItems.length === limit && lastRawItem
-      ? `${lastItem.savedAt || lastRawItem.createdAt.toISOString()}|${buildSha}|${patch.id}`
+    const hasMore = finalItems.length === limit && filteredContent.length === limit
+    const nextCursor = hasMore && lastItem && lastRawItem
+      ? `${lastRawItem.createdAt.toISOString()}|${lastRawItem.id}|${buildSha}|${patch.id}`
       : null
     
+    // New API shape: { success, items, cursor, hasMore, totals, isActive, debug }
     const responseData: any = {
       success: true,
       items: finalItems,
-      itemsCount: finalItems.length,
-      totalItems,
+      cursor: nextCursor,
+      hasMore,
+      totals: {
+        items: finalItems.length,
+        total: totalItems
+      },
       isActive: finalItems.length > 0,
-      nextCursor
-    }
-    
-    if (debug) {
-        responseData.debug = {
-        patchId: patch.id,
-        handle,
-        dbQueryCount: allContent.length,
-        beforeVerification: beforeVerificationCount,
-        afterVerification: discoveredContent.length,
-        finalItems: finalItems.length,
-        limit,
-        offset,
-        verificationSkipped,
-        onlySaved
+      debug: {
+        buildSha,
+        lastRunId: lastRun?.id || null,
+        reasonWhenEmpty: finalItems.length === 0 
+          ? (totalItems === 0 ? 'no_content_discovered' : 'all_filtered_out')
+          : null
       }
     }
     
     console.log('[Discovered Content] Final response:', {
       patchId: patch.id,
       handle,
-      itemsReturned: discoveredContent.length,
-      dbQueryCount: allContent.length
+      itemsReturned: finalItems.length,
+      totalItems,
+      hasMore,
+      buildSha,
+      lastRunId: lastRun?.id
     })
 
     const res = NextResponse.json(responseData);
+    // Cache-Control: no-store, Vary: Authorization (as per requirements)
+    res.headers.set('Cache-Control', 'no-store')
+    res.headers.set('Vary', 'Authorization')
     // Report optimized timing: param resolution, patch lookup, unified query
     const timings = [
       `prep;desc=param_resolve;dur=${t1 - t0}`,
@@ -371,12 +383,23 @@ export async function GET(
       stack: error instanceof Error ? error.stack : undefined,
       handle: await params.then(p => p.handle).catch(() => 'unknown')
     });
-    return NextResponse.json(
-      { 
-        error: 'Failed to fetch discovered content',
-        details: error instanceof Error ? error.message : 'Unknown error'
+    // Never 500; return {success:false, error:{code,msg}} (as per requirements)
+    return NextResponse.json({
+      success: false,
+      items: [],
+      cursor: null,
+      hasMore: false,
+      totals: { items: 0, total: 0 },
+      isActive: false,
+      error: {
+        code: 'FETCH_ERROR',
+        msg: error instanceof Error ? error.message : 'Unknown error'
       },
-      { status: 500 }
-    );
+      debug: {
+        buildSha: process.env.BUILD_SHA || 'unknown',
+        lastRunId: null,
+        reasonWhenEmpty: 'error'
+      }
+    }, { status: 200 }); // Return 200 with error in response body
   }
 }

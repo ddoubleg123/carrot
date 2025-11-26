@@ -1,13 +1,18 @@
 /**
  * URL Canonicalization for Discovery System
  * Strips tracking parameters, normalizes hostnames, follows redirects
+ * Computes SHA-256 hashes for duplicate detection
  */
+
+import { createHash } from 'crypto'
 
 export interface CanonicalizationResult {
   canonicalUrl: string
   originalUrl: string
   redirectChain: string[]
   finalDomain: string
+  canonicalHost: string
+  canonicalPathHash: string // SHA-256 of path + query (for fast lookups)
 }
 
 const TRACKING_PARAM_REGEX = /^(utm_|icid|ncid|igshid)/i
@@ -165,11 +170,24 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     
     // Return original URL as fallback
     const normalizedFallback = canonicalizeUrlFast(fallbackUrl)
+    let canonicalHost = 'unknown'
+    let canonicalPathHash = ''
+    try {
+      if (normalizedFallback.startsWith('http')) {
+        const urlObj = new URL(normalizedFallback)
+        canonicalHost = urlObj.hostname.replace(/^www\./, '').toLowerCase()
+        const pathQuery = urlObj.pathname + urlObj.search
+        canonicalPathHash = createHash('sha256').update(pathQuery).digest('hex')
+      }
+    } catch {}
+    
     return {
       canonicalUrl: normalizedFallback,
       originalUrl,
       redirectChain,
-      finalDomain: normalizedFallback.startsWith('http') ? new URL(normalizedFallback).hostname : 'unknown'
+      finalDomain: canonicalHost,
+      canonicalHost,
+      canonicalPathHash
     };
   }
 }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { canonicalize, canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
+import { createHash } from 'crypto'
 import { DiscoveryEventStream } from './streaming'
 import { audit, logger, MetricsTracker } from './logger'
 import { HeroImagePipeline } from './hero-pipeline'
@@ -2057,6 +2058,32 @@ export class DiscoveryEngineV21 {
         try {
           const t = Date.now()
           
+          // DB-first duplicate check (before create)
+          const existing = await prisma.discoveredContent.findUnique({
+            where: {
+              patchId_canonicalUrl: {
+                patchId,
+                canonicalUrl
+              }
+            },
+            select: { id: true, contentHash: true, textContent: true }
+          })
+          
+          if (existing) {
+            // Update existing record if contentHash changed (recrawl)
+            const cleanedText = (extracted.text || '').trim()
+            const newContentHash = createHash('sha256').update(cleanedText).digest('hex')
+            
+            if (existing.contentHash === newContentHash) {
+              // Content unchanged, skip
+              savedId = existing.id
+              savedCreatedAt = new Date()
+              return { saved: true, reason: 'duplicate', angle, host }
+            }
+            
+            // Content changed, will update below
+          }
+          
           // Extract fair-use quote and paraphrase summary
           const { extractFairUseQuote } = await import('./fairUse')
           const { summarizeParaphrase } = await import('./paraphrase')
@@ -2080,7 +2107,161 @@ export class DiscoveryEngineV21 {
           const hasArticleOrMain = extracted.rawHtml ? /<(article|main)[\s>]/i.test(extracted.rawHtml) : false
           const isPartialContent = textBytes >= 400 && textBytes < 800 && !hasArticleOrMain
           
-          const savedItem = await prisma.discoveredContent.create({
+          // Compute contentHash = sha256(cleanedText)
+          const cleanedText = (extracted.text || '').trim()
+          const contentHash = createHash('sha256').update(cleanedText).digest('hex')
+          
+          // Get canonicalHost and canonicalPathHash from canonicalization result
+          const canonicalResult = await canonicalize(canonicalUrl).catch(() => null)
+          const canonicalHost = canonicalResult?.canonicalHost || domain || null
+          const canonicalPathHash = canonicalResult?.canonicalPathHash || ''
+          
+          // MIN_TEXT_BYTES_FOR_HERO threshold (default 600, configurable)
+          const MIN_TEXT_BYTES_FOR_HERO = Number(process.env.MIN_TEXT_BYTES_FOR_HERO || '600')
+          const shouldCreateHero = textBytes >= MIN_TEXT_BYTES_FOR_HERO
+          
+          // Save → Hero transaction
+          const savedItem = await prisma.$transaction(async (tx) => {
+            // Upsert discovered content
+            const content = existing
+              ? await tx.discoveredContent.update({
+                  where: { id: existing.id },
+                  data: {
+                    title: extracted.title,
+                    sourceUrl: canonicalUrl,
+                    domain,
+                    sourceDomain: canonicalHost,
+                    publishDate: candidate.meta?.publishDate ?? null,
+                    category: (candidate.meta?.category as string | undefined) || null,
+                    isControversy,
+                    isHistory,
+                    relevanceScore: synthesis.relevanceScore,
+                    qualityScore: synthesis.qualityScore,
+                    whyItMatters: synthesis.whyItMatters,
+                    summary: summaryWithParaphrase,
+                    facts: synthesis.facts as unknown as Prisma.JsonArray,
+                    quotes: enhancedQuotes as unknown as Prisma.JsonArray,
+                    provenance: synthesis.provenance as unknown as Prisma.JsonArray,
+                    hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
+                    contentHash,
+                    rawHtml: extracted.rawHtml ? Buffer.from(extracted.rawHtml) : null,
+                    textContent: cleanedText,
+                    lastCrawledAt: new Date(),
+                    metadata: {
+                      fairUseQuote: fairUseQuote ? {
+                        quoteHtml: fairUseQuote.quoteHtml,
+                        quoteWordCount: fairUseQuote.quoteWordCount,
+                        quoteStartChar: fairUseQuote.quoteStartChar,
+                        quoteEndChar: fairUseQuote.quoteEndChar
+                      } : null,
+                      summaryPoints: paraphraseResult.summaryPoints,
+                      summaryWordCount: paraphraseResult.wordCount,
+                      renderUsed: renderUsed,
+                      render_ok: renderUsed,
+                      fetch_metadata: {
+                        render_used: renderUsed,
+                        branch_used: paywallBranch || 'direct',
+                        status_code: null,
+                        html_bytes: htmlBytes,
+                        text_bytes: textBytes,
+                        failure_reason: null
+                      } as Prisma.JsonObject,
+                      contentStatus: isPartialContent ? 'partial' : 'full',
+                      canonicalHost,
+                      canonicalPathHash
+                    } as Prisma.JsonObject
+                  }
+                })
+              : await tx.discoveredContent.create({
+                  data: {
+                    patchId,
+                    canonicalUrl,
+                    title: extracted.title,
+                    sourceUrl: canonicalUrl,
+                    domain,
+                    sourceDomain: canonicalHost,
+                    publishDate: candidate.meta?.publishDate ?? null,
+                    category: (candidate.meta?.category as string | undefined) || null,
+                    isControversy,
+                    isHistory,
+                    relevanceScore: synthesis.relevanceScore,
+                    qualityScore: synthesis.qualityScore,
+                    whyItMatters: synthesis.whyItMatters,
+                    summary: summaryWithParaphrase,
+                    facts: synthesis.facts as unknown as Prisma.JsonArray,
+                    quotes: enhancedQuotes as unknown as Prisma.JsonArray,
+                    provenance: synthesis.provenance as unknown as Prisma.JsonArray,
+                    hero: hero ? ({ url: hero.url, source: hero.source } as Prisma.JsonObject) : Prisma.JsonNull,
+                    contentHash,
+                    rawHtml: extracted.rawHtml ? Buffer.from(extracted.rawHtml) : null,
+                    textContent: cleanedText,
+                    lastCrawledAt: new Date(),
+                    metadata: {
+                      fairUseQuote: fairUseQuote ? {
+                        quoteHtml: fairUseQuote.quoteHtml,
+                        quoteWordCount: fairUseQuote.quoteWordCount,
+                        quoteStartChar: fairUseQuote.quoteStartChar,
+                        quoteEndChar: fairUseQuote.quoteEndChar
+                      } : null,
+                      summaryPoints: paraphraseResult.summaryPoints,
+                      summaryWordCount: paraphraseResult.wordCount,
+                      renderUsed: renderUsed,
+                      render_ok: renderUsed,
+                      fetch_metadata: {
+                        render_used: renderUsed,
+                        branch_used: paywallBranch || 'direct',
+                        status_code: null,
+                        html_bytes: htmlBytes,
+                        text_bytes: textBytes,
+                        failure_reason: null
+                      } as Prisma.JsonObject,
+                      contentStatus: isPartialContent ? 'partial' : 'full',
+                      canonicalHost,
+                      canonicalPathHash
+                    } as Prisma.JsonObject
+                  }
+                })
+            
+            // Create hero if threshold met (transactional)
+            if (shouldCreateHero) {
+              try {
+                const { upsertHero } = await import('./heroUpsert')
+                await upsertHero({
+                  patchId: this.options.patchId,
+                  contentId: content.id,
+                  url: canonicalUrl,
+                  canonicalUrl,
+                  title: extracted.title,
+                  summary: synthesis.whyItMatters,
+                  sourceDomain: canonicalHost ?? undefined,
+                  extractedText: cleanedText,
+                  traceId: this.options.runId
+                })
+                
+                // Log success
+                console.log(`[EngineV21] saved:true hero:true status:SAVED textBytes:${textBytes} contentId:${content.id}`)
+              } catch (heroError: any) {
+                // Log hero failure but don't fail transaction
+                console.warn(`[EngineV21] saved:true hero:false status:ERROR textBytes:${textBytes} error:${heroError.message}`)
+              }
+            } else {
+              console.log(`[EngineV21] saved:true hero:false status:SAVED textBytes:${textBytes} (below threshold ${MIN_TEXT_BYTES_FOR_HERO})`)
+            }
+            
+            return content
+          })
+          
+          savedId = savedItem.id
+          savedCreatedAt = savedItem.createdAt
+          
+          // Record telemetry
+          if (this.discoveryTelemetry) {
+            this.discoveryTelemetry.recordPersistOk()
+          }
+          
+          // Structured logging
+          const { discoveryLogger } = await import('./structuredLogger')
+          discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
             data: {
               patchId,
               canonicalUrl,
@@ -2138,45 +2319,6 @@ export class DiscoveryEngineV21 {
           // Structured logging
           const { discoveryLogger } = await import('./structuredLogger')
           discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
-
-          // Create hero record (idempotent, non-blocking)
-          try {
-            const { upsertHero, logHeroEvent } = await import('./heroUpsert')
-            const heroResult = await upsertHero({
-              patchId: this.options.patchId,
-              contentId: savedItem.id,
-              url: canonicalUrl,
-              canonicalUrl,
-              title: extracted.title,
-              summary: synthesis.whyItMatters,
-              sourceDomain: finalDomain ?? hostHint ?? undefined,
-              extractedText: extracted.text,
-              traceId: this.options.runId
-            })
-            logHeroEvent(heroResult.created ? 'hero_created' : 'hero_skipped_duplicate', {
-              patchId: this.options.patchId,
-              contentId: savedItem.id,
-              url: canonicalUrl,
-              traceId: this.options.runId
-            })
-            // Emit SSE event for hero creation
-            this.eventStream.sendEvent('hero_ready', {
-              contentId: savedItem.id,
-              heroId: heroResult.heroId,
-              created: heroResult.created
-            })
-          } catch (heroError: any) {
-            const { logHeroEvent } = await import('./heroUpsert')
-            logHeroEvent('hero_upsert_error', {
-              patchId: this.options.patchId,
-              contentId: savedItem.id,
-              url: canonicalUrl,
-              traceId: this.options.runId,
-              error: heroError.message
-            })
-            // Don't fail the save if hero creation fails
-            console.warn('[EngineV21] Hero creation failed (non-blocking):', heroError)
-          }
           
           // Structured logging for successful save (persist)
           const { slog } = await import('@/lib/log')

@@ -8,24 +8,38 @@ export interface PatchFeatures {
   enablePrintBranches: boolean
   enableAmpBranches: boolean
   enableRecrawl: boolean
+  // Pipeline features
+  enableStaticSeeds: boolean
+  enableRenderBranch: boolean
+  enableNewApiShape: boolean
+  enableHeroThreshold: boolean
 }
 
 /**
  * Default feature flags (all OFF for safety)
+ * For chicago-bulls, pipeline features default ON
  */
-export const DEFAULT_FEATURES: PatchFeatures = {
-  enableWikipediaExpansion: false,
-  enablePrintBranches: false,
-  enableAmpBranches: false,
-  enableRecrawl: false
+export function getDefaultFeatures(patchHandle?: string): PatchFeatures {
+  const isBulls = patchHandle === 'chicago-bulls'
+  return {
+    enableWikipediaExpansion: false,
+    enablePrintBranches: false,
+    enableAmpBranches: false,
+    enableRecrawl: false,
+    // Pipeline features - ON for Bulls, OFF otherwise
+    enableStaticSeeds: isBulls,
+    enableRenderBranch: isBulls,
+    enableNewApiShape: isBulls,
+    enableHeroThreshold: isBulls
+  }
 }
 
 /**
  * Parse PATCH_FEATURES env var (comma-separated list)
- * Example: PATCH_FEATURES=wikipedia,recrawl
+ * Example: PATCH_FEATURES=wikipedia,recrawl,static_seeds,render
  */
-function parsePatchFeatures(): PatchFeatures {
-  const features = { ...DEFAULT_FEATURES }
+function parsePatchFeatures(patchHandle?: string): PatchFeatures {
+  const features = getDefaultFeatures(patchHandle)
   const envValue = process.env.PATCH_FEATURES
   
   if (!envValue) {
@@ -46,14 +60,26 @@ function parsePatchFeatures(): PatchFeatures {
   if (enabled.includes('recrawl')) {
     features.enableRecrawl = true
   }
+  if (enabled.includes('static_seeds') || enabled.includes('static')) {
+    features.enableStaticSeeds = true
+  }
+  if (enabled.includes('render') || enabled.includes('render_branch')) {
+    features.enableRenderBranch = true
+  }
+  if (enabled.includes('new_api') || enabled.includes('api_shape')) {
+    features.enableNewApiShape = true
+  }
+  if (enabled.includes('hero_threshold') || enabled.includes('hero')) {
+    features.enableHeroThreshold = true
+  }
   
   return features
 }
 
 /**
- * Get current feature flags
+ * Get current feature flags for a patch
  */
-export function getPatchFeatures(): PatchFeatures {
-  return parsePatchFeatures()
+export function getPatchFeatures(patchHandle?: string): PatchFeatures {
+  return parsePatchFeatures(patchHandle)
 }
 
