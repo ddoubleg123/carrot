@@ -41,6 +41,7 @@ interface MetricsData {
   }
   frontier?: any
   timestamp?: string
+  debug?: any
 }
 
 interface HeroMetricsData {
