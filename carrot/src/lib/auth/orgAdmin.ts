@@ -3,8 +3,7 @@
  * Used for debug endpoints and admin actions
  */
 
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { auth } from '@/auth'
 
 /**
  * Check if current user is org admin
@@ -12,7 +11,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route'
  */
 export async function requireOrgAdmin(): Promise<{ isAdmin: boolean; userId?: string }> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await auth()
     
     if (!session || !session.user) {
       return { isAdmin: false }
