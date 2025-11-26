@@ -152,11 +152,25 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     const normalizedUrl = canonicalizeUrlFast(currentUrl)
     const finalDomain = extractDomain(normalizedUrl);
     
+    // Compute canonicalHost and canonicalPathHash
+    let canonicalHost = 'unknown'
+    let canonicalPathHash = ''
+    try {
+      if (normalizedUrl.startsWith('http')) {
+        const urlObj = new URL(normalizedUrl)
+        canonicalHost = urlObj.hostname.replace(/^www\./, '').toLowerCase()
+        const pathQuery = urlObj.pathname + urlObj.search
+        canonicalPathHash = createHash('sha256').update(pathQuery).digest('hex')
+      }
+    } catch {}
+    
     return {
       canonicalUrl: normalizedUrl,
       originalUrl,
       redirectChain,
-      finalDomain
+      finalDomain,
+      canonicalHost,
+      canonicalPathHash
     };
     
   } catch (error) {
