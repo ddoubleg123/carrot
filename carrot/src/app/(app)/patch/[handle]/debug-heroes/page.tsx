@@ -20,10 +20,22 @@ interface HeroItem {
 
 export default function DebugHeroesPage() {
   const params = useParams()
-  const handle = params.handle as string
+  const handle = (params?.handle as string) || ''
   const [heroes, setHeroes] = useState<HeroItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  if (!handle) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <p className="text-red-600">Error: Patch handle not found</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const fetchHeroes = async () => {
     setLoading(true)
