@@ -21,6 +21,7 @@ import {
   normaliseSeedCandidate,
   PlannerSeedCandidate
 } from './planner'
+import { getStaticBullsSeeds } from './staticSeeds'
 
 export interface DiscoveryConfig {
   maxItems: number
@@ -421,11 +422,51 @@ export class DiscoveryOrchestrator {
         'unique domains (target: 10). Seeds:',
         selected.length
       )
-      // If we have < minUniqueDomains unique domains, this is a failure condition
+      // If we have < minUniqueDomains unique domains, add static fallback seeds
       if (finalUniqueDomainCount < minUniqueDomains) {
-        throw new Error(
-          `Failed to generate sufficient seed diversity: only ${finalUniqueDomainCount} unique domains (minimum: ${minUniqueDomains})`
+        console.warn(
+          `[Initialize Frontier] Low seed diversity (${finalUniqueDomainCount} < ${minUniqueDomains}), adding static fallback seeds`
         )
+        
+        // Add static Bulls seeds as fallback
+        const staticSeeds = getStaticBullsSeeds()
+        const existingDomains = new Set(domainCounts.keys())
+        
+        for (const staticSeed of staticSeeds) {
+          if (selected.length >= 20) break // Don't add too many
+          
+          const staticDomain = staticSeed.domain.toLowerCase()
+          // Only add if domain is new or we have very few domains
+          if (!existingDomains.has(staticDomain) || finalUniqueDomainCount < 5) {
+            const staticCandidate: PlannerSeedCandidate = {
+              url: staticSeed.url,
+              title: staticSeed.title,
+              priority: 999, // Low priority fallback
+              stance: 'establishment',
+              isControversy: false
+            }
+            selected.push(staticCandidate)
+            
+            if (!existingDomains.has(staticDomain)) {
+              domainCounts.set(staticDomain, 1)
+              existingDomains.add(staticDomain)
+              finalUniqueDomainCount = domainCounts.size
+            } else {
+              domainCounts.set(staticDomain, (domainCounts.get(staticDomain) || 0) + 1)
+            }
+          }
+        }
+        
+        console.log(
+          `[Initialize Frontier] After fallback: ${selected.length} seeds from ${domainCounts.size} unique domains`
+        )
+        
+        // If still below minimum after fallback, warn but proceed (never abort)
+        if (domainCounts.size < minUniqueDomains) {
+          console.warn(
+            `[Initialize Frontier] Still low diversity after fallback (${domainCounts.size} < ${minUniqueDomains}), but proceeding anyway`
+          )
+        }
       }
     }
 

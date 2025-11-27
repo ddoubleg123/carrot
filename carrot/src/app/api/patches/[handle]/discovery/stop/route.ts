@@ -9,6 +9,7 @@ import { getActiveRun, clearActiveRun, setRunState } from '@/lib/redis/discovery
 import { stopOpenEvidenceRun } from '@/lib/discovery/engine'
 import prisma from '@/lib/prisma'
 
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
