@@ -2954,8 +2954,8 @@ export class DiscoveryEngineV21 {
     // This allows the candidate to be skipped gracefully instead of causing a fatal error
     if (lastError instanceof Error && lastError.message === 'extractor_empty') {
       this.structuredLog('all_branches_extractor_empty', {
-        url: candidate.canonicalUrl || candidate.cursor,
-        domain: this.getHostFromUrl(candidate.canonicalUrl || candidate.cursor)
+        url: candidate.cursor,
+        domain: this.getHostFromUrl(candidate.cursor)
       })
       return null
     }
