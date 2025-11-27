@@ -440,8 +440,10 @@ export class DiscoveryOrchestrator {
           if (!existingDomains.has(staticDomain) || finalUniqueDomainCount < 5) {
             const staticCandidate: PlannerSeedCandidate = {
               url: staticSeed.url,
-              title: staticSeed.title,
-              priority: 999, // Low priority fallback
+              titleGuess: staticSeed.title,
+              category: staticSeed.category as PlannerSeedCandidate['category'],
+              angle: 'coverage', // Generic angle for fallback seeds
+              priority: 3, // Low priority fallback (3 is lowest valid priority)
               stance: 'establishment',
               isControversy: false
             }
