@@ -405,7 +405,7 @@ export class DiscoveryOrchestrator {
       return 0
     }
 
-    const finalUniqueDomainCount = domainCounts.size
+    let finalUniqueDomainCount = domainCounts.size
     const minUniqueDomains = Number(process.env.DISCOVERY_MIN_UNIQUE_DOMAINS || 5)
     
     // Log seed generation
