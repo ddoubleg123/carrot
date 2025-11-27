@@ -123,10 +123,17 @@ export async function GET(
       sampleIds: allContent.slice(0, 3).map(c => c.id)
     });
 
-    // Filter items with textBytes >= MIN_TEXT_BYTES_FOR_HERO
+    // Filter items with textBytes >= MIN_TEXT_BYTES_FOR_HERO OR items with heroes/summaries (for backward compatibility)
     const filteredContent = allContent.filter(item => {
       const textBytes = item.textContent?.length || 0
-      return textBytes >= MIN_TEXT_BYTES_FOR_HERO
+      const hasHero = item.heroRecord || (item.hero && typeof item.hero === 'object' && (item.hero as any)?.url)
+      const hasSummary = item.summary && item.summary.length > 0
+      
+      // Include if:
+      // 1. Has sufficient text content (>= 200 bytes), OR
+      // 2. Has a hero (backward compatibility for old items), OR
+      // 3. Has a summary (backward compatibility for old items)
+      return textBytes >= MIN_TEXT_BYTES_FOR_HERO || hasHero || hasSummary
     })
     
     let discoveredContent: DiscoveryCardPayload[] = filteredContent.map((item) => {
