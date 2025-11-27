@@ -65,24 +65,59 @@ browserType.launch: Executable doesn't exist at /opt/render/.cache/ms-playwright
 - Don't filter by `textBytes >= 200` if item has `heroRecord` (already has hero)
 - Or backfill `textContent` for old items
 
-### Fix 3: Investigate Why Items With Content Aren't Saved
-**Need to check:**
-- Are items with 2327, 1409, 3669 chars passing the 400 char minimum?
-- Are they being filtered out by other checks (vetter, acceptance, etc.)?
-- Check logs for `saved: false` reasons for these items
+### Fix 3: Investigate Why Items With Content Aren't Saved ✅ COMPLETED
+**Findings:**
+- Items ARE extracting content successfully (2327, 1409, 3669 chars)
+- They're being rejected by legitimate filters:
+  - `nytimes.com/athletic/nba/team/bulls/` (2327 chars) → `duplicate_simhash` (already seen)
+  - `forbes.com/sites/sportsmoney/` (1409 chars) → `entity_missing` (doesn't mention "Chicago Bulls")
+  - `nbcchicago.com/tag/chicago-bulls/` (3669 chars) → `duplicate_simhash` (already seen)
+
+**Root Cause:**
+- Most URLs extract 0 chars because Playwright isn't working
+- Items that do extract content are being filtered by:
+  - Duplicate detection (simhash) - legitimate
+  - Entity mention check - may be too strict for some pages
+
+**Solution:**
+- Wait for Playwright to be installed (next deploy)
+- This will allow more URLs to extract content successfully
+- Consider relaxing entity mention check for pages with "Chicago Bulls" in URL/title
 
 ### Fix 4: Backfill textContent for Old Items
 **Action:**
 - Create migration/script to backfill `textContent` from `summary` or other fields for old items
 - Or update API to not require `textContent` if item has hero
 
+## Root Cause Analysis
+
+### Why Items With Content Aren't Being Saved
+
+**Items ARE extracting content successfully:**
+- `nytimes.com/athletic/nba/team/bulls/` → 2327 chars extracted
+- `forbes.com/sites/sportsmoney/` → 1409 chars extracted  
+- `nbcchicago.com/tag/chicago-bulls/` → 3669 chars extracted
+
+**But they're being rejected by legitimate filters:**
+1. **Duplicate detection (simhash)** - URLs already seen in previous runs
+   - `nytimes.com/athletic/nba/team/bulls/` → `duplicate_simhash`
+   - `nbcchicago.com/tag/chicago-bulls/` → `duplicate_simhash`
+
+2. **Entity mention check** - Page doesn't mention "Chicago Bulls" in extracted text
+   - `forbes.com/sites/sportsmoney/` → `entity_missing` (general sports page, not Bulls-specific)
+
+**The real blocker:**
+- **Most URLs extract 0 chars** because Playwright isn't working
+- Without Playwright, JS-rendered pages can't be extracted
+- Only simple HTML pages extract successfully, and many of those are duplicates
+
 ## Immediate Actions
 
-1. **Deploy current fixes** (extractor_empty handling, Playwright postinstall)
-2. **Check Render build logs** to verify Playwright installs
-3. **Query database** to check if saved items have `textContent` populated
-4. **Update API** to show items without `textContent` if they have heroes
-5. **Backfill textContent** for old saved items
+1. ✅ **Deploy current fixes** (extractor_empty handling, Playwright postinstall, API filtering)
+2. **Wait for next Render deploy** - Playwright browsers will install during build
+3. **Monitor next discovery run** - Should see more URLs extracting content successfully
+4. **Query database** to check if saved items have `textContent` populated (optional)
+5. **Backfill textContent** for old saved items (optional - API now handles this)
 
 ## Database Query to Check
 
