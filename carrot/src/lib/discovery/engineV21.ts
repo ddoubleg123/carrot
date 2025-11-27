@@ -1651,6 +1651,26 @@ export class DiscoveryEngineV21 {
         candidate,
         host
       })
+      
+      // Handle case where all branches failed with extractor_empty
+      if (!fetchResult) {
+        await this.incrementMetric('dropped')
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'extractor_empty_all_branches')
+        this.structuredLog('extract_fail', {
+          url: canonicalUrl,
+          reason: 'extractor_empty_all_branches',
+          textLength: 0
+        })
+        await this.emitAudit('fetch', 'fail', {
+          candidateUrl: canonicalUrl,
+          provider: candidate.provider,
+          error: { message: 'extractor_empty_all_branches' }
+        })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: 'extractor_empty_all_branches', angle, host }
+      }
+      
       const extracted = fetchResult.extracted
       const paywallBranch = fetchResult.branch
       const renderUsed = fetchResult.renderUsed
@@ -2638,7 +2658,7 @@ export class DiscoveryEngineV21 {
     canonicalUrl: string
     candidate: FrontierItem
     host: string | null
-  }): Promise<{ extracted: ExtractedContent; branch: string; finalUrl: string; renderUsed: boolean }> {
+  }): Promise<{ extracted: ExtractedContent; branch: string; finalUrl: string; renderUsed: boolean } | null> {
     const { canonicalUrl, candidate } = args
     const plan = buildPaywallPlan({
       canonicalUrl,
@@ -2929,6 +2949,17 @@ export class DiscoveryEngineV21 {
     }
 
     console.error('[EngineV21] Exhausted paywall branches', lastError)
+    
+    // If all branches failed with extractor_empty, return null instead of throwing
+    // This allows the candidate to be skipped gracefully instead of causing a fatal error
+    if (lastError instanceof Error && lastError.message === 'extractor_empty') {
+      this.structuredLog('all_branches_extractor_empty', {
+        url: candidate.canonicalUrl || candidate.cursor,
+        domain: this.getHostFromUrl(candidate.canonicalUrl || candidate.cursor)
+      })
+      return null
+    }
+    
     throw lastError ?? new Error('paywall_branches_exhausted')
   }
 
