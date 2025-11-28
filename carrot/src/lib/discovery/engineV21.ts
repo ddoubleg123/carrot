@@ -835,6 +835,11 @@ export class DiscoveryEngineV21 {
 
     await Promise.all(
       links.map(async (rawUrl, index) => {
+        // Filter out invalid URLs before processing
+        if (!this.isValidHttpUrl(rawUrl)) {
+          return
+        }
+
         const canonical = canonicalizeUrlFast(rawUrl)
         if (!canonical) return
         if (this.refOutCache.has(canonical) || this.seedCanonicalUrls.has(canonical)) return
@@ -891,6 +896,42 @@ export class DiscoveryEngineV21 {
       candidateUrl: sourceUrl,
       meta: { enqueued, context }
     })
+  }
+
+  private isValidHttpUrl(url: string): boolean {
+    if (!url || typeof url !== 'string') return false
+    
+    const trimmed = url.trim()
+    if (!trimmed) return false
+    
+    // Reject non-HTTP(S) protocols (data:, javascript:, mw-data:, etc.)
+    const invalidProtocols = ['data:', 'javascript:', 'mailto:', 'tel:', 'file:', 'mw-data:', 'about:', 'chrome:', 'edge:']
+    const lowerUrl = trimmed.toLowerCase()
+    if (invalidProtocols.some(proto => lowerUrl.startsWith(proto))) {
+      return false
+    }
+    
+    // Must start with http:// or https:// (or be a valid absolute URL)
+    if (!trimmed.match(/^https?:\/\//i)) {
+      // Try to validate if it's a valid URL that can be made absolute
+      try {
+        const testUrl = new URL(trimmed.startsWith('//') ? `https:${trimmed}` : `https://${trimmed}`)
+        // Additional check: reject URLs with invalid path patterns
+        if (testUrl.pathname.includes('mw-data:') || testUrl.pathname.includes('TemplateStyles:')) {
+          return false
+        }
+        return true
+      } catch {
+        return false
+      }
+    }
+    
+    // Additional validation: check for Wikipedia internal resource patterns
+    if (trimmed.includes('mw-data:') || trimmed.includes('TemplateStyles:')) {
+      return false
+    }
+    
+    return true
   }
 
   private normaliseHost(input: string | null | undefined): string | null {
