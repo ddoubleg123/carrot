@@ -160,6 +160,17 @@ async function renderWithPlaywright(url: string): Promise<{
 
     const { chromium } = playwright
 
+    // Verify Playwright browser is installed
+    try {
+      const executablePath = chromium.executablePath()
+      if (!executablePath) {
+        throw new Error('Playwright chromium executable not found. Run: npx playwright install chromium')
+      }
+    } catch (error) {
+      console.error('[HeadlessFetcher] Playwright installation check failed:', error)
+      throw new Error('Playwright chromium not installed. Please run: npx playwright install --with-deps chromium')
+    }
+
     // Rotate UA (desktop/mobile)
     const useMobile = Math.random() > 0.5
     const userAgent = useMobile ? FETCH_USER_AGENTS.mobile : FETCH_USER_AGENTS.desktop

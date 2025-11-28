@@ -96,6 +96,17 @@ export async function renderWithPlaywright(url: string): Promise<{
     
     const { chromium } = playwright
     
+    // Verify Playwright browser is installed
+    try {
+      const executablePath = chromium.executablePath()
+      if (!executablePath) {
+        throw new Error('Playwright chromium executable not found. Run: npx playwright install chromium')
+      }
+    } catch (error) {
+      console.error('[Renderer] Playwright installation check failed:', error)
+      throw new Error('Playwright chromium not installed. Please run: npx playwright install --with-deps chromium')
+    }
+    
     const browser = await chromium.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
