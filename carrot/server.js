@@ -33,7 +33,31 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+  // Verify Playwright installation at startup
+  try {
+    const { execSync } = require('child_process');
+    const { existsSync } = require('fs');
+    const playwright = require('playwright');
+    
+    // Check if Chromium executable exists
+    const executablePath = playwright.chromium.executablePath();
+    if (!existsSync(executablePath)) {
+      console.warn('[STARTUP] Playwright Chromium not found, attempting installation...');
+      try {
+        execSync('npx playwright install chromium', { stdio: 'inherit', timeout: 120000 });
+        console.log('[STARTUP] Playwright Chromium installed successfully');
+      } catch (installError) {
+        console.error('[STARTUP] Failed to install Playwright Chromium:', installError.message);
+        console.error('[STARTUP] Discovery engine may not work correctly without Playwright');
+      }
+    } else {
+      console.log('[STARTUP] Playwright Chromium verified:', executablePath);
+    }
+  } catch (error) {
+    console.warn('[STARTUP] Playwright verification skipped:', error.message);
+  }
+
   // Create HTTP/1.1 server (NOT http2)
   const server = createServer((req, res) => {
     try {
