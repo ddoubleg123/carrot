@@ -15,6 +15,7 @@ export async function GET(
   const offset = parseInt(searchParams.get('offset') || '0')
   const cursor = searchParams.get('cursor') // Cursor for pagination (ISO date string or ID)
   const onlySaved = searchParams.get('onlySaved') === '1' || searchParams.get('onlySaved') === 'true'
+  const debug = searchParams.get('debug') === '1' // Define debug early so it can be used in filter
   try {
     console.log('[Discovered Content] ===== API CALLED =====');
     const t0 = Date.now();
@@ -334,9 +335,7 @@ export async function GET(
       console.log('[Discovered Content] Verification skipped (SKIP_LINK_VERIFICATION=true)')
     }
 
-    // Debug logging
-    const debug = searchParams.get('debug') === '1'
-    // onlySaved already defined at top of function
+    // Debug logging (debug already defined at top of function)
     
     // If onlySaved=1, filter to items that have been saved (have an id)
     let finalItems = discoveredContent
