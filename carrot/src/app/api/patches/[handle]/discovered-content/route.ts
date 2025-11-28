@@ -197,10 +197,23 @@ export async function GET(
       
       if (heroRelation && heroRelation.status === 'READY') {
         // Use Hero table data (preferred)
-        // Map to DiscoveryHero format - use 'ai' as source since it's from our enrichment system
+        // Detect source from imageUrl: wikimedia URLs contain 'wikimedia.org' or 'upload.wikimedia.org'
+        const imageUrl = heroRelation.imageUrl || ''
+        let heroSource: 'ai' | 'wikimedia' | 'skeleton' = 'skeleton'
+        
+        if (imageUrl) {
+          const urlLower = imageUrl.toLowerCase()
+          if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
+            heroSource = 'wikimedia'
+          } else {
+            // Assume AI-generated or other enriched images
+            heroSource = 'ai'
+          }
+        }
+        
         heroRaw = {
-          url: heroRelation.imageUrl || '',
-          source: heroRelation.imageUrl ? 'ai' : 'skeleton' // Use 'ai' for enriched images, 'skeleton' if no image
+          url: imageUrl,
+          source: heroSource
         }
       } else if (heroJson) {
         // Fallback to JSON hero field for backward compatibility
