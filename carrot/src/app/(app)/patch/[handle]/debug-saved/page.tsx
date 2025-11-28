@@ -40,7 +40,7 @@ export default async function DebugSavedPage({
   const [sourceCount, heroCount, sources, heroes] = await Promise.all([
     prisma.discoveredContent.count({ where: { patchId: patch.id } }),
     prisma.hero.count({ where: { content: { patchId: patch.id } } }),
-    prisma.discoveredContent.findMany({
+      prisma.discoveredContent.findMany({
       where: { patchId: patch.id },
       orderBy: { createdAt: 'desc' },
       take: 25,
@@ -50,12 +50,18 @@ export default async function DebugSavedPage({
         canonicalUrl: true,
         domain: true,
         relevanceScore: true,
+        qualityScore: true,
+        summary: true,
+        whyItMatters: true,
         createdAt: true,
         textContent: true,
+        hero: true,
         heroRecord: {
           select: {
             id: true,
-            status: true
+            status: true,
+            imageUrl: true,
+            sourceUrl: true
           }
         }
       }
@@ -117,7 +123,9 @@ export default async function DebugSavedPage({
                 <th className="px-4 py-2 text-left">Domain</th>
                 <th className="px-4 py-2 text-left">Title</th>
                 <th className="px-4 py-2 text-left">Relevance</th>
+                <th className="px-4 py-2 text-left">Quality</th>
                 <th className="px-4 py-2 text-left">Has Hero</th>
+                <th className="px-4 py-2 text-left">Hero URL</th>
                 <th className="px-4 py-2 text-left">Text Length</th>
                 <th className="px-4 py-2 text-left">Created</th>
               </tr>
@@ -144,13 +152,23 @@ export default async function DebugSavedPage({
                       </span>
                     </td>
                     <td className="px-4 py-2">
+                      <span className={s.qualityScore && s.qualityScore >= 70 ? 'text-green-600' : s.qualityScore && s.qualityScore >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+                        {s.qualityScore?.toFixed(0) || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
                       {s.heroRecord ? (
                         <span className={s.heroRecord.status === 'READY' ? 'text-green-600' : 'text-red-600'}>
                           ✓ {s.heroRecord.status}
                         </span>
+                      ) : (s.hero && typeof s.hero === 'object' && (s.hero as any)?.url) ? (
+                        <span className="text-yellow-600">✓ JSON</span>
                       ) : (
                         <span className="text-red-600">✗</span>
                       )}
+                    </td>
+                    <td className="px-4 py-2 text-xs max-w-xs truncate" title={s.heroRecord?.imageUrl || (s.hero && typeof s.hero === 'object' ? (s.hero as any)?.url : '') || ''}>
+                      {s.heroRecord?.imageUrl || (s.hero && typeof s.hero === 'object' ? (s.hero as any)?.url : '') || '—'}
                     </td>
                     <td className="px-4 py-2">
                       <span className={s.textContent && s.textContent.length > 0 ? 'text-green-600' : 'text-red-600'}>
