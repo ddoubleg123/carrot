@@ -38,27 +38,10 @@ export async function GET(
     // Build where clause
     // FE hero query guard: only query status='SAVED' with textBytes >= MIN_TEXT_BYTES_FOR_HERO
     const MIN_TEXT_BYTES_FOR_HERO = 200 // Minimum text content for hero display
+    // Return ALL items for the patch - filtering happens in JavaScript
+    // This ensures we don't miss items that might not have textContent/hero/summary yet
     const whereClause: any = {
-      patchId: patch.id,
-      OR: [
-        {
-          textContent: {
-            not: null,
-          },
-        },
-        {
-          // Include items with a hero image even if textContent is null or short
-          hero: {
-            not: Prisma.JsonNull,
-          },
-        },
-        {
-          // Include items with a summary even if textContent is null or short
-          summary: {
-            not: null,
-          },
-        },
-      ],
+      patchId: patch.id
     }
     
     // Filter by textBytes >= MIN_TEXT_BYTES_FOR_HERO (we'll filter in JS since Prisma doesn't support length on text)
@@ -139,21 +122,29 @@ export async function GET(
       sampleIds: allContent.slice(0, 3).map(c => c.id)
     });
 
-    // Filter items with textBytes >= MIN_TEXT_BYTES_FOR_HERO OR items with heroes/summaries (for backward compatibility)
+    // Filter items - be lenient: include items with at least a title
+    // The frontend can handle items without heroes/summaries/textContent
     const filteredContent = allContent.filter(item => {
+      // Must have at least a title to be displayable
+      if (!item.title || item.title.trim().length === 0) {
+        if (debug) {
+          console.log('[Discovered Content] Filtered out item (no title):', { id: item.id })
+        }
+        return false
+      }
+      
+      // Optional: prefer items with some content, but don't require it
+      // This helps prioritize items with more data, but doesn't exclude items without it
       const textBytes = item.textContent?.length || 0
       const hasHero = item.heroRecord || (item.hero && typeof item.hero === 'object' && (item.hero as any)?.url)
       const hasSummary = item.summary && item.summary.length > 0
       
-      // Include if:
-      // 1. Has sufficient text content (>= 200 bytes), OR
-      // 2. Has a hero (backward compatibility for old items), OR
-      // 3. Has a summary (backward compatibility for old items)
-      const shouldInclude = textBytes >= MIN_TEXT_BYTES_FOR_HERO || hasHero || hasSummary
+      // Include all items with titles - frontend will handle missing data gracefully
+      const shouldInclude = true
       
-      // Debug logging for filtered items
-      if (!shouldInclude && debug) {
-        console.log('[Discovered Content] Filtered out item:', {
+      // Debug logging
+      if (debug) {
+        console.log('[Discovered Content] Item details:', {
           id: item.id,
           title: item.title?.substring(0, 50),
           textBytes,
@@ -353,29 +344,10 @@ export async function GET(
       finalItems = discoveredContent.filter(item => item.id)
     }
     
-    // Get total count for pagination (from DB truth) - use same OR conditions as whereClause
+    // Get total count for pagination (from DB truth) - count all items for the patch
     const totalItems = await prisma.discoveredContent.count({
       where: { 
-        patchId: patch.id,
-        OR: [
-          {
-            textContent: {
-              not: null,
-            },
-          },
-          {
-            // Include items with a hero image even if textContent is null or short
-            hero: {
-              not: Prisma.JsonNull,
-            },
-          },
-          {
-            // Include items with a summary even if textContent is null or short
-            summary: {
-              not: null,
-            },
-          },
-        ],
+        patchId: patch.id
       }
     })
     
