@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { DiscoveryCardPayload, DiscoveryContested, DiscoveryFact, DiscoveryHero, DiscoveryQuote } from '@/types/discovery-card'
 
 export const runtime = 'nodejs';
@@ -39,10 +40,25 @@ export async function GET(
     const MIN_TEXT_BYTES_FOR_HERO = 200 // Minimum text content for hero display
     const whereClause: any = {
       patchId: patch.id,
-      // Only include items with sufficient text content for hero display
-      textContent: {
-        not: null
-      }
+      OR: [
+        {
+          textContent: {
+            not: null,
+          },
+        },
+        {
+          // Include items with a hero image even if textContent is null or short
+          hero: {
+            not: Prisma.JsonNull,
+          },
+        },
+        {
+          // Include items with a summary even if textContent is null or short
+          summary: {
+            not: null,
+          },
+        },
+      ],
     }
     
     // Filter by textBytes >= MIN_TEXT_BYTES_FOR_HERO (we'll filter in JS since Prisma doesn't support length on text)
@@ -133,7 +149,28 @@ export async function GET(
       // 1. Has sufficient text content (>= 200 bytes), OR
       // 2. Has a hero (backward compatibility for old items), OR
       // 3. Has a summary (backward compatibility for old items)
-      return textBytes >= MIN_TEXT_BYTES_FOR_HERO || hasHero || hasSummary
+      const shouldInclude = textBytes >= MIN_TEXT_BYTES_FOR_HERO || hasHero || hasSummary
+      
+      // Debug logging for filtered items
+      if (!shouldInclude && debug) {
+        console.log('[Discovered Content] Filtered out item:', {
+          id: item.id,
+          title: item.title?.substring(0, 50),
+          textBytes,
+          hasHero: !!hasHero,
+          hasSummary: !!hasSummary,
+          heroRecord: item.heroRecord ? { status: item.heroRecord.status, hasImage: !!item.heroRecord.imageUrl } : null,
+          heroJson: item.hero ? { hasUrl: !!(item.hero as any)?.url } : null
+        })
+      }
+      
+      return shouldInclude
+    })
+    
+    console.log('[Discovered Content] Filter results:', {
+      beforeFilter: allContent.length,
+      afterFilter: filteredContent.length,
+      filteredOut: allContent.length - filteredContent.length
     })
     
     let discoveredContent: DiscoveryCardPayload[] = filteredContent.map((item) => {
@@ -316,11 +353,29 @@ export async function GET(
       finalItems = discoveredContent.filter(item => item.id)
     }
     
-    // Get total count for pagination (from DB truth)
+    // Get total count for pagination (from DB truth) - use same OR conditions as whereClause
     const totalItems = await prisma.discoveredContent.count({
       where: { 
         patchId: patch.id,
-        textContent: { not: null }
+        OR: [
+          {
+            textContent: {
+              not: null,
+            },
+          },
+          {
+            // Include items with a hero image even if textContent is null or short
+            hero: {
+              not: Prisma.JsonNull,
+            },
+          },
+          {
+            // Include items with a summary even if textContent is null or short
+            summary: {
+              not: null,
+            },
+          },
+        ],
       }
     })
     
