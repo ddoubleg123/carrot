@@ -450,8 +450,7 @@ export class SchedulerGuards {
           status: 'paused',
           attempts,
           issuedAt: new Date().toISOString(),
-          reason: 'zero_save_autopause',
-          runDurationMs: runDuration
+          reason: 'zero_save_autopause'
         })
         await setRunState(this.logicalPatchId, 'paused')
       }
@@ -465,8 +464,7 @@ export class SchedulerGuards {
             status: 'warning',
             attempts,
             issuedAt: new Date().toISOString(),
-            reason: 'zero_save_warning',
-            runDurationMs: runDuration
+            reason: 'zero_save_warning'
           })
         }
         return 'warning'
@@ -477,8 +475,7 @@ export class SchedulerGuards {
             status: 'paused',
             attempts,
             issuedAt: new Date().toISOString(),
-            reason: 'zero_save_autopause',
-            runDurationMs: runDuration
+            reason: 'zero_save_autopause'
           })
           await setRunState(this.logicalPatchId, 'paused')
         }
