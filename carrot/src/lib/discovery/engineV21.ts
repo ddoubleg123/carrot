@@ -696,6 +696,9 @@ export class DiscoveryEngineV21 {
         attempts: this.reseedAttempts,
         maxAttempts: this.MAX_RESEED_ATTEMPTS
       })
+      // Don't stop the run on reseed circuit breaker - just log and continue
+      // The zero-save SLO will handle stopping if needed
+      console.warn(`[EngineV21] Reseed circuit breaker reached (${this.reseedAttempts}/${this.MAX_RESEED_ATTEMPTS}), but continuing discovery`)
     }
   }
 
