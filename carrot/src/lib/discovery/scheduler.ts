@@ -421,7 +421,7 @@ export class SchedulerGuards {
     this.canonicalHits.delete(canonicalUrl)
   }
 
-  async handleZeroSave(attempts: number): Promise<'ok' | 'warning' | 'paused'> {
+  async handleZeroSave(attempts: number, runStartTime?: number): Promise<'ok' | 'warning' | 'paused'> {
     // Allow disabling zero-save auto-pause via environment variable
     // This is useful when Playwright isn't working and items fail quickly
     const DISABLE_ZERO_SAVE_PAUSE = process.env.DISABLE_ZERO_SAVE_PAUSE === 'true'
@@ -434,28 +434,56 @@ export class SchedulerGuards {
       return 'ok'
     }
     
+    // Use time-based pause instead of attempt-based to prevent premature pauses
+    // Only pause after 2 minutes with no saves, not after X attempts
+    // This prevents pausing in <10 seconds when items fail quickly
+    const ZERO_SAVE_PAUSE_TIME_MS = Number(process.env.ZERO_SAVE_PAUSE_TIME_MS || 120000) // 2 minutes default
+    const now = Date.now()
+    const runDuration = runStartTime ? now - runStartTime : 0
+    
     const zeroSave = await getZeroSaveDiagnostics(this.redisPatchId)
-    if (attempts >= 40) {
+    
+    // Time-based pause: only pause after minimum time has elapsed AND we have enough attempts
+    if (attempts >= 40 && runDuration >= ZERO_SAVE_PAUSE_TIME_MS) {
       if (!zeroSave || zeroSave.status !== 'paused') {
         await setZeroSaveDiagnostics(this.redisPatchId, {
           status: 'paused',
           attempts,
           issuedAt: new Date().toISOString(),
-          reason: 'zero_save_autopause'
+          reason: 'zero_save_autopause',
+          runDurationMs: runDuration
         })
         await setRunState(this.logicalPatchId, 'paused')
       }
       return 'paused'
     } else if (attempts >= 25) {
-      if (!zeroSave || zeroSave.status === 'ok') {
-        await setZeroSaveDiagnostics(this.redisPatchId, {
-          status: 'warning',
-          attempts,
-          issuedAt: new Date().toISOString(),
-          reason: 'zero_save_warning'
-        })
+      // Warning threshold: log but don't pause yet if not enough time has passed
+      if (runDuration < ZERO_SAVE_PAUSE_TIME_MS) {
+        // Log warning but don't pause until minimum time has elapsed
+        if (!zeroSave || zeroSave.status === 'ok') {
+          await setZeroSaveDiagnostics(this.redisPatchId, {
+            status: 'warning',
+            attempts,
+            issuedAt: new Date().toISOString(),
+            reason: 'zero_save_warning',
+            runDurationMs: runDuration
+          })
+        }
+        return 'warning'
+      } else {
+        // Time has elapsed and we have enough attempts - pause
+        if (!zeroSave || zeroSave.status !== 'paused') {
+          await setZeroSaveDiagnostics(this.redisPatchId, {
+            status: 'paused',
+            attempts,
+            issuedAt: new Date().toISOString(),
+            reason: 'zero_save_autopause',
+            runDurationMs: runDuration
+          })
+          await setRunState(this.logicalPatchId, 'paused')
+        }
+        return 'paused'
       }
-      return 'warning'
     } else if (zeroSave && zeroSave.status !== 'ok') {
       await clearZeroSaveDiagnostics(this.redisPatchId)
     }

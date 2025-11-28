@@ -1032,7 +1032,7 @@ export class DiscoveryEngineV21 {
   }
 
   private async handleZeroSaveSlo(): Promise<void> {
-    const status = await this.scheduler.handleZeroSave(this.metrics.candidatesProcessed)
+    const status = await this.scheduler.handleZeroSave(this.metrics.candidatesProcessed, this.startTime)
     this.zeroSaveWarningIssued = status === 'warning'
     this.zeroSaveAutoPaused = status === 'paused'
     if (status === 'paused') {
