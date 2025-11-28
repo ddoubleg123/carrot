@@ -1147,8 +1147,9 @@ export class DiscoveryEngineV21 {
             `[Discovery SLO] zero-save warning@25 attempts (handle=${this.options.patchHandle}, run=${this.options.runId})`
           )
         } else if (this.metrics.candidatesProcessed === 40) {
-          console.error(
-            `[Discovery SLO] zero-save pause@40 attempts (handle=${this.options.patchHandle}, run=${this.options.runId})`
+          // Note: This is just a warning log - actual pause is handled by scheduler.ts with time-based check
+          console.warn(
+            `[Discovery SLO] zero-save warning@40 attempts (handle=${this.options.patchHandle}, run=${this.options.runId}) - pause will occur after 2+ minutes if no saves`
           )
         }
       }
