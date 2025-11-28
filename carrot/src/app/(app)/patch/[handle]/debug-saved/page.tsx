@@ -75,6 +75,7 @@ export default async function DebugSavedPage({
         title: true,
         sourceUrl: true,
         status: true,
+        imageUrl: true,
         createdAt: true,
         content: {
           select: {
@@ -195,6 +196,7 @@ export default async function DebugSavedPage({
                 <th className="px-4 py-2 text-left">Status</th>
                 <th className="px-4 py-2 text-left">Title</th>
                 <th className="px-4 py-2 text-left">Domain</th>
+                <th className="px-4 py-2 text-left">Image URL</th>
                 <th className="px-4 py-2 text-left">Created</th>
               </tr>
             </thead>
@@ -218,6 +220,9 @@ export default async function DebugSavedPage({
                     {h.title}
                   </td>
                   <td className="px-4 py-2">{h.content?.domain || 'unknown'}</td>
+                  <td className="px-4 py-2 text-xs max-w-xs truncate" title={h.imageUrl || ''}>
+                    {h.imageUrl || '—'}
+                  </td>
                   <td className="px-4 py-2 text-xs">
                     {h.createdAt.toLocaleString()}
                   </td>
