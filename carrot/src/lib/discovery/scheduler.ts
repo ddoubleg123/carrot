@@ -422,6 +422,18 @@ export class SchedulerGuards {
   }
 
   async handleZeroSave(attempts: number): Promise<'ok' | 'warning' | 'paused'> {
+    // Allow disabling zero-save auto-pause via environment variable
+    // This is useful when Playwright isn't working and items fail quickly
+    const DISABLE_ZERO_SAVE_PAUSE = process.env.DISABLE_ZERO_SAVE_PAUSE === 'true'
+    
+    if (DISABLE_ZERO_SAVE_PAUSE) {
+      // Still log warnings but don't auto-pause
+      if (attempts >= 25) {
+        console.warn(`[Zero-Save SLO] Warning at ${attempts} attempts (auto-pause disabled)`)
+      }
+      return 'ok'
+    }
+    
     const zeroSave = await getZeroSaveDiagnostics(this.redisPatchId)
     if (attempts >= 40) {
       if (!zeroSave || zeroSave.status !== 'paused') {
