@@ -913,6 +913,12 @@ export class DiscoveryEngineV21 {
       return false
     }
     
+    // Reject PDF files and other non-HTML content
+    const nonHtmlExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar', '.tar', '.gz']
+    if (nonHtmlExtensions.some(ext => lowerUrl.endsWith(ext) || lowerUrl.includes(ext + '?'))) {
+      return false
+    }
+    
     // Must start with http:// or https:// (or be a valid absolute URL)
     if (!trimmed.match(/^https?:\/\//i)) {
       // Try to validate if it's a valid URL that can be made absolute

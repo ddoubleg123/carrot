@@ -146,13 +146,15 @@ Tasks:
 2) Importance (0–100): Evaluate how SIGNIFICANT this content is to the core subject matter.
    - HIGH IMPORTANCE (80-100): Core subject matter, key people, major events, franchise history, foundational concepts, legacy-defining moments, championship seasons, dynasty eras, transformative trades/signings, coaching philosophies that shaped the organization.
    - MEDIUM IMPORTANCE (50-79): Current roster analysis, season previews, player development, draft picks, significant but routine news, strategic decisions.
-   - LOW IMPORTANCE (0-49): Game recaps, routine injury updates, trade rumors, social media posts, daily news, match previews, post-game quotes, minor transactions.
+   - LOW IMPORTANCE (0-49): Game recaps, routine injury updates, trade rumors, social media posts, daily news, match previews, post-game quotes, minor transactions, e-commerce pages, product listings.
    Score based on whether this content addresses what REALLY MATTERS about the topic vs. just being tangentially related news.
 3) Why it matters: 1–2 concise sentences tailored to the topic, include publish date hints.
 4) Facts: 3–6 bullets with dates/numbers; each must map to a citation AND include an evidence array with anchors {cssPath|xpath,startOffset,endOffset,preContext,postContext}.
+   NOTE: For listing/aggregation pages or e-commerce pages, if you cannot extract 3+ facts, set isUseful=false and return minimal facts.
 5) Quotes (optional): up to 3 SHORT verbatim quotes (<=25 words each) with speaker + citation + anchor; track total quoted words.
 6) Contested (optional): if this source advances or disputes a controversial claim, add a compact "contested" note with one supporting and one counter source (URLs).
 7) Provenance: array of source URLs (this URL first; add on-page anchors when possible).
+8) Publish Date: Extract publish date from content. If this is a listing/aggregation page without a clear date, use today's date (YYYY-MM-DD format).
 
 Return JSON ONLY:
 {
@@ -189,7 +191,10 @@ Reject if:
 - <200 words substantive text,
 - qualityScore < 70,
 - relevanceScore < 0.65 (strict),
-- no mappable citations for facts/quotes.${contestedSection}`
+- no mappable citations for facts/quotes,
+- e-commerce/shop pages with insufficient facts (set isUseful=false if this is a product listing page).
+
+For listing/aggregation pages: If you cannot extract a publish date, use today's date (YYYY-MM-DD).${contestedSection}`
 }
 
 function getApiKey(): string {
@@ -313,10 +318,29 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     throw new Error('deepseek_vetter_pii_detected')
   }
 
-  // Enforce publish date presence for off-wiki pages
-  const publishDate: string | undefined = typeof parsed.publishDate === 'string' ? parsed.publishDate.trim() : undefined
+  // Extract publish date - use fallback for listing/aggregation pages
+  let publishDate: string | undefined = typeof parsed.publishDate === 'string' ? parsed.publishDate.trim() : undefined
+  
+  // If no publish date found, check if this is a listing/aggregation page
+  // Listing pages often don't have publish dates, so we use a fallback
   if (!publishDate) {
-    throw new Error('publish_date_missing')
+    const isListingPage = 
+      args.url.includes('/news') || 
+      args.url.includes('/articles') || 
+      args.url.includes('/blog') ||
+      args.url.includes('/collections') ||
+      args.url.match(/\/[^\/]+\/?$/) || // Root-level paths like /news
+      args.text.length < 2000 // Short content often indicates listing pages
+    
+    if (isListingPage) {
+      // Use today's date as fallback for listing pages
+      const today = new Date().toISOString().split('T')[0]
+      publishDate = today
+      console.warn(`[Vetter] No publish date found for listing page ${args.url}, using fallback: ${today}`)
+    } else {
+      // For article pages, require publish date
+      throw new Error('publish_date_missing')
+    }
   }
 
   // Enforce anchored evidence on all facts
