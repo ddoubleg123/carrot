@@ -263,39 +263,112 @@ async function renderWithPlaywright(url: string): Promise<{
       }
     }
 
+    // Additional wait for content to render (JS-heavy sites need time)
+    // Wait for either article/main to appear, or at least some substantial text
+    try {
+      await page.waitForFunction(
+        () => {
+          const article = document.querySelector('article')
+          const main = document.querySelector('main')
+          const bodyText = document.body.innerText || document.body.textContent || ''
+          return (article && article.innerText.length > 100) || 
+                 (main && main.innerText.length > 100) || 
+                 bodyText.length > 500
+        },
+        { timeout: 3000 }
+      ).catch(() => {
+        // Timeout is OK - proceed with what we have
+      })
+    } catch {
+      // Continue anyway
+    }
+
     // Extract content
     const title = await page.title().catch(() => '')
     const html = await page.content().catch(() => '')
 
-    // Extract main content
+    // Extract main content using improved algorithm
     const text = await page.evaluate(() => {
-      // Try article tag first
+      // Helper to get text content
+      const getText = (el: Element | null): string => {
+        if (!el) return ''
+        return (el as HTMLElement).innerText?.trim() || el.textContent?.trim() || ''
+      }
+
+      // Try to find article tag first
       const article = document.querySelector('article')
       if (article) {
-        return article.innerText.trim()
+        const articleText = getText(article)
+        if (articleText.length > 100) {
+          return articleText
+        }
       }
 
       // Try main tag
       const main = document.querySelector('main')
       if (main) {
-        return main.innerText.trim()
+        const mainText = getText(main)
+        if (mainText.length > 100) {
+          return mainText
+        }
       }
 
-      // Fallback: largest text block
-      const allElements = Array.from(document.querySelectorAll('p, div, section'))
+      // Try common content containers
+      const contentSelectors = [
+        '[role="main"]',
+        '[class*="content"]',
+        '[class*="article"]',
+        '[class*="post"]',
+        '[id*="content"]',
+        '[id*="main"]',
+        '[id*="article"]'
+      ]
+
+      for (const selector of contentSelectors) {
+        const el = document.querySelector(selector)
+        if (el) {
+          const text = getText(el)
+          if (text.length > 200) {
+            return text
+          }
+        }
+      }
+
+      // Fallback: largest text block heuristic (improved)
+      const allElements = Array.from(document.querySelectorAll('p, div, section, article, main'))
       let largestBlock = ''
       let largestSize = 0
 
       for (const el of allElements) {
-        const text = (el as HTMLElement).innerText?.trim() || el.textContent?.trim() || ''
-        if (text.length > largestSize && text.length > 200) {
-          largestSize = text.length
-          largestBlock = text
+        const text = getText(el)
+        // Look for substantial text blocks (lowered threshold for JS sites)
+        if (text.length > largestSize && text.length > 100) {
+          // Prefer elements with more structure (multiple paragraphs)
+          const paragraphCount = el.querySelectorAll('p').length
+          const score = text.length + (paragraphCount * 50)
+          if (score > largestSize) {
+            largestSize = score
+            largestBlock = text
+          }
         }
       }
 
-      return largestBlock || (document.body as HTMLElement).innerText?.trim() || document.body.textContent?.trim() || ''
-    }).catch(() => '')
+      // If we found a good block, use it
+      if (largestBlock.length > 200) {
+        return largestBlock
+      }
+
+      // Final fallback: body text, but filter out very short content
+      const bodyText = getText(document.body)
+      if (bodyText.length > 500) {
+        return bodyText
+      }
+
+      return ''
+    }).catch((error) => {
+      console.error('[HeadlessFetcher] Error extracting text:', error)
+      return ''
+    })
 
     // Close context per URL to stop leaks (as per requirements)
     await context.close()

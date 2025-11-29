@@ -2844,8 +2844,8 @@ export class DiscoveryEngineV21 {
           const renderResult = await renderWithPlaywright(branch.url)
           renderUsed = true
           
-          if (renderResult.success && renderResult.text.length > initialTextLength && renderResult.html) {
-            // Use rendered content
+          if (renderResult.success && renderResult.html) {
+            // Use rendered HTML even if text extraction was minimal
             html = renderResult.html
             if (html) {
               extracted = this.extractHtmlContent(html)
@@ -2853,19 +2853,36 @@ export class DiscoveryEngineV21 {
               if (renderResult.title && renderResult.title !== 'Untitled') {
                 extracted.title = renderResult.title
               }
-              // Use rendered text if it's longer
-              if (renderResult.text.length > extracted.text.length) {
+              // Use rendered text if it's longer OR if initial was empty
+              if (renderResult.text.length > extracted.text.length || initialTextLength === 0) {
                 extracted.text = renderResult.text
               }
             }
             
-            if (extracted) {
+            // Check if we got meaningful content
+            const finalTextLength = extracted?.text.length || 0
+            if (finalTextLength > 100 || (initialTextLength === 0 && finalTextLength > 50)) {
               this.telemetry.htmlExtracted++
               this.structuredLog('render_success', {
                 url: branch.url,
-                text_len: extracted.text.length,
-                title: extracted.title.slice(0, 100)
+                text_len: finalTextLength,
+                title: extracted.title.slice(0, 100),
+                improvement: finalTextLength - initialTextLength
               })
+            } else {
+              // Renderer ran but didn't extract meaningful content
+              this.structuredLog('render_failed', {
+                url: branch.url,
+                error: renderResult.error || 'no_content_extracted',
+                initial_len: initialTextLength,
+                rendered_len: renderResult.text.length,
+                html_len: html.length
+              })
+              
+              // If still empty after rendering, mark as extractor_empty
+              if (extracted && extracted.text.length < 100) {
+                throw new Error('extractor_empty')
+              }
             }
           } else {
             // Renderer failed or didn't improve - use original extraction
@@ -2873,7 +2890,7 @@ export class DiscoveryEngineV21 {
               url: branch.url,
               error: renderResult.error || 'no_improvement',
               initial_len: initialTextLength,
-              rendered_len: renderResult.text.length
+              rendered_len: renderResult.text.length || 0
             })
             
             // If still empty, mark as extractor_empty
@@ -3118,16 +3135,21 @@ export class DiscoveryEngineV21 {
     const paraMatches = contentHtml.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || []
     const divMatches = contentHtml.match(/<div[^>]*class=["'][^"']*content["'][^>]*>([\s\S]*?)<\/div>/gi) || []
     
-    let textParts: string[] = []
-    
-    // Add paragraphs
-    paraMatches.forEach(match => {
-      const text = match
+    // Helper to clean and validate text
+    const cleanText = (rawText: string): string => {
+      return rawText
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/gi, ' ')
         .replace(/&[a-z]+;/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim()
+    }
+    
+    let textParts: string[] = []
+    
+    // Add paragraphs
+    paraMatches.forEach(match => {
+      const text = cleanText(match)
       if (text.length > 50) { // Filter short paragraphs (likely boilerplate)
         textParts.push(text)
       }
@@ -3136,27 +3158,48 @@ export class DiscoveryEngineV21 {
     // Add content divs if paragraphs are sparse
     if (textParts.length < 3 && divMatches.length > 0) {
       divMatches.forEach(match => {
-        const text = match
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/gi, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
+        const text = cleanText(match)
         if (text.length > 100) {
           textParts.push(text)
         }
       })
     }
     
-    // Fallback: extract all text if still empty
-    if (textParts.length === 0) {
-      const allText = contentHtml
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&[a-z]+;/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (allText.length > 100) {
-        textParts.push(allText)
+    // Try common content class patterns for JS-heavy sites (NBA.com, etc.)
+    if (textParts.length < 3) {
+      const commonContentSelectors = [
+        /<div[^>]*class=["'][^"']*article["'][^>]*>([\s\S]*?)<\/div>/gi,
+        /<div[^>]*class=["'][^"']*post["'][^>]*>([\s\S]*?)<\/div>/gi,
+        /<div[^>]*class=["'][^"']*story["'][^>]*>([\s\S]*?)<\/div>/gi,
+        /<section[^>]*class=["'][^"']*content["'][^>]*>([\s\S]*?)<\/section>/gi,
+        /<div[^>]*id=["'][^"']*content["'][^>]*>([\s\S]*?)<\/div>/gi,
+        /<div[^>]*id=["'][^"']*main["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ]
+      
+      for (const selector of commonContentSelectors) {
+        const matches = contentHtml.match(selector) || []
+        for (const match of matches) {
+          const text = cleanText(match)
+          if (text.length > 200) {
+            textParts.push(text)
+          }
+        }
+        if (textParts.length >= 3) break
+      }
+    }
+    
+    // Fallback: extract all text if still empty or very short
+    if (textParts.length === 0 || textParts.join(' ').length < 200) {
+      const allText = cleanText(contentHtml)
+      if (allText.length > 200) {
+        // Split into sentences and filter for better quality
+        const sentences = allText.split(/[.!?]\s+/).filter(s => s.length > 50)
+        if (sentences.length > 0) {
+          textParts = sentences.slice(0, 30) // Limit to first 30 sentences
+        } else if (allText.length > 100) {
+          // If no sentence breaks, use the whole text if it's substantial
+          textParts = [allText]
+        }
       }
     }
 
@@ -3188,18 +3231,45 @@ export class DiscoveryEngineV21 {
     }
 
     const title = content.title?.toLowerCase?.() ?? ''
-    const words = content.text?.split(/\s+/).slice(0, 200).join(' ').toLowerCase()
+    // Check more text (first 500 words instead of 200) for better entity detection
+    const words = content.text?.split(/\s+/).slice(0, 500).join(' ').toLowerCase() ?? ''
     const body = content.text?.toLowerCase?.() ?? ''
 
+    // Check title first (most reliable)
     for (const term of terms) {
       if (!term) continue
       if (title.includes(term)) return true
+    }
+
+    // Check first 500 words (improved from 200)
+    for (const term of terms) {
+      if (!term) continue
       if (words.includes(term)) return true
     }
 
-    for (const term of terms) {
-      if (!term) continue
-      if (body.includes(term)) return true
+    // Check full body as fallback (for longer articles where entity might be later)
+    // Only check if we have substantial content (>500 chars) to avoid false positives
+    if (body.length > 500) {
+      for (const term of terms) {
+        if (!term) continue
+        if (body.includes(term)) return true
+      }
+    }
+
+    // If content is substantial (>1000 chars) but no entity found, be more lenient
+    // This helps with articles that mention the entity indirectly or in context
+    if (body.length > 1000 && content.text && content.text.length > 1000) {
+      // Check for partial matches (e.g., "Bulls" in "Chicago Bulls")
+      for (const term of terms) {
+        if (!term || term.length < 4) continue // Only check substantial terms
+        // Split multi-word terms and check for any word match
+        const termWords = term.split(/\s+/)
+        for (const word of termWords) {
+          if (word.length >= 4 && body.includes(word)) {
+            return true
+          }
+        }
+      }
     }
 
     return false
