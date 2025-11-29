@@ -62,10 +62,28 @@ export function normalizeUrl(u: string, baseUrl?: string): string | null {
 
 function collectLinksByRegex(html: string): Array<{ href: string; title?: string }> {
   const links: Array<{ href: string; title?: string }> = []
+  
+  // Remove footer, header, and navigation sections that typically contain non-article links
+  let cleanedHtml = html
+  // Remove footer sections
+  cleanedHtml = cleanedHtml.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+  cleanedHtml = cleanedHtml.replace(/<div[^>]*class=["'][^"']*footer[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
+  // Remove header/nav sections (but keep main content)
+  cleanedHtml = cleanedHtml.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+  cleanedHtml = cleanedHtml.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+  cleanedHtml = cleanedHtml.replace(/<div[^>]*class=["'][^"']*nav[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
+  // Remove aside/sidebar sections
+  cleanedHtml = cleanedHtml.replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+  
+  // Prioritize links in main content areas (article, main, content sections)
+  const mainContentRegex = /<(article|main|section)[^>]*>[\s\S]*?<\/(article|main|section)>/gi
+  const mainContentMatches = cleanedHtml.match(mainContentRegex)
+  const contentToSearch = mainContentMatches ? mainContentMatches.join('\n') : cleanedHtml
+  
   // Simple anchor tag extraction; robust libraries can be swapped in later
   const anchorRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi
   let m: RegExpExecArray | null
-  while ((m = anchorRegex.exec(html)) !== null) {
+  while ((m = anchorRegex.exec(contentToSearch)) !== null) {
     const href = m[1]
     const inner = m[2]?.replace(/<[^>]+>/g, '').trim()
     links.push({ href, title: inner || undefined })

@@ -41,9 +41,72 @@ export function passesDeepLinkFilters(
   if (host.endsWith('wikipedia.org') || host.endsWith('m.wikipedia.org')) {
     return false
   }
+  
+  // Reject privacy, support, cookie, tools, and other non-content pages
+  const lowerUrl = inputUrl.toLowerCase()
+  const rejectPatterns = [
+    /\/privacy/i,
+    /\/support\//i,
+    /\/cookies?/i,
+    /\/cookie/i,
+    /\/tools\//i,
+    /\/legal\//i,
+    /\/terms/i,
+    /\/about\//i,
+    /\/contact\//i,
+    /\/help\//i,
+    /\/faq/i,
+    /\/sitemap/i,
+    /\/feed/i,
+    /\/rss/i,
+    /privacy\./i,  // privacy.example.com
+    /support\./i,  // support.example.com
+    /tools\./i,    // tools.example.com
+    /cookiedatabase/i,
+    /gaoptout/i,
+    /opt.?out/i
+  ]
+  if (rejectPatterns.some(pattern => pattern.test(lowerUrl))) {
+    return false
+  }
+  
+  // Reject common footer/header domains
+  const rejectHosts = [
+    'cookiedatabase.org',
+    'tools.google.com',
+    'support.apple.com',
+    'support.mozilla.org',
+    'support.microsoft.com',
+    'nbcuniversalprivacy.com',
+    'facebook.com'
+  ]
+  if (rejectHosts.some(rejectHost => host.includes(rejectHost))) {
+    return false
+  }
+  
   if (!isLikelyDeepLink(inputUrl)) {
     return false
   }
+  
+  // Prioritize article-like URLs (those with dates, article slugs, etc.)
+  const articlePatterns = [
+    /\d{4}\/\d{2}\/\d{2}/,  // Date in URL: 2024/11/29
+    /\d{4}-\d{2}-\d{2}/,    // Date in URL: 2024-11-29
+    /\/article\//i,
+    /\/story\//i,
+    /\/post\//i,
+    /\/news\//i,
+    /\/sports\//i,
+    /\/[a-z0-9-]{20,}/i     // Long slug (likely article)
+  ]
+  const isArticleLike = articlePatterns.some(pattern => pattern.test(inputUrl))
+  
+  // If it's not article-like and has low path depth, likely a listing/nav page
+  const depth = getPathDepth(inputUrl)
+  if (!isArticleLike && depth < 2) {
+    return false
+  }
+  
   if (publishDateGuess && !hostIsOfficial(host)) {
     const twentyFourMonthsAgo = new Date()
     twentyFourMonthsAgo.setMonth(twentyFourMonthsAgo.getMonth() - 24)
