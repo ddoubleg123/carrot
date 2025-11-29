@@ -2876,7 +2876,7 @@ export class DiscoveryEngineV21 {
                 error: renderResult.error || 'no_content_extracted',
                 initial_len: initialTextLength,
                 rendered_len: renderResult.text.length,
-                html_len: html.length
+                html_len: html?.length || 0
               })
               
               // If still empty after rendering, mark as extractor_empty

@@ -249,7 +249,7 @@ export async function renderWithPlaywright(url: string): Promise<{
       }
 
       return ''
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       console.error('[Renderer] Error extracting text:', error)
       return ''
     })

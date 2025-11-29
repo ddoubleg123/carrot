@@ -365,7 +365,7 @@ async function renderWithPlaywright(url: string): Promise<{
       }
 
       return ''
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       console.error('[HeadlessFetcher] Error extracting text:', error)
       return ''
     })
