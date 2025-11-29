@@ -980,7 +980,8 @@ export class DiscoveryEngineV21 {
         /\/sitemap/,
         /\/feed/,
         /\/rss/,
-        /\/news\/?$/,
+        /\/news\/?$/,  // /news or /news/
+        /\/news$/,     // /bulls/news (news at end of path)
         /\/articles\/?$/,
         /\/blog\/?$/,
         /\/sites\/[^\/]+\/?$/,
@@ -1001,10 +1002,15 @@ export class DiscoveryEngineV21 {
         return true
       }
       
-      // Check for category-like patterns
+      // Check for category-like patterns - also check if path ends with "news"
       if (pathSegments.length >= 2) {
         const lastSegment = pathSegments[pathSegments.length - 1]
         const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles', 'bulls']
+        
+        // Special case: /bulls/news or /team/news pattern
+        if (lastSegment === 'news' && pathSegments.length === 2) {
+          return true
+        }
         
         // If last segment is a category word or very short, likely a listing
         if (categoryWords.includes(lastSegment) || lastSegment.length < 5) {
@@ -1027,6 +1033,49 @@ export class DiscoveryEngineV21 {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Detect listing pages by content characteristics (short text, multiple links, list-like structure)
+   */
+  private isListingPageByContent(text: string, title: string): boolean {
+    if (!text || text.length < 100) return false
+    
+    const lowerText = text.toLowerCase()
+    const lowerTitle = title.toLowerCase()
+    
+    // Check title for listing indicators
+    const listingTitlePatterns = [
+      /news$/i,
+      /articles$/i,
+      /blog$/i,
+      /archive/i,
+      /latest/i,
+      /all posts/i,
+      /all articles/i
+    ]
+    if (listingTitlePatterns.some(pattern => pattern.test(lowerTitle))) {
+      return true
+    }
+    
+    // Check for listing page characteristics:
+    // - Short text relative to number of links (listing pages have many links but little text)
+    // - Multiple "read more" or "view article" patterns
+    const linkPatterns = /(read more|view article|see more|full story|continue reading)/gi
+    const linkMatches = (text.match(linkPatterns) || []).length
+    
+    // If text is short (< 2000 chars) and has multiple link indicators, likely a listing page
+    if (text.length < 2000 && linkMatches >= 3) {
+      return true
+    }
+    
+    // Check for list-like structure (many short paragraphs)
+    const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 20)
+    if (paragraphs.length > 10 && paragraphs.every(p => p.length < 300)) {
+      return true
+    }
+    
+    return false
   }
 
   private resolveHost(candidate: FrontierItem): string | null {
@@ -1743,14 +1792,18 @@ export class DiscoveryEngineV21 {
         return { saved: false, reason: 'run_suspended', angle, host }
       }
 
-      // Deep-link scraper: skip summary/wiki pages and enqueue ref_out links (pre-vet)
+      // Deep-link scraper: skip summary/wiki pages and listing pages, enqueue ref_out links (pre-vet)
       if (DEEP_LINK_SCRAPER) {
         try {
           const urlObj = new URL(canonicalUrl)
           const isWiki = this.isWikipediaUrl(canonicalUrl)
           const pathDepthForSummary = urlObj.pathname.split('/').filter(Boolean).length
           const isSummary = isWiki || pathDepthForSummary < 2
-          if (isSummary) {
+          // Also check if this is a listing page (news, articles, blog, etc.)
+          const isListingPage = this.isDirectoryOrListingPage(canonicalUrl) || 
+            this.isListingPageByContent(extracted?.text || '', extracted?.title || '')
+          
+          if (isSummary || isListingPage) {
             const html = extracted?.rawHtml || ''
             if (html && html.length > 0) {
               const refs = await extractOffHostLinks(html, canonicalUrl, { maxLinks: 20 })
@@ -1778,12 +1831,12 @@ export class DiscoveryEngineV21 {
                 enqueued++
               }
               if (enqueued > 0) {
-                this.structuredLog('ref_out_enqueued', { source: canonicalUrl, count: enqueued, context: isWiki ? 'wikipedia' : 'summary' })
+                this.structuredLog('ref_out_enqueued', { source: canonicalUrl, count: enqueued, context: isWiki ? 'wikipedia' : (isListingPage ? 'listing' : 'summary') })
               }
             }
-            await this.emitAudit('summary_skipped', 'ok', { candidateUrl: canonicalUrl })
+            await this.emitAudit('summary_skipped', 'ok', { candidateUrl: canonicalUrl, reason: isListingPage ? 'listing_page' : 'summary' })
             await this.persistMetricsSnapshot('running', countersBefore)
-            return { saved: false, reason: 'summary_skipped', angle, host }
+            return { saved: false, reason: isListingPage ? 'listing_skipped' : 'summary_skipped', angle, host }
           }
         } catch {
           // ignore
