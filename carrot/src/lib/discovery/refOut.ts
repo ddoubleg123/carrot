@@ -76,9 +76,21 @@ function collectLinksByRegex(html: string): Array<{ href: string; title?: string
   cleanedHtml = cleanedHtml.replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
   
   // Prioritize links in main content areas (article, main, content sections)
+  // Also look for common article listing containers
   const mainContentRegex = /<(article|main|section)[^>]*>[\s\S]*?<\/(article|main|section)>/gi
   const mainContentMatches = cleanedHtml.match(mainContentRegex)
-  const contentToSearch = mainContentMatches ? mainContentMatches.join('\n') : cleanedHtml
+  
+  // Also look for common article listing patterns (divs with article-related classes)
+  const articleListRegex = /<div[^>]*class=["'][^"']*(?:article|story|post|news|content|listing|feed|stream|grid|list)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi
+  const articleListMatches = cleanedHtml.match(articleListRegex)
+  
+  // Combine main content and article listing areas
+  const contentAreas = []
+  if (mainContentMatches) contentAreas.push(...mainContentMatches)
+  if (articleListMatches) contentAreas.push(...articleListMatches)
+  
+  // Use content areas if found, otherwise fall back to cleaned HTML
+  const contentToSearch = contentAreas.length > 0 ? contentAreas.join('\n') : cleanedHtml
   
   // Simple anchor tag extraction; robust libraries can be swapped in later
   const anchorRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi

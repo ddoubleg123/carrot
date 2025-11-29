@@ -97,15 +97,19 @@ export function passesDeepLinkFilters(
     /\/post\//i,
     /\/news\//i,
     /\/sports\//i,
-    /\/[a-z0-9-]{20,}/i     // Long slug (likely article)
+    /\/[a-z0-9-]{15,}/i     // Long slug (likely article) - reduced from 20 to 15
   ]
   const isArticleLike = articlePatterns.some(pattern => pattern.test(inputUrl))
   
-  // If it's not article-like and has low path depth, likely a listing/nav page
+  // If it's not article-like and has very low path depth, likely a listing/nav page
+  // But be more lenient - allow depth 1 if it looks like an article
   const depth = getPathDepth(inputUrl)
-  if (!isArticleLike && depth < 2) {
+  if (!isArticleLike && depth < 1) {
     return false
   }
+  
+  // Allow more URLs through - if it passes the reject patterns and has some depth, it's probably OK
+  // The vetter will filter out non-article content later
   
   if (publishDateGuess && !hostIsOfficial(host)) {
     const twentyFourMonthsAgo = new Date()
