@@ -14,6 +14,10 @@ export interface GroupProfile {
   block_domains: string[]
   relevance_threshold: number
   embedding_threshold: number
+  importance_keywords?: {
+    high: string[] // Keywords that indicate high importance content
+    low: string[] // Keywords that indicate low importance (game recaps, etc.)
+  }
 }
 
 export const GROUP_PROFILES: Record<string, GroupProfile> = {
@@ -73,7 +77,67 @@ export const GROUP_PROFILES: Record<string, GroupProfile> = {
       'low-quality-sports.com'
     ],
     relevance_threshold: 0.7,
-    embedding_threshold: 0.48
+    embedding_threshold: 0.48,
+    importance_keywords: {
+      high: [
+        'michael jordan',
+        'championship',
+        'championships',
+        'dynasty',
+        'phil jackson',
+        'scottie pippen',
+        'triangle offense',
+        '1990s',
+        'six championships',
+        'franchise history',
+        'legacy',
+        'hall of fame',
+        'retired jersey',
+        'united center',
+        'jerry krause',
+        'jerry reinsdorf',
+        'draft pick',
+        'trade',
+        'signing',
+        'coaching',
+        'philosophy',
+        'culture',
+        'identity',
+        'era',
+        'golden age',
+        'greatest',
+        'best team',
+        'record',
+        '72-10',
+        '1995-96',
+        '1996-97',
+        '1997-98'
+      ],
+      low: [
+        'game recap',
+        'post-game',
+        'injury update',
+        'injury report',
+        'trade rumor',
+        'rumor',
+        'social media',
+        'tweet',
+        'instagram',
+        'match preview',
+        'preview',
+        'vs',
+        'versus',
+        'game notes',
+        'daily',
+        'today',
+        'tonight',
+        'score',
+        'highlights',
+        'box score',
+        'stats',
+        'player of the game'
+      ]
+    }
   }
 }
 

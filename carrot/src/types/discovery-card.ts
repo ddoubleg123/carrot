@@ -45,6 +45,7 @@ export interface DiscoveryCardPayload {
   heroScore?: number
   relevanceScore: number
   qualityScore: number
+  importanceScore: number
   viewSourceOk: boolean
   isControversy?: boolean
   isHistory?: boolean

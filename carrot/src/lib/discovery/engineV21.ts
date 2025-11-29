@@ -106,6 +106,8 @@ const MIN_CONTENT_LENGTH = Number(process.env.DISCOVERY_V2_MIN_CONTENT_LENGTH ??
 const DUPLICATE_HASH_THRESHOLD = Number(process.env.DISCOVERY_V2_DUPLICATE_HASH_THRESHOLD ?? 7)
 const MIN_RELEVANCE_SCORE = 0.65
 const MIN_QUALITY_SCORE = 70
+const MIN_IMPORTANCE_SCORE = 50 // Minimum importance score (0-100) - filters out low-importance content like game recaps
+const PREFERRED_IMPORTANCE_SCORE = 70 // Preferred importance for high-priority content
 const MIN_FACT_COUNT = 2
 const CANONICAL_COOLDOWN_MS = 30 * 60 * 1000
 const NON_PROVIDER_FAILURE_REASONS = new Set([
@@ -1980,6 +1982,33 @@ export class DiscoveryEngineV21 {
       const softEligible = isFirstCard && synthesis.qualityScore >= 70 && factsWithCitations >= 2
       const minRelevance = softEligible ? 0.7 : MIN_RELEVANCE_SCORE
       const minQuality = softEligible ? 70 : MIN_QUALITY_SCORE
+      const importanceScore = synthesis.importanceScore ?? 50 // Default to medium if not provided
+
+      // Check importance score - reject low-importance content (game recaps, routine news)
+      if (importanceScore < MIN_IMPORTANCE_SCORE) {
+        await this.incrementMetric('dropped')
+        this.metricsTracker.recordError()
+        logger.logSkip(canonicalUrl, 'low_importance')
+        this.structuredLog('low_importance', {
+          url: canonicalUrl,
+          provider: candidate.provider,
+          angle,
+          importanceScore,
+          relevanceScore: synthesis.relevanceScore,
+          qualityScore: synthesis.qualityScore
+        })
+        await this.emitAudit('synthesis', 'fail', {
+          candidateUrl: canonicalUrl,
+          meta: { ...synthesis, importanceScore },
+          decisions: { action: 'drop', reason: 'low_importance' }
+        })
+        this.eventStream.skipped('low_importance', canonicalUrl, { 
+          reason: 'low_importance',
+          importanceScore 
+        })
+        await this.persistMetricsSnapshot('running', countersBefore)
+        return { saved: false, reason: 'low_importance', angle, host }
+      }
 
       if (synthesis.relevanceScore < minRelevance || synthesis.qualityScore < minQuality) {
         await this.incrementMetric('dropped')
@@ -1993,7 +2022,8 @@ export class DiscoveryEngineV21 {
           provider: candidate.provider,
           angle,
           relevanceScore: synthesis.relevanceScore,
-          qualityScore: synthesis.qualityScore
+          qualityScore: synthesis.qualityScore,
+          importanceScore: importanceScore
         })
         await this.emitAudit('synthesis', 'fail', {
           candidateUrl: canonicalUrl,
@@ -2201,6 +2231,7 @@ export class DiscoveryEngineV21 {
                     isHistory,
                     relevanceScore: synthesis.relevanceScore,
                     qualityScore: synthesis.qualityScore,
+                    importanceScore: importanceScore, // Now stored in database column
                     whyItMatters: synthesis.whyItMatters,
                     summary: summaryWithParaphrase,
                     facts: synthesis.facts as unknown as Prisma.JsonArray,
@@ -2233,6 +2264,7 @@ export class DiscoveryEngineV21 {
                       contentStatus: isPartialContent ? 'partial' : 'full',
                       canonicalHost,
                       canonicalPathHash
+                      // importanceScore is now stored in database column, not metadata
                     } as Prisma.JsonObject
                   }
                 })
@@ -2250,6 +2282,7 @@ export class DiscoveryEngineV21 {
                     isHistory,
                     relevanceScore: synthesis.relevanceScore,
                     qualityScore: synthesis.qualityScore,
+                    importanceScore: importanceScore, // Now stored in database column
                     whyItMatters: synthesis.whyItMatters,
                     summary: summaryWithParaphrase,
                     facts: synthesis.facts as unknown as Prisma.JsonArray,
@@ -2282,6 +2315,7 @@ export class DiscoveryEngineV21 {
                       contentStatus: isPartialContent ? 'partial' : 'full',
                       canonicalHost,
                       canonicalPathHash
+                      // importanceScore is now stored in database column, not metadata
                     } as Prisma.JsonObject
                   }
                 })
@@ -2481,6 +2515,7 @@ export class DiscoveryEngineV21 {
         heroScore,
         relevanceScore: synthesis.relevanceScore,
         qualityScore: synthesis.qualityScore,
+        importanceScore: importanceScore,
         viewSourceOk,
         isControversy,
         isHistory,

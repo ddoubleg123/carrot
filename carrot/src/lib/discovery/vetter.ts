@@ -59,6 +59,7 @@ export interface VetterResult {
   isUseful: boolean
   relevanceScore: number
   qualityScore: number
+  importanceScore: number // 0-100: How important/significant this content is to the core subject
   whyItMatters: string
   facts: VetterFact[]
   quotes: VetterQuote[]
@@ -142,17 +143,23 @@ Source HTML/Text (cleaned extract): <<<${text}>>>
 
 Tasks:
 1) Relevance (0–1) and Quality (0–100). Off-topic if title/H1 lacks topic/alias.
-2) Why it matters: 1–2 concise sentences tailored to the topic, include publish date hints.
-3) Facts: 3–6 bullets with dates/numbers; each must map to a citation AND include an evidence array with anchors {cssPath|xpath,startOffset,endOffset,preContext,postContext}.
-4) Quotes (optional): up to 3 SHORT verbatim quotes (<=25 words each) with speaker + citation + anchor; track total quoted words.
-5) Contested (optional): if this source advances or disputes a controversial claim, add a compact “contested” note with one supporting and one counter source (URLs).
-6) Provenance: array of source URLs (this URL first; add on-page anchors when possible).
+2) Importance (0–100): Evaluate how SIGNIFICANT this content is to the core subject matter.
+   - HIGH IMPORTANCE (80-100): Core subject matter, key people, major events, franchise history, foundational concepts, legacy-defining moments, championship seasons, dynasty eras, transformative trades/signings, coaching philosophies that shaped the organization.
+   - MEDIUM IMPORTANCE (50-79): Current roster analysis, season previews, player development, draft picks, significant but routine news, strategic decisions.
+   - LOW IMPORTANCE (0-49): Game recaps, routine injury updates, trade rumors, social media posts, daily news, match previews, post-game quotes, minor transactions.
+   Score based on whether this content addresses what REALLY MATTERS about the topic vs. just being tangentially related news.
+3) Why it matters: 1–2 concise sentences tailored to the topic, include publish date hints.
+4) Facts: 3–6 bullets with dates/numbers; each must map to a citation AND include an evidence array with anchors {cssPath|xpath,startOffset,endOffset,preContext,postContext}.
+5) Quotes (optional): up to 3 SHORT verbatim quotes (<=25 words each) with speaker + citation + anchor; track total quoted words.
+6) Contested (optional): if this source advances or disputes a controversial claim, add a compact "contested" note with one supporting and one counter source (URLs).
+7) Provenance: array of source URLs (this URL first; add on-page anchors when possible).
 
 Return JSON ONLY:
 {
   "isUseful": true,
   "relevanceScore": 0.00,
   "qualityScore": 0,
+  "importanceScore": 0,
   "whyItMatters": "...",
   "facts": [{
     "label":"...",
@@ -355,6 +362,7 @@ export async function vetSource(args: VetterArgs): Promise<VetterResult> {
     isUseful: parsed.isUseful !== false,
     relevanceScore: Number(parsed.relevanceScore ?? 0),
     qualityScore: Number(parsed.qualityScore ?? 0),
+    importanceScore: Number(parsed.importanceScore ?? 50), // Default to medium if not provided
     whyItMatters: typeof parsed.whyItMatters === 'string' ? parsed.whyItMatters.trim() : '',
     facts,
     quotes: normaliseArray(parsed.quotes, (quote) => {

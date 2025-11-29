@@ -766,6 +766,7 @@ model DiscoveredContent {
   isHistory      Boolean   @default(false) @map("is_history")
   relevanceScore Float     @default(0.0) @map("relevance_score")
   qualityScore   Float     @default(0.0) @map("quality_score")
+  importanceScore Float   @default(50.0) @map("importance_score")
   whyItMatters   String?   @map("why_it_matters")
   summary        String?
   facts          Json?
