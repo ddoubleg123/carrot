@@ -87,6 +87,8 @@ export async function GET(
         category: true,
         summary: true,
         relevanceScore: true,
+        qualityScore: true,
+        importanceScore: true,
         createdAt: true,
         whyItMatters: true,
         facts: true,
@@ -94,7 +96,6 @@ export async function GET(
         provenance: true,
         hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
-        qualityScore: true,
         textContent: true,
         heroRecord: { // Hero relation (preferred over JSON)
           select: {
@@ -284,6 +285,7 @@ export async function GET(
         hero: heroRaw,
         relevanceScore: Number(item.relevanceScore ?? 0),
         qualityScore: Number(item.qualityScore ?? 0),
+        importanceScore: Number(item.importanceScore ?? 50),
         viewSourceOk: viewSourceStatus ? viewSourceStatus < 400 : metadataRaw?.viewSourceOk !== false,
         savedAt: item.createdAt?.toISOString() || new Date().toISOString(),
         // Additional fields for frontend

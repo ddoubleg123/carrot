@@ -2002,7 +2002,7 @@ export class DiscoveryEngineV21 {
           meta: { ...synthesis, importanceScore },
           decisions: { action: 'drop', reason: 'low_importance' }
         })
-        this.eventStream.skipped('low_importance', canonicalUrl, { 
+        this.eventStream.skipped('low_relevance', canonicalUrl, { 
           reason: 'low_importance',
           importanceScore 
         })
