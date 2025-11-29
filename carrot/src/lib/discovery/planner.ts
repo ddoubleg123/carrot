@@ -1435,15 +1435,24 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
   const tasks: Array<Promise<void>> = []
 
   // De-dup seeds against seen URLs (Redis + DB)
+  // BUT: Always allow Wikipedia pages through for deep link extraction (even if seen)
   const dedupedSeeds: PlannerSeedCandidate[] = []
   for (const seed of selectedSeeds) {
     if (!seed.url) continue
     
-    // Check if already seen (Redis + DB)
-    const alreadySeen = await isUrlSeen(patchId, seed.url)
-    if (alreadySeen) {
-      console.log(`[Seed Planner] Skipping duplicate seed: ${seed.url.substring(0, 80)}`)
-      continue
+    // Wikipedia pages should always be processed for deep link extraction
+    const isWikipedia = /wikipedia\.org/i.test(seed.url)
+    
+    if (!isWikipedia) {
+      // Check if already seen (Redis + DB) for non-Wikipedia seeds
+      const alreadySeen = await isUrlSeen(patchId, seed.url)
+      if (alreadySeen) {
+        console.log(`[Seed Planner] Skipping duplicate seed: ${seed.url.substring(0, 80)}`)
+        continue
+      }
+    } else {
+      // For Wikipedia: mark that we should extract deep links but skip saving
+      console.log(`[Seed Planner] Allowing Wikipedia seed for deep link extraction: ${seed.url.substring(0, 80)}`)
     }
     
     dedupedSeeds.push(seed)

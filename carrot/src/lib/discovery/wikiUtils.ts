@@ -11,33 +11,85 @@ function normaliseUrl(candidate: string, source: string): string | null {
   }
 }
 
+export interface WikipediaCitation {
+  url: string
+  title?: string
+  context?: string
+  text?: string
+}
+
 export function extractWikipediaReferences(
   html: string | undefined,
   sourceUrl: string,
   limit = 20
 ): string[] {
+  const citations = extractWikipediaCitationsWithContext(html, sourceUrl, limit)
+  return citations.map(c => c.url)
+}
+
+/**
+ * Extract Wikipedia citations with title and context for prioritization
+ */
+export function extractWikipediaCitationsWithContext(
+  html: string | undefined,
+  sourceUrl: string,
+  limit = 50
+): WikipediaCitation[] {
   if (!html) return []
+  
+  // Find references section
   const referencesMatch = html.match(/<ol[^>]*class="[^"]*references[^"]*"[^>]*>([\s\S]*?)<\/ol>/i)
   if (!referencesMatch) return []
 
   const refMatches = referencesMatch[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
   if (!refMatches.length) return []
 
-  const collected: string[] = []
+  const citations: WikipediaCitation[] = []
   for (const ref of refMatches) {
-    const hrefMatch = ref.match(/href="([^"#]+)"/i)
+    // Extract URL
+    const hrefMatch = ref.match(/href=["']([^"']+)["']/i)
     if (!hrefMatch) continue
+    
     const normalised = normaliseUrl(hrefMatch[1], sourceUrl)
     if (!normalised) continue
     if (/wikipedia\.org/i.test(normalised)) continue
+    
     const canonical = canonicalizeUrlFast(normalised)
     if (!canonical) continue
-    if (collected.includes(canonical)) continue
-    collected.push(canonical)
-    if (collected.length >= limit) break
+    
+    // Check for duplicates
+    if (citations.some(c => c.url === canonical)) continue
+    
+    // Extract title/text from citation
+    // Look for <cite> tags, reference text, or link text
+    const citeMatch = ref.match(/<cite[^>]*>([^<]+)<\/cite>/i)
+    const textMatch = ref.match(/<span[^>]*class=["'][^"']*reference-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)
+    const linkTextMatch = ref.match(/<a[^>]*>([^<]+)<\/a>/i)
+    
+    let title: string | undefined
+    let context: string | undefined
+    
+    if (citeMatch) {
+      title = citeMatch[1].replace(/<[^>]+>/g, '').trim()
+    } else if (linkTextMatch) {
+      title = linkTextMatch[1].replace(/<[^>]+>/g, '').trim()
+    }
+    
+    if (textMatch) {
+      context = textMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200)
+    }
+    
+    citations.push({
+      url: canonical,
+      title,
+      context,
+      text: title || context
+    })
+    
+    if (citations.length >= limit) break
   }
 
-  return collected
+  return citations
 }
 
 export interface OutgoingLinks {

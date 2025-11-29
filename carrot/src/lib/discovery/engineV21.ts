@@ -797,10 +797,122 @@ export class DiscoveryEngineV21 {
     if (this.wikiRefCache.has(sourceUrl)) return
     this.wikiRefCache.add(sourceUrl)
 
-    const citations = extractWikipediaReferences(rawHtml, sourceUrl, 20)
+    // Extract citations with context (title, text) for prioritization
+    const { extractWikipediaCitationsWithContext } = await import('./wikiUtils')
+    const citations = extractWikipediaCitationsWithContext(rawHtml, sourceUrl, 50)
     if (!citations.length) return
 
-    await this.enqueueRefOutLinks(citations, parent, sourceUrl, 'wikipedia')
+    // Prioritize citations using AI based on titles/context
+    const prioritized = await this.prioritizeCitations(citations, sourceUrl)
+    
+    // Take top 25 prioritized citations
+    const topCitations = prioritized.slice(0, 25)
+    const citationUrls = topCitations.map(c => c.url)
+
+    await this.enqueueRefOutLinks(citationUrls, parent, sourceUrl, 'wikipedia')
+    
+    if (topCitations.length > 0) {
+      this.structuredLog('wiki_citations_prioritized', {
+        source: sourceUrl,
+        total: citations.length,
+        prioritized: topCitations.length,
+        top5: topCitations.slice(0, 5).map(c => ({ url: c.url.substring(0, 60), title: c.title?.substring(0, 40) }))
+      })
+    }
+  }
+
+  /**
+   * Prioritize Wikipedia citations using AI based on titles and context
+   * Returns citations sorted by importance (most important first)
+   */
+  private async prioritizeCitations(
+    citations: Array<{ url: string; title?: string; context?: string; text?: string }>,
+    sourceUrl: string
+  ): Promise<Array<{ url: string; title?: string; context?: string; text?: string; score?: number }>> {
+    if (citations.length === 0) return []
+    if (citations.length <= 10) {
+      // For small lists, return as-is (no need for AI prioritization)
+      return citations
+    }
+
+    try {
+      // Get topic/entity info for context
+      const topic = this.options.patchHandle || 'Chicago Bulls'
+      const aliases = ['Michael Jordan', 'Chicago Bulls', 'basketball', 'NBA']
+      
+      // Build prompt for citation prioritization
+      const citationsText = citations.map((c, i) => 
+        `${i + 1}. ${c.title || c.url}\n   URL: ${c.url}\n   Context: ${c.context || c.text || 'No context'}\n`
+      ).join('\n')
+
+      const prompt = `You are analyzing Wikipedia citations to prioritize the most important sources for the topic: "${topic}".
+
+Topic: "${topic}" (aliases: ${aliases.join(', ')})
+Source Wikipedia page: ${sourceUrl}
+
+Citations found:
+${citationsText}
+
+Task: Score each citation (0-100) based on:
+1. Relevance to the core topic (${topic})
+2. Importance/authority of the source
+3. Likelihood of containing valuable, factual information
+4. Recency (if date is mentioned in title/context)
+
+Return JSON array with scores:
+[
+  {"index": 1, "score": 85, "reason": "Official source about key event"},
+  {"index": 2, "score": 45, "reason": "Generic news article"},
+  ...
+]
+
+Return ONLY valid JSON array, no other text.`
+
+      const { chatStream } = await import('@/lib/llm/providers/DeepSeekClient')
+      let response = ''
+      for await (const chunk of chatStream({
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a citation prioritization expert. Return only valid JSON arrays.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 2000
+      })) {
+        if (chunk.type === 'token' && chunk.token) {
+          response += chunk.token
+        }
+      }
+
+      // Parse AI response
+      const cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
+      const scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
+      
+      // Apply scores to citations
+      const scored = citations.map((citation, index) => {
+        const scoreData = scores.find(s => s.index === index + 1)
+        return {
+          ...citation,
+          score: scoreData?.score ?? 50, // Default to medium if not scored
+          reason: scoreData?.reason
+        }
+      })
+
+      // Sort by score (highest first)
+      scored.sort((a, b) => (b.score ?? 50) - (a.score ?? 50))
+      
+      return scored
+    } catch (error) {
+      console.warn('[EngineV21] Citation prioritization failed, using original order:', error)
+      // Fallback: return citations as-is
+      return citations
+    }
   }
 
   private async enqueueHtmlOutgoingReferences(
@@ -1586,48 +1698,64 @@ export class DiscoveryEngineV21 {
       }
 
       // Fast skip check with timestamp + durable seen tracking
+      // BUT: Wikipedia pages should always be processed for deep link extraction (even if seen)
+      // Note: isWiki is already declared above (line 1646)
       const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
       const { isUrlSeen, markUrlSeen } = await import('./seenTracker')
       
-      // Check durable seen table first (7-day window)
-      const seenCheck = await isUrlSeen(this.options.patchId, canonicalUrl, this.options.runId)
-      if (seenCheck.seen) {
-        const { discoveryLogger } = await import('./structuredLogger')
-        discoveryLogger.seenSkip(canonicalUrl, seenCheck.reason || 'seen', {
-          patchId: this.options.patchId,
-          runId: this.options.runId,
-          lastSeen: seenCheck.lastSeen?.toISOString()
-        })
-        await this.incrementMetric('duplicates')
-        this.metricsTracker.recordDuplicate()
-        if (this.discoveryTelemetry) {
-          this.discoveryTelemetry.recordDuplicate()
+      // For Wikipedia pages: skip the seen check - we'll process them for deep links even if seen
+      // For non-Wikipedia pages: check if already seen
+      if (!isWiki) {
+        const seenCheck = await isUrlSeen(this.options.patchId, canonicalUrl, this.options.runId)
+        if (seenCheck.seen) {
+          const { discoveryLogger } = await import('./structuredLogger')
+          discoveryLogger.seenSkip(canonicalUrl, seenCheck.reason || 'seen', {
+            patchId: this.options.patchId,
+            runId: this.options.runId,
+            lastSeen: seenCheck.lastSeen?.toISOString()
+          })
+          await this.incrementMetric('duplicates')
+          this.metricsTracker.recordDuplicate()
+          if (this.discoveryTelemetry) {
+            this.discoveryTelemetry.recordDuplicate()
+          }
+          logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
+          this.structuredLog('duplicate_seen_durable', {
+            url: canonicalUrl,
+            provider: candidate.provider,
+            lastSeen: seenCheck.lastSeen
+          })
+          await this.emitAudit('duplicate_check', 'fail', {
+            candidateUrl: canonicalUrl,
+            provider: candidate.provider,
+            decisions: { action: 'drop', reason: 'seen_durable', lastSeen: seenCheck.lastSeen }
+          })
+          this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'seen_durable' })
+          await this.persistMetricsSnapshot('running', countersBefore)
+          return { saved: false, reason: 'seen_durable', angle, host }
         }
-        logger.logDuplicate(canonicalUrl, 'A', candidate.provider)
-        this.structuredLog('duplicate_seen_durable', {
-          url: canonicalUrl,
-          provider: candidate.provider,
-          lastSeen: seenCheck.lastSeen
-        })
-        await this.emitAudit('duplicate_check', 'fail', {
-          candidateUrl: canonicalUrl,
-          provider: candidate.provider,
-          decisions: { action: 'drop', reason: 'seen_durable', lastSeen: seenCheck.lastSeen }
-        })
-        this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'seen_durable' })
-        await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'seen_durable', angle, host }
+      } else {
+        // For Wikipedia: log that we're processing for deep links even if seen
+        const seenCheck = await isUrlSeen(this.options.patchId, canonicalUrl, this.options.runId).catch(() => ({ seen: false }))
+        if (seenCheck.seen && 'lastSeen' in seenCheck) {
+          this.structuredLog('wiki_seen_processing', {
+            url: canonicalUrl,
+            reason: 'deep_link_extraction',
+            lastSeen: seenCheck.lastSeen
+          })
+        }
       }
       
-      // Also check Redis fast skip (24h)
-      const redisSeenCheck = await isSeenWithTimestamp(redisPatchId, canonicalUrl, 24) // 24h fast skip
-      
-      if (redisSeenCheck.seen) {
-        // Fast skip if crawled < 24h ago
-        if (redisSeenCheck.canSkip) {
-          // Track fast skips in first 10 candidates to ensure we don't waste time
-          const isFirst10 = this.metrics.candidatesProcessed < 10
-          if (isFirst10) {
+      // Also check Redis fast skip (24h) - but skip this check for Wikipedia pages
+      if (!isWiki) {
+        const redisSeenCheck = await isSeenWithTimestamp(redisPatchId, canonicalUrl, 24) // 24h fast skip
+        
+        if (redisSeenCheck.seen) {
+          // Fast skip if crawled < 24h ago
+          if (redisSeenCheck.canSkip) {
+            // Track fast skips in first 10 candidates to ensure we don't waste time
+            const isFirst10 = this.metrics.candidatesProcessed < 10
+            if (isFirst10) {
             this.structuredLog('fast_skip_first10', {
               url: canonicalUrl,
               provider: candidate.provider,
@@ -1714,9 +1842,10 @@ export class DiscoveryEngineV21 {
         this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'redis_seen' })
         await this.persistMetricsSnapshot('running', countersBefore)
         return { saved: false, reason: 'redis_seen', angle, host }
+        }
       }
 
-      if (!this.shadowMode) {
+    if (!this.shadowMode) {
         const existing = await prisma.discoveredContent.findFirst({
           where: { patchId, canonicalUrl },
           select: { id: true }
@@ -1933,11 +2062,33 @@ export class DiscoveryEngineV21 {
       }
       this.runSignatures.add(signature)
 
+      // For Wikipedia pages: Always extract citations (even if already seen)
+      // This ensures we mine Wikipedia as a launchpad for deep links
       if (this.isWikipediaUrl(canonicalUrl)) {
         await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
+        // Also extract general outgoing links from Wikipedia
+        await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
+        
+        // For Wikipedia pages that are already seen: extract links but skip saving
+        const { isUrlSeen } = await import('./seenUrl')
+        const alreadySeen = await isUrlSeen(this.options.patchId, canonicalUrl).catch(() => false)
+        if (alreadySeen) {
+          this.structuredLog('wiki_seen_processed', {
+            url: canonicalUrl,
+            reason: 'extract_deep_links_only',
+            textLength: extracted?.text.length ?? 0
+          })
+          await this.emitAudit('wiki_processed', 'ok', {
+            candidateUrl: canonicalUrl,
+            meta: { reason: 'deep_link_extraction_only', alreadySeen: true }
+          })
+          await this.persistMetricsSnapshot('running', countersBefore)
+          return { saved: false, reason: 'wiki_seen_deep_links_extracted', angle, host }
+        }
+      } else {
+        // For non-Wikipedia pages, extract outgoing references normally
+        await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
       }
-
-      await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
 
       if (!this.hasEntityMention(extracted)) {
         await this.incrementMetric('dropped')
