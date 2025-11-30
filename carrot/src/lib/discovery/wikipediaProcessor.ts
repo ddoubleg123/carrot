@@ -155,42 +155,125 @@ export async function processNextWikipediaPage(
     // Store content for memory
     await updateWikipediaPageContent(nextPage.id, page.content)
 
-    // Extract and store citations - need HTML, not extracted text
-    // If rawHtml is available, use it; otherwise fetch HTML again
-    let htmlForExtraction = page.rawHtml
-    if (!htmlForExtraction) {
-      // Fallback: fetch HTML again if not provided
-      console.log(`[WikipediaProcessor] rawHtml not available, fetching HTML for ${nextPage.title}`)
-      try {
-        const htmlUrl = `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(nextPage.title)}`
-        const htmlResponse = await fetch(htmlUrl, {
-          headers: { 'User-Agent': 'CarrotApp/1.0 (Educational research platform)' }
-        })
-        if (htmlResponse.ok) {
-          htmlForExtraction = await htmlResponse.text()
+    // Use citations already extracted by WikipediaSource.getPage()
+    // It uses a method that works with REST API HTML format
+    // Convert WikipediaSource citations to the format expected by extractAndStoreCitations
+    const citationsFromPage = page.citations || []
+    console.log(`[WikipediaProcessor] Using ${citationsFromPage.length} citations already extracted by WikipediaSource`)
+    
+    if (citationsFromPage.length === 0) {
+      console.log(`[WikipediaProcessor] No citations found in page.citations, trying HTML extraction as fallback`)
+      
+      // Fallback: try HTML extraction if page.citations is empty
+      let htmlForExtraction = page.rawHtml
+      if (!htmlForExtraction) {
+        try {
+          const htmlUrl = `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(nextPage.title)}`
+          const htmlResponse = await fetch(htmlUrl, {
+            headers: { 'User-Agent': 'CarrotApp/1.0 (Educational research platform)' }
+          })
+          if (htmlResponse.ok) {
+            htmlForExtraction = await htmlResponse.text()
+          }
+        } catch (error) {
+          console.error(`[WikipediaProcessor] Failed to fetch HTML:`, error)
         }
-      } catch (error) {
-        console.error(`[WikipediaProcessor] Failed to fetch HTML:`, error)
+      }
+      
+      if (htmlForExtraction) {
+        const { extractWikipediaCitationsWithContext } = await import('./wikiUtils')
+        const extractedCitations = extractWikipediaCitationsWithContext(htmlForExtraction, nextPage.url, 10000)
+        console.log(`[WikipediaProcessor] HTML extraction found ${extractedCitations.length} citations`)
+        
+        // Convert to format for storage
+        const convertedCitations = extractedCitations.map(c => ({
+          url: c.url,
+          title: c.title,
+          context: c.context,
+          text: c.text || c.title || c.context
+        }))
+        
+        const prioritizeFn = options.prioritizeCitationsFn || ((citations, sourceUrl) => 
+          prioritizeCitations(citations, sourceUrl, options.patchName, [options.patchHandle])
+        )
+        const prioritized = await prioritizeFn(convertedCitations, nextPage.url)
+        
+        // Store citations
+        const { extractAndStoreCitations } = await import('./wikipediaCitation')
+        const result = await extractAndStoreCitations(
+          nextPage.id,
+          nextPage.url,
+          htmlForExtraction,
+          prioritizeFn
+        )
+        
+        await markCitationsExtracted(nextPage.id, result.citationsFound)
+        return { processed: true, pageTitle: nextPage.title, citationsFound: result.citationsFound }
+      } else {
+        console.error(`[WikipediaProcessor] No citations and no HTML available for ${nextPage.title}`)
+        await markWikipediaPageError(nextPage.id, 'No citations found and no HTML available')
+        return { processed: true, pageTitle: nextPage.title }
       }
     }
     
-    if (!htmlForExtraction) {
-      console.error(`[WikipediaProcessor] No HTML available for citation extraction from ${nextPage.title}`)
-      await markWikipediaPageError(nextPage.id, 'No HTML available for citation extraction')
-      return { processed: true, pageTitle: nextPage.title }
-    }
-
+    // Convert WikipediaSource citations to format expected by storage
+    const convertedCitations = citationsFromPage
+      .filter(c => c.url && !c.url.includes('wikipedia.org')) // Filter out Wikipedia links
+      .map(c => ({
+        url: c.url!,
+        title: c.title || c.text?.substring(0, 100),
+        context: c.text,
+        text: c.text || c.title
+      }))
+    
+    console.log(`[WikipediaProcessor] Converted ${convertedCitations.length} citations (filtered from ${citationsFromPage.length})`)
+    
     const prioritizeFn = options.prioritizeCitationsFn || ((citations, sourceUrl) => 
       prioritizeCitations(citations, sourceUrl, options.patchName, [options.patchHandle])
     )
-    const { citationsFound, citationsStored } = await extractAndStoreCitations(
-      nextPage.id,
-      nextPage.url,
-      htmlForExtraction, // Pass HTML, not extracted text
-      prioritizeFn
-    )
-
-    // Mark citations as extracted
+    
+    // Prioritize and store citations directly (bypass HTML extraction)
+    const prioritized = await prioritizeFn(convertedCitations, nextPage.url)
+    console.log(`[WikipediaProcessor] Prioritized ${prioritized.length} citations`)
+    
+    // Store citations in database
+    const { prisma } = await import('@/lib/prisma')
+    let citationsStored = 0
+    for (let i = 0; i < prioritized.length; i++) {
+      const citation = prioritized[i]
+      const sourceNumber = i + 1
+      
+      try {
+        const existing = await prisma.wikipediaCitation.findUnique({
+          where: {
+            monitoringId_sourceNumber: {
+              monitoringId: nextPage.id,
+              sourceNumber
+            }
+          }
+        })
+        
+        if (existing) continue
+        
+        await prisma.wikipediaCitation.create({
+          data: {
+            monitoringId: nextPage.id,
+            sourceNumber,
+            citationUrl: citation.url,
+            citationTitle: citation.title,
+            citationContext: citation.context,
+            aiPriorityScore: citation.score,
+            verificationStatus: 'pending',
+            scanStatus: 'not_scanned'
+          }
+        })
+        citationsStored++
+      } catch (error) {
+        console.error(`[WikipediaProcessor] Error storing citation ${sourceNumber}:`, error)
+      }
+    }
+    
+    const citationsFound = convertedCitations.length
     await markCitationsExtracted(nextPage.id, citationsFound)
     
     // DON'T mark page as complete yet - wait until ALL citations are processed
