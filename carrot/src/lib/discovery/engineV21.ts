@@ -608,7 +608,7 @@ export class DiscoveryEngineV21 {
                     facts: [] as any,
                     quotes: [] as any,
                     provenance: [url] as any,
-                    hero: null,
+                    hero: Prisma.JsonNull,
                     contentHash,
                     textContent: cleanedText,
                     lastCrawledAt: new Date(),
