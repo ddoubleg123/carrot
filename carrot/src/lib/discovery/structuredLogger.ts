@@ -90,3 +90,16 @@ export class StructuredLogger {
 
 export const discoveryLogger = new StructuredLogger('DISCOVERY')
 
+/**
+ * Helper function for simple structured logging
+ */
+export function structuredLog(event: string, context: Record<string, any> = {}) {
+  const logLine = JSON.stringify({
+    ts: Date.now(),
+    level: 'info',
+    event,
+    ...context
+  })
+  console.log(`[WIKIPEDIA] ${logLine}`)
+}
+
