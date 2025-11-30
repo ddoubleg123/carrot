@@ -1134,6 +1134,10 @@ function computeSeedPriority(seed: PlannerSeedCandidate, index: number, domainWh
       case 'academic':
         priority += 30
         break
+      case 'wikipedia':
+        // Wikipedia seeds should be processed early for deep link extraction
+        priority += 50
+        break
       case 'data':
         priority += 25
         break
@@ -1465,7 +1469,16 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
 
   console.log(`[Seed Planner] After de-dup: ${dedupedSeeds.length} seeds (removed ${selectedSeeds.length - dedupedSeeds.length} duplicates)`)
 
-  dedupedSeeds.forEach((seed, index) => {
+  // Sort seeds to prioritize Wikipedia first
+  const sortedSeeds = [...dedupedSeeds].sort((a, b) => {
+    const aIsWiki = /wikipedia\.org/i.test(a.url || '')
+    const bIsWiki = /wikipedia\.org/i.test(b.url || '')
+    if (aIsWiki && !bIsWiki) return -1
+    if (!aIsWiki && bIsWiki) return 1
+    return 0
+  })
+
+  sortedSeeds.forEach((seed, index) => {
     if (!seed.url) return
 
     const item: FrontierItem = {
