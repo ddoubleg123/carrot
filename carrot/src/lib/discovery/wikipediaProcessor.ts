@@ -105,6 +105,8 @@ Return ONLY valid JSON array, no other text.`
   }
 }
 import { canonicalizeUrlFast } from './canonicalize'
+import { prisma } from '@/lib/prisma'
+import { getDomainFromUrl } from './canonicalize'
 
 /**
  * Process next Wikipedia page (scan content and extract citations)
@@ -126,6 +128,20 @@ export async function processNextWikipediaPage(
 
   console.log(`[WikipediaProcessor] Processing Wikipedia page: ${nextPage.title}`)
   
+  // Structured logging
+  try {
+    const { structuredLog } = await import('./structuredLogger')
+    structuredLog('wikipedia_page_processing', {
+      patchId,
+      pageId: nextPage.id,
+      pageTitle: nextPage.title,
+      pageUrl: nextPage.url,
+      timestamp: new Date().toISOString()
+    })
+  } catch {
+    // Non-fatal
+  }
+  
   try {
     // Mark as scanning
     await markWikipediaPageScanning(nextPage.id)
@@ -141,24 +157,63 @@ export async function processNextWikipediaPage(
     // Store content for memory
     await updateWikipediaPageContent(nextPage.id, page.content)
 
-    // Extract and store citations
+    // Extract and store citations - need HTML, not extracted text
+    // If rawHtml is available, use it; otherwise fetch HTML again
+    let htmlForExtraction = page.rawHtml
+    if (!htmlForExtraction) {
+      // Fallback: fetch HTML again if not provided
+      console.log(`[WikipediaProcessor] rawHtml not available, fetching HTML for ${nextPage.title}`)
+      try {
+        const htmlUrl = `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(nextPage.title)}`
+        const htmlResponse = await fetch(htmlUrl, {
+          headers: { 'User-Agent': 'CarrotApp/1.0 (Educational research platform)' }
+        })
+        if (htmlResponse.ok) {
+          htmlForExtraction = await htmlResponse.text()
+        }
+      } catch (error) {
+        console.error(`[WikipediaProcessor] Failed to fetch HTML:`, error)
+      }
+    }
+    
+    if (!htmlForExtraction) {
+      console.error(`[WikipediaProcessor] No HTML available for citation extraction from ${nextPage.title}`)
+      await markWikipediaPageError(nextPage.id, 'No HTML available for citation extraction')
+      return { processed: true, pageTitle: nextPage.title }
+    }
+
     const prioritizeFn = options.prioritizeCitationsFn || ((citations, sourceUrl) => 
       prioritizeCitations(citations, sourceUrl, options.patchName, [options.patchHandle])
     )
     const { citationsFound, citationsStored } = await extractAndStoreCitations(
       nextPage.id,
       nextPage.url,
-      page.content,
+      htmlForExtraction, // Pass HTML, not extracted text
       prioritizeFn
     )
 
     // Mark citations as extracted
     await markCitationsExtracted(nextPage.id, citationsFound)
     
-    // Mark page as complete
-    await markWikipediaPageComplete(nextPage.id)
+    // DON'T mark page as complete yet - wait until ALL citations are processed
+    // Page will be marked complete when checkAndMarkPageCompleteIfAllCitationsProcessed is called
 
     console.log(`[WikipediaProcessor] Completed page "${nextPage.title}": ${citationsStored} citations stored`)
+    
+    // Structured logging for completion
+    try {
+      const { structuredLog } = await import('./structuredLogger')
+      structuredLog('wikipedia_page_complete', {
+        patchId,
+        pageId: nextPage.id,
+        pageTitle: nextPage.title,
+        citationsFound,
+        citationsStored,
+        timestamp: new Date().toISOString()
+      })
+    } catch {
+      // Non-fatal
+    }
     
     return {
       processed: true,
@@ -187,7 +242,7 @@ export async function processNextCitation(
     saveAsContent?: (url: string, title: string, content: string) => Promise<string | null> // Returns DiscoveredContent.id
     saveAsMemory?: (url: string, title: string, content: string, patchHandle: string) => Promise<string | null> // Returns AgentMemory.id // Returns AgentMemory.id
   }
-): Promise<{ processed: boolean; citationUrl?: string; saved?: boolean }> {
+): Promise<{ processed: boolean; citationUrl?: string; saved?: boolean; monitoringId?: string }> {
   const nextCitation = await getNextCitationToProcess(patchId)
   
   if (!nextCitation) {
@@ -197,6 +252,39 @@ export async function processNextCitation(
   console.log(`[WikipediaProcessor] Processing citation: ${nextCitation.citationUrl}`)
 
   try {
+    // Check for duplicate in DiscoveredContent (deduplication)
+    const canonicalUrl = canonicalizeUrlFast(nextCitation.citationUrl)
+    if (canonicalUrl) {
+      const existing = await prisma.discoveredContent.findUnique({
+        where: {
+          patchId_canonicalUrl: {
+            patchId,
+            canonicalUrl
+          }
+        },
+        select: { id: true }
+      })
+
+      if (existing) {
+        console.log(`[WikipediaProcessor] Citation already exists in DiscoveredContent, skipping: ${canonicalUrl}`)
+        // Mark as saved (already exists)
+        await markCitationScanned(
+          nextCitation.id,
+          'saved',
+          existing.id,
+          undefined
+        )
+        // Check if page can be marked complete
+        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+        return { 
+          processed: true, 
+          citationUrl: nextCitation.citationUrl, 
+          saved: true,
+          monitoringId: nextCitation.monitoringId
+        }
+      }
+    }
+
     // Mark as verifying
     await markCitationVerifying(nextCitation.id)
 
@@ -280,17 +368,23 @@ export async function processNextCitation(
 
       console.log(`[WikipediaProcessor] Citation processed: ${isRelevant ? 'saved' : 'denied'}`)
 
+      // Check if page can be marked complete after processing this citation
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+
       return {
         processed: true,
         citationUrl: nextCitation.citationUrl,
-        saved: isRelevant
+        saved: isRelevant,
+        monitoringId: nextCitation.monitoringId
       }
     } catch (error) {
       await markCitationVerificationFailed(
         nextCitation.id,
         error instanceof Error ? error.message : 'Content fetch failed'
       )
-      return { processed: true, citationUrl: nextCitation.citationUrl }
+      // Check if page can be marked complete even on error
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: nextCitation.citationUrl, monitoringId: nextCitation.monitoringId }
     }
   } catch (error) {
     console.error(`[WikipediaProcessor] Error processing citation:`, error)
@@ -298,7 +392,42 @@ export async function processNextCitation(
       nextCitation.id,
       error instanceof Error ? error.message : 'Unknown error'
     )
-    return { processed: true, citationUrl: nextCitation.citationUrl }
+    // Check if page can be marked complete even on error
+    await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+    return { processed: true, citationUrl: nextCitation.citationUrl, monitoringId: nextCitation.monitoringId }
+  }
+}
+
+/**
+ * Check if all citations for a Wikipedia page have been processed
+ * If so, mark the page as complete
+ */
+async function checkAndMarkPageCompleteIfAllCitationsProcessed(monitoringId: string): Promise<void> {
+  try {
+    // Count total citations and processed citations
+    const totalCitations = await prisma.wikipediaCitation.count({
+      where: { monitoringId }
+    })
+
+    const processedCitations = await prisma.wikipediaCitation.count({
+      where: {
+        monitoringId,
+        scanStatus: { in: ['scanned'] },
+        OR: [
+          { verificationStatus: 'failed' }, // Failed citations count as processed
+          { relevanceDecision: { not: null } } // Has a decision (saved or denied)
+        ]
+      }
+    })
+
+    // If all citations are processed, mark page as complete
+    if (totalCitations > 0 && processedCitations >= totalCitations) {
+      await markWikipediaPageComplete(monitoringId)
+      console.log(`[WikipediaProcessor] All ${totalCitations} citations processed, marking page as complete`)
+    }
+  } catch (error) {
+    console.error(`[WikipediaProcessor] Error checking page completion:`, error)
+    // Non-fatal - continue
   }
 }
 
@@ -323,7 +452,7 @@ export async function processWikipediaIncremental(
   citationsSaved: number
 }> {
   const maxPages = options.maxPagesPerRun || 1
-  const maxCitations = options.maxCitationsPerRun || 5
+  const maxCitations = options.maxCitationsPerRun || 50 // Process more citations per run (was 5)
 
   let pagesProcessed = 0
   let citationsProcessed = 0

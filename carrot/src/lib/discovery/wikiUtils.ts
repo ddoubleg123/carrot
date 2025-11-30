@@ -33,7 +33,7 @@ export function extractWikipediaReferences(
 export function extractWikipediaCitationsWithContext(
   html: string | undefined,
   sourceUrl: string,
-  limit = 50
+  limit = 10000 // Extract ALL citations (very high limit)
 ): WikipediaCitation[] {
   if (!html) return []
   

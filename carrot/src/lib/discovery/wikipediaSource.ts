@@ -7,6 +7,7 @@ export interface WikipediaPage {
   title: string
   url: string
   content: string
+  rawHtml?: string // Raw HTML for citation extraction
   summary: string
   citations: WikipediaCitation[]
   infobox?: Record<string, string>
@@ -117,6 +118,7 @@ export class WikipediaSource {
         title,
         url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
         content: this.extractMainContent(html),
+        rawHtml: html, // Store raw HTML for citation extraction
         summary,
         citations,
         categories

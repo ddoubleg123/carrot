@@ -25,6 +25,19 @@ export async function initializeWikipediaMonitoring(
 ): Promise<{ pagesFound: number; pagesStored: number }> {
   console.log(`[WikipediaMonitoring] Initializing for patch ${patchId}`)
   console.log(`[WikipediaMonitoring] Page: "${pageName}", Terms: ${searchTerms.join(', ')}`)
+  
+  // Structured logging
+  try {
+    const { structuredLog } = await import('./structuredLogger')
+    structuredLog('wikipedia_monitoring_init', {
+      patchId,
+      pageName,
+      searchTerms: searchTerms.length,
+      timestamp: new Date().toISOString()
+    })
+  } catch {
+    // Non-fatal if structured logger unavailable
+  }
 
   // Combine page name with search terms
   const allSearchTerms = [pageName, ...searchTerms].filter(Boolean)
@@ -63,6 +76,19 @@ export async function initializeWikipediaMonitoring(
   }
 
   console.log(`[WikipediaMonitoring] Found ${foundPages.size} unique Wikipedia pages`)
+
+  // Structured logging for search results
+  try {
+    const { structuredLog } = await import('./structuredLogger')
+    structuredLog('wikipedia_search_complete', {
+      patchId,
+      searchTerms: uniqueTerms.length,
+      pagesFound: foundPages.size,
+      timestamp: new Date().toISOString()
+    })
+  } catch {
+    // Non-fatal
+  }
 
   // Store pages in database
   let pagesStored = 0
@@ -107,6 +133,20 @@ export async function initializeWikipediaMonitoring(
   }
 
   console.log(`[WikipediaMonitoring] Stored ${pagesStored} new pages`)
+  
+  // Structured logging for storage results
+  try {
+    const { structuredLog } = await import('./structuredLogger')
+    structuredLog('wikipedia_monitoring_stored', {
+      patchId,
+      pagesFound: foundPages.size,
+      pagesStored,
+      timestamp: new Date().toISOString()
+    })
+  } catch {
+    // Non-fatal
+  }
+  
   return { pagesFound: foundPages.size, pagesStored }
 }
 

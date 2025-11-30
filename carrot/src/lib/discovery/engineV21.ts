@@ -559,12 +559,87 @@ export class DiscoveryEngineV21 {
             patchName: this.options.patchName,
             patchHandle: this.options.patchHandle,
             maxPagesPerRun: 1,
-            maxCitationsPerRun: 3,
-            saveAsContent: async (url, title, content) => {
-              // Use existing processCandidate logic to save as DiscoveredContent
-              // For now, return null - full integration can be added later
-              // The citation will still be tracked in WikipediaCitation table
-              return null
+            maxCitationsPerRun: 50, // Process more citations per run
+            saveAsContent: async (url: string, title: string, content: string) => {
+              // Save relevant citation to DiscoveredContent for the patch
+              try {
+                const { canonicalizeUrlFast } = await import('./canonicalize')
+                const { getDomainFromUrl } = await import('./canonicalize')
+                const { createHash } = await import('crypto')
+                
+                const canonicalUrl = canonicalizeUrlFast(url) || url
+                const domain = getDomainFromUrl(canonicalUrl) || null
+                
+                // Check for duplicate
+                const existing = await prisma.discoveredContent.findUnique({
+                  where: {
+                    patchId_canonicalUrl: {
+                      patchId: this.options.patchId,
+                      canonicalUrl
+                    }
+                  },
+                  select: { id: true }
+                })
+                
+                if (existing) {
+                  console.log(`[WikipediaProcessor] Citation already in DiscoveredContent: ${canonicalUrl}`)
+                  return existing.id
+                }
+                
+                // Compute content hash
+                const cleanedText = content.trim()
+                const contentHash = createHash('sha256').update(cleanedText).digest('hex')
+                
+                // Create DiscoveredContent entry (simplified - no synthesis/hero for citations)
+                const savedItem = await prisma.discoveredContent.create({
+                  data: {
+                    patchId: this.options.patchId,
+                    canonicalUrl,
+                    title,
+                    sourceUrl: url,
+                    domain,
+                    sourceDomain: domain,
+                    category: 'article',
+                    relevanceScore: 0.7, // Default relevance for Wikipedia citations
+                    qualityScore: 0.6, // Default quality
+                    importanceScore: 0.5, // Default importance
+                    whyItMatters: `Source cited on Wikipedia page related to ${this.options.patchName}`,
+                    summary: cleanedText.substring(0, 500), // First 500 chars as summary
+                    facts: [] as any,
+                    quotes: [] as any,
+                    provenance: [url] as any,
+                    hero: null,
+                    contentHash,
+                    textContent: cleanedText,
+                    lastCrawledAt: new Date(),
+                    metadata: {
+                      source: 'wikipedia_citation',
+                      processedAt: new Date().toISOString()
+                    } as any
+                  }
+                })
+                
+                console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id}`)
+                return savedItem.id
+              } catch (error: any) {
+                console.error(`[WikipediaProcessor] Error saving citation to DiscoveredContent:`, error)
+                // If duplicate error, try to find existing
+                if (error?.code === 'P2002') {
+                  const { canonicalizeUrlFast } = await import('./canonicalize')
+                  const canonicalUrl = canonicalizeUrlFast(url) || url
+                  const existing = await prisma.discoveredContent.findUnique({
+                    where: {
+                      patchId_canonicalUrl: {
+                        patchId: this.options.patchId,
+                        canonicalUrl
+                      }
+                    },
+                    select: { id: true }
+                  })
+                  return existing?.id || null
+                }
+                return null
+              }
             },
             saveAsMemory: async (url: string, title: string, content: string, patchHandle: string) => {
               // Save to AgentMemory for patch-associated agents

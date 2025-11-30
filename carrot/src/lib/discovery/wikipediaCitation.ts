@@ -19,19 +19,19 @@ export async function extractAndStoreCitations(
 ): Promise<{ citationsFound: number; citationsStored: number }> {
   console.log(`[WikipediaCitation] Extracting citations from ${wikipediaUrl}`)
 
-  // Extract citations with context
-  const citations = extractWikipediaCitationsWithContext(htmlContent, wikipediaUrl, 50)
+  // Extract citations with context (ALL citations, no limit)
+  const citations = extractWikipediaCitationsWithContext(htmlContent, wikipediaUrl, 10000)
   console.log(`[WikipediaCitation] Found ${citations.length} citations`)
 
   if (citations.length === 0) {
     return { citationsFound: 0, citationsStored: 0 }
   }
 
-  // Prioritize citations using AI
+  // Prioritize citations using AI (for scoring, but store ALL)
   const prioritized = await prioritizeCitations(citations, wikipediaUrl)
-  console.log(`[WikipediaCitation] Prioritized ${prioritized.length} citations`)
+  console.log(`[WikipediaCitation] Prioritized ${prioritized.length} citations (storing all)`)
 
-  // Store citations in database
+  // Store ALL citations in database (not just top 25)
   let citationsStored = 0
   for (let i = 0; i < prioritized.length; i++) {
     const citation = prioritized[i]

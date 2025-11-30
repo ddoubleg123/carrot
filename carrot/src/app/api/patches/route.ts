@@ -169,10 +169,27 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
         ? (rawEntity.aliases as string[]).filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
         : tags.filter((tag: any): tag is string => typeof tag === 'string' && tag.trim().length > 0);
       
+      console.log('[API] Initializing Wikipedia monitoring:', { patchId: patch.id, pageName, searchTerms });
+      
       // Run in background - don't await to avoid blocking response
-      initializeWikipediaMonitoring(patch.id, pageName, searchTerms).catch((error) => {
-        console.error('[API] Failed to initialize Wikipedia monitoring:', error);
-      });
+      initializeWikipediaMonitoring(patch.id, pageName, searchTerms)
+        .then((result) => {
+          console.log('[API] Wikipedia monitoring initialized:', result);
+        })
+        .catch((error) => {
+          console.error('[API] Failed to initialize Wikipedia monitoring:', error);
+          // Log to structured logger if available
+          try {
+            const { structuredLog } = require('@/lib/discovery/structuredLogger');
+            structuredLog('wikipedia_monitoring_init_error', {
+              patchId: patch.id,
+              error: error instanceof Error ? error.message : String(error),
+              timestamp: new Date().toISOString()
+            });
+          } catch {
+            // Non-fatal
+          }
+        });
     } catch (wikiError) {
       console.error('[API] Error setting up Wikipedia monitoring:', wikiError);
       // Non-fatal - continue with patch creation
