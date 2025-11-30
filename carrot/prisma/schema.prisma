@@ -501,20 +501,21 @@ model Patch {
   sourcesWhitelist Json?    @map("sources_whitelist")
 
   // Relations
-  creator           User                @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  facts             Fact[]
-  events            Event[]
-  sources           Source[]
-  posts             PatchPost[]
-  members           PatchMember[]
+  creator             User                  @relation("PatchCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  facts               Fact[]
+  events              Event[]
+  sources             Source[]
+  posts               PatchPost[]
+  members             PatchMember[]
   // New relations
-  userThemes        UserPatchTheme[]
-  followers         Follower[]
-  botSubscriptions  BotSubscription[]
-  discoveredContent DiscoveredContent[]
-  discoveryRuns     DiscoveryRun[]
-  discoveryAudits   DiscoveryAudit[]
-  seenUrls          SeenUrl[]
+  userThemes          UserPatchTheme[]
+  followers           Follower[]
+  botSubscriptions    BotSubscription[]
+  discoveredContent   DiscoveredContent[]
+  discoveryRuns       DiscoveryRun[]
+  discoveryAudits     DiscoveryAudit[]
+  seenUrls            SeenUrl[]
+  wikipediaMonitoring WikipediaMonitoring[]
 
   @@index([handle])
   @@index([createdBy])
@@ -664,7 +665,8 @@ model AgentMemory {
   fedBy        String? // User ID who fed this memory
   createdAt    DateTime @default(now())
 
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent             Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  wikipediaCitation WikipediaCitation?
 
   @@map("agent_memories")
 }
@@ -753,39 +755,40 @@ model BotSubscription {
 
 // AI-Discovered Content for Patches
 model DiscoveredContent {
-  id             String    @id @default(cuid())
-  patchId        String    @map("patch_id")
-  canonicalUrl   String    @map("canonical_url")
-  title          String
-  sourceUrl      String    @map("source_url")
-  sourceDomain   String?   @map("source_domain") @db.VarChar(255)
-  domain         String?   @db.Text
-  publishDate    DateTime? @map("publish_date")
-  category       String? // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
-  isControversy  Boolean   @default(false) @map("is_controversy")
-  isHistory      Boolean   @default(false) @map("is_history")
-  relevanceScore Float     @default(0.0) @map("relevance_score")
-  qualityScore   Float     @default(0.0) @map("quality_score")
-  importanceScore Float   @default(50.0) @map("importance_score")
-  whyItMatters   String?   @map("why_it_matters")
-  summary        String?
-  facts          Json?
-  quotes         Json?
-  provenance     Json?
-  hero           Json?
-  metadata       Json?
-  contentHash    String?   @map("content_hash")
+  id              String    @id @default(cuid())
+  patchId         String    @map("patch_id")
+  canonicalUrl    String    @map("canonical_url")
+  title           String
+  sourceUrl       String    @map("source_url")
+  sourceDomain    String?   @map("source_domain") @db.VarChar(255)
+  domain          String?   @db.Text
+  publishDate     DateTime? @map("publish_date")
+  category        String? // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
+  isControversy   Boolean   @default(false) @map("is_controversy")
+  isHistory       Boolean   @default(false) @map("is_history")
+  relevanceScore  Float     @default(0.0) @map("relevance_score")
+  qualityScore    Float     @default(0.0) @map("quality_score")
+  importanceScore Float     @default(50.0) @map("importance_score")
+  whyItMatters    String?   @map("why_it_matters")
+  summary         String?
+  facts           Json?
+  quotes          Json?
+  provenance      Json?
+  hero            Json?
+  metadata        Json?
+  contentHash     String?   @map("content_hash")
   // New fields for robust crawler
-  rawHtml        Bytes?    @map("raw_html")
-  textContent    String?   @map("text_content") @db.Text
-  keyFacts       Json?     @map("key_facts") // array of strings
-  notableQuotes  Json?     @map("notable_quotes") // array of {quote:string, attribution?:string, sourceUrl?:string}
-  isUseful       Boolean?  @map("is_useful") // relevance heuristic
-  lastCrawledAt  DateTime? @map("last_crawled_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  rawHtml         Bytes?    @map("raw_html")
+  textContent     String?   @map("text_content") @db.Text
+  keyFacts        Json?     @map("key_facts") // array of strings
+  notableQuotes   Json?     @map("notable_quotes") // array of {quote:string, attribution?:string, sourceUrl?:string}
+  isUseful        Boolean?  @map("is_useful") // relevance heuristic
+  lastCrawledAt   DateTime? @map("last_crawled_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
-  patch      Patch @relation(fields: [patchId], references: [id], onDelete: Cascade)
-  heroRecord Hero? @relation("HeroToContent") // One-to-one relation (renamed to avoid conflict with JSON hero field)
+  patch              Patch               @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  heroRecord         Hero?               @relation("HeroToContent") // One-to-one relation (renamed to avoid conflict with JSON hero field)
+  wikipediaCitations WikipediaCitation[]
 
   @@unique([patchId, canonicalUrl])
   @@index([patchId])
@@ -855,13 +858,13 @@ enum HeroStatus {
 
 // Discovery seen tracking for durable duplicate prevention across runs
 model DiscoverySeen {
-  url        String   @id @db.Text
-  firstSeen  DateTime @default(now()) @map("first_seen")
-  lastSeen   DateTime @default(now()) @updatedAt @map("last_seen")
-  lastRunId  String?  @map("last_run_id") @db.VarChar(64)
-  timesSeen  Int      @default(1) @map("times_seen")
-  patchId    String?  @map("patch_id") @db.VarChar(64)
-  domain     String?  @db.VarChar(255)
+  url       String   @id @db.Text
+  firstSeen DateTime @default(now()) @map("first_seen")
+  lastSeen  DateTime @default(now()) @updatedAt @map("last_seen")
+  lastRunId String?  @map("last_run_id") @db.VarChar(64)
+  timesSeen Int      @default(1) @map("times_seen")
+  patchId   String?  @map("patch_id") @db.VarChar(64)
+  domain    String?  @db.VarChar(255)
 
   @@index([patchId])
   @@index([domain])
@@ -977,4 +980,66 @@ model SeenUrl {
   @@unique([patchId, urlHash])
   @@index([patchId, lastSeenAt])
   @@map("seen_urls")
+}
+
+// Wikipedia Deep Link Extraction System
+// Tracks Wikipedia pages being monitored for each patch
+model WikipediaMonitoring {
+  id                 String    @id @default(cuid())
+  patchId            String    @map("patch_id")
+  wikipediaUrl       String    @map("wikipedia_url") @db.Text
+  wikipediaTitle     String    @map("wikipedia_title") @db.Text
+  searchTerm         String?   @map("search_term") // Which search term found this page
+  contentScanned     Boolean   @default(false) @map("content_scanned")
+  contentText        String?   @map("content_text") @db.Text // Scanned content for memory
+  lastScannedAt      DateTime? @map("last_scanned_at")
+  citationCount      Int       @default(0) @map("citation_count")
+  citationsExtracted Boolean   @default(false) @map("citations_extracted")
+  lastExtractedAt    DateTime? @map("last_extracted_at")
+  priority           Int       @default(0) // Higher = process first
+  status             String    @default("pending") // pending | scanning | completed | error
+  errorMessage       String?   @map("error_message") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  patch     Patch               @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  citations WikipediaCitation[]
+
+  @@unique([patchId, wikipediaUrl])
+  @@index([patchId, status, priority])
+  @@index([patchId, citationsExtracted])
+  @@index([patchId, lastScannedAt])
+  @@map("wikipedia_monitoring")
+}
+
+// Citations extracted from Wikipedia pages
+model WikipediaCitation {
+  id                 String    @id @default(cuid())
+  monitoringId       String    @map("monitoring_id")
+  sourceNumber       Int       @map("source_number") // Reference number on Wikipedia page
+  citationUrl        String    @map("citation_url") @db.Text
+  citationTitle      String?   @map("citation_title") @db.Text
+  citationContext    String?   @map("citation_context") @db.Text
+  aiPriorityScore    Float?    @map("ai_priority_score") // AI-scored relevance (0-100)
+  verificationStatus String    @default("pending") @map("verification_status") // pending | verified | failed
+  scanStatus         String    @default("not_scanned") @map("scan_status") // not_scanned | scanning | scanned
+  relevanceDecision  String?   @map("relevance_decision") // saved | denied | null
+  savedContentId     String?   @map("saved_content_id") // FK to DiscoveredContent if saved
+  savedMemoryId      String?   @unique @map("saved_memory_id") // FK to AgentMemory if saved as knowledge (unique for one-to-one)
+  lastVerifiedAt     DateTime? @map("last_verified_at")
+  lastScannedAt      DateTime? @map("last_scanned_at")
+  errorMessage       String?   @map("error_message") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  monitoring   WikipediaMonitoring @relation(fields: [monitoringId], references: [id], onDelete: Cascade)
+  savedContent DiscoveredContent?  @relation(fields: [savedContentId], references: [id], onDelete: SetNull)
+  savedMemory  AgentMemory?        @relation(fields: [savedMemoryId], references: [id], onDelete: SetNull)
+
+  @@unique([monitoringId, sourceNumber])
+  @@index([monitoringId, verificationStatus, scanStatus])
+  @@index([monitoringId, aiPriorityScore])
+  @@index([verificationStatus, scanStatus])
+  @@index([citationUrl])
+  @@map("wikipedia_citations")
 }

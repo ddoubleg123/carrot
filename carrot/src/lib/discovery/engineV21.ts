@@ -531,6 +531,9 @@ export class DiscoveryEngineV21 {
   private async discoveryLoop(coveredAngles: Set<string>): Promise<void> {
     const redisPatchId = this.redisPatchId
     const startTime = Date.now()
+    let lastWikipediaProcessTime = 0
+    const WIKIPEDIA_PROCESS_INTERVAL = 30000 // Process Wikipedia every 30 seconds
+    let candidateCount = 0
 
     if (!this.priorityBurstProcessed) {
       const handled = await this.processPriorityBurst(coveredAngles, startTime)
@@ -544,6 +547,79 @@ export class DiscoveryEngineV21 {
       if (!(await this.ensureLiveState('loop'))) {
         break
       }
+
+      // Periodic Wikipedia incremental processing (every 30 seconds or every 10 candidates)
+      const now = Date.now()
+      if (now - lastWikipediaProcessTime > WIKIPEDIA_PROCESS_INTERVAL || candidateCount % 10 === 0) {
+        try {
+          const { processWikipediaIncremental } = await import('./wikipediaProcessor')
+          const { prisma } = await import('@/lib/prisma')
+          
+          await processWikipediaIncremental(this.options.patchId, {
+            patchName: this.options.patchName,
+            patchHandle: this.options.patchHandle,
+            maxPagesPerRun: 1,
+            maxCitationsPerRun: 3,
+            saveAsContent: async (url, title, content) => {
+              // Use existing processCandidate logic to save as DiscoveredContent
+              // For now, return null - full integration can be added later
+              // The citation will still be tracked in WikipediaCitation table
+              return null
+            },
+            saveAsMemory: async (url: string, title: string, content: string, patchHandle: string) => {
+              // Save to AgentMemory for patch-associated agents
+              try {
+                // Find agents associated with this patch
+                const agents = await prisma.agent.findMany({
+                  where: {
+                    associatedPatches: { has: patchHandle },
+                    isActive: true
+                  },
+                  select: { id: true }
+                })
+
+                if (agents.length === 0) {
+                  // No agent found - skip memory storage
+                  return null
+                }
+
+                // Save to first associated agent (could be enhanced to save to all)
+                const agentId = agents[0].id
+                
+                // Limit content length
+                const maxContentLength = 5000
+                const contentToStore = content.length > maxContentLength
+                  ? content.substring(0, maxContentLength) + '...'
+                  : content
+
+                const memory = await prisma.agentMemory.create({
+                  data: {
+                    agentId,
+                    content: contentToStore,
+                    embedding: [], // Will be populated by embedding service later
+                    sourceType: 'wikipedia_citation',
+                    sourceUrl: url,
+                    sourceTitle: title,
+                    tags: [patchHandle, 'wikipedia', 'citation'],
+                    confidence: 1.0,
+                    fedBy: 'system'
+                  }
+                })
+
+                return memory.id
+              } catch (error) {
+                console.error('[WikipediaProcessor] Error saving to AgentMemory:', error)
+                return null
+              }
+            }
+          })
+          lastWikipediaProcessTime = now
+        } catch (error) {
+          console.error('[EngineV21] Error in Wikipedia incremental processing:', error)
+          // Non-fatal - continue with main discovery
+        }
+      }
+
       const candidate = await this.pullCandidateWithBias(redisPatchId)
 
       if (!candidate) {
@@ -578,6 +654,7 @@ export class DiscoveryEngineV21 {
       }
 
       await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
+      candidateCount++
 
       if (this.stopRequested) {
         break

@@ -5,6 +5,7 @@ import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { OPEN_EVIDENCE_V2 } from '@/lib/flags';
 import { generateGuideSnapshot } from '@/lib/discovery/planner';
+import { initializeWikipediaMonitoring } from '@/lib/discovery/wikipediaMonitoring';
 
 function sanitizeEntity(rawEntity: any) {
   if (!rawEntity || typeof rawEntity !== 'object') return undefined;
@@ -159,6 +160,22 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       } catch (guideError) {
         console.error('[API] Failed to generate discovery guide during patch creation', guideError);
       }
+    }
+
+    // Initialize Wikipedia monitoring (background task - don't block response)
+    try {
+      const pageName = (rawEntity?.name as string | undefined)?.trim() || title;
+      const searchTerms = rawEntity?.aliases
+        ? (rawEntity.aliases as string[]).filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+        : tags.filter((tag: any): tag is string => typeof tag === 'string' && tag.trim().length > 0);
+      
+      // Run in background - don't await to avoid blocking response
+      initializeWikipediaMonitoring(patch.id, pageName, searchTerms).catch((error) => {
+        console.error('[API] Failed to initialize Wikipedia monitoring:', error);
+      });
+    } catch (wikiError) {
+      console.error('[API] Error setting up Wikipedia monitoring:', wikiError);
+      // Non-fatal - continue with patch creation
     }
 
     // Return the created patch
