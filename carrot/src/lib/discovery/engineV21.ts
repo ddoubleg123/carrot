@@ -793,8 +793,16 @@ export class DiscoveryEngineV21 {
     sourceUrl: string,
     parent: FrontierItem
   ): Promise<void> {
-    if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) return
-    if (this.wikiRefCache.has(sourceUrl)) return
+    if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) {
+      if (!rawHtml) console.log(`[EngineV21] enqueueWikipediaReferences: No HTML for ${sourceUrl.substring(0, 80)}`)
+      if (!this.isWikipediaUrl(sourceUrl)) console.log(`[EngineV21] enqueueWikipediaReferences: Not Wikipedia URL: ${sourceUrl.substring(0, 80)}`)
+      return
+    }
+    if (this.wikiRefCache.has(sourceUrl)) {
+      console.log(`[EngineV21] enqueueWikipediaReferences: Already cached ${sourceUrl.substring(0, 80)}`)
+      return
+    }
+    console.log(`[EngineV21] enqueueWikipediaReferences: Processing citations from ${sourceUrl.substring(0, 80)}`)
     this.wikiRefCache.add(sourceUrl)
 
     // Extract citations with context (title, text) for prioritization
@@ -935,6 +943,7 @@ Return ONLY valid JSON array, no other text.`
     sourceUrl: string,
     context: 'wikipedia' | 'html'
   ): Promise<void> {
+    console.log(`[EngineV21] enqueueRefOutLinks: ${links.length} links from ${context} (source: ${sourceUrl.substring(0, 80)})`)
     const sourceHost = (() => {
       try {
         return new URL(sourceUrl).hostname.toLowerCase()
@@ -999,8 +1008,12 @@ Return ONLY valid JSON array, no other text.`
       })
     )
 
-    if (!enqueued.length) return
+    if (!enqueued.length) {
+      console.log(`[EngineV21] enqueueRefOutLinks: No links enqueued after filtering (input: ${links.length} links)`)
+      return
+    }
 
+    console.log(`[EngineV21] enqueueRefOutLinks: Successfully enqueued ${enqueued.length} of ${links.length} links from ${context}`)
     this.structuredLog('ref_out_enqueued', {
       source: sourceUrl,
       count: enqueued.length,
@@ -1641,11 +1654,12 @@ Return ONLY valid JSON array, no other text.`
         meta: { domain: finalDomain }
       })
 
-      // For Wikipedia pages: extract outlinks BEFORE checking if seen
+      // For Wikipedia pages: extract outlinks AND citations BEFORE checking if seen
       // This ensures we mine Wikipedia as a launchpad for deep links
       const isWiki = this.isWikipediaUrl(canonicalUrl)
       if (isWiki && DEEP_LINK_SCRAPER) {
-        // Fetch content first to extract outlinks
+        console.log(`[EngineV21] Processing Wikipedia page for deep link extraction: ${canonicalUrl.substring(0, 100)}`)
+        // Fetch content first to extract outlinks and citations
         const fetchResult = await this.fetchAndExtractContent({
           canonicalUrl,
           candidate,
@@ -1653,6 +1667,10 @@ Return ONLY valid JSON array, no other text.`
         }).catch(() => null)
         
         if (fetchResult?.extracted?.rawHtml) {
+          // Extract citations (prioritized)
+          await this.enqueueWikipediaReferences(fetchResult.extracted.rawHtml, canonicalUrl, candidate)
+          
+          // Also extract general outlinks
           const WIKI_OUTLINK_LIMIT = Number(process.env.CRAWL_WIKI_OUTLINK_LIMIT || 25)
           const refs = await extractOffHostLinks(fetchResult.extracted.rawHtml, canonicalUrl, { maxLinks: WIKI_OUTLINK_LIMIT })
           let enqueued = 0
@@ -1686,7 +1704,7 @@ Return ONLY valid JSON array, no other text.`
               limit: WIKI_OUTLINK_LIMIT
             })
           }
-          // Now mark as seen AFTER extracting outlinks
+          // Now mark as seen AFTER extracting outlinks and citations
           await markAsSeen(redisPatchId, canonicalUrl).catch(() => undefined)
           await this.emitAudit('wiki_processed', 'ok', { 
             candidateUrl: canonicalUrl,
@@ -1694,6 +1712,8 @@ Return ONLY valid JSON array, no other text.`
           })
           await this.persistMetricsSnapshot('running', countersBefore)
           return { saved: false, reason: 'wiki_launchpad_processed', angle, host }
+        } else {
+          console.log(`[EngineV21] Wikipedia page fetch failed or no HTML: ${canonicalUrl.substring(0, 100)}`)
         }
       }
 

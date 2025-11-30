@@ -1443,6 +1443,11 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     // Wikipedia pages should always be processed for deep link extraction
     const isWikipedia = /wikipedia\.org/i.test(seed.url)
     
+    // Diagnostic logging
+    if (isWikipedia) {
+      console.log(`[Seed Planner] Wikipedia seed detected: ${seed.url.substring(0, 100)}`)
+    }
+    
     if (!isWikipedia) {
       // Check if already seen (Redis + DB) for non-Wikipedia seeds
       const alreadySeen = await isUrlSeen(patchId, seed.url)
