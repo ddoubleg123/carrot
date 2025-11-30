@@ -104,9 +104,7 @@ Return ONLY valid JSON array, no other text.`
     return citations.map(c => ({ ...c, score: 50 }))
   }
 }
-import { canonicalizeUrlFast } from './canonicalize'
-import { prisma } from '@/lib/prisma'
-import { getDomainFromUrl } from './canonicalize'
+import { canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
 
 /**
  * Process next Wikipedia page (scan content and extract citations)
