@@ -778,6 +778,7 @@ model DiscoveredContent {
   hero            Json?
   metadata        Json?
   contentHash     String?   @map("content_hash")
+  content         String?   @db.Text // Legacy field (required by database, nullable in schema)
   // New fields for robust crawler
   rawHtml         Bytes?    @map("raw_html")
   textContent     String?   @map("text_content") @db.Text
