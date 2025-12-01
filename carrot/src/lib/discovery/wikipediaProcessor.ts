@@ -78,15 +78,44 @@ Return ONLY valid JSON array, no other text.`
         }
       ],
       temperature: 0.3,
-      max_tokens: 2000
+      max_tokens: Math.min(8000, Math.max(2000, citations.length * 15)) // Scale tokens with citation count, max 8000
     })) {
       if (chunk.type === 'token' && chunk.token) {
         response += chunk.token
       }
     }
 
-    const cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
-    const scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
+    // Clean and extract JSON from response
+    let cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
+    
+    // Try to extract JSON array if response contains other text
+    const jsonMatch = cleanResponse.match(/\[[\s\S]*\]/)
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0]
+    }
+    
+    // Try to fix common JSON issues
+    let scores: Array<{ index: number; score: number; reason?: string }> = []
+    try {
+      scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
+    } catch (parseError: any) {
+      // If JSON is incomplete, try to extract valid partial JSON
+      console.warn(`[WikipediaProcessor] JSON parse error at position ${parseError.message.match(/position (\d+)/)?.[1] || 'unknown'}, attempting recovery...`)
+      
+      // Try to extract valid JSON objects from the response
+      const jsonObjects = cleanResponse.match(/\{[^}]*"index"[^}]*\}/g)
+      if (jsonObjects && jsonObjects.length > 0) {
+        try {
+          scores = jsonObjects.map(obj => JSON.parse(obj))
+          console.log(`[WikipediaProcessor] Recovered ${scores.length} scores from partial JSON`)
+        } catch (recoveryError) {
+          console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
+          throw parseError // Re-throw original error
+        }
+      } else {
+        throw parseError // Re-throw if we can't recover
+      }
+    }
     
     const scored = citations.map((citation, index) => {
       const scoreData = scores.find(s => s.index === index + 1)

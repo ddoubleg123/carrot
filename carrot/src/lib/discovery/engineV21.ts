@@ -599,7 +599,8 @@ export class DiscoveryEngineV21 {
                     sourceUrl: url,
                     domain,
                     sourceDomain: domain,
-                    category: 'article',
+                    category: 'wikipedia_citation',
+                    publishDate: null, // Explicitly set to null since we don't have publish date for citations
                     relevanceScore: 0.7, // Default relevance for Wikipedia citations
                     qualityScore: 0.6, // Default quality
                     importanceScore: 0.5, // Default importance
