@@ -600,6 +600,7 @@ export class DiscoveryEngineV21 {
                     sourceUrl: url,
                     domain,
                     sourceDomain: domain,
+                    type: 'article', // Required field - Wikipedia citations are articles
                     category: 'wikipedia_citation',
                     publishDate: null, // Column now exists in database
                     relevanceScore: 0.7, // Default relevance for Wikipedia citations

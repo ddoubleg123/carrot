@@ -762,6 +762,7 @@ model DiscoveredContent {
   sourceUrl       String    @map("source_url")
   sourceDomain    String?   @map("source_domain") @db.VarChar(255)
   domain          String?   @db.Text
+  type            String    @default("article") // "article" | "video" | "pdf" | "image" | "text"
   publishDate     DateTime? @map("publish_date")
   category        String? // "official" | "intergovernmental" | "watchdog" | "academic" | "media"
   isControversy   Boolean   @default(false) @map("is_controversy")
