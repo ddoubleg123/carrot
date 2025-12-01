@@ -647,9 +647,10 @@ export class DiscoveryEngineV21 {
             saveAsMemory: async (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => {
               // Save to AgentMemory for patch-associated agents
               // Segregated by Wikipedia page title for better organization
+              // Auto-creates agent if none exists for the patch
               try {
                 // Find agents associated with this patch
-                const agents = await prisma.agent.findMany({
+                let agents = await prisma.agent.findMany({
                   where: {
                     associatedPatches: { has: patchHandle },
                     isActive: true
@@ -657,9 +658,36 @@ export class DiscoveryEngineV21 {
                   select: { id: true }
                 })
 
+                // Auto-create agent if none exists
                 if (agents.length === 0) {
-                  console.log(`[WikipediaProcessor] No agents found for patch ${patchHandle} - skipping AgentMemory storage`)
-                  return null
+                  console.log(`[WikipediaProcessor] No agents found for patch ${patchHandle} - auto-creating agent`)
+                  
+                  // Get patch details for agent name
+                  const patch = await prisma.patch.findUnique({
+                    where: { handle: patchHandle },
+                    select: { title: true, entity: true }
+                  })
+
+                  const agentName = patch?.title || patchHandle
+                  const agentPersona = `I am the ${agentName} agent. I store and organize knowledge, citations, and information related to ${agentName}. My purpose is to maintain a comprehensive memory of relevant content discovered from Wikipedia citations and other sources.`
+
+                  const newAgent = await prisma.agent.create({
+                    data: {
+                      name: agentName,
+                      persona: agentPersona,
+                      domainExpertise: ['knowledge-storage', 'citation-management', 'wikipedia-sources'],
+                      associatedPatches: [patchHandle],
+                      isActive: true,
+                      metadata: {
+                        autoCreated: true,
+                        createdFor: 'wikipedia_citation_storage',
+                        patchHandle: patchHandle
+                      } as any
+                    }
+                  })
+
+                  console.log(`[WikipediaProcessor] Created agent "${agentName}" (${newAgent.id}) for patch ${patchHandle}`)
+                  agents = [{ id: newAgent.id }]
                 }
 
                 // Save to first associated agent (could be enhanced to save to all)
