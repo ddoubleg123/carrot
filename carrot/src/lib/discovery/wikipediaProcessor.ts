@@ -350,7 +350,7 @@ export async function processNextCitation(
     patchName: string
     patchHandle: string
     saveAsContent?: (url: string, title: string, content: string) => Promise<string | null> // Returns DiscoveredContent.id
-    saveAsMemory?: (url: string, title: string, content: string, patchHandle: string) => Promise<string | null> // Returns AgentMemory.id // Returns AgentMemory.id
+    saveAsMemory?: (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => Promise<string | null> // Returns AgentMemory.id
   }
 ): Promise<{ processed: boolean; citationUrl?: string; saved?: boolean; monitoringId?: string }> {
   const nextCitation = await getNextCitationToProcess(patchId)
@@ -362,8 +362,28 @@ export async function processNextCitation(
   console.log(`[WikipediaProcessor] Processing citation: ${nextCitation.citationUrl}`)
 
   try {
+    // Get Wikipedia page info for URL conversion and tagging
+    const monitoring = await prisma.wikipediaMonitoring.findUnique({
+      where: { id: nextCitation.monitoringId },
+      select: { wikipediaUrl: true, wikipediaTitle: true }
+    })
+
+    if (!monitoring) {
+      console.error(`[WikipediaProcessor] Monitoring record not found for citation ${nextCitation.id}`)
+      return { processed: false }
+    }
+
+    // Convert relative Wikipedia URLs to absolute URLs
+    let citationUrl = nextCitation.citationUrl
+    if (citationUrl.startsWith('./') || citationUrl.startsWith('../') || !citationUrl.startsWith('http')) {
+      // This is a relative Wikipedia link - convert to full URL
+      const pageTitle = citationUrl.replace(/^\.\//, '').replace(/^\.\.\//, '')
+      citationUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(pageTitle.replace(/ /g, '_'))}`
+      console.log(`[WikipediaProcessor] Converted relative URL to: ${citationUrl}`)
+    }
+
     // Check for duplicate in DiscoveredContent (deduplication)
-    const canonicalUrl = canonicalizeUrlFast(nextCitation.citationUrl)
+    const canonicalUrl = canonicalizeUrlFast(citationUrl) || citationUrl
     if (canonicalUrl) {
       const existing = await prisma.discoveredContent.findUnique({
         where: {
@@ -388,7 +408,7 @@ export async function processNextCitation(
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { 
           processed: true, 
-          citationUrl: nextCitation.citationUrl, 
+          citationUrl: citationUrl, 
           saved: true,
           monitoringId: nextCitation.monitoringId
         }
@@ -401,7 +421,7 @@ export async function processNextCitation(
     // Verify URL is accessible
     let response: Response
     try {
-      response = await fetch(nextCitation.citationUrl, {
+      response = await fetch(citationUrl, {
         method: 'HEAD',
         signal: AbortSignal.timeout(10000) // 10 second timeout
       })
@@ -414,7 +434,7 @@ export async function processNextCitation(
         nextCitation.id,
         error instanceof Error ? error.message : 'URL verification failed'
       )
-      return { processed: true, citationUrl: nextCitation.citationUrl }
+      return { processed: true, citationUrl: citationUrl }
     }
 
     // Mark as scanning
@@ -422,7 +442,7 @@ export async function processNextCitation(
 
     // Fetch and process content
     try {
-      response = await fetch(nextCitation.citationUrl, {
+      response = await fetch(citationUrl, {
         signal: AbortSignal.timeout(30000) // 30 second timeout
       })
       
@@ -451,19 +471,21 @@ export async function processNextCitation(
       // isUseful flag will determine if it's published to the page
       if (options.saveAsContent) {
         savedContentId = await options.saveAsContent(
-          nextCitation.citationUrl,
+          citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
           textContent
         ) || null
       }
 
       // Only save to AgentMemory if relevant (for AI knowledge)
+      // Pass Wikipedia page title for segregation
       if (isRelevant && options.saveAsMemory) {
         savedMemoryId = await options.saveAsMemory(
-          nextCitation.citationUrl,
+          citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
           textContent,
-          options.patchHandle
+          options.patchHandle,
+          monitoring?.wikipediaTitle // Pass Wikipedia page title for segregation
         ) || null
       }
 
@@ -482,7 +504,7 @@ export async function processNextCitation(
 
       return {
         processed: true,
-        citationUrl: nextCitation.citationUrl,
+        citationUrl: citationUrl,
         saved: isRelevant,
         monitoringId: nextCitation.monitoringId
       }
@@ -493,7 +515,7 @@ export async function processNextCitation(
       )
       // Check if page can be marked complete even on error
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-      return { processed: true, citationUrl: nextCitation.citationUrl, monitoringId: nextCitation.monitoringId }
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
   } catch (error) {
     console.error(`[WikipediaProcessor] Error processing citation:`, error)

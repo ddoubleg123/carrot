@@ -644,8 +644,9 @@ export class DiscoveryEngineV21 {
                 return null
               }
             },
-            saveAsMemory: async (url: string, title: string, content: string, patchHandle: string) => {
+            saveAsMemory: async (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => {
               // Save to AgentMemory for patch-associated agents
+              // Segregated by Wikipedia page title for better organization
               try {
                 // Find agents associated with this patch
                 const agents = await prisma.agent.findMany({
@@ -657,7 +658,7 @@ export class DiscoveryEngineV21 {
                 })
 
                 if (agents.length === 0) {
-                  // No agent found - skip memory storage
+                  console.log(`[WikipediaProcessor] No agents found for patch ${patchHandle} - skipping AgentMemory storage`)
                   return null
                 }
 
@@ -670,6 +671,17 @@ export class DiscoveryEngineV21 {
                   ? content.substring(0, maxContentLength) + '...'
                   : content
 
+                // Create tags with Wikipedia page title for segregation
+                // Format: [patchHandle, 'wikipedia', 'citation', 'page:WikipediaPageTitle']
+                const tags = [
+                  patchHandle,
+                  'wikipedia',
+                  'citation'
+                ]
+                if (wikipediaPageTitle) {
+                  tags.push(`page:${wikipediaPageTitle}`)
+                }
+
                 const memory = await prisma.agentMemory.create({
                   data: {
                     agentId,
@@ -678,12 +690,13 @@ export class DiscoveryEngineV21 {
                     sourceType: 'wikipedia_citation',
                     sourceUrl: url,
                     sourceTitle: title,
-                    tags: [patchHandle, 'wikipedia', 'citation'],
+                    tags: tags,
                     confidence: 1.0,
                     fedBy: 'system'
                   }
                 })
 
+                console.log(`[WikipediaProcessor] Saved citation to AgentMemory: ${memory.id} (tags: ${tags.join(', ')})`)
                 return memory.id
               } catch (error) {
                 console.error('[WikipediaProcessor] Error saving to AgentMemory:', error)
