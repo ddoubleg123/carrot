@@ -447,36 +447,35 @@ export async function processNextCitation(
       let savedContentId: string | null = null
       let savedMemoryId: string | null = null
 
-      if (isRelevant) {
-        // Save as discovered content if function provided
-        if (options.saveAsContent) {
-          savedContentId = await options.saveAsContent(
-            nextCitation.citationUrl,
-            nextCitation.citationTitle || 'Untitled',
-            textContent
-          ) || null
-        }
-
-        // Save as agent memory if function provided
-        if (options.saveAsMemory) {
-          savedMemoryId = await options.saveAsMemory(
-            nextCitation.citationUrl,
-            nextCitation.citationTitle || 'Untitled',
-            textContent,
-            options.patchHandle
-          ) || null
-        }
+      // Save ALL citations to DiscoveredContent for data tracking
+      // isUseful flag will determine if it's published to the page
+      if (options.saveAsContent) {
+        savedContentId = await options.saveAsContent(
+          nextCitation.citationUrl,
+          nextCitation.citationTitle || 'Untitled',
+          textContent
+        ) || null
       }
 
-      // Mark as scanned with decision
+      // Only save to AgentMemory if relevant (for AI knowledge)
+      if (isRelevant && options.saveAsMemory) {
+        savedMemoryId = await options.saveAsMemory(
+          nextCitation.citationUrl,
+          nextCitation.citationTitle || 'Untitled',
+          textContent,
+          options.patchHandle
+        ) || null
+      }
+
+      // Mark as scanned - all citations are saved, but relevance determines memory storage
       await markCitationScanned(
         nextCitation.id,
-        isRelevant ? 'saved' : 'denied',
+        savedContentId ? 'saved' : 'denied', // 'saved' if successfully stored in DiscoveredContent
         savedContentId || undefined,
         savedMemoryId || undefined
       )
 
-      console.log(`[WikipediaProcessor] Citation processed: ${isRelevant ? 'saved' : 'denied'}`)
+      console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'failed to save'}${isRelevant ? ' (relevant - added to memory)' : ' (not relevant - data only)'}`)
 
       // Check if page can be marked complete after processing this citation
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
