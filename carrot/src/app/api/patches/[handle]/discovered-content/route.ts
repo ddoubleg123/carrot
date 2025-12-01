@@ -84,6 +84,7 @@ export async function GET(
         title: true,
         sourceUrl: true,
         canonicalUrl: true,
+        type: true, // Content type (article, video, etc.)
         category: true,
         summary: true,
         relevanceScore: true,
@@ -97,6 +98,7 @@ export async function GET(
         hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
         textContent: true,
+        isUseful: true, // Whether content is useful/published
         heroRecord: { // Hero relation (preferred over JSON)
           select: {
             id: true,
@@ -268,6 +270,7 @@ export async function GET(
         url: primaryUrl,
         canonicalUrl: primaryUrl,
         domain,
+        type: item.type || 'article', // Use type field from database
         sourceType: metadataRaw?.sourceType || item.category || 'article',
         credibilityTier: metadataRaw?.credibilityTier,
         angle: metadataRaw?.angle,

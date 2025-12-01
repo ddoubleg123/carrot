@@ -36,6 +36,14 @@ export async function GET(
     const status = await getWikipediaMonitoringStatus(patch.id)
     const progress = await getWikipediaProcessingProgress(patch.id)
 
+    // Get AgentMemory count for Wikipedia citations
+    const agentMemoryCount = await prisma.agentMemory.count({
+      where: {
+        sourceType: 'wikipedia_citation',
+        tags: { has: handle }
+      }
+    })
+
     // Get top priority citations if requested
     let topCitations: any[] = []
     if (includeTopCitations) {
@@ -51,7 +59,8 @@ export async function GET(
       },
       status: {
         ...status,
-        progress
+        progress,
+        agentMemoryCount
       },
       topCitations: includeTopCitations ? topCitations : undefined,
       timestamp: new Date().toISOString()
