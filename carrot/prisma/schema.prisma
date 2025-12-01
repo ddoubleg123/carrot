@@ -787,6 +787,7 @@ model DiscoveredContent {
   isUseful        Boolean?  @map("is_useful") // relevance heuristic
   lastCrawledAt   DateTime? @map("last_crawled_at")
   createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   patch              Patch               @relation(fields: [patchId], references: [id], onDelete: Cascade)
   heroRecord         Hero?               @relation("HeroToContent") // One-to-one relation (renamed to avoid conflict with JSON hero field)
