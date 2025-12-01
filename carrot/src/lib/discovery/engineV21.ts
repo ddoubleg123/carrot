@@ -591,6 +591,7 @@ export class DiscoveryEngineV21 {
                 const contentHash = createHash('sha256').update(cleanedText).digest('hex')
                 
                 // Create DiscoveredContent entry (simplified - no synthesis/hero for citations)
+                // Note: Omitting publishDate since the column may not exist in all database instances
                 const savedItem = await prisma.discoveredContent.create({
                   data: {
                     patchId: this.options.patchId,
@@ -600,7 +601,7 @@ export class DiscoveryEngineV21 {
                     domain,
                     sourceDomain: domain,
                     category: 'wikipedia_citation',
-                    publishDate: null, // Explicitly set to null since we don't have publish date for citations
+                    // publishDate omitted - column may not exist in database
                     relevanceScore: 0.7, // Default relevance for Wikipedia citations
                     qualityScore: 0.6, // Default quality
                     importanceScore: 0.5, // Default importance
@@ -617,7 +618,7 @@ export class DiscoveryEngineV21 {
                       source: 'wikipedia_citation',
                       processedAt: new Date().toISOString()
                     } as any
-                  }
+                  } as any // Use 'as any' to allow omitting publishDate if column doesn't exist
                 })
                 
                 console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id}`)
