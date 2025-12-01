@@ -614,13 +614,14 @@ export class DiscoveryEngineV21 {
                     hero: Prisma.JsonNull,
                     contentHash,
                     textContent: cleanedText,
+                    content: cleanedText, // Legacy content field (required by database)
                     lastCrawledAt: new Date(),
                     isUseful: cleanedText.length > 500, // Mark as useful if content is substantial
                     metadata: {
                       source: 'wikipedia_citation',
                       processedAt: new Date().toISOString()
                     } as any
-                  }
+                  } as any // Use 'as any' to allow legacy 'content' field
                 })
                 
                 console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id}`)
