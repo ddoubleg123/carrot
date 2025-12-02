@@ -150,6 +150,7 @@ export async function processNextWikipediaPage(
   const nextPage = await getNextWikipediaPageToProcess(patchId)
   
   if (!nextPage) {
+    console.log(`[WikipediaProcessor] No Wikipedia pages available to process for patch ${patchId}`)
     return { processed: false }
   }
 
@@ -356,6 +357,7 @@ export async function processNextCitation(
   const nextCitation = await getNextCitationToProcess(patchId)
   
   if (!nextCitation) {
+    console.log(`[WikipediaProcessor] No citations available to process for patch ${patchId}`)
     return { processed: false }
   }
 
@@ -654,12 +656,22 @@ export async function processWikipediaIncremental(
   const maxPages = options.maxPagesPerRun || 1
   const maxCitations = options.maxCitationsPerRun || 50 // Process more citations per run (was 5)
 
+  // Quick check: verify Wikipedia monitoring exists for this patch
+  const { prisma } = await import('@/lib/prisma')
+  const monitoringCount = await prisma.wikipediaMonitoring.count({
+    where: { patchId }
+  })
+  if (monitoringCount === 0) {
+    console.warn(`[WikipediaProcessor] ⚠️ No Wikipedia pages in monitoring table for patch ${patchId}. Wikipedia monitoring may not have been initialized.`)
+    return { pagesProcessed: 0, citationsProcessed: 0, citationsSaved: 0 }
+  }
+
   let pagesProcessed = 0
   let citationsProcessed = 0
   let citationsSaved = 0
 
   // Process Wikipedia pages first
-  console.log(`[WikipediaProcessor] Processing up to ${maxPages} pages and ${maxCitations} citations`)
+  console.log(`[WikipediaProcessor] Processing up to ${maxPages} pages and ${maxCitations} citations (${monitoringCount} pages in monitoring table)`)
   for (let i = 0; i < maxPages; i++) {
     const result = await processNextWikipediaPage(patchId, {
       patchName: options.patchName,
@@ -667,7 +679,10 @@ export async function processWikipediaIncremental(
       prioritizeCitationsFn: options.prioritizeCitationsFn
     })
 
-    if (!result.processed) break
+    if (!result.processed) {
+      console.log(`[WikipediaProcessor] No more pages to process (attempted ${i + 1})`)
+      break
+    }
     pagesProcessed++
   }
 
@@ -680,11 +695,17 @@ export async function processWikipediaIncremental(
       saveAsMemory: options.saveAsMemory
     })
 
-    if (!result.processed) break
+    if (!result.processed) {
+      if (i === 0) {
+        console.log(`[WikipediaProcessor] No citations to process`)
+      }
+      break
+    }
     citationsProcessed++
     if (result.saved) citationsSaved++
   }
 
+  console.log(`[WikipediaProcessor] Completed: ${pagesProcessed} pages, ${citationsProcessed} citations, ${citationsSaved} saved`)
   return {
     pagesProcessed,
     citationsProcessed,
