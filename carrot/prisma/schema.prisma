@@ -1023,7 +1023,8 @@ model WikipediaCitation {
   citationUrl        String    @map("citation_url") @db.Text
   citationTitle      String?   @map("citation_title") @db.Text
   citationContext    String?   @map("citation_context") @db.Text
-  aiPriorityScore    Float?    @map("ai_priority_score") // AI-scored relevance (0-100)
+  contentText        String?   @map("content_text") @db.Text // Extracted article content (stored after fetch)
+  aiPriorityScore    Float?    @map("ai_priority_score") // AI-scored relevance (0-100) - scored from actual content
   verificationStatus String    @default("pending") @map("verification_status") // pending | verified | failed
   scanStatus         String    @default("not_scanned") @map("scan_status") // not_scanned | scanning | scanned
   relevanceDecision  String?   @map("relevance_decision") // saved | denied | null

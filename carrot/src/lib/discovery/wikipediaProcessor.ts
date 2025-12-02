@@ -22,8 +22,88 @@ import {
   markCitationScanned
 } from './wikipediaCitation'
 import { WikipediaSource } from './wikipediaSource'
-// Note: prioritizeCitations will be imported from a shared utility
-// For now, using a simple wrapper
+/**
+ * Score citation content using DeepSeek after fetching actual article content
+ * This is called in Phase 2 after content is fetched
+ */
+async function scoreCitationContent(
+  title: string,
+  url: string,
+  contentText: string,
+  topic: string
+): Promise<{ score: number; isRelevant: boolean; reason: string }> {
+  try {
+    const { chatStream } = await import('@/lib/llm/providers/DeepSeekClient')
+    
+    const prompt = `Analyze this article for relevance to "${topic}":
+
+Title: ${title}
+URL: ${url}
+Content: ${contentText.substring(0, 10000)}${contentText.length > 10000 ? '...' : ''}
+
+Score 0-100 based on relevance to "${topic}".
+Consider:
+1. How directly the article relates to "${topic}"
+2. Whether it contains valuable information about "${topic}"
+3. The depth and quality of information provided
+
+Return ONLY valid JSON:
+{"score": 85, "isRelevant": true, "reason": "Article discusses key events and players related to the topic"}
+
+Return ONLY valid JSON, no other text.`
+
+    let response = ''
+    for await (const chunk of chatStream({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a content relevance analyzer. Return only valid JSON objects with score (0-100), isRelevant (boolean), and reason (string).'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 500
+    })) {
+      if (chunk.type === 'token' && chunk.token) {
+        response += chunk.token
+      }
+    }
+
+    // Clean and extract JSON from response
+    let cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
+    
+    // Try to extract JSON object if response contains other text
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0]
+    }
+    
+    const result = JSON.parse(cleanResponse) as { score: number; isRelevant: boolean; reason: string }
+    
+    // Ensure score is in valid range
+    const score = Math.max(0, Math.min(100, result.score || 0))
+    const isRelevant = result.isRelevant ?? (score >= 60)
+    
+    return {
+      score,
+      isRelevant,
+      reason: result.reason || `Scored ${score}/100`
+    }
+  } catch (error) {
+    console.warn('[WikipediaProcessor] Content scoring failed, using default:', error)
+    return {
+      score: 50,
+      isRelevant: false,
+      reason: 'Scoring failed - default score'
+    }
+  }
+}
+
+// Note: prioritizeCitations is no longer used in Phase 1, but kept for backward compatibility
 async function prioritizeCitations(
   citations: Array<{ url: string; title?: string; context?: string; text?: string }>,
   sourceUrl: string,
@@ -258,19 +338,12 @@ export async function processNextWikipediaPage(
     
     console.log(`[WikipediaProcessor] Converted ${convertedCitations.length} citations (filtered from ${citationsFromPage.length})`)
     
-    const prioritizeFn = options.prioritizeCitationsFn || ((citations, sourceUrl) => 
-      prioritizeCitations(citations, sourceUrl, options.patchName, [options.patchHandle])
-    )
-    
-    // Prioritize and store citations directly (bypass HTML extraction)
-    const prioritized = await prioritizeFn(convertedCitations, nextPage.url)
-    console.log(`[WikipediaProcessor] Prioritized ${prioritized.length} citations`)
-    
-    // Store citations in database
+    // Phase 1: Store citations WITHOUT scoring (scoring happens in Phase 2 after content fetch)
+    // Store citations in database without aiPriorityScore (will be scored after content fetch)
     const { prisma } = await import('@/lib/prisma')
     let citationsStored = 0
-    for (let i = 0; i < prioritized.length; i++) {
-      const citation = prioritized[i]
+    for (let i = 0; i < convertedCitations.length; i++) {
+      const citation = convertedCitations[i]
       const sourceNumber = i + 1
       
       try {
@@ -292,7 +365,7 @@ export async function processNextWikipediaPage(
             citationUrl: citation.url,
             citationTitle: citation.title,
             citationContext: citation.context,
-            aiPriorityScore: citation.score,
+            aiPriorityScore: null, // Will be scored in Phase 2 after content fetch
             verificationStatus: 'pending',
             scanStatus: 'not_scanned'
           }
@@ -463,67 +536,94 @@ export async function processNextCitation(
         .trim()
         .substring(0, 50000) // Limit to 50k chars
 
-      // Determine relevance using AI priority score AND relevance engine
-      const { RelevanceEngine } = await import('./relevance')
-      const relevanceEngine = new RelevanceEngine()
+      // Phase 2: Content validation - ensure meaningful content
+      const MIN_CONTENT_LENGTH = 500
+      const meaningfulContent = textContent.trim()
+      const hasSufficientContent = meaningfulContent.length >= MIN_CONTENT_LENGTH
       
-      // Build entity profile for the patch
-      await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
-      
-      // Check relevance using RelevanceEngine
-      const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
-      const relevanceResult = await relevanceEngine.checkRelevance(
-        options.patchHandle,
+      if (!hasSufficientContent) {
+        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: insufficient content (${meaningfulContent.length} chars, need ${MIN_CONTENT_LENGTH})`)
+        await markCitationScanned(
+          nextCitation.id,
+          'denied',
+          undefined,
+          undefined,
+          meaningfulContent, // Store content even if rejected
+          null // No score if content is insufficient
+        )
+        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+        return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      }
+
+      // Phase 2: Score content using DeepSeek with actual article content
+      console.log(`[WikipediaProcessor] Scoring citation content for "${nextCitation.citationTitle}"...`)
+      const scoringResult = await scoreCitationContent(
         nextCitation.citationTitle || 'Untitled',
-        textContent,
-        domain
+        citationUrl,
+        meaningfulContent,
+        options.patchName
       )
       
-      // Get AI priority score from citation
-      const aiPriorityScore = nextCitation.aiPriorityScore ?? 50
+      const aiPriorityScore = scoringResult.score
+      const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= 60
       
-      // Citation is relevant if:
-      // 1. AI priority score >= 60 (moderate relevance threshold) OR
-      //    RelevanceEngine gives high confidence (score >= 0.8) with relevant entities
-      // 2. RelevanceEngine confirms it's relevant to the topic
-      // 3. Content has sufficient length (>500 chars)
-      const hasGoodAIScore = aiPriorityScore >= 60
-      const hasHighRelevanceEngineScore = relevanceResult.score >= 0.8 && relevanceResult.matchedEntities.length > 0
-      const hasRelevanceEngineApproval = relevanceResult.isRelevant
-      const hasSufficientContent = textContent.length > 500
+      console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
+        score: aiPriorityScore,
+        isRelevant: scoringResult.isRelevant,
+        reason: scoringResult.reason,
+        finalDecision: isRelevantFromDeepSeek ? 'RELEVANT' : 'NOT RELEVANT'
+      })
+
+      // Optional: Secondary validation using RelevanceEngine
+      let relevanceEngineResult: { score: number; isRelevant: boolean; reason: string; matchedEntities: string[] } | null = null
+      try {
+        const { RelevanceEngine } = await import('./relevance')
+        const relevanceEngine = new RelevanceEngine()
+        await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
+        const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
+        relevanceEngineResult = await relevanceEngine.checkRelevance(
+          options.patchHandle,
+          nextCitation.citationTitle || 'Untitled',
+          meaningfulContent,
+          domain
+        )
+        console.log(`[WikipediaProcessor] RelevanceEngine validation:`, {
+          score: relevanceEngineResult.score,
+          isRelevant: relevanceEngineResult.isRelevant,
+          matchedEntities: relevanceEngineResult.matchedEntities,
+          reason: relevanceEngineResult.reason
+        })
+      } catch (error) {
+        console.warn(`[WikipediaProcessor] RelevanceEngine validation failed (non-fatal):`, error)
+      }
+
+      // Final relevance decision: Primary check is DeepSeek score (>= 60 and isRelevant)
+      // Secondary check (optional): RelevanceEngine can override if it strongly disagrees
+      const finalIsRelevant = isRelevantFromDeepSeek && 
+        (!relevanceEngineResult || relevanceEngineResult.isRelevant || relevanceEngineResult.score >= 0.5)
       
-      // Allow through if either AI score is good OR RelevanceEngine is highly confident
-      const isRelevant = (hasGoodAIScore || hasHighRelevanceEngineScore) && hasRelevanceEngineApproval && hasSufficientContent
-      
-      console.log(`[WikipediaProcessor] Relevance check for "${nextCitation.citationTitle}":`, {
-        aiPriorityScore,
-        relevanceScore: relevanceResult.score,
-        isRelevant: relevanceResult.isRelevant,
-        matchedEntities: relevanceResult.matchedEntities,
-        reason: relevanceResult.reason,
-        finalDecision: isRelevant ? 'RELEVANT' : 'NOT RELEVANT',
-        checks: {
-          aiScore: hasGoodAIScore,
-          highRelevanceEngineScore: hasHighRelevanceEngineScore,
-          relevanceEngine: hasRelevanceEngineApproval,
-          contentLength: hasSufficientContent
-        }
+      console.log(`[WikipediaProcessor] Final relevance decision for "${nextCitation.citationTitle}":`, {
+        deepSeekScore: aiPriorityScore,
+        deepSeekRelevant: isRelevantFromDeepSeek,
+        relevanceEngineScore: relevanceEngineResult?.score,
+        relevanceEngineRelevant: relevanceEngineResult?.isRelevant,
+        finalDecision: finalIsRelevant ? 'RELEVANT' : 'NOT RELEVANT'
       })
       
       let savedContentId: string | null = null
       let savedMemoryId: string | null = null
 
       // Save citations to DiscoveredContent
-      // Only save if relevant (AI score + RelevanceEngine approval)
+      // Only save if DeepSeek approves (score >= 60 and isRelevant)
       // isUseful flag will determine if it's published to the page
-      if (isRelevant && options.saveAsContent) {
+      if (finalIsRelevant && options.saveAsContent) {
         savedContentId = await options.saveAsContent(
           citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
-          textContent,
+          meaningfulContent,
           {
             aiScore: aiPriorityScore,
-            relevanceScore: relevanceResult.score,
+            relevanceScore: relevanceEngineResult?.score ?? 0,
             isRelevant: true
           }
         ) || null
@@ -543,31 +643,33 @@ export async function processNextCitation(
             // Non-fatal - hero can be generated later
           })
         }
-      } else if (!isRelevant) {
-        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${relevanceResult.reason || 'Failed relevance checks'}`)
+      } else if (!finalIsRelevant) {
+        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${scoringResult.reason || 'Failed DeepSeek relevance check'}`)
       }
 
       // Only save to AgentMemory if relevant (for AI knowledge)
       // Pass Wikipedia page title for segregation
-      if (isRelevant && options.saveAsMemory) {
+      if (finalIsRelevant && options.saveAsMemory) {
         savedMemoryId = await options.saveAsMemory(
           citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
-          textContent,
+          meaningfulContent,
           options.patchHandle,
           monitoring?.wikipediaTitle // Pass Wikipedia page title for segregation
         ) || null
       }
 
-      // Mark as scanned - all citations are saved, but relevance determines memory storage
+      // Mark as scanned - store content, score, and decision
       await markCitationScanned(
         nextCitation.id,
         savedContentId ? 'saved' : 'denied', // 'saved' if successfully stored in DiscoveredContent
         savedContentId || undefined,
-        savedMemoryId || undefined
+        savedMemoryId || undefined,
+        meaningfulContent, // Store extracted content
+        aiPriorityScore // Store DeepSeek score from actual content
       )
 
-      console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'failed to save'}${isRelevant ? ' (relevant - added to memory)' : ' (not relevant - data only)'}`)
+      console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'rejected'}${finalIsRelevant ? ' (relevant - added to memory)' : ' (not relevant - content stored for audit)'}`)
 
       // Check if page can be marked complete after processing this citation
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)

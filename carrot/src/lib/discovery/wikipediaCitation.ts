@@ -280,7 +280,9 @@ export async function markCitationScanned(
   citationId: string,
   relevanceDecision: 'saved' | 'denied',
   savedContentId?: string,
-  savedMemoryId?: string
+  savedMemoryId?: string,
+  contentText?: string,
+  aiPriorityScore?: number
 ): Promise<void> {
   await prisma.wikipediaCitation.update({
     where: { id: citationId },
@@ -289,6 +291,8 @@ export async function markCitationScanned(
       relevanceDecision,
       savedContentId: savedContentId || null,
       savedMemoryId: savedMemoryId || null,
+      contentText: contentText || null,
+      aiPriorityScore: aiPriorityScore !== undefined ? aiPriorityScore : null,
       lastScannedAt: new Date()
     }
   })
