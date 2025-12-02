@@ -677,7 +677,7 @@ export async function processNextCitation(
       return {
         processed: true,
         citationUrl: citationUrl,
-        saved: isRelevant,
+        saved: finalIsRelevant,
         monitoringId: nextCitation.monitoringId
       }
     } catch (error) {
