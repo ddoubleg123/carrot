@@ -159,7 +159,7 @@ export async function getNextWikipediaPageToProcess(
   const page = await prisma.wikipediaMonitoring.findFirst({
     where: {
       patchId,
-      status: { in: ['pending', 'scanning'] },
+      status: { in: ['pending', 'scanning', 'error'] }, // Include 'error' to allow retry
       OR: [
         { contentScanned: false },
         { citationsExtracted: false }
@@ -171,7 +171,19 @@ export async function getNextWikipediaPageToProcess(
     ]
   })
 
-  if (!page) return null
+  if (!page) {
+    // Log why no pages were found for debugging
+    const allPages = await prisma.wikipediaMonitoring.findMany({
+      where: { patchId },
+      select: { id: true, status: true, contentScanned: true, citationsExtracted: true }
+    })
+    const statusCounts = allPages.reduce((acc, p) => {
+      acc[p.status] = (acc[p.status] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    console.log(`[WikipediaMonitoring] No pages available to process. Status breakdown:`, statusCounts)
+    return null
+  }
 
   return {
     id: page.id,
@@ -214,6 +226,7 @@ export async function updateWikipediaPageContent(
 
 /**
  * Mark Wikipedia page citations as extracted
+ * NOTE: Does NOT mark page as 'completed' - that only happens after ALL citations are processed
  */
 export async function markCitationsExtracted(
   monitoringId: string,
@@ -224,8 +237,9 @@ export async function markCitationsExtracted(
     data: {
       citationsExtracted: true,
       citationCount,
-      lastExtractedAt: new Date(),
-      status: 'completed'
+      lastExtractedAt: new Date()
+      // DO NOT set status: 'completed' here - wait until all citations are processed
+      // Status will be set to 'completed' by checkAndMarkPageCompleteIfAllCitationsProcessed
     }
   })
 }
