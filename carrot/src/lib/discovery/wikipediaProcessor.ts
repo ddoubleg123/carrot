@@ -820,15 +820,14 @@ export async function processNextCitation(
         // Trigger hero image generation in background (non-blocking)
         if (savedContentId) {
           // Fire and forget - don't await
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
-          fetch(`${baseUrl}/api/internal/enrich/${savedContentId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Internal-Token': process.env.INTERNAL_ENRICH_TOKEN || 'internal-token'
-            }
+          // Use direct function call instead of HTTP to avoid URL construction issues
+          import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
+            enrichContentId(savedContentId).catch(err => {
+              console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${savedContentId}:`, err)
+              // Non-fatal - hero can be generated later
+            })
           }).catch(err => {
-            console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${savedContentId}:`, err)
+            console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${savedContentId}:`, err)
             // Non-fatal - hero can be generated later
           })
         }
