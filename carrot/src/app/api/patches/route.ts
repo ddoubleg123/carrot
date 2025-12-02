@@ -204,9 +204,9 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       setTimeout(async () => {
         try {
           // Import discovery engine and related functions
-          const { runOpenEvidenceEngine } = await import('@/lib/discovery/engineV21');
-          const { generateGuideSnapshot } = await import('@/lib/discovery/planner');
-          const { clearFrontier, seedFrontierFromPlan, storeDiscoveryPlan } = await import('@/lib/discovery/frontier');
+          const { runOpenEvidenceEngine } = await import('@/lib/discovery/engine');
+          const { generateGuideSnapshot, seedFrontierFromPlan } = await import('@/lib/discovery/planner');
+          const { clearFrontier, storeDiscoveryPlan } = await import('@/lib/redis/discovery');
           
           // Check if DEEPSEEK_API_KEY is configured
           if (!process.env.DEEPSEEK_API_KEY) {
