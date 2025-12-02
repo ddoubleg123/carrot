@@ -195,6 +195,48 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       // Non-fatal - continue with patch creation
     }
 
+    // Auto-start discovery (background task - don't block response)
+    // Use the same endpoint that manual discovery uses to ensure consistency
+    try {
+      console.log('[API] Auto-starting discovery for new patch:', { patchId: patch.id, handle: patch.handle });
+      
+      // Wait a bit for Wikipedia monitoring to initialize first, then trigger discovery
+      setTimeout(async () => {
+        try {
+          // Use internal fetch to start discovery (same as test wizard does)
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+          
+          const discoveryResponse = await fetch(`${baseUrl}/api/patches/${patch.handle}/start-discovery`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // Forward auth headers if available (for internal calls)
+              ...(session?.user?.id && { 'X-User-Id': session.user.id })
+            },
+            body: JSON.stringify({
+              action: 'start_deepseek_search'
+            })
+          });
+
+          if (discoveryResponse.ok) {
+            const result = await discoveryResponse.json();
+            console.log('[API] Auto-started discovery successfully:', result);
+          } else {
+            const errorText = await discoveryResponse.text();
+            console.warn('[API] Auto-start discovery failed:', discoveryResponse.status, errorText);
+            // Non-fatal - discovery can be started manually later
+          }
+        } catch (error) {
+          console.error('[API] Error auto-starting discovery:', error);
+          // Non-fatal - discovery can be started manually later
+        }
+      }, 3000); // Wait 3 seconds for Wikipedia monitoring to complete
+    } catch (discoveryError) {
+      console.error('[API] Error setting up auto-discovery:', discoveryError);
+      // Non-fatal - continue with patch creation
+    }
+
     // Return the created patch
     return NextResponse.json({
       success: true,
