@@ -177,7 +177,8 @@ export async function getNextWikipediaPageToProcess(
   if (!page) {
     const { prisma: prismaClient } = await import('@/lib/prisma')
     
-    // Find completed pages that have citations with scanStatus != 'scanned' or relevanceDecision = null
+    // Find completed pages that have unprocessed citations
+    // A citation is unprocessed if it's NOT scanned AND verification didn't fail
     const pagesWithUnprocessedCitations = await prismaClient.wikipediaMonitoring.findMany({
       where: {
         patchId,
@@ -185,9 +186,9 @@ export async function getNextWikipediaPageToProcess(
         citationsExtracted: true,
         citations: {
           some: {
-            OR: [
-              { scanStatus: { not: 'scanned' } },
-              { relevanceDecision: null }
+            AND: [
+              { scanStatus: { not: 'scanned' } }, // Not scanned
+              { verificationStatus: { not: 'failed' } } // And verification didn't fail
             ]
           }
         }

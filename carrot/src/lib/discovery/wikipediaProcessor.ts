@@ -603,6 +603,15 @@ export async function processNextCitation(
  * Check if all citations for a Wikipedia page have been processed
  * If so, mark the page as complete
  */
+/**
+ * Check if all citations for a page have been processed, and mark page as complete if so.
+ * 
+ * A citation is considered "processed" if:
+ * - It has been scanned (scanStatus: 'scanned'), OR
+ * - Verification failed (verificationStatus: 'failed') - these are processed even if not scanned
+ * 
+ * This ensures pages are only marked complete when ALL citations have been reviewed.
+ */
 async function checkAndMarkPageCompleteIfAllCitationsProcessed(monitoringId: string): Promise<void> {
   try {
     // Count total citations and processed citations
@@ -610,21 +619,35 @@ async function checkAndMarkPageCompleteIfAllCitationsProcessed(monitoringId: str
       where: { monitoringId }
     })
 
+    if (totalCitations === 0) {
+      // No citations to process - page can be marked complete
+      await markWikipediaPageComplete(monitoringId)
+      console.log(`[WikipediaProcessor] Page has no citations, marking as complete`)
+      return
+    }
+
+    // A citation is "processed" if:
+    // 1. It has been scanned (scanStatus: 'scanned'), OR
+    // 2. Verification failed (verificationStatus: 'failed') - these are processed even if not scanned
     const processedCitations = await prisma.wikipediaCitation.count({
       where: {
         monitoringId,
-        scanStatus: { in: ['scanned'] },
         OR: [
-          { verificationStatus: 'failed' }, // Failed citations count as processed
-          { relevanceDecision: { not: null } } // Has a decision (saved or denied)
+          { scanStatus: 'scanned' }, // Any scanned citation is processed
+          { verificationStatus: 'failed' } // Failed citations are processed even if not scanned
         ]
       }
     })
 
+    console.log(`[WikipediaProcessor] Page completion check: ${processedCitations}/${totalCitations} citations processed`)
+
     // If all citations are processed, mark page as complete
-    if (totalCitations > 0 && processedCitations >= totalCitations) {
+    if (processedCitations >= totalCitations) {
       await markWikipediaPageComplete(monitoringId)
-      console.log(`[WikipediaProcessor] All ${totalCitations} citations processed, marking page as complete`)
+      console.log(`[WikipediaProcessor] ✅ All ${totalCitations} citations processed, marking page as complete`)
+    } else {
+      const unprocessed = totalCitations - processedCitations
+      console.log(`[WikipediaProcessor] ⏳ Page not complete: ${unprocessed} citations still need processing`)
     }
   } catch (error) {
     console.error(`[WikipediaProcessor] Error checking page completion:`, error)

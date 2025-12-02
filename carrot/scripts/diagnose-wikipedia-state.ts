@@ -24,23 +24,24 @@ async function diagnoseWikipediaState(patchHandle: string) {
     })
 
     if (!patch) {
-      console.error(`❌ Error: Patch with handle "${patchHandle}" not found.`)
+      console.error(`Error: Patch with handle "${patchHandle}" not found.`)
       process.exit(1)
     }
 
-    console.log(`📋 Patch: ${patch.title} (${patch.id})\n`)
+    console.log(`Patch: ${patch.title} (${patch.id})\n`)
     console.log('=' .repeat(70))
 
     // 1. PAGE STATUS DISTRIBUTION
-    console.log('\n1️⃣  PAGE STATUS DISTRIBUTION\n')
+    console.log('\n1. PAGE STATUS DISTRIBUTION\n')
     
-    const pageStatusCounts = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
-      SELECT status, COUNT(*) as count
-      FROM wikipedia_monitoring
-      WHERE patch_id = ${patch.id}
-      GROUP BY status
-      ORDER BY status
-    `
+    const pageStatusCounts = await prisma.$queryRawUnsafe<Array<{ status: string; count: bigint }>>(
+      `SELECT status, COUNT(*) as count
+       FROM wikipedia_monitoring
+       WHERE patch_id = $1
+       GROUP BY status
+       ORDER BY status`,
+      patch.id
+    )
 
     const totalPages = await prisma.wikipediaMonitoring.count({
       where: { patchId: patch.id }
@@ -64,29 +65,30 @@ async function diagnoseWikipediaState(patchHandle: string) {
     })
 
     // 2. CITATION STATUS DISTRIBUTION
-    console.log('\n2️⃣  CITATION STATUS DISTRIBUTION\n')
+    console.log('\n2. CITATION STATUS DISTRIBUTION\n')
     
     const totalCitations = await prisma.wikipediaCitation.count({
       where: { monitoring: { patchId: patch.id } }
     })
 
-    const citationStatusCounts = await prisma.$queryRaw<Array<{ 
+    const citationStatusCounts = await prisma.$queryRawUnsafe<Array<{ 
       verification_status: string
       scan_status: string
       relevance_decision: string | null
       count: bigint 
-    }>>`
-      SELECT 
+    }>>(
+      `SELECT 
         verification_status,
         scan_status,
         relevance_decision,
         COUNT(*) as count
       FROM wikipedia_citations wc
       JOIN wikipedia_monitoring wm ON wc.monitoring_id = wm.id
-      WHERE wm.patch_id = ${patch.id}
+      WHERE wm.patch_id = $1
       GROUP BY verification_status, scan_status, relevance_decision
-      ORDER BY verification_status, scan_status, relevance_decision
-    `
+      ORDER BY verification_status, scan_status, relevance_decision`,
+      patch.id
+    )
 
     console.log(`Total citations: ${totalCitations}`)
     citationStatusCounts.forEach(({ verification_status, scan_status, relevance_decision, count }) => {
@@ -95,7 +97,7 @@ async function diagnoseWikipediaState(patchHandle: string) {
     })
 
     // 3. WHY PAGES AREN'T BEING FOUND
-    console.log('\n3️⃣  WHY PAGES AREN'T BEING FOUND\n')
+    console.log('\n3. WHY PAGES AREN\'T BEING FOUND\n')
     
     // Check what getNextWikipediaPageToProcess would find
     const pagesThatShouldMatch = await prisma.wikipediaMonitoring.findMany({
@@ -122,17 +124,8 @@ async function diagnoseWikipediaState(patchHandle: string) {
       take: 5
     })
 
-    console.log(`Pages matching getNextWikipediaPageToProcess query: ${pagesThatShouldMatch.length}`)
-    if (pagesThatShouldMatch.length > 0) {
-      pagesThatShouldMatch.forEach((page, i) => {
-        console.log(`  ${i + 1}. "${page.wikipediaTitle}"`)
-        console.log(`     Status: ${page.status}, contentScanned: ${page.contentScanned}, citationsExtracted: ${page.citationsExtracted}, priority: ${page.priority}`)
-      })
-    } else {
-      console.log('  ❌ No pages match the query conditions!')
-      
-      // Check for completed pages with unprocessed citations
-      const completedPagesWithUnprocessedCitations = await prisma.wikipediaMonitoring.findMany({
+    // Check for completed pages with unprocessed citations (regardless of pagesThatShouldMatch)
+    const completedPagesWithUnprocessedCitations = await prisma.wikipediaMonitoring.findMany({
         where: {
           patchId: patch.id,
           status: 'completed',
@@ -167,20 +160,29 @@ async function diagnoseWikipediaState(patchHandle: string) {
         take: 5
       })
 
-      if (completedPagesWithUnprocessedCitations.length > 0) {
-        console.log(`\n  ⚠️  Found ${completedPagesWithUnprocessedCitations.length} 'completed' pages with unprocessed citations:`)
-        completedPagesWithUnprocessedCitations.forEach((page, i) => {
-          console.log(`  ${i + 1}. "${page.wikipediaTitle}"`)
-          console.log(`     Unprocessed citations: ${page._count.citations}`)
-        })
-        console.log('  → These should be reset to "scanning" status by recovery logic')
-      } else {
-        console.log('  ℹ️  All pages are truly completed (no unprocessed citations)')
-      }
+    console.log(`Pages matching getNextWikipediaPageToProcess query: ${pagesThatShouldMatch.length}`)
+    if (pagesThatShouldMatch.length > 0) {
+      pagesThatShouldMatch.forEach((page, i) => {
+        console.log(`  ${i + 1}. "${page.wikipediaTitle}"`)
+        console.log(`     Status: ${page.status}, contentScanned: ${page.contentScanned}, citationsExtracted: ${page.citationsExtracted}, priority: ${page.priority}`)
+      })
+    } else {
+      console.log('  ❌ No pages match the query conditions!')
+    }
+
+    if (completedPagesWithUnprocessedCitations.length > 0) {
+      console.log(`\n  ⚠️  Found ${completedPagesWithUnprocessedCitations.length} 'completed' pages with unprocessed citations:`)
+      completedPagesWithUnprocessedCitations.forEach((page, i) => {
+        console.log(`  ${i + 1}. "${page.wikipediaTitle}"`)
+        console.log(`     Unprocessed citations: ${page._count.citations}`)
+      })
+      console.log('  → These should be reset to "scanning" status by recovery logic')
+    } else if (pagesThatShouldMatch.length === 0) {
+      console.log('  ℹ️  All pages are truly completed (no unprocessed citations)')
     }
 
     // 4. WHY CITATIONS AREN'T BEING FOUND
-    console.log('\n4️⃣  WHY CITATIONS AREN'T BEING FOUND\n')
+    console.log('\n4. WHY CITATIONS AREN\'T BEING FOUND\n')
     
     // Check what getNextCitationToProcess would find
     const citationsThatShouldMatch = await prisma.wikipediaCitation.findMany({
@@ -253,7 +255,7 @@ async function diagnoseWikipediaState(patchHandle: string) {
     }
 
     // 5. PROCESSING RECOMMENDATIONS
-    console.log('\n5️⃣  PROCESSING RECOMMENDATIONS\n')
+    console.log('\n5. PROCESSING RECOMMENDATIONS\n')
     
     const unprocessedCitations = await prisma.wikipediaCitation.count({
       where: {
