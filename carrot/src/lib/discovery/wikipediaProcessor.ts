@@ -549,7 +549,7 @@ export async function processNextCitation(
           undefined,
           undefined,
           meaningfulContent, // Store content even if rejected
-          null // No score if content is insufficient
+          undefined // No score if content is insufficient
         )
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
