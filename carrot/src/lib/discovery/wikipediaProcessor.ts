@@ -481,14 +481,17 @@ export async function processNextCitation(
       const aiPriorityScore = nextCitation.aiPriorityScore ?? 50
       
       // Citation is relevant if:
-      // 1. AI priority score >= 60 (moderate relevance threshold)
+      // 1. AI priority score >= 60 (moderate relevance threshold) OR
+      //    RelevanceEngine gives high confidence (score >= 0.8) with relevant entities
       // 2. RelevanceEngine confirms it's relevant to the topic
       // 3. Content has sufficient length (>500 chars)
       const hasGoodAIScore = aiPriorityScore >= 60
+      const hasHighRelevanceEngineScore = relevanceResult.score >= 0.8 && relevanceResult.matchedEntities.length > 0
       const hasRelevanceEngineApproval = relevanceResult.isRelevant
       const hasSufficientContent = textContent.length > 500
       
-      const isRelevant = hasGoodAIScore && hasRelevanceEngineApproval && hasSufficientContent
+      // Allow through if either AI score is good OR RelevanceEngine is highly confident
+      const isRelevant = (hasGoodAIScore || hasHighRelevanceEngineScore) && hasRelevanceEngineApproval && hasSufficientContent
       
       console.log(`[WikipediaProcessor] Relevance check for "${nextCitation.citationTitle}":`, {
         aiPriorityScore,
@@ -499,6 +502,7 @@ export async function processNextCitation(
         finalDecision: isRelevant ? 'RELEVANT' : 'NOT RELEVANT',
         checks: {
           aiScore: hasGoodAIScore,
+          highRelevanceEngineScore: hasHighRelevanceEngineScore,
           relevanceEngine: hasRelevanceEngineApproval,
           contentLength: hasSufficientContent
         }
