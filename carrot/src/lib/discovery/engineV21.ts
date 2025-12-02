@@ -560,7 +560,7 @@ export class DiscoveryEngineV21 {
             patchHandle: this.options.patchHandle,
             maxPagesPerRun: 1,
             maxCitationsPerRun: 50, // Process more citations per run
-            saveAsContent: async (url: string, title: string, content: string) => {
+            saveAsContent: async (url: string, title: string, content: string, relevanceData?: { aiScore?: number; relevanceScore?: number; isRelevant?: boolean }) => {
               // Save relevant citation to DiscoveredContent for the patch
               try {
                 const { canonicalizeUrlFast } = await import('./canonicalize')
@@ -590,8 +590,13 @@ export class DiscoveryEngineV21 {
                 const cleanedText = content.trim()
                 const contentHash = createHash('sha256').update(cleanedText).digest('hex')
                 
-                // Create DiscoveredContent entry for ALL citations (for data tracking)
-                // isUseful flag will determine if it's published to the page
+                // Calculate final relevance score (combine AI score and relevance engine score)
+                const aiScore = relevanceData?.aiScore ?? 50
+                const relevanceEngineScore = relevanceData?.relevanceScore ?? 0
+                const finalRelevanceScore = (aiScore / 100) * 0.6 + relevanceEngineScore * 0.4 // Weighted combination
+                
+                // Create DiscoveredContent entry for relevant citations only
+                // isUseful flag determines if it's published to the page
                 const savedItem = await prisma.discoveredContent.create({
                   data: {
                     patchId: this.options.patchId,
@@ -603,28 +608,30 @@ export class DiscoveryEngineV21 {
                     type: 'article', // Required field - Wikipedia citations are articles
                     category: 'wikipedia_citation',
                     publishDate: null, // Column now exists in database
-                    relevanceScore: 0.7, // Default relevance for Wikipedia citations
+                    relevanceScore: finalRelevanceScore, // Combined AI + relevance engine score
                     qualityScore: 0.6, // Default quality
-                    importanceScore: 0.5, // Default importance
+                    importanceScore: aiScore / 100, // Use AI priority score as importance
                     whyItMatters: `Source cited on Wikipedia page related to ${this.options.patchName}`,
                     summary: cleanedText.substring(0, 500), // First 500 chars as summary
                     facts: [] as any,
                     quotes: [] as any,
                     provenance: [url] as any,
-                    hero: Prisma.JsonNull,
+                    hero: Prisma.JsonNull, // Will be populated by hero pipeline
                     contentHash,
                     textContent: cleanedText,
                     content: cleanedText, // Legacy content field (required by database)
                     lastCrawledAt: new Date(),
-                    isUseful: cleanedText.length > 500, // Mark as useful if content is substantial
+                    isUseful: relevanceData?.isRelevant ?? false, // Only useful if actually relevant
                     metadata: {
                       source: 'wikipedia_citation',
-                      processedAt: new Date().toISOString()
+                      processedAt: new Date().toISOString(),
+                      aiPriorityScore: aiScore,
+                      relevanceEngineScore: relevanceEngineScore
                     } as any
                   } as any // Use 'as any' to allow legacy 'content' field
                 })
                 
-                console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id}`)
+                console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id} (relevance: ${finalRelevanceScore.toFixed(2)}, useful: ${relevanceData?.isRelevant ?? false})`)
                 return savedItem.id
               } catch (error: any) {
                 console.error(`[WikipediaProcessor] Error saving citation to DiscoveredContent:`, error)

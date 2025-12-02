@@ -104,6 +104,7 @@ export async function getNextCitationToProcess(
   citationTitle: string | null
   sourceNumber: number
   monitoringId: string
+  aiPriorityScore: number | null
 } | null> {
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
@@ -132,7 +133,8 @@ export async function getNextCitationToProcess(
     citationUrl: citation.citationUrl,
     citationTitle: citation.citationTitle,
     sourceNumber: citation.sourceNumber,
-    monitoringId: citation.monitoringId
+    monitoringId: citation.monitoringId,
+    aiPriorityScore: citation.aiPriorityScore
   }
 }
 

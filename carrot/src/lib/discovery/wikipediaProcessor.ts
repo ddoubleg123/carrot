@@ -349,7 +349,7 @@ export async function processNextCitation(
   options: {
     patchName: string
     patchHandle: string
-    saveAsContent?: (url: string, title: string, content: string) => Promise<string | null> // Returns DiscoveredContent.id
+    saveAsContent?: (url: string, title: string, content: string, relevanceData?: { aiScore?: number; relevanceScore?: number; isRelevant?: boolean }) => Promise<string | null> // Returns DiscoveredContent.id
     saveAsMemory?: (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => Promise<string | null> // Returns AgentMemory.id
   }
 ): Promise<{ processed: boolean; citationUrl?: string; saved?: boolean; monitoringId?: string }> {
@@ -461,20 +461,84 @@ export async function processNextCitation(
         .trim()
         .substring(0, 50000) // Limit to 50k chars
 
-      // Determine relevance (simplified - should use actual relevance engine)
-      const isRelevant = textContent.length > 500 // Basic heuristic
+      // Determine relevance using AI priority score AND relevance engine
+      const { RelevanceEngine } = await import('./relevance')
+      const relevanceEngine = new RelevanceEngine()
+      
+      // Build entity profile for the patch
+      await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
+      
+      // Check relevance using RelevanceEngine
+      const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
+      const relevanceResult = await relevanceEngine.checkRelevance(
+        options.patchHandle,
+        nextCitation.citationTitle || 'Untitled',
+        textContent,
+        domain
+      )
+      
+      // Get AI priority score from citation
+      const aiPriorityScore = nextCitation.aiPriorityScore ?? 50
+      
+      // Citation is relevant if:
+      // 1. AI priority score >= 60 (moderate relevance threshold)
+      // 2. RelevanceEngine confirms it's relevant to the topic
+      // 3. Content has sufficient length (>500 chars)
+      const hasGoodAIScore = aiPriorityScore >= 60
+      const hasRelevanceEngineApproval = relevanceResult.isRelevant
+      const hasSufficientContent = textContent.length > 500
+      
+      const isRelevant = hasGoodAIScore && hasRelevanceEngineApproval && hasSufficientContent
+      
+      console.log(`[WikipediaProcessor] Relevance check for "${nextCitation.citationTitle}":`, {
+        aiPriorityScore,
+        relevanceScore: relevanceResult.score,
+        isRelevant: relevanceResult.isRelevant,
+        matchedEntities: relevanceResult.matchedEntities,
+        reason: relevanceResult.reason,
+        finalDecision: isRelevant ? 'RELEVANT' : 'NOT RELEVANT',
+        checks: {
+          aiScore: hasGoodAIScore,
+          relevanceEngine: hasRelevanceEngineApproval,
+          contentLength: hasSufficientContent
+        }
+      })
       
       let savedContentId: string | null = null
       let savedMemoryId: string | null = null
 
-      // Save ALL citations to DiscoveredContent for data tracking
+      // Save citations to DiscoveredContent
+      // Only save if relevant (AI score + RelevanceEngine approval)
       // isUseful flag will determine if it's published to the page
-      if (options.saveAsContent) {
+      if (isRelevant && options.saveAsContent) {
         savedContentId = await options.saveAsContent(
           citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
-          textContent
+          textContent,
+          {
+            aiScore: aiPriorityScore,
+            relevanceScore: relevanceResult.score,
+            isRelevant: true
+          }
         ) || null
+        
+        // Trigger hero image generation in background (non-blocking)
+        if (savedContentId) {
+          // Fire and forget - don't await
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+          fetch(`${baseUrl}/api/internal/enrich/${savedContentId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Internal-Token': process.env.INTERNAL_ENRICH_TOKEN || 'internal-token'
+            }
+          }).catch(err => {
+            console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${savedContentId}:`, err)
+            // Non-fatal - hero can be generated later
+          })
+        }
+      } else if (!isRelevant) {
+        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${relevanceResult.reason || 'Failed relevance checks'}`)
       }
 
       // Only save to AgentMemory if relevant (for AI knowledge)
