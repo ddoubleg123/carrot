@@ -196,37 +196,85 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     }
 
     // Auto-start discovery (background task - don't block response)
-    // Use the same endpoint that manual discovery uses to ensure consistency
+    // Wait for Wikipedia monitoring to initialize, then start discovery engine directly
     try {
-      console.log('[API] Auto-starting discovery for new patch:', { patchId: patch.id, handle: patch.handle });
+      console.log('[API] Scheduling auto-start discovery for new patch:', { patchId: patch.id, handle: patch.handle });
       
-      // Wait a bit for Wikipedia monitoring to initialize first, then trigger discovery
+      // Wait a bit for Wikipedia monitoring to initialize first, then start discovery
       setTimeout(async () => {
         try {
-          // Use internal fetch to start discovery (same as test wizard does)
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+          // Import discovery engine and related functions
+          const { runOpenEvidenceEngine } = await import('@/lib/discovery/engineV21');
+          const { generateGuideSnapshot } = await import('@/lib/discovery/planner');
+          const { clearFrontier, seedFrontierFromPlan, storeDiscoveryPlan } = await import('@/lib/discovery/frontier');
           
-          const discoveryResponse = await fetch(`${baseUrl}/api/patches/${patch.handle}/start-discovery`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              // Forward auth headers if available (for internal calls)
-              ...(session?.user?.id && { 'X-User-Id': session.user.id })
-            },
-            body: JSON.stringify({
-              action: 'start_deepseek_search'
-            })
+          // Check if DEEPSEEK_API_KEY is configured
+          if (!process.env.DEEPSEEK_API_KEY) {
+            console.warn('[API] DEEPSEEK_API_KEY not configured - skipping auto-start discovery');
+            return;
+          }
+
+          // Create discovery run
+          const run = await (prisma as any).discoveryRun.create({
+            data: {
+              patchId: patch.id,
+              status: 'queued'
+            }
           });
 
-          if (discoveryResponse.ok) {
-            const result = await discoveryResponse.json();
-            console.log('[API] Auto-started discovery successfully:', result);
-          } else {
-            const errorText = await discoveryResponse.text();
-            console.warn('[API] Auto-start discovery failed:', discoveryResponse.status, errorText);
-            // Non-fatal - discovery can be started manually later
+          // Generate or use existing guide
+          let guide = patch.guide as any;
+          if (!guide) {
+            const entity = (rawEntity ?? {}) as { name?: string; aliases?: string[] };
+            const topic = entity?.name && entity.name.trim().length ? entity.name.trim() : title;
+            const aliases = Array.isArray(entity?.aliases) && entity.aliases.length
+              ? entity.aliases.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+              : tags.filter((tag: any): tag is string => typeof tag === 'string' && tag.trim().length > 0);
+
+            guide = await generateGuideSnapshot(topic, aliases);
+            await prisma.patch.update({
+              where: { id: patch.id },
+              data: { guide: guide as unknown as Prisma.JsonObject }
+            });
           }
+
+          // Clear frontier and seed from plan
+          await clearFrontier(patch.id).catch((error) => {
+            console.warn('[API] Failed to clear frontier before seeding', error);
+          });
+
+          await storeDiscoveryPlan(run.id, guide).catch((error) => {
+            console.error('[API] Failed to cache discovery plan', error);
+          });
+
+          await seedFrontierFromPlan(patch.id, guide).catch((error) => {
+            console.error('[API] Failed to seed frontier from guide', error);
+          });
+
+          // Mark run as live
+          await (prisma as any).discoveryRun.update({
+            where: { id: run.id },
+            data: {
+              status: 'live',
+              startedAt: new Date()
+            }
+          });
+
+          // Start discovery engine
+          console.log('[API] Auto-starting discovery engine:', { patchId: patch.id, runId: run.id });
+          runOpenEvidenceEngine({
+            patchId: patch.id,
+            patchHandle: patch.handle,
+            patchName: patch.title,
+            runId: run.id
+          }).catch((error) => {
+            console.error('[API] Auto-start discovery engine failed:', error);
+            // Update run status to error
+            (prisma as any).discoveryRun.update({
+              where: { id: run.id },
+              data: { status: 'error' }
+            }).catch(() => {});
+          });
         } catch (error) {
           console.error('[API] Error auto-starting discovery:', error);
           // Non-fatal - discovery can be started manually later
