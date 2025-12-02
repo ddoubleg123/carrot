@@ -96,6 +96,14 @@ export async function extractAndStoreCitations(
  * Get next citation to process (for incremental processing)
  * Returns highest priority unprocessed citation
  */
+/**
+ * Get next citation to process (verify and scan)
+ * Returns citation with highest AI priority score that hasn't been scanned yet
+ * 
+ * IMPORTANT: Citations are processed independently of page status.
+ * Once citations are extracted, they should be processed regardless of
+ * whether their parent page is marked "completed" or not.
+ */
 export async function getNextCitationToProcess(
   patchId: string
 ): Promise<{
@@ -106,6 +114,7 @@ export async function getNextCitationToProcess(
   monitoringId: string
   aiPriorityScore: number | null
 } | null> {
+  // First, try to find citations that need processing
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
@@ -120,13 +129,93 @@ export async function getNextCitationToProcess(
     include: {
       monitoring: {
         select: {
-          id: true
+          id: true,
+          wikipediaTitle: true,
+          status: true
         }
       }
     }
   })
 
-  if (!citation) return null
+  if (!citation) {
+    // Enhanced diagnostic logging to understand why no citations are found
+    const totalCitations = await prisma.wikipediaCitation.count({
+      where: { monitoring: { patchId } }
+    })
+
+    const pendingCitations = await prisma.wikipediaCitation.count({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: 'pending',
+        scanStatus: 'not_scanned',
+        relevanceDecision: null
+      }
+    })
+
+    const verifiedCitations = await prisma.wikipediaCitation.count({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: 'verified',
+        scanStatus: 'not_scanned',
+        relevanceDecision: null
+      }
+    })
+
+    const scannedCitations = await prisma.wikipediaCitation.count({
+      where: {
+        monitoring: { patchId },
+        scanStatus: 'scanned'
+      }
+    })
+
+    const withRelevanceDecision = await prisma.wikipediaCitation.count({
+      where: {
+        monitoring: { patchId },
+        relevanceDecision: { not: null }
+      }
+    })
+
+    console.log(`[WikipediaCitation] No citations available to process for patch ${patchId}`)
+    console.log(`[WikipediaCitation] Diagnostic breakdown:`)
+    console.log(`  Total citations: ${totalCitations}`)
+    console.log(`  Pending + not_scanned + no decision: ${pendingCitations}`)
+    console.log(`  Verified + not_scanned + no decision: ${verifiedCitations}`)
+    console.log(`  Already scanned: ${scannedCitations}`)
+    console.log(`  Already have relevanceDecision: ${withRelevanceDecision}`)
+    console.log(`  Query conditions: verificationStatus IN ['pending','verified'] AND scanStatus IN ['not_scanned','scanning'] AND relevanceDecision IS NULL`)
+
+    // If there are citations but they don't match, show why
+    if (totalCitations > 0 && pendingCitations === 0 && verifiedCitations === 0) {
+      const failedVerification = await prisma.wikipediaCitation.count({
+        where: {
+          monitoring: { patchId },
+          verificationStatus: 'failed'
+        }
+      })
+
+      const scanning = await prisma.wikipediaCitation.count({
+        where: {
+          monitoring: { patchId },
+          scanStatus: 'scanning'
+        }
+      })
+
+      console.log(`  Failed verification: ${failedVerification}`)
+      console.log(`  Currently scanning: ${scanning}`)
+      
+      if (scannedCitations === totalCitations) {
+        console.log(`  ℹ️  All citations have been scanned`)
+      } else if (withRelevanceDecision === totalCitations) {
+        console.log(`  ℹ️  All citations have a relevance decision`)
+      } else {
+        console.log(`  ⚠️  Some citations may be in unexpected states`)
+      }
+    }
+
+    return null
+  }
+
+  console.log(`[WikipediaCitation] Found citation to process: "${citation.citationTitle || 'Untitled'}" (priority: ${citation.aiPriorityScore || 'N/A'}) from page "${citation.monitoring.wikipediaTitle}" (status: ${citation.monitoring.status})`)
 
   return {
     id: citation.id,

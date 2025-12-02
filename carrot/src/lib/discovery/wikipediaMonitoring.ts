@@ -225,16 +225,42 @@ export async function getNextWikipediaPageToProcess(
   }
 
   if (!page) {
-    // Log why no pages were found for debugging
+    // Enhanced diagnostic logging to understand why no pages are found
     const allPages = await prisma.wikipediaMonitoring.findMany({
       where: { patchId },
-      select: { id: true, status: true, contentScanned: true, citationsExtracted: true }
+      select: { 
+        id: true, 
+        status: true, 
+        contentScanned: true, 
+        citationsExtracted: true,
+        wikipediaTitle: true
+      }
     })
+    
     const statusCounts = allPages.reduce((acc, p) => {
       acc[p.status] = (acc[p.status] || 0) + 1
       return acc
     }, {} as Record<string, number>)
-    console.log(`[WikipediaMonitoring] No pages available to process. Status breakdown:`, statusCounts)
+
+    const extractionBreakdown = allPages.reduce((acc, p) => {
+      const key = `contentScanned:${p.contentScanned},citationsExtracted:${p.citationsExtracted}`
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    console.log(`[WikipediaMonitoring] No pages available to process for patch ${patchId}`)
+    console.log(`[WikipediaMonitoring] Status breakdown:`, statusCounts)
+    console.log(`[WikipediaMonitoring] Extraction breakdown:`, extractionBreakdown)
+    console.log(`[WikipediaMonitoring] Query conditions: status IN ['pending','scanning','error'] AND (contentScanned=false OR citationsExtracted=false)`)
+
+    // Show sample pages to understand their state
+    if (allPages.length > 0) {
+      console.log(`[WikipediaMonitoring] Sample pages (first 5):`)
+      allPages.slice(0, 5).forEach((p, i) => {
+        console.log(`  ${i + 1}. "${p.wikipediaTitle}" - status: ${p.status}, contentScanned: ${p.contentScanned}, citationsExtracted: ${p.citationsExtracted}`)
+      })
+    }
+
     return null
   }
 
