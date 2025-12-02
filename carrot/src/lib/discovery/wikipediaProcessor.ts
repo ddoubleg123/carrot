@@ -575,7 +575,7 @@ export async function processNextCitation(
       })
 
       // Optional: Secondary validation using RelevanceEngine
-      let relevanceEngineResult: { score: number; isRelevant: boolean; reason: string; matchedEntities: string[] } | null = null
+      let relevanceEngineResult: { score: number; isRelevant: boolean; reason?: string; matchedEntities: string[] } | null = null
       try {
         const { RelevanceEngine } = await import('./relevance')
         const relevanceEngine = new RelevanceEngine()
