@@ -156,7 +156,8 @@ export async function initializeWikipediaMonitoring(
 export async function getNextWikipediaPageToProcess(
   patchId: string
 ): Promise<{ id: string; url: string; title: string } | null> {
-  const page = await prisma.wikipediaMonitoring.findFirst({
+  // First, try to find pages that need content scanning or citation extraction
+  let page = await prisma.wikipediaMonitoring.findFirst({
     where: {
       patchId,
       status: { in: ['pending', 'scanning', 'error'] }, // Include 'error' to allow retry
@@ -170,6 +171,58 @@ export async function getNextWikipediaPageToProcess(
       { createdAt: 'asc' }
     ]
   })
+
+  // If no pages found, check for 'completed' pages that might have unprocessed citations
+  // (This handles the case where pages were incorrectly marked as complete)
+  if (!page) {
+    const { prisma: prismaClient } = await import('@/lib/prisma')
+    
+    // Find completed pages that have citations with scanStatus != 'scanned' or relevanceDecision = null
+    const pagesWithUnprocessedCitations = await prismaClient.wikipediaMonitoring.findMany({
+      where: {
+        patchId,
+        status: 'completed',
+        citationsExtracted: true,
+        citations: {
+          some: {
+            OR: [
+              { scanStatus: { not: 'scanned' } },
+              { relevanceDecision: null }
+            ]
+          }
+        }
+      },
+      select: {
+        id: true,
+        wikipediaUrl: true,
+        wikipediaTitle: true,
+        priority: true,
+        createdAt: true
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' }
+      ],
+      take: 1
+    })
+
+    if (pagesWithUnprocessedCitations.length > 0) {
+      const foundPage = pagesWithUnprocessedCitations[0]
+      console.log(`[WikipediaMonitoring] Found 'completed' page with unprocessed citations: ${foundPage.wikipediaTitle}. Resetting to 'scanning' status.`)
+      
+      // Reset status to 'scanning' so it can be processed
+      await prismaClient.wikipediaMonitoring.update({
+        where: { id: foundPage.id },
+        data: { status: 'scanning' }
+      })
+      
+      page = {
+        id: foundPage.id,
+        url: foundPage.wikipediaUrl,
+        title: foundPage.wikipediaTitle
+      } as any
+    }
+  }
 
   if (!page) {
     // Log why no pages were found for debugging
