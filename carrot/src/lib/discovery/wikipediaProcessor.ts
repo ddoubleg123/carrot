@@ -821,13 +821,14 @@ export async function processNextCitation(
         if (savedContentId) {
           // Fire and forget - don't await
           // Use direct function call instead of HTTP to avoid URL construction issues
+          const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
           import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
-            enrichContentId(savedContentId).catch(err => {
-              console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${savedContentId}:`, err)
+            enrichContentId(contentId).catch(err => {
+              console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
               // Non-fatal - hero can be generated later
             })
           }).catch(err => {
-            console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${savedContentId}:`, err)
+            console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
             // Non-fatal - hero can be generated later
           })
         }
