@@ -551,9 +551,12 @@ export class DiscoveryEngineV21 {
       // Periodic Wikipedia incremental processing (every 30 seconds or every 10 candidates)
       const now = Date.now()
       if (now - lastWikipediaProcessTime > WIKIPEDIA_PROCESS_INTERVAL || candidateCount % 10 === 0) {
+        console.log(`[EngineV21] Triggering Wikipedia incremental processing (candidateCount: ${candidateCount}, timeSinceLast: ${now - lastWikipediaProcessTime}ms)`)
         try {
           const { processWikipediaIncremental } = await import('./wikipediaProcessor')
           const { prisma } = await import('@/lib/prisma')
+          
+          console.log(`[EngineV21] Calling processWikipediaIncremental for patch ${this.options.patchId}`)
           
           await processWikipediaIncremental(this.options.patchId, {
             patchName: this.options.patchName,

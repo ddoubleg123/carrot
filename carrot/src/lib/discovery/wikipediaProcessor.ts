@@ -642,14 +642,15 @@ export async function processWikipediaIncremental(
     maxPagesPerRun?: number
     maxCitationsPerRun?: number
     prioritizeCitationsFn?: (citations: any[], sourceUrl: string) => Promise<Array<any & { score?: number }>>
-    saveAsContent?: (url: string, title: string, content: string) => Promise<string | null>
-    saveAsMemory?: (url: string, title: string, content: string, patchHandle: string) => Promise<string | null>
+    saveAsContent?: (url: string, title: string, content: string, relevanceData?: { aiScore?: number; relevanceScore?: number; isRelevant?: boolean }) => Promise<string | null>
+    saveAsMemory?: (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => Promise<string | null>
   }
 ): Promise<{
   pagesProcessed: number
   citationsProcessed: number
   citationsSaved: number
 }> {
+  console.log(`[WikipediaProcessor] processWikipediaIncremental called for patch ${patchId}`)
   const maxPages = options.maxPagesPerRun || 1
   const maxCitations = options.maxCitationsPerRun || 50 // Process more citations per run (was 5)
 
@@ -658,6 +659,7 @@ export async function processWikipediaIncremental(
   let citationsSaved = 0
 
   // Process Wikipedia pages first
+  console.log(`[WikipediaProcessor] Processing up to ${maxPages} pages and ${maxCitations} citations`)
   for (let i = 0; i < maxPages; i++) {
     const result = await processNextWikipediaPage(patchId, {
       patchName: options.patchName,
