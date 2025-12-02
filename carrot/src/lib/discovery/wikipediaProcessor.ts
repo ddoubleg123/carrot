@@ -22,6 +22,127 @@ import {
   markCitationScanned
 } from './wikipediaCitation'
 import { WikipediaSource } from './wikipediaSource'
+
+/**
+ * Check if URL is a low-quality source (library catalog, authority file, metadata page)
+ * These should be filtered out before processing
+ */
+function isLowQualityUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url)
+    const hostname = urlObj.hostname.replace(/^www\./, '')
+    const pathname = urlObj.pathname.toLowerCase()
+    
+    // Low-quality domains
+    const lowQualityDomains = [
+      'viaf.org',
+      'id.loc.gov',
+      'id.ndl.go.jp',
+      'nli.org.il',
+      'collections.yale.edu',
+      'web.archive.org', // Archive pages are usually not primary sources
+      'commons.wikimedia.org', // Media files, not articles
+      'upload.wikimedia.org',
+      'wikidata.org',
+    ]
+    
+    // Check domain
+    if (lowQualityDomains.some(domain => hostname.includes(domain))) {
+      return true
+    }
+    
+    // Low-quality URL patterns
+    const lowQualityPatterns = [
+      /\/authorities\//,
+      /\/viaf\//,
+      /\/auth\//,
+      /\/catalog\//,
+      /\/authority\//,
+      /\/authority-control/,
+      /\/bibliographic/,
+      /\/metadata/,
+      /\/record\//,
+      /\/item\//, // Wikidata items
+    ]
+    
+    // Check path patterns
+    if (lowQualityPatterns.some(pattern => pattern.test(pathname))) {
+      return true
+    }
+    
+    return false
+  } catch (error) {
+    // If URL parsing fails, assume it's valid (let verification catch it)
+    return false
+  }
+}
+
+/**
+ * Check if content is an actual article (not a metadata/catalog page)
+ */
+function isActualArticle(content: string, url: string): boolean {
+  // Must have substantial content
+  if (content.length < 1000) {
+    return false
+  }
+  
+  // Check for article structure (paragraphs, not just metadata)
+  const paragraphCount = (content.match(/\n\n/g) || []).length
+  if (paragraphCount < 3) {
+    return false
+  }
+  
+  // Check for narrative indicators (sentences with proper structure)
+  const hasNarrative = /\. [A-Z]/.test(content) // Sentences followed by capital letters
+  if (!hasNarrative) {
+    return false
+  }
+  
+  // Reject if it looks like a catalog/authority page
+  const catalogIndicators = [
+    'authority control',
+    'catalog record',
+    'bibliographic',
+    'metadata',
+    'viaf',
+    'lccn',
+    'isni',
+    'library of congress',
+    'national library',
+    'authority file',
+    'controlled vocabulary',
+  ]
+  
+  const lowerContent = content.toLowerCase()
+  const catalogScore = catalogIndicators.filter(ind => 
+    lowerContent.includes(ind)
+  ).length
+  
+  // If more than 2 catalog indicators, likely not an article
+  if (catalogScore >= 2) {
+    return false
+  }
+  
+  // Check for actual article indicators
+  const articleIndicators = [
+    'article',
+    'published',
+    'wrote',
+    'said',
+    'according to',
+    'reported',
+    'interview',
+    'analysis',
+  ]
+  
+  const articleScore = articleIndicators.filter(ind => 
+    lowerContent.includes(ind)
+  ).length
+  
+  // If has article indicators, likely an article
+  return articleScore >= 1
+}
+
 /**
  * Score citation content using DeepSeek after fetching actual article content
  * This is called in Phase 2 after content is fetched
@@ -35,20 +156,35 @@ async function scoreCitationContent(
   try {
     const { chatStream } = await import('@/lib/llm/providers/DeepSeekClient')
     
-    const prompt = `Analyze this article for relevance to "${topic}":
+    const prompt = `Analyze this content for relevance to "${topic}":
 
 Title: ${title}
 URL: ${url}
 Content: ${contentText.substring(0, 10000)}${contentText.length > 10000 ? '...' : ''}
 
-Score 0-100 based on relevance to "${topic}".
-Consider:
-1. How directly the article relates to "${topic}"
-2. Whether it contains valuable information about "${topic}"
-3. The depth and quality of information provided
+IMPORTANT: First verify this is an actual article, not a metadata/catalog page.
 
-Return ONLY valid JSON:
-{"score": 85, "isRelevant": true, "reason": "Article discusses key events and players related to the topic"}
+Return JSON:
+{
+  "score": 0-100,
+  "isRelevant": boolean,
+  "isActualArticle": boolean,
+  "contentQuality": "high" | "medium" | "low",
+  "reason": string
+}
+
+Scoring criteria:
+1. Is this an actual article? (not a library catalog, authority file, or metadata page)
+2. How directly does it relate to "${topic}"?
+3. Does it contain valuable, substantive information about "${topic}"?
+4. What is the depth and quality of information?
+
+Reject (score < 60) if:
+- It's a library catalog entry
+- It's an authority file or metadata page
+- It's just metadata with no narrative content
+- Content is too short or lacks substance
+- It's not actually about "${topic}"
 
 Return ONLY valid JSON, no other text.`
 
@@ -82,16 +218,38 @@ Return ONLY valid JSON, no other text.`
       cleanResponse = jsonMatch[0]
     }
     
-    const result = JSON.parse(cleanResponse) as { score: number; isRelevant: boolean; reason: string }
+    const result = JSON.parse(cleanResponse) as { 
+      score: number
+      isRelevant: boolean
+      isActualArticle?: boolean
+      contentQuality?: string
+      reason: string
+    }
     
     // Ensure score is in valid range
     const score = Math.max(0, Math.min(100, result.score || 0))
+    
+    // Check if it's an actual article (from DeepSeek or our own check)
+    const isActualArticleFromAI = result.isActualArticle ?? true
+    const isActualArticleFromContent = isActualArticle(contentText, url)
+    const isActuallyAnArticle = isActualArticleFromAI && isActualArticleFromContent
+    
+    // Reject if not an actual article
+    if (!isActuallyAnArticle) {
+      return {
+        score: 30, // Low score for non-articles
+        isRelevant: false,
+        reason: 'Not an actual article (metadata/catalog page)'
+      }
+    }
+    
+    // Determine relevance (must be actual article AND relevant)
     const isRelevant = result.isRelevant ?? (score >= 60)
     
     return {
       score,
-      isRelevant,
-      reason: result.reason || `Scored ${score}/100`
+      isRelevant: isRelevant && isActuallyAnArticle, // Must be both relevant AND an article
+      reason: result.reason || `Scored ${score}/100${!isActuallyAnArticle ? ' (not an article)' : ''}`
     }
   } catch (error) {
     console.warn('[WikipediaProcessor] Content scoring failed, using default:', error)
@@ -450,11 +608,39 @@ export async function processNextCitation(
 
     // Convert relative Wikipedia URLs to absolute URLs
     let citationUrl = nextCitation.citationUrl
-    if (citationUrl.startsWith('./') || citationUrl.startsWith('../') || !citationUrl.startsWith('http')) {
-      // This is a relative Wikipedia link - convert to full URL
-      const pageTitle = citationUrl.replace(/^\.\//, '').replace(/^\.\.\//, '')
-      citationUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(pageTitle.replace(/ /g, '_'))}`
-      console.log(`[WikipediaProcessor] Converted relative URL to: ${citationUrl}`)
+    
+    // Skip Wikipedia internal links - these are not external citations
+    if (citationUrl.startsWith('./') || citationUrl.startsWith('../') || (!citationUrl.startsWith('http') && !citationUrl.startsWith('//'))) {
+      // This is a relative Wikipedia link - skip it (not an external citation)
+      console.log(`[WikipediaProcessor] Skipping Wikipedia internal link: ${citationUrl}`)
+      await markCitationVerificationFailed(
+        nextCitation.id,
+        'Wikipedia internal link - not an external citation'
+      )
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+    }
+    
+    // Check if it's a Wikipedia URL (even if absolute)
+    if (citationUrl.includes('wikipedia.org/wiki/') || citationUrl.includes('wikipedia.org/w/')) {
+      console.log(`[WikipediaProcessor] Skipping Wikipedia link: ${citationUrl}`)
+      await markCitationVerificationFailed(
+        nextCitation.id,
+        'Wikipedia link - not an external citation'
+      )
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+    }
+    
+    // Check for low-quality URLs (library catalogs, authority files, metadata pages)
+    if (isLowQualityUrl(citationUrl)) {
+      console.log(`[WikipediaProcessor] Skipping low-quality URL: ${citationUrl}`)
+      await markCitationVerificationFailed(
+        nextCitation.id,
+        'Low-quality URL (library catalog, authority file, metadata page)'
+      )
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
 
     // Check for duplicate in DiscoveredContent (deduplication)
@@ -505,11 +691,14 @@ export async function processNextCitation(
         throw new Error(`HTTP ${response.status}`)
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'URL verification failed'
+      console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" verification failed: ${errorMessage}`)
       await markCitationVerificationFailed(
         nextCitation.id,
-        error instanceof Error ? error.message : 'URL verification failed'
+        errorMessage
       )
-      return { processed: true, citationUrl: citationUrl }
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
 
     // Mark as scanning
@@ -681,9 +870,11 @@ export async function processNextCitation(
         monitoringId: nextCitation.monitoringId
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Content fetch failed'
+      console.error(`[WikipediaProcessor] Error fetching content for "${nextCitation.citationTitle}": ${errorMessage}`)
       await markCitationVerificationFailed(
         nextCitation.id,
-        error instanceof Error ? error.message : 'Content fetch failed'
+        errorMessage
       )
       // Check if page can be marked complete even on error
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
