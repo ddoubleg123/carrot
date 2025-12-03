@@ -85,14 +85,32 @@ export default function ExtractionTestPage() {
 
   if (!data) return null
 
-  // Filter stored citations
-  const filteredStored = data.stored?.citations?.filter((cit: StoredCitation) => {
+  // Separate external vs Wikipedia citations
+  const externalCitations = (data.stored?.citations || []).filter((cit: StoredCitation) => 
+    !cit.url.includes('wikipedia.org')
+  )
+  const wikipediaCitations = (data.stored?.citations || []).filter((cit: StoredCitation) => 
+    cit.url.includes('wikipedia.org')
+  )
+
+  // Filter stored citations (prioritize external)
+  const filteredExternal = externalCitations.filter((cit: StoredCitation) => {
     const searchLower = searchTerm.toLowerCase()
     return cit.url.toLowerCase().includes(searchLower) ||
            (cit.title || '').toLowerCase().includes(searchLower) ||
            (cit.context || '').toLowerCase().includes(searchLower) ||
            (cit.fromWikipediaPage || '').toLowerCase().includes(searchLower)
-  }) || []
+  })
+  const filteredWikipedia = wikipediaCitations.filter((cit: StoredCitation) => {
+    const searchLower = searchTerm.toLowerCase()
+    return cit.url.toLowerCase().includes(searchLower) ||
+           (cit.title || '').toLowerCase().includes(searchLower) ||
+           (cit.context || '').toLowerCase().includes(searchLower) ||
+           (cit.fromWikipediaPage || '').toLowerCase().includes(searchLower)
+  })
+  
+  // Prioritize external citations
+  const filteredStored = [...filteredExternal, ...filteredWikipedia]
 
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '20px', fontFamily: 'system-ui', background: '#f5f5f5', minHeight: '100vh' }}>
@@ -211,9 +229,16 @@ export default function ExtractionTestPage() {
       {/* Stored Citations Tab */}
       {activeTab === 'stored' && (
         <div style={{ background: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ margin: '0 0 20px 0', borderBottom: '2px solid #0066cc', paddingBottom: '10px' }}>
-            Stored Citations from Database ({filteredStored.length})
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #0066cc', paddingBottom: '10px' }}>
+            <h2 style={{ margin: 0 }}>
+              Stored Citations from Database ({filteredStored.length})
+            </h2>
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              <span style={{ color: '#28a745', fontWeight: 'bold' }}>{filteredExternal.length} External</span>
+              {' | '}
+              <span style={{ color: '#0066cc', fontWeight: 'bold' }}>{filteredWikipedia.length} Wikipedia</span>
+            </div>
+          </div>
           {filteredStored.length === 0 ? (
             <p style={{ color: '#999', fontStyle: 'italic', padding: '20px', textAlign: 'center' }}>
               No citations found. {searchTerm ? 'Try a different search term.' : 'Citations will appear here once they are extracted and stored.'}

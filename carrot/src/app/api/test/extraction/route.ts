@@ -39,7 +39,8 @@ export async function GET() {
     const extractedUrls = extractAllExternalUrls(html, 'https://en.wikipedia.org/wiki/Apartheid')
     
     // Get ALL stored citations from database for Israel patch
-    const storedCitations = await prisma.wikipediaCitation.findMany({
+    // Filter to show external URLs first, then Wikipedia URLs
+    const allStoredCitations = await prisma.wikipediaCitation.findMany({
       where: {
         monitoring: { patchId: patch.id }
       },
@@ -54,8 +55,19 @@ export async function GET() {
       orderBy: {
         createdAt: 'desc'
       },
-      take: 1000 // Limit for performance
+      take: 2000 // Increased limit
     })
+
+    // Separate external vs Wikipedia URLs
+    const externalCitations = allStoredCitations.filter(c => 
+      !c.citationUrl.includes('wikipedia.org')
+    )
+    const wikipediaCitations = allStoredCitations.filter(c => 
+      c.citationUrl.includes('wikipedia.org')
+    )
+
+    // Prioritize external citations in the list
+    const storedCitations = [...externalCitations, ...wikipediaCitations]
 
     // Get stored DiscoveredContent
     const storedContent = await prisma.discoveredContent.findMany({

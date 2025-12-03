@@ -609,27 +609,34 @@ export async function processNextCitation(
     // Convert relative Wikipedia URLs to absolute URLs
     let citationUrl = nextCitation.citationUrl
     
-    // Skip Wikipedia internal links - these are not external citations
-    if (citationUrl.startsWith('./') || citationUrl.startsWith('../') || (!citationUrl.startsWith('http') && !citationUrl.startsWith('//'))) {
-      // This is a relative Wikipedia link - skip it (not an external citation)
-      console.log(`[WikipediaProcessor] Skipping Wikipedia internal link: ${citationUrl}`)
+    // Convert relative Wikipedia links to absolute URLs
+    if (citationUrl.startsWith('./')) {
+      const pageName = citationUrl.replace('./', '').replace(/^\/wiki\//, '')
+      citationUrl = `https://en.wikipedia.org/wiki/${pageName}`
+      console.log(`[WikipediaProcessor] Converted relative Wikipedia link to absolute: ${citationUrl}`)
+    } else if (citationUrl.startsWith('/wiki/')) {
+      const pageName = citationUrl.replace('/wiki/', '')
+      citationUrl = `https://en.wikipedia.org/wiki/${pageName}`
+      console.log(`[WikipediaProcessor] Converted absolute path Wikipedia link to full URL: ${citationUrl}`)
+    } else if (!citationUrl.startsWith('http') && !citationUrl.startsWith('//')) {
+      // Skip non-URLs (anchors, etc.)
+      console.log(`[WikipediaProcessor] Skipping non-URL citation: ${citationUrl}`)
       await markCitationVerificationFailed(
         nextCitation.id,
-        'Wikipedia internal link - not an external citation'
+        'Not a valid URL (anchor or relative path)'
       )
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
     
-    // Check if it's a Wikipedia URL (even if absolute)
-    if (citationUrl.includes('wikipedia.org/wiki/') || citationUrl.includes('wikipedia.org/w/')) {
-      console.log(`[WikipediaProcessor] Skipping Wikipedia link: ${citationUrl}`)
-      await markCitationVerificationFailed(
-        nextCitation.id,
-        'Wikipedia link - not an external citation'
-      )
-      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+    // Check if it's a Wikipedia URL - if so, we'll process it to add to monitoring if relevant
+    const isWikipediaUrl = citationUrl.includes('wikipedia.org/wiki/') || citationUrl.includes('wikipedia.org/w/')
+    
+    if (isWikipediaUrl) {
+      // For Wikipedia URLs, we still want to fetch and score them
+      // If relevant, they'll be added to monitoring (handled later in the code)
+      console.log(`[WikipediaProcessor] Processing Wikipedia link (will add to monitoring if relevant): ${citationUrl}`)
+      // Continue processing - don't skip it
     }
     
     // Check for low-quality URLs (library catalogs, authority files, metadata pages)
