@@ -872,7 +872,7 @@ export async function processNextCitation(
             
             const { addWikipediaPageToMonitoring } = await import('./wikipediaMonitoring')
             const result = await addWikipediaPageToMonitoring(
-              options.patchId,
+              patchId,
               citationUrl,
               title,
               `citation from ${monitoring?.wikipediaTitle || 'unknown page'}`
