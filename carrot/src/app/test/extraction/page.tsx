@@ -12,6 +12,8 @@ interface StoredCitation {
   url: string
   title?: string
   context?: string
+  sourceNumber?: number
+  referenceNumber?: number
   contentText?: string
   contentLength: number
   aiScore?: number
@@ -22,6 +24,7 @@ interface StoredCitation {
   savedMemoryId?: string
   errorMessage?: string
   fromWikipediaPage: string
+  fromWikipediaUrl?: string
   lastScannedAt?: string
   createdAt: string
 }
@@ -85,32 +88,17 @@ export default function ExtractionTestPage() {
 
   if (!data) return null
 
-  // Separate external vs Wikipedia citations
-  const externalCitations = (data.stored?.citations || []).filter((cit: StoredCitation) => 
-    !cit.url.includes('wikipedia.org')
-  )
-  const wikipediaCitations = (data.stored?.citations || []).filter((cit: StoredCitation) => 
-    cit.url.includes('wikipedia.org')
-  )
+  // All citations are external (API filters out Wikipedia URLs)
+  const allCitations = (data.stored?.citations || []) as StoredCitation[]
 
-  // Filter stored citations (prioritize external)
-  const filteredExternal = externalCitations.filter((cit: StoredCitation) => {
+  // Filter stored citations
+  const filteredStored = allCitations.filter((cit: StoredCitation) => {
     const searchLower = searchTerm.toLowerCase()
     return cit.url.toLowerCase().includes(searchLower) ||
            (cit.title || '').toLowerCase().includes(searchLower) ||
            (cit.context || '').toLowerCase().includes(searchLower) ||
            (cit.fromWikipediaPage || '').toLowerCase().includes(searchLower)
   })
-  const filteredWikipedia = wikipediaCitations.filter((cit: StoredCitation) => {
-    const searchLower = searchTerm.toLowerCase()
-    return cit.url.toLowerCase().includes(searchLower) ||
-           (cit.title || '').toLowerCase().includes(searchLower) ||
-           (cit.context || '').toLowerCase().includes(searchLower) ||
-           (cit.fromWikipediaPage || '').toLowerCase().includes(searchLower)
-  })
-  
-  // Prioritize external citations
-  const filteredStored = [...filteredExternal, ...filteredWikipedia]
 
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '20px', fontFamily: 'system-ui', background: '#f5f5f5', minHeight: '100vh' }}>
@@ -231,12 +219,24 @@ export default function ExtractionTestPage() {
         <div style={{ background: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #0066cc', paddingBottom: '10px' }}>
             <h2 style={{ margin: 0 }}>
-              Stored Citations from Database ({filteredStored.length})
+              External URLs from Database ({filteredStored.length} of {allCitations.length} total)
             </h2>
             <div style={{ fontSize: '14px', color: '#666' }}>
-              <span style={{ color: '#28a745', fontWeight: 'bold' }}>{filteredExternal.length} External</span>
+              <span style={{ color: '#28a745', fontWeight: 'bold' }}>
+                {allCitations.filter(c => c.scanStatus === 'scanned').length} Scanned
+              </span>
               {' | '}
-              <span style={{ color: '#0066cc', fontWeight: 'bold' }}>{filteredWikipedia.length} Wikipedia</span>
+              <span style={{ color: '#ffc107', fontWeight: 'bold' }}>
+                {allCitations.filter(c => c.scanStatus === 'not_scanned').length} Pending
+              </span>
+              {' | '}
+              <span style={{ color: '#dc3545', fontWeight: 'bold' }}>
+                {allCitations.filter(c => c.relevanceDecision === 'denied').length} Denied
+              </span>
+              {' | '}
+              <span style={{ color: '#17a2b8', fontWeight: 'bold' }}>
+                {allCitations.filter(c => c.savedContentId).length} Saved
+              </span>
             </div>
           </div>
           {filteredStored.length === 0 ? (
@@ -288,20 +288,46 @@ export default function ExtractionTestPage() {
                           <strong>Context:</strong> {cit.context.substring(0, 200)}{cit.context.length > 200 ? '...' : ''}
                         </div>
                       )}
-                      <div style={{ fontSize: '12px', color: '#999', marginTop: '10px' }}>
-                        <strong>From Wikipedia:</strong> {cit.fromWikipediaPage}
+                      <div style={{ fontSize: '12px', color: '#999', marginTop: '10px', display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                        <span>
+                          <strong>From Wikipedia:</strong>{' '}
+                          {cit.fromWikipediaUrl ? (
+                            <a href={cit.fromWikipediaUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc' }}>
+                              {cit.fromWikipediaPage}
+                            </a>
+                          ) : (
+                            cit.fromWikipediaPage
+                          )}
+                        </span>
+                        {(cit.sourceNumber || cit.referenceNumber) && (
+                          <span>
+                            <strong>Reference #:</strong> {cit.referenceNumber || cit.sourceNumber}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-end', minWidth: '150px' }}>
                       <span style={{
                         padding: '4px 10px',
                         borderRadius: '12px',
                         fontSize: '11px',
                         fontWeight: '600',
-                        background: cit.scanStatus === 'scanned' ? '#28a745' : '#ffc107',
-                        color: 'white'
+                        background: cit.scanStatus === 'scanned' ? '#28a745' : cit.scanStatus === 'scanning' ? '#17a2b8' : '#ffc107',
+                        color: 'white',
+                        textTransform: 'capitalize'
                       }}>
                         {cit.scanStatus}
+                      </span>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        background: cit.verificationStatus === 'verified' ? '#28a745' : cit.verificationStatus === 'failed' ? '#dc3545' : '#6c757d',
+                        color: 'white',
+                        textTransform: 'capitalize'
+                      }}>
+                        {cit.verificationStatus}
                       </span>
                       {cit.relevanceDecision && (
                         <span style={{
@@ -310,9 +336,22 @@ export default function ExtractionTestPage() {
                           fontSize: '11px',
                           fontWeight: '600',
                           background: cit.relevanceDecision === 'saved' ? '#28a745' : '#dc3545',
-                          color: 'white'
+                          color: 'white',
+                          textTransform: 'capitalize'
                         }}>
                           {cit.relevanceDecision}
+                        </span>
+                      )}
+                      {!cit.relevanceDecision && cit.scanStatus === 'scanned' && (
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          background: '#6c757d',
+                          color: 'white'
+                        }}>
+                          Pending Decision
                         </span>
                       )}
                       {cit.aiScore !== null && cit.aiScore !== undefined && (
@@ -321,10 +360,10 @@ export default function ExtractionTestPage() {
                           borderRadius: '12px',
                           fontSize: '11px',
                           fontWeight: '600',
-                          background: cit.aiScore >= 60 ? '#28a745' : '#ffc107',
+                          background: cit.aiScore >= 60 ? '#28a745' : cit.aiScore >= 40 ? '#ffc107' : '#dc3545',
                           color: 'white'
                         }}>
-                          Score: {cit.aiScore}
+                          AI Score: {cit.aiScore}
                         </span>
                       )}
                     </div>

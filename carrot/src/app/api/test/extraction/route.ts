@@ -68,12 +68,13 @@ export async function GET() {
     }
     
     // Get ALL stored citations from database for Israel patch
-    // Filter to show external URLs first, then Wikipedia URLs
+    // Focus on external URLs (non-Wikipedia)
     let allStoredCitations: any[]
     try {
       allStoredCitations = await prisma.wikipediaCitation.findMany({
         where: {
-          monitoring: { patchId: patch.id }
+          monitoring: { patchId: patch.id },
+          citationUrl: { not: { contains: 'wikipedia.org' } } // Only external URLs
         },
         include: {
           monitoring: {
@@ -83,10 +84,11 @@ export async function GET() {
             }
           }
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 2000 // Increased limit
+        orderBy: [
+          { aiPriorityScore: 'desc' },
+          { createdAt: 'asc' }
+        ],
+        // No limit - get ALL external URLs
       })
     } catch (dbError: any) {
       console.error('[Test Extraction] Database error (citations):', dbError)
@@ -96,16 +98,9 @@ export async function GET() {
       )
     }
 
-    // Separate external vs Wikipedia URLs
-    const externalCitations = allStoredCitations.filter(c => 
-      !c.citationUrl.includes('wikipedia.org')
-    )
-    const wikipediaCitations = allStoredCitations.filter(c => 
-      c.citationUrl.includes('wikipedia.org')
-    )
-
-    // Prioritize external citations in the list
-    const storedCitations = [...externalCitations, ...wikipediaCitations]
+    // All citations are external (filtered above)
+    const externalCitations = allStoredCitations
+    const storedCitations = externalCitations
 
     // Get stored DiscoveredContent
     let storedContent: any[]
@@ -202,7 +197,8 @@ export async function GET() {
           url: c.citationUrl,
           title: c.citationTitle,
           context: c.citationContext,
-          contentText: c.contentText ? c.contentText.substring(0, 500) + (c.contentText.length > 500 ? '...' : '') : null,
+          sourceNumber: c.sourceNumber, // Reference number on Wikipedia page
+          contentText: c.contentText ? c.contentText.substring(0, 1000) + (c.contentText.length > 1000 ? '...' : '') : null,
           contentLength: c.contentText?.length || 0,
           aiScore: c.aiPriorityScore,
           scanStatus: c.scanStatus,
@@ -212,6 +208,8 @@ export async function GET() {
           savedMemoryId: c.savedMemoryId,
           errorMessage: c.errorMessage,
           fromWikipediaPage: c.monitoring?.wikipediaTitle || 'Unknown',
+          fromWikipediaUrl: c.monitoring?.wikipediaUrl || null,
+          referenceNumber: c.sourceNumber, // Clear alias
           lastScannedAt: c.lastScannedAt?.toISOString(),
           createdAt: c.createdAt.toISOString()
         })),

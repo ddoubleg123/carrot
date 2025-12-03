@@ -115,11 +115,12 @@ export async function getNextCitationToProcess(
   aiPriorityScore: number | null
 } | null> {
   // Prioritize processing unprocessed citations first
-  // Only re-process denied citations if there are no unprocessed ones
+  // Include 'failed' verification status - these may still be valid URLs that failed verification checks
+  // but should be processed if they haven't been scanned yet
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
-      verificationStatus: { in: ['pending', 'verified'] },
+      verificationStatus: { in: ['pending', 'verified', 'failed'] }, // Include 'failed' - may still be processable
       scanStatus: { in: ['not_scanned', 'scanning'] },
       relevanceDecision: null // Only process citations that haven't been decided yet
     },
