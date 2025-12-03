@@ -1355,3 +1355,51 @@ export async function processWikipediaIncremental(
   }
 }
 
+/**
+ * Reprocess a single citation by ID
+ * Used for manual verification/reprocessing
+ */
+export async function reprocessCitation(citationId: string): Promise<{ processed: boolean; citationUrl?: string; monitoringId?: string }> {
+  const citation = await prisma.wikipediaCitation.findUnique({
+    where: { id: citationId },
+    include: {
+      monitoring: {
+        select: {
+          patchId: true,
+          wikipediaUrl: true,
+          wikipediaTitle: true
+        }
+      }
+    }
+  })
+
+  if (!citation) {
+    console.error(`[WikipediaProcessor] Citation not found: ${citationId}`)
+    return { processed: false }
+  }
+
+  // Reset the citation to allow reprocessing
+  // Clear previous decisions but keep the citation data
+  await prisma.wikipediaCitation.update({
+    where: { id: citationId },
+    data: {
+      scanStatus: 'not_scanned',
+      relevanceDecision: null,
+      contentText: null,
+      savedContentId: null,
+      savedMemoryId: null,
+      errorMessage: null,
+      lastScannedAt: null
+    }
+  })
+
+  // Process the citation using the existing processCitation logic
+  // We need to call processCitation with the citation data
+  const result = await processCitation(
+    citation.monitoring.patchId,
+    citationId
+  )
+
+  return result
+}
+
