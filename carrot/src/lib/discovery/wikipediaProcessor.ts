@@ -1439,7 +1439,7 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
 
       // Trigger hero image generation
       try {
-        const { enrichContentId } = await import('./contentEnrichment')
+        const { enrichContentId } = await import('@/lib/enrichment/worker')
         await enrichContentId(saved.id)
       } catch (enrichError) {
         console.warn(`[WikipediaProcessor] Failed to enrich content ${saved.id}:`, enrichError)
@@ -1496,8 +1496,8 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
     }
   })
 
-  // Call processCitation - it should pick up our reset citation
-  const result = await processCitation(patchId, {
+  // Call processNextCitation - it should pick up our reset citation
+  const result = await processNextCitation(patchId, {
     patchName: patch.title,
     patchHandle: patch.handle,
     saveAsContent,
