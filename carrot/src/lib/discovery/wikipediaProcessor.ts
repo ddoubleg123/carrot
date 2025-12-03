@@ -292,9 +292,9 @@ export async function prioritizeCitations(
       `${i + 1}. ${c.title || c.url}\n   URL: ${c.url}\n   Context: ${c.context || c.text || 'No context'}\n`
     ).join('\n')
 
-    const prompt = `You are analyzing Wikipedia citations to prioritize the most important sources for the topic: "${topic}".
+    const prompt = `You are analyzing Wikipedia citations to prioritize the most important sources for the topic: "${topic || 'unknown'}".
 
-Topic: "${topic}" (aliases: ${aliases.join(', ')})
+Topic: "${topic || 'unknown'}" (aliases: ${(aliases || []).join(', ')})
 Source Wikipedia page: ${sourceUrl}
 
 Citations found:
