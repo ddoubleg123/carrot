@@ -594,6 +594,24 @@ export async function processNextCitation(
     return { processed: false }
   }
 
+  // If this citation was previously denied but is being re-processed (scored >= 40),
+  // reset the relevanceDecision and scanStatus so it can be fully re-evaluated
+  const citationRecord = await prisma.wikipediaCitation.findUnique({
+    where: { id: nextCitation.id },
+    select: { relevanceDecision: true, aiPriorityScore: true, scanStatus: true }
+  })
+  
+  if (citationRecord?.relevanceDecision === 'denied' && (citationRecord.aiPriorityScore ?? 0) >= 40) {
+    console.log(`[WikipediaProcessor] Re-processing previously denied citation (score: ${citationRecord.aiPriorityScore}) with new threshold of 40`)
+    await prisma.wikipediaCitation.update({
+      where: { id: nextCitation.id },
+      data: { 
+        relevanceDecision: null,
+        scanStatus: 'not_scanned' // Reset to allow full re-processing
+      }
+    })
+  }
+
   console.log(`[WikipediaProcessor] Processing citation: ${nextCitation.citationUrl}`)
 
   try {
