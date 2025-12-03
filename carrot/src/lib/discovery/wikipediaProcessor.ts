@@ -631,14 +631,28 @@ export async function processNextCitation(
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
     
-    // Check if it's a Wikipedia URL - if so, we'll process it to add to monitoring if relevant
+    // Check if it's a Wikipedia URL - these should NOT be processed as external citations
+    // They should be handled by Wikipedia-to-Wikipedia crawling instead
     const isWikipediaUrl = citationUrl.includes('wikipedia.org/wiki/') || citationUrl.includes('wikipedia.org/w/')
     
     if (isWikipediaUrl) {
-      // For Wikipedia URLs, we still want to fetch and score them
-      // If relevant, they'll be added to monitoring (handled later in the code)
-      console.log(`[WikipediaProcessor] Processing Wikipedia link (will add to monitoring if relevant): ${citationUrl}`)
-      // Continue processing - don't skip it
+      console.log(`[WikipediaProcessor] Skipping Wikipedia internal link (not an external citation): ${citationUrl}`)
+      // Mark as verification failed with specific message
+      await markCitationVerificationFailed(
+        nextCitation.id,
+        'Wikipedia internal link - not an external citation'
+      )
+      // Also mark as scanned with denied decision to prevent reprocessing
+      await markCitationScanned(
+        nextCitation.id,
+        'denied',
+        null,
+        undefined,
+        '', // No content for Wikipedia links
+        null // No AI score
+      )
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
     
     // Check for low-quality URLs (library catalogs, authority files, metadata pages)
