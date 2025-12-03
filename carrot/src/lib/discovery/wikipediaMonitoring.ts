@@ -151,6 +151,57 @@ export async function initializeWikipediaMonitoring(
 }
 
 /**
+ * Add a Wikipedia page to monitoring if it doesn't already exist
+ * Used when a relevant Wikipedia link is found in citations
+ */
+export async function addWikipediaPageToMonitoring(
+  patchId: string,
+  wikipediaUrl: string,
+  wikipediaTitle: string,
+  source: string = 'citation' // How this page was discovered
+): Promise<{ added: boolean; monitoringId?: string }> {
+  try {
+    const canonical = canonicalizeUrlFast(wikipediaUrl)
+    if (!canonical) {
+      return { added: false }
+    }
+
+    // Check if already exists
+    const existing = await prisma.wikipediaMonitoring.findUnique({
+      where: {
+        patchId_wikipediaUrl: {
+          patchId,
+          wikipediaUrl: canonical
+        }
+      }
+    })
+
+    if (existing) {
+      console.log(`[WikipediaMonitoring] Page already monitored: ${wikipediaTitle}`)
+      return { added: false, monitoringId: existing.id }
+    }
+
+    // Create new monitoring entry
+    const newPage = await prisma.wikipediaMonitoring.create({
+      data: {
+        patchId,
+        wikipediaUrl: canonical,
+        wikipediaTitle,
+        searchTerm: source, // Track how this page was discovered
+        priority: 5, // Medium priority for discovered pages
+        status: 'pending'
+      }
+    })
+
+    console.log(`[WikipediaMonitoring] Added new page to monitoring: ${wikipediaTitle} (from ${source})`)
+    return { added: true, monitoringId: newPage.id }
+  } catch (error) {
+    console.error(`[WikipediaMonitoring] Error adding page "${wikipediaTitle}":`, error)
+    return { added: false }
+  }
+}
+
+/**
  * Get next Wikipedia page to process (for incremental processing)
  */
 export async function getNextWikipediaPageToProcess(

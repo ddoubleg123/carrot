@@ -860,6 +860,34 @@ export async function processNextCitation(
 
       console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'rejected'}${finalIsRelevant ? ' (relevant - added to memory)' : ' (not relevant - content stored for audit)'}`)
 
+      // If this citation is a Wikipedia URL and it's relevant, add it to monitoring
+      // This allows us to recursively extract citations from relevant Wikipedia pages
+      if (finalIsRelevant) {
+        try {
+          const urlObj = new URL(citationUrl)
+          const hostname = urlObj.hostname.toLowerCase()
+          if (hostname.includes('wikipedia.org') && urlObj.pathname.startsWith('/wiki/')) {
+            // Extract title from URL
+            const title = decodeURIComponent(urlObj.pathname.replace('/wiki/', '').replace(/_/g, ' '))
+            
+            const { addWikipediaPageToMonitoring } = await import('./wikipediaMonitoring')
+            const result = await addWikipediaPageToMonitoring(
+              options.patchId,
+              citationUrl,
+              title,
+              `citation from ${monitoring?.wikipediaTitle || 'unknown page'}`
+            )
+            
+            if (result.added) {
+              console.log(`[WikipediaProcessor] ✅ Added relevant Wikipedia page to monitoring: ${title}`)
+            }
+          }
+        } catch (error) {
+          // Non-fatal - just log and continue
+          console.warn(`[WikipediaProcessor] Failed to check/add Wikipedia page to monitoring:`, error)
+        }
+      }
+
       // Check if page can be marked complete after processing this citation
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
 
