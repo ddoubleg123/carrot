@@ -53,7 +53,7 @@ import {
   isDiscoveryV2WriteModeEnabled
 } from './flags'
 import { buildPaywallPlan } from './paywall'
-import { extractOutgoingLinks, extractWikipediaReferences } from './wikiUtils'
+import { extractOutgoingLinks, extractWikipediaReferences, extractInternalWikipediaLinks } from './wikiUtils'
 
 interface EngineOptions {
   patchId: string
@@ -1038,6 +1038,90 @@ export class DiscoveryEngineV21 {
   }
 
   /**
+   * Extract and enqueue internal Wikipedia links with priority levels
+   * Level 1 = seed pages, Level 2 = pages linked from Level 1, etc.
+   */
+  private async enqueueInternalWikipediaLinks(
+    rawHtml: string | undefined,
+    sourceUrl: string,
+    parent: FrontierItem
+  ): Promise<void> {
+    if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) {
+      return
+    }
+
+    // Determine parent level from parent's metadata or priority
+    // Seed pages (priority 1-10) = Level 1
+    // Pages from Level 1 = Level 2, etc.
+    const parentPriority = parent.priority ?? 300
+    const parentLevel = parentPriority <= 10 ? 1 : (parent.meta?.wikipediaLevel as number) ?? 1
+    const childLevel = parentLevel + 1
+
+    // Limit depth to prevent infinite crawling
+    const MAX_WIKIPEDIA_LEVEL = 3
+    if (childLevel > MAX_WIKIPEDIA_LEVEL) {
+      console.log(`[EngineV21] Skipping Wikipedia links from Level ${parentLevel} (max level: ${MAX_WIKIPEDIA_LEVEL})`)
+      return
+    }
+
+    // Extract internal Wikipedia links
+    const internalLinks = extractInternalWikipediaLinks(rawHtml, sourceUrl, 30) // Limit to 30 links per page
+    if (internalLinks.length === 0) {
+      return
+    }
+
+    console.log(`[EngineV21] Found ${internalLinks.length} internal Wikipedia links from ${sourceUrl.substring(0, 80)} (Level ${parentLevel} -> Level ${childLevel})`)
+
+    // Enqueue each internal Wikipedia link with appropriate priority
+    let enqueued = 0
+    for (const wikiUrl of internalLinks) {
+      // Check if already seen
+      const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
+      const seen = await isSeenWithTimestamp(this.redisPatchId, wikiUrl).catch(() => false)
+      if (seen) {
+        continue
+      }
+
+      // Calculate priority: Level 1 = 200-210, Level 2 = 210-220, Level 3 = 220-230
+      const basePriority = 200 + (childLevel - 1) * 10
+      const priority = basePriority + enqueued
+
+      const item: FrontierItem = {
+        id: `wiki_internal:${Date.now()}:${Math.random()}`,
+        provider: 'direct',
+        cursor: wikiUrl,
+        priority,
+        angle: parent.angle ?? undefined,
+        meta: {
+          reason: 'wikipedia_internal_link',
+          parent: sourceUrl,
+          parentLevel,
+          wikipediaLevel: childLevel,
+          hookId: parent.meta?.hookId,
+          viewpoint: parent.meta?.viewpoint,
+          angleCategory: parent.meta?.angleCategory,
+          originatingProvider: parent.provider,
+          originatingReason: parent.meta?.reason
+        }
+      }
+
+      await addToFrontier(this.redisPatchId, item)
+      enqueued++
+    }
+
+    if (enqueued > 0) {
+      this.structuredLog('wiki_internal_links_enqueued', {
+        source: sourceUrl,
+        parentLevel,
+        childLevel,
+        total: internalLinks.length,
+        enqueued
+      })
+      console.log(`[EngineV21] Enqueued ${enqueued} internal Wikipedia links (Level ${childLevel}) from ${sourceUrl.substring(0, 80)}`)
+    }
+  }
+
+  /**
    * Prioritize Wikipedia citations using AI based on titles and context
    * Returns citations sorted by importance (most important first)
    */
@@ -1878,6 +1962,9 @@ Return ONLY valid JSON array, no other text.`
           // Extract citations (prioritized)
           await this.enqueueWikipediaReferences(fetchResult.extracted.rawHtml, canonicalUrl, candidate)
           
+          // Extract and enqueue internal Wikipedia links (for Wikipedia-to-Wikipedia crawling)
+          await this.enqueueInternalWikipediaLinks(fetchResult.extracted.rawHtml, canonicalUrl, candidate)
+          
           // Also extract general outlinks
           const WIKI_OUTLINK_LIMIT = Number(process.env.CRAWL_WIKI_OUTLINK_LIMIT || 25)
           const refs = await extractOffHostLinks(fetchResult.extracted.rawHtml, canonicalUrl, { maxLinks: WIKI_OUTLINK_LIMIT })
@@ -2223,6 +2310,8 @@ Return ONLY valid JSON array, no other text.`
           if (extracted?.rawHtml) {
             if (this.isWikipediaUrl(canonicalUrl)) {
               await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
+              // Extract and enqueue internal Wikipedia links (for Wikipedia-to-Wikipedia crawling)
+              await this.enqueueInternalWikipediaLinks(extracted.rawHtml, canonicalUrl, candidate)
             }
             // Extract and count links for logging
             let linksCount = 0
@@ -2294,6 +2383,8 @@ Return ONLY valid JSON array, no other text.`
       // This ensures we mine Wikipedia as a launchpad for deep links
       if (this.isWikipediaUrl(canonicalUrl)) {
         await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
+        // Extract and enqueue internal Wikipedia links (for Wikipedia-to-Wikipedia crawling)
+        await this.enqueueInternalWikipediaLinks(extracted.rawHtml, canonicalUrl, candidate)
         // Also extract general outgoing links from Wikipedia
         await this.enqueueHtmlOutgoingReferences(extracted.rawHtml, canonicalUrl, candidate)
         

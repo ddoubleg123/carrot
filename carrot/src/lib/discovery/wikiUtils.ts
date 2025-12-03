@@ -28,6 +28,80 @@ export function extractWikipediaReferences(
 }
 
 /**
+ * Extract internal Wikipedia links from a Wikipedia page
+ * Returns array of Wikipedia page URLs (not external URLs)
+ */
+export function extractInternalWikipediaLinks(
+  html: string | undefined,
+  sourceUrl: string,
+  limit = 50
+): string[] {
+  if (!html) return []
+  
+  const wikipediaLinks: string[] = []
+  const seenUrls = new Set<string>()
+  
+  try {
+    // Extract all links from the page
+    const anchorRegex = /<a[^>]+href=['"]([^'"#]+)['"][^>]*>/gi
+    let match: RegExpExecArray | null
+    
+    while ((match = anchorRegex.exec(html)) && wikipediaLinks.length < limit) {
+      const href = match[1]
+      
+      // Skip non-Wikipedia links
+      if (!href.includes('wikipedia.org') && !href.startsWith('/wiki/') && !href.startsWith('./')) {
+        continue
+      }
+      
+      // Convert relative links to absolute
+      let normalizedUrl: string
+      if (href.startsWith('/wiki/')) {
+        // Absolute path Wikipedia link
+        const pageName = href.replace('/wiki/', '')
+        normalizedUrl = `https://en.wikipedia.org/wiki/${pageName}`
+      } else if (href.startsWith('./')) {
+        // Relative Wikipedia link
+        const pageName = href.replace('./', '').replace(/^\/wiki\//, '')
+        normalizedUrl = `https://en.wikipedia.org/wiki/${pageName}`
+      } else if (href.includes('wikipedia.org/wiki/')) {
+        // Already absolute Wikipedia URL
+        normalizedUrl = normaliseUrl(href, sourceUrl) || href
+      } else {
+        continue
+      }
+      
+      // Canonicalize and deduplicate
+      const canonical = canonicalizeUrlFast(normalizedUrl)
+      if (!canonical) continue
+      
+      // Skip if already seen
+      if (seenUrls.has(canonical)) continue
+      
+      // Only include en.wikipedia.org/wiki/ links (not other Wikipedia domains)
+      if (!canonical.includes('en.wikipedia.org/wiki/')) continue
+      
+      // Skip special pages (User:, Talk:, File:, etc.)
+      const pathMatch = canonical.match(/\/wiki\/([^\/]+)/)
+      if (pathMatch) {
+        const pageName = pathMatch[1]
+        const specialPrefixes = ['User:', 'Talk:', 'File:', 'Image:', 'Category:', 'Template:', 'Help:', 'Special:', 'Portal:', 'Wikipedia:', 'Media:']
+        if (specialPrefixes.some(prefix => pageName.startsWith(prefix))) {
+          continue
+        }
+      }
+      
+      seenUrls.add(canonical)
+      wikipediaLinks.push(canonical)
+    }
+  } catch (error) {
+    console.error('[WikiUtils] Error extracting internal Wikipedia links:', error)
+  }
+  
+  return wikipediaLinks
+}
+
+/**
  * Extract ALL external URLs from Wikipedia page
  * Includes: References, Further reading, External links sections
  */
@@ -98,10 +172,14 @@ export function extractAllExternalUrls(
   }
   
   // 1. Extract from References section
-  const referencesMatch = html.match(/<ol[^>]*class="[^"]*references[^"]*"[^>]*>([\s\S]*?)<\/ol>/i)
+  const referencesMatch = html.match(/<ol[^>]*class=["'][^"']*references[^"']*["'][^>]*>([\s\S]*?)<\/ol>/i)
   if (referencesMatch) {
-    const refMatches = referencesMatch[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
-    for (const ref of refMatches) {
+    const refsHtml = referencesMatch[1]
+    const refMatches = refsHtml.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)
+    
+    for (const refMatch of refMatches) {
+      const ref = refMatch[1]
+      
       // Extract all URLs from this reference (including relative Wikipedia links)
       const urlMatches = ref.matchAll(/href=["']([^"']+)["']/gi)
       for (const urlMatch of urlMatches) {
@@ -117,8 +195,9 @@ export function extractAllExternalUrls(
         const linkTextMatch = ref.match(/<a[^>]*href=["'][^"']*["'][^>]*>([^<]+)<\/a>/i)
         
         const title = citeMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 
-                      linkTextMatch?.[1]?.replace(/<[^>]+>/g, '').trim()
-        const context = textMatch?.[1]?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200)
+                     linkTextMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || 
+                     undefined
+        const context = textMatch?.[1]?.replace(/<[^>]+>/g, '').trim() || undefined
         
         addCitation(url, title, context, 'References')
       }
@@ -175,19 +254,68 @@ export function extractAllExternalUrls(
 }
 
 /**
- * Extract Wikipedia citations with title and context for prioritization
- * Now uses comprehensive extraction from all sections
+ * Extract Wikipedia citations with context (title, text, context)
  */
 export function extractWikipediaCitationsWithContext(
   html: string | undefined,
   sourceUrl: string,
-  limit = 10000 // Extract ALL citations (very high limit)
+  limit = 100
 ): WikipediaCitation[] {
-  // Use comprehensive extraction that gets ALL external URLs
-  const allCitations = extractAllExternalUrls(html, sourceUrl)
+  if (!html) return []
   
-  // Return up to limit
-  return allCitations.slice(0, limit)
+  const citations: WikipediaCitation[] = []
+  const seenUrls = new Set<string>()
+  
+  // Extract from references section
+  const referencesMatch = html.match(/<ol[^>]*class=["'][^"']*references[^"']*["'][^>]*>([\s\S]*?)<\/ol>/i)
+  if (!referencesMatch) return citations
+  
+  const refsHtml = referencesMatch[1]
+  const refMatches = refsHtml.matchAll(/<li[^>]*id=["']cite_note-(\d+)["'][^>]*>([\s\S]*?)<\/li>/gi)
+  
+  for (const refMatch of refMatches) {
+    if (citations.length >= limit) break
+    
+    const index = parseInt(refMatch[1])
+    const refHtml = refMatch[2]
+    
+    // Extract reference text
+    const textMatch = refHtml.match(/<span[^>]*class=["'][^"']*reference-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)
+    if (!textMatch) continue
+    
+    const refText = textMatch[1]
+    
+    // Extract URL from external links
+    const urlMatch = refText.match(/<a[^>]*class=["'][^"']*external[^"']*["'][^>]*href=["']([^"']+)["']/i) ||
+                    refText.match(/href=["'](https?:\/\/[^"']+)["']/i)
+    const url = urlMatch ? urlMatch[1] : undefined
+    
+    // Extract title
+    const titleMatch = refText.match(/title=["']([^"']+)["']/i) || 
+                      refText.match(/<cite[^>]*>([^<]+)<\/cite>/i)
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : undefined
+    
+    // Clean context text
+    const context = refText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    
+    if (url) {
+      const normalized = normaliseUrl(url, sourceUrl)
+      if (normalized) {
+        const canonical = canonicalizeUrlFast(normalized)
+        if (canonical && !seenUrls.has(canonical)) {
+          seenUrls.add(canonical)
+          citations.push({
+            url: canonical,
+            title,
+            context: context.substring(0, 500),
+            text: context
+          })
+        }
+      }
+    }
+  }
+  
+  return citations
 }
 
 export interface OutgoingLinks {
