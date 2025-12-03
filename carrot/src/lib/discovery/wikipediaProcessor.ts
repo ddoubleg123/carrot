@@ -813,34 +813,49 @@ export async function processNextCitation(
       // Only save if DeepSeek approves (score >= 60 and isRelevant)
       // isUseful flag will determine if it's published to the page
       if (finalIsRelevant && options.saveAsContent) {
-        savedContentId = await options.saveAsContent(
-          citationUrl, // Use converted URL
-          nextCitation.citationTitle || 'Untitled',
-          meaningfulContent,
-          {
-            aiScore: aiPriorityScore,
-            relevanceScore: relevanceEngineResult?.score ?? 0,
-            isRelevant: true
-          }
-        ) || null
-        
-        // Trigger hero image generation in background (non-blocking)
-        if (savedContentId) {
-          // Fire and forget - don't await
-          // Use direct function call instead of HTTP to avoid URL construction issues
-          const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
-          import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
-            enrichContentId(contentId).catch(err => {
-              console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
+        try {
+          console.log(`[WikipediaProcessor] Attempting to save citation "${nextCitation.citationTitle}" to DiscoveredContent...`)
+          savedContentId = await options.saveAsContent(
+            citationUrl, // Use converted URL
+            nextCitation.citationTitle || 'Untitled',
+            meaningfulContent,
+            {
+              aiScore: aiPriorityScore,
+              relevanceScore: relevanceEngineResult?.score ?? 0,
+              isRelevant: true
+            }
+          ) || null
+          
+          if (savedContentId) {
+            console.log(`[WikipediaProcessor] ✅ Successfully saved citation to DiscoveredContent: ${savedContentId}`)
+            
+            // Trigger hero image generation in background (non-blocking)
+            // Fire and forget - don't await
+            // Use direct function call instead of HTTP to avoid URL construction issues
+            const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
+            import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
+              enrichContentId(contentId).catch(err => {
+                console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
+                // Non-fatal - hero can be generated later
+              })
+            }).catch(err => {
+              console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
               // Non-fatal - hero can be generated later
             })
-          }).catch(err => {
-            console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
-            // Non-fatal - hero can be generated later
-          })
+          } else {
+            console.warn(`[WikipediaProcessor] ⚠️ saveAsContent returned null for citation "${nextCitation.citationTitle}" - citation was not saved`)
+          }
+        } catch (error) {
+          console.error(`[WikipediaProcessor] ❌ Error saving citation "${nextCitation.citationTitle}" to DiscoveredContent:`, error)
+          // Don't throw - continue processing other citations
         }
-      } else if (!finalIsRelevant) {
-        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${scoringResult.reason || 'Failed DeepSeek relevance check'}`)
+      } else {
+        if (!finalIsRelevant) {
+          console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${scoringResult.reason || 'Failed DeepSeek relevance check'} (score: ${aiPriorityScore}, isRelevant: ${scoringResult.isRelevant})`)
+        }
+        if (!options.saveAsContent) {
+          console.warn(`[WikipediaProcessor] ⚠️ saveAsContent function not provided - citation "${nextCitation.citationTitle}" cannot be saved`)
+        }
       }
 
       // Only save to AgentMemory if relevant (for AI knowledge)
