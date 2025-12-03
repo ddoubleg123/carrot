@@ -644,9 +644,19 @@ export async function processNextCitation(
     // Check for low-quality URLs (library catalogs, authority files, metadata pages)
     if (isLowQualityUrl(citationUrl)) {
       console.log(`[WikipediaProcessor] Skipping low-quality URL: ${citationUrl}`)
+      // Mark as verification failed AND scanned with denied decision to prevent infinite loop
       await markCitationVerificationFailed(
         nextCitation.id,
         'Low-quality URL (library catalog, authority file, metadata page)'
+      )
+      // Also mark as scanned with denied decision so it doesn't get picked up again
+      await markCitationScanned(
+        nextCitation.id,
+        'denied',
+        null,
+        undefined,
+        '', // No content for low-quality URLs
+        null // No AI score
       )
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
