@@ -594,23 +594,6 @@ export async function processNextCitation(
     return { processed: false }
   }
 
-  // If this citation was previously denied but is being re-processed (scored >= 40),
-  // reset the relevanceDecision and scanStatus so it can be fully re-evaluated
-  const citationRecord = await prisma.wikipediaCitation.findUnique({
-    where: { id: nextCitation.id },
-    select: { relevanceDecision: true, aiPriorityScore: true, scanStatus: true }
-  })
-  
-  if (citationRecord?.relevanceDecision === 'denied' && (citationRecord.aiPriorityScore ?? 0) >= 40) {
-    console.log(`[WikipediaProcessor] Re-processing previously denied citation (score: ${citationRecord.aiPriorityScore}) with new threshold of 40`)
-    await prisma.wikipediaCitation.update({
-      where: { id: nextCitation.id },
-      data: { 
-        relevanceDecision: null,
-        scanStatus: 'not_scanned' // Reset to allow full re-processing
-      }
-    })
-  }
 
   console.log(`[WikipediaProcessor] Processing citation: ${nextCitation.citationUrl}`)
 
@@ -781,9 +764,8 @@ export async function processNextCitation(
       )
       
       const aiPriorityScore = scoringResult.score
-      // Lower threshold from 60 to 40 to allow more citations through
-      // Average score is ~30, so 60 was too restrictive
-      const RELEVANCE_THRESHOLD = 40
+      // Keep threshold at 60 to maintain quality
+      const RELEVANCE_THRESHOLD = 60
       const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= RELEVANCE_THRESHOLD
       
       console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
@@ -833,8 +815,7 @@ export async function processNextCitation(
       let savedMemoryId: string | null = null
 
       // Save citations to DiscoveredContent
-      // Only save if DeepSeek approves (score >= 40 and isRelevant)
-      // Threshold lowered from 60 to 40 to allow more citations through
+      // Only save if DeepSeek approves (score >= 60 and isRelevant)
       // isUseful flag will determine if it's published to the page
       if (finalIsRelevant && options.saveAsContent) {
         try {

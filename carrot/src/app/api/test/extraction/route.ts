@@ -20,15 +20,20 @@ export async function GET() {
     }
 
     // Fetch the Apartheid Wikipedia page for extraction test
+    // Use Promise.race with timeout to prevent hanging
     let html: string
     try {
-      const response = await fetch('https://en.wikipedia.org/wiki/Apartheid', {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout after 20 seconds')), 20000)
+      })
+      
+      const fetchPromise = fetch('https://en.wikipedia.org/wiki/Apartheid', {
         headers: {
           'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
-        },
-        // Remove AbortController - may not be available in all Node.js versions
-        // Use default timeout instead
+        }
       })
+      
+      const response = await Promise.race([fetchPromise, timeoutPromise])
 
       if (!response.ok) {
         return NextResponse.json(
@@ -40,8 +45,12 @@ export async function GET() {
       html = await response.text()
     } catch (fetchError: any) {
       console.error('[Test Extraction] Fetch error:', fetchError)
+      // Return a more helpful error message
+      const errorMessage = fetchError.message?.includes('timeout') 
+        ? 'Wikipedia fetch timed out after 20 seconds'
+        : fetchError.message || 'Network error'
       return NextResponse.json(
-        { error: `Failed to fetch Wikipedia page: ${fetchError.message || 'Network error'}` },
+        { error: `Failed to fetch Wikipedia page: ${errorMessage}` },
         { status: 500 }
       )
     }

@@ -114,33 +114,14 @@ export async function getNextCitationToProcess(
   monitoringId: string
   aiPriorityScore: number | null
 } | null> {
-  // RELEVANCE_THRESHOLD is now 40 (lowered from 60)
-  // We need to re-process citations that were denied but scored 40-59
-  // to give them a chance with the new threshold
-  const RELEVANCE_THRESHOLD = 40
-  
-  // First, try to find citations that need processing
-  // Include citations that:
-  // 1. Haven't been decided yet (relevanceDecision IS NULL), OR
-  // 2. Were denied but scored >= 40 (might pass with new threshold)
-  //    - Allow re-processing even if already scanned
+  // Prioritize processing unprocessed citations first
+  // Only re-process denied citations if there are no unprocessed ones
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
       verificationStatus: { in: ['pending', 'verified'] },
-      OR: [
-        // Standard case: not yet scanned
-        {
-          scanStatus: { in: ['not_scanned', 'scanning'] },
-          relevanceDecision: null
-        },
-        // Re-process case: already scanned but denied with score >= 40
-        {
-          scanStatus: 'scanned',
-          relevanceDecision: 'denied',
-          aiPriorityScore: { gte: RELEVANCE_THRESHOLD }
-        }
-      ]
+      scanStatus: { in: ['not_scanned', 'scanning'] },
+      relevanceDecision: null // Only process citations that haven't been decided yet
     },
     orderBy: [
       { aiPriorityScore: 'desc' },
