@@ -213,11 +213,23 @@ export async function addWikipediaPageToMonitoring(
         const html = await response.text()
         
         // Extract and store citations (this will be processed incrementally later)
+        // Create a wrapper function that matches the expected signature
+        const prioritizeFn = async (citations: any[], sourceUrl: string) => {
+          // Get patch info for topic/aliases
+          const patch = await prisma.patch.findUnique({
+            where: { id: patchId },
+            select: { title: true, tags: true }
+          })
+          const topic = patch?.title || 'unknown'
+          const aliases = (patch?.tags as string[]) || []
+          return prioritizeCitations(citations, sourceUrl, topic, aliases)
+        }
+        
         await extractAndStoreCitations(
           newPage.id,
           canonical,
           html,
-          prioritizeCitations
+          prioritizeFn
         )
         
         console.log(`[WikipediaMonitoring] ✅ Citations extracted from ${wikipediaTitle}`)

@@ -274,11 +274,12 @@ Return ONLY valid JSON, no other text.`
 }
 
 // Note: prioritizeCitations is no longer used in Phase 1, but kept for backward compatibility
-async function prioritizeCitations(
+// Export for use in wikipediaMonitoring
+export async function prioritizeCitations(
   citations: Array<{ url: string; title?: string; context?: string; text?: string }>,
   sourceUrl: string,
-  topic: string,
-  aliases: string[]
+  topic?: string,
+  aliases?: string[]
 ): Promise<Array<{ url: string; title?: string; context?: string; text?: string; score?: number }>> {
   if (citations.length === 0) return []
   if (citations.length <= 10) {
