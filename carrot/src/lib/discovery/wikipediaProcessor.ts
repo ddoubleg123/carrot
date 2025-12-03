@@ -1466,7 +1466,11 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
           sourceTitle: title,
           sourceUrl: url,
           content,
-          tags: wikipediaPageTitle ? [`page:${wikipediaPageTitle}`] : []
+          sourceType: 'wikipedia_citation',
+          tags: wikipediaPageTitle ? [`page:${wikipediaPageTitle}`] : [],
+          confidence: 1.0,
+          fedBy: 'system',
+          embedding: []
         }
       })
       return saved.id
