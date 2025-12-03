@@ -1463,7 +1463,6 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
     try {
       const saved = await prisma.agentMemory.create({
         data: {
-          patchId,
           sourceTitle: title,
           sourceUrl: url,
           content,
