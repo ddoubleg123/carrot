@@ -631,28 +631,136 @@ export async function processNextCitation(
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
     
-    // Check if it's a Wikipedia URL - these should NOT be processed as external citations
-    // They should be handled by Wikipedia-to-Wikipedia crawling instead
+    // Check if it's a Wikipedia URL - these should be added to monitoring if relevant
+    // They should NOT be saved as external citations, but should be crawled via Wikipedia-to-Wikipedia crawling
     const isWikipediaUrl = citationUrl.includes('wikipedia.org/wiki/') || citationUrl.includes('wikipedia.org/w/')
     
     if (isWikipediaUrl) {
-      console.log(`[WikipediaProcessor] Skipping Wikipedia internal link (not an external citation): ${citationUrl}`)
-      // Mark as verification failed with specific message
-      await markCitationVerificationFailed(
-        nextCitation.id,
-        'Wikipedia internal link - not an external citation'
-      )
-      // Also mark as scanned with denied decision to prevent reprocessing
-      await markCitationScanned(
-        nextCitation.id,
-        'denied',
-        null,
-        undefined,
-        '', // No content for Wikipedia links
-        null // No AI score
-      )
-      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      console.log(`[WikipediaProcessor] Processing Wikipedia internal link: ${citationUrl} (will add to monitoring if relevant)`)
+      
+      // For Wikipedia URLs, we need to:
+      // 1. Fetch and check relevance
+      // 2. If relevant, add to Wikipedia monitoring (for Wikipedia-to-Wikipedia crawling)
+      // 3. Mark as processed (not as external citation)
+      
+      try {
+        // Fetch the Wikipedia page to check relevance
+        const response = await fetch(citationUrl, {
+          signal: AbortSignal.timeout(30000) // 30 second timeout
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        
+        const html = await response.text()
+        
+        // Extract title from URL
+        const urlObj = new URL(citationUrl)
+        const title = decodeURIComponent(urlObj.pathname.replace('/wiki/', '').replace(/_/g, ' '))
+        
+        // Extract basic text content for relevance check
+        const textContent = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 2000) // Limit for relevance check
+        
+        // Quick relevance check using DeepSeek
+        // Get patch topic for relevance check
+        const patch = await prisma.patch.findUnique({
+          where: { id: patchId },
+          select: { title: true }
+        })
+        const topic = patch?.title || 'unknown'
+        
+        const scoringResult = await scoreCitationContent(
+          title,
+          citationUrl,
+          textContent,
+          topic
+        )
+        
+        const isRelevant = scoringResult.isRelevant && scoringResult.score >= 60
+        
+        if (isRelevant) {
+          // Add to Wikipedia monitoring for Wikipedia-to-Wikipedia crawling
+          const { addWikipediaPageToMonitoring } = await import('./wikipediaMonitoring')
+          const result = await addWikipediaPageToMonitoring(
+            patchId,
+            citationUrl,
+            title,
+            `citation from ${monitoring?.wikipediaTitle || 'unknown page'}`
+          )
+          
+          if (result.added) {
+            console.log(`[WikipediaProcessor] ✅ Added relevant Wikipedia page to monitoring: ${title} (score: ${scoringResult.score})`)
+            // Mark as scanned with a special status indicating it was added to monitoring
+            await markCitationScanned(
+              nextCitation.id,
+              'denied', // Not saved as external citation
+              null,
+              undefined,
+              '', // No content stored (it's in monitoring now)
+              scoringResult.score // Store the relevance score
+            )
+            await markCitationVerificationFailed(
+              nextCitation.id,
+              'Wikipedia internal link - added to monitoring for crawling'
+            )
+          } else {
+            console.log(`[WikipediaProcessor] Wikipedia page already in monitoring: ${title}`)
+            await markCitationScanned(
+              nextCitation.id,
+              'denied',
+              null,
+              undefined,
+              '',
+              scoringResult.score
+            )
+            await markCitationVerificationFailed(
+              nextCitation.id,
+              'Wikipedia internal link - already in monitoring'
+            )
+          }
+        } else {
+          console.log(`[WikipediaProcessor] Wikipedia page not relevant: ${title} (score: ${scoringResult.score})`)
+          await markCitationScanned(
+            nextCitation.id,
+            'denied',
+            null,
+            undefined,
+            '',
+            scoringResult.score
+          )
+          await markCitationVerificationFailed(
+            nextCitation.id,
+            `Wikipedia internal link - not relevant (score: ${scoringResult.score})`
+          )
+        }
+        
+        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+        return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to process Wikipedia URL'
+        console.error(`[WikipediaProcessor] Error processing Wikipedia URL "${citationUrl}": ${errorMessage}`)
+        await markCitationVerificationFailed(
+          nextCitation.id,
+          `Wikipedia internal link - processing failed: ${errorMessage}`
+        )
+        await markCitationScanned(
+          nextCitation.id,
+          'denied',
+          null,
+          undefined,
+          '',
+          null
+        )
+        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+        return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      }
     }
     
     // Check for low-quality URLs (library catalogs, authority files, metadata pages)
