@@ -68,13 +68,13 @@ export async function GET() {
     }
     
     // Get ALL stored citations from database for Israel patch
-    // Focus on external URLs (non-Wikipedia)
+    // Include both external URLs AND Wikipedia internal links
     let allStoredCitations: any[]
     try {
       allStoredCitations = await prisma.wikipediaCitation.findMany({
         where: {
-          monitoring: { patchId: patch.id },
-          citationUrl: { not: { contains: 'wikipedia.org' } } // Only external URLs
+          monitoring: { patchId: patch.id }
+          // Include ALL citations (external + Wikipedia internal)
         },
         include: {
           monitoring: {
