@@ -194,6 +194,41 @@ export async function addWikipediaPageToMonitoring(
     })
 
     console.log(`[WikipediaMonitoring] Added new page to monitoring: ${wikipediaTitle} (from ${source})`)
+    
+    // Immediately extract and store citations from this Wikipedia page
+    // This ensures we capture all reference URLs and sources just like we do with all Wikipedia pages
+    try {
+      console.log(`[WikipediaMonitoring] Extracting citations from newly added page: ${wikipediaTitle}`)
+      const { extractAndStoreCitations } = await import('./wikipediaCitation')
+      const { prioritizeCitations } = await import('./wikipediaProcessor')
+      
+      // Fetch the Wikipedia page HTML
+      const response = await fetch(canonical, {
+        headers: {
+          'User-Agent': 'CarrotApp/1.0 (Educational research platform)'
+        }
+      })
+      
+      if (response.ok) {
+        const html = await response.text()
+        
+        // Extract and store citations (this will be processed incrementally later)
+        await extractAndStoreCitations(
+          newPage.id,
+          canonical,
+          html,
+          prioritizeCitations
+        )
+        
+        console.log(`[WikipediaMonitoring] ✅ Citations extracted from ${wikipediaTitle}`)
+      } else {
+        console.warn(`[WikipediaMonitoring] Failed to fetch HTML for citation extraction: ${wikipediaTitle} (HTTP ${response.status})`)
+      }
+    } catch (error) {
+      // Non-fatal - citations can be extracted later during incremental processing
+      console.warn(`[WikipediaMonitoring] Error extracting citations from ${wikipediaTitle}:`, error)
+    }
+    
     return { added: true, monitoringId: newPage.id }
   } catch (error) {
     console.error(`[WikipediaMonitoring] Error adding page "${wikipediaTitle}":`, error)

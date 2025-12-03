@@ -91,8 +91,16 @@ export default function ExtractionTestPage() {
   // All citations are external (API filters out Wikipedia URLs)
   const allCitations = (data.stored?.citations || []) as StoredCitation[]
 
-  // Filter stored citations
-  const filteredStored = allCitations.filter((cit: StoredCitation) => {
+  // Additional filter: ensure we only show external URLs (double-check)
+  const externalOnlyCitations = allCitations.filter((cit: StoredCitation) => {
+    const url = cit.url.toLowerCase()
+    return !url.includes('wikipedia.org') && 
+           !url.includes('wikimedia.org') && 
+           !url.includes('wikidata.org')
+  })
+
+  // Filter stored citations by search term
+  const filteredStored = externalOnlyCitations.filter((cit: StoredCitation) => {
     const searchLower = searchTerm.toLowerCase()
     return cit.url.toLowerCase().includes(searchLower) ||
            (cit.title || '').toLowerCase().includes(searchLower) ||
@@ -219,7 +227,7 @@ export default function ExtractionTestPage() {
         <div style={{ background: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #0066cc', paddingBottom: '10px' }}>
             <h2 style={{ margin: 0 }}>
-              External URLs from Database ({filteredStored.length} of {allCitations.length} total)
+              External URLs from Database ({filteredStored.length} of {externalOnlyCitations.length} external, {allCitations.length} total)
             </h2>
             <div style={{ fontSize: '14px', color: '#666' }}>
               <span style={{ color: '#28a745', fontWeight: 'bold' }}>
