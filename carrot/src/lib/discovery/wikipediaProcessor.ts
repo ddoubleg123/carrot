@@ -244,8 +244,7 @@ Return ONLY valid JSON, no other text.`
     }
     
     // Determine relevance (must be actual article AND relevant)
-    // Lower threshold from 60 to 40 to match main processing threshold
-    const RELEVANCE_THRESHOLD = 40
+    const RELEVANCE_THRESHOLD = 60
     const isRelevant = result.isRelevant ?? (score >= RELEVANCE_THRESHOLD)
     
     return {
