@@ -288,7 +288,19 @@ export function extractWikipediaCitationsWithContext(
     // Extract URL from external links
     const urlMatch = refText.match(/<a[^>]*class=["'][^"']*external[^"']*["'][^>]*href=["']([^"']+)["']/i) ||
                     refText.match(/href=["'](https?:\/\/[^"']+)["']/i)
-    const url = urlMatch ? urlMatch[1] : undefined
+    let url = urlMatch ? urlMatch[1] : undefined
+    
+    // Skip relative Wikipedia links (./PageName, /wiki/PageName)
+    if (url) {
+      if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
+        // This is a relative Wikipedia link, skip it
+        continue
+      }
+      // Skip if it's already a Wikipedia URL
+      if (url.includes('wikipedia.org/wiki/') || url.includes('wikipedia.org/w/')) {
+        continue
+      }
+    }
     
     // Extract title
     const titleMatch = refText.match(/title=["']([^"']+)["']/i) || 
@@ -301,15 +313,25 @@ export function extractWikipediaCitationsWithContext(
     if (url) {
       const normalized = normaliseUrl(url, sourceUrl)
       if (normalized) {
+        // Double-check: skip if normalized URL is a Wikipedia URL
+        if (normalized.includes('wikipedia.org/wiki/') || normalized.includes('wikipedia.org/w/')) {
+          continue
+        }
         const canonical = canonicalizeUrlFast(normalized)
-        if (canonical && !seenUrls.has(canonical)) {
-          seenUrls.add(canonical)
-          citations.push({
-            url: canonical,
-            title,
-            context: context.substring(0, 500),
-            text: context
-          })
+        if (canonical) {
+          // Triple-check: skip if canonical URL is a Wikipedia URL
+          if (canonical.includes('wikipedia.org/wiki/') || canonical.includes('wikipedia.org/w/')) {
+            continue
+          }
+          if (!seenUrls.has(canonical)) {
+            seenUrls.add(canonical)
+            citations.push({
+              url: canonical,
+              title,
+              context: context.substring(0, 500),
+              text: context
+            })
+          }
         }
       }
     }
