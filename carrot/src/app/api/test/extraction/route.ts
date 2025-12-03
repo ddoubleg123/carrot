@@ -22,17 +22,13 @@ export async function GET() {
     // Fetch the Apartheid Wikipedia page for extraction test
     let html: string
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-      
       const response = await fetch('https://en.wikipedia.org/wiki/Apartheid', {
         headers: {
           'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
         },
-        signal: controller.signal
+        // Remove AbortController - may not be available in all Node.js versions
+        // Use default timeout instead
       })
-      
-      clearTimeout(timeoutId)
 
       if (!response.ok) {
         return NextResponse.json(

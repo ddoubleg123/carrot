@@ -244,7 +244,9 @@ Return ONLY valid JSON, no other text.`
     }
     
     // Determine relevance (must be actual article AND relevant)
-    const isRelevant = result.isRelevant ?? (score >= 60)
+    // Lower threshold from 60 to 40 to match main processing threshold
+    const RELEVANCE_THRESHOLD = 40
+    const isRelevant = result.isRelevant ?? (score >= RELEVANCE_THRESHOLD)
     
     return {
       score,
@@ -761,7 +763,10 @@ export async function processNextCitation(
       )
       
       const aiPriorityScore = scoringResult.score
-      const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= 60
+      // Lower threshold from 60 to 40 to allow more citations through
+      // Average score is ~30, so 60 was too restrictive
+      const RELEVANCE_THRESHOLD = 40
+      const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= RELEVANCE_THRESHOLD
       
       console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
         score: aiPriorityScore,
@@ -810,7 +815,8 @@ export async function processNextCitation(
       let savedMemoryId: string | null = null
 
       // Save citations to DiscoveredContent
-      // Only save if DeepSeek approves (score >= 60 and isRelevant)
+      // Only save if DeepSeek approves (score >= 40 and isRelevant)
+      // Threshold lowered from 60 to 40 to allow more citations through
       // isUseful flag will determine if it's published to the page
       if (finalIsRelevant && options.saveAsContent) {
         try {
