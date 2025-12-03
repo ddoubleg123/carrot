@@ -236,6 +236,17 @@ Return ONLY valid JSON, no other text.`
     
     // Reject if not an actual article
     if (!isActuallyAnArticle) {
+      const paragraphCount = (contentText.match(/\n\n/g) || []).length + 1
+      const textBytes = Buffer.byteLength(contentText, 'utf8')
+      console.warn(JSON.stringify({
+        tag: 'content_validate_fail',
+        url: url,
+        reason: 'not_article',
+        textBytes,
+        paragraphCount,
+        isActualArticleFromAI,
+        isActualArticleFromContent
+      }))
       return {
         score: 30, // Low score for non-articles
         isRelevant: false,
@@ -701,7 +712,7 @@ export async function processNextCitation(
             await markCitationScanned(
               nextCitation.id,
               'denied', // Not saved as external citation
-              null,
+              undefined,
               undefined,
               '', // No content stored (it's in monitoring now)
               scoringResult.score // Store the relevance score
@@ -715,7 +726,7 @@ export async function processNextCitation(
             await markCitationScanned(
               nextCitation.id,
               'denied',
-              null,
+              undefined,
               undefined,
               '',
               scoringResult.score
@@ -730,7 +741,7 @@ export async function processNextCitation(
           await markCitationScanned(
             nextCitation.id,
             'denied',
-            null,
+            undefined,
             undefined,
             '',
             scoringResult.score
@@ -750,14 +761,14 @@ export async function processNextCitation(
           nextCitation.id,
           `Wikipedia internal link - processing failed: ${errorMessage}`
         )
-        await markCitationScanned(
-          nextCitation.id,
-          'denied',
-          null,
-          undefined,
-          '',
-          null
-        )
+      await markCitationScanned(
+        nextCitation.id,
+        'denied',
+        undefined,
+        undefined,
+        '',
+        undefined
+      )
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
       }
@@ -775,10 +786,10 @@ export async function processNextCitation(
       await markCitationScanned(
         nextCitation.id,
         'denied',
-        null,
+        undefined,
         undefined,
         '', // No content for low-quality URLs
-        null // No AI score
+        undefined // No AI score
       )
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
@@ -857,14 +868,78 @@ export async function processNextCitation(
 
       const html = await response.text()
       
-      // Extract text content (simplified - could use better extraction)
-      const textContent = html
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 50000) // Limit to 50k chars
+      // Robust content extraction with fallback chain
+      // Try Readability first, then ContentExtractor, then simple fallback
+      function normalizeText(t: string): string {
+        return t
+          .replace(/\u00A0/g, ' ')
+          .replace(/\s+\n/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+      }
+
+      let textContent = ''
+      let extractionMethod = 'fallback-strip'
+      let extractedTitle = nextCitation.citationTitle || 'Untitled'
+
+      // Stage 1: Try Readability extraction (best for news/blogs)
+      try {
+        const { extractReadableContent } = await import('@/lib/readability')
+        const readableResult = extractReadableContent(html, citationUrl)
+        const readableText = readableResult.textContent || readableResult.content || ''
+        if (readableText.length >= 600) {
+          textContent = normalizeText(readableText)
+          extractedTitle = readableResult.title || extractedTitle
+          extractionMethod = 'readability'
+        }
+      } catch (error) {
+        // Continue to next method
+        console.warn(`[WikipediaProcessor] Readability extraction failed for ${citationUrl}:`, error)
+      }
+
+      // Stage 2: Try ContentExtractor (better boilerplate removal)
+      if (textContent.length < 600) {
+        try {
+          const { ContentExtractor } = await import('./content-quality')
+          const extracted = await ContentExtractor.extractFromHtml(html, citationUrl)
+          const extractedText = extracted.text || ''
+          if (extractedText.length >= 600) {
+            textContent = normalizeText(extractedText)
+            extractedTitle = extracted.title || extractedTitle
+            extractionMethod = 'content-extractor'
+          }
+        } catch (error) {
+          // Continue to fallback
+          console.warn(`[WikipediaProcessor] ContentExtractor failed for ${citationUrl}:`, error)
+        }
+      }
+
+      // Stage 3: Ultra last resort fallback (keeps us from total failure)
+      if (textContent.length < 200) {
+        extractionMethod = 'fallback-strip'
+        textContent = normalizeText(
+          html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+        )
+      }
+
+      // Calculate metrics for logging
+      const paragraphCount = (textContent.match(/\n\n/g) || []).length + 1
+      const textBytes = Buffer.byteLength(textContent, 'utf8')
+
+      // Structured log for observability
+      console.info(JSON.stringify({
+        tag: 'content_extract',
+        url: citationUrl,
+        method: extractionMethod,
+        textBytes,
+        paragraphCount,
+        title: extractedTitle
+      }))
 
       // Phase 2: Content validation - ensure meaningful content
       const MIN_CONTENT_LENGTH = 500
@@ -872,6 +947,13 @@ export async function processNextCitation(
       const hasSufficientContent = meaningfulContent.length >= MIN_CONTENT_LENGTH
       
       if (!hasSufficientContent) {
+        console.warn(JSON.stringify({
+          tag: 'content_validate_fail',
+          url: citationUrl,
+          reason: 'min_len_500',
+          textBytes: meaningfulContent.length,
+          method: extractionMethod
+        }))
         console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: insufficient content (${meaningfulContent.length} chars, need ${MIN_CONTENT_LENGTH})`)
         await markCitationScanned(
           nextCitation.id,
@@ -886,9 +968,30 @@ export async function processNextCitation(
       }
 
       // Phase 2: Score content using DeepSeek with actual article content
-      console.log(`[WikipediaProcessor] Scoring citation content for "${nextCitation.citationTitle}"...`)
+      // Only score if we have sufficient content (avoid sending garbage to AI)
+      if (meaningfulContent.length < 800) {
+        console.warn(JSON.stringify({
+          tag: 'content_validate_fail',
+          url: citationUrl,
+          reason: 'min_len_800_for_ai',
+          textBytes: meaningfulContent.length,
+          method: extractionMethod
+        }))
+        await markCitationScanned(
+          nextCitation.id,
+          'denied',
+          undefined,
+          undefined,
+          meaningfulContent,
+          undefined
+        )
+        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+        return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      }
+
+      console.log(`[WikipediaProcessor] Scoring citation content for "${extractedTitle}"...`)
       const scoringResult = await scoreCitationContent(
-        nextCitation.citationTitle || 'Untitled',
+        extractedTitle,
         citationUrl,
         meaningfulContent,
         options.patchName
@@ -963,21 +1066,57 @@ export async function processNextCitation(
           ) || null
           
           if (savedContentId) {
+            const textBytes = Buffer.byteLength(meaningfulContent, 'utf8')
             console.log(`[WikipediaProcessor] ✅ Successfully saved citation to DiscoveredContent: ${savedContentId}`)
             
             // Trigger hero image generation in background (non-blocking)
             // Fire and forget - don't await
             // Use direct function call instead of HTTP to avoid URL construction issues
             const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
+            let heroTriggered = false
             import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
-              enrichContentId(contentId).catch(err => {
+              enrichContentId(contentId).then(() => {
+                heroTriggered = true
+                console.info(JSON.stringify({
+                  tag: 'content_saved',
+                  url: citationUrl,
+                  textBytes,
+                  score: aiPriorityScore,
+                  hero: true
+                }))
+              }).catch(err => {
                 console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
                 // Non-fatal - hero can be generated later
+                console.info(JSON.stringify({
+                  tag: 'content_saved',
+                  url: citationUrl,
+                  textBytes,
+                  score: aiPriorityScore,
+                  hero: false
+                }))
               })
             }).catch(err => {
               console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
               // Non-fatal - hero can be generated later
+              console.info(JSON.stringify({
+                tag: 'content_saved',
+                url: citationUrl,
+                textBytes,
+                score: aiPriorityScore,
+                hero: false
+              }))
             })
+            
+            // Log immediately if hero trigger is async
+            if (!heroTriggered) {
+              console.info(JSON.stringify({
+                tag: 'content_saved',
+                url: citationUrl,
+                textBytes,
+                score: aiPriorityScore,
+                hero: 'pending'
+              }))
+            }
           } else {
             console.warn(`[WikipediaProcessor] ⚠️ saveAsContent returned null for citation "${nextCitation.citationTitle}" - citation was not saved`)
           }
