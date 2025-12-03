@@ -185,7 +185,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     try {
       const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start_deepseek_search'
+        })
       })
 
       if (!response.ok) {
