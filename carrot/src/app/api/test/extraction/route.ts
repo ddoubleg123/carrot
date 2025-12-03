@@ -20,43 +20,76 @@ export async function GET() {
     }
 
     // Fetch the Apartheid Wikipedia page for extraction test
-    const response = await fetch('https://en.wikipedia.org/wiki/Apartheid', {
-      headers: {
-        'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
-      }
-    })
+    let html: string
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      
+      const response = await fetch('https://en.wikipedia.org/wiki/Apartheid', {
+        headers: {
+          'User-Agent': 'CarrotBot/1.0 (https://carrot-app.onrender.com)'
+        },
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: `Failed to fetch Wikipedia page: ${response.status}` },
+          { status: response.status }
+        )
+      }
+
+      html = await response.text()
+    } catch (fetchError: any) {
+      console.error('[Test Extraction] Fetch error:', fetchError)
       return NextResponse.json(
-        { error: `Failed to fetch Wikipedia page: ${response.status}` },
-        { status: response.status }
+        { error: `Failed to fetch Wikipedia page: ${fetchError.message || 'Network error'}` },
+        { status: 500 }
       )
     }
-
-    const html = await response.text()
     
     // Extract URLs (for comparison)
-    const extractedUrls = extractAllExternalUrls(html, 'https://en.wikipedia.org/wiki/Apartheid')
+    let extractedUrls: any[]
+    try {
+      extractedUrls = extractAllExternalUrls(html, 'https://en.wikipedia.org/wiki/Apartheid')
+    } catch (extractError: any) {
+      console.error('[Test Extraction] Extraction error:', extractError)
+      return NextResponse.json(
+        { error: `Failed to extract URLs: ${extractError.message || 'Unknown error'}` },
+        { status: 500 }
+      )
+    }
     
     // Get ALL stored citations from database for Israel patch
     // Filter to show external URLs first, then Wikipedia URLs
-    const allStoredCitations = await prisma.wikipediaCitation.findMany({
-      where: {
-        monitoring: { patchId: patch.id }
-      },
-      include: {
-        monitoring: {
-          select: {
-            wikipediaTitle: true,
-            wikipediaUrl: true
+    let allStoredCitations: any[]
+    try {
+      allStoredCitations = await prisma.wikipediaCitation.findMany({
+        where: {
+          monitoring: { patchId: patch.id }
+        },
+        include: {
+          monitoring: {
+            select: {
+              wikipediaTitle: true,
+              wikipediaUrl: true
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: 2000 // Increased limit
-    })
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: 2000 // Increased limit
+      })
+    } catch (dbError: any) {
+      console.error('[Test Extraction] Database error (citations):', dbError)
+      return NextResponse.json(
+        { error: `Database error: ${dbError.message || 'Unknown error'}` },
+        { status: 500 }
+      )
+    }
 
     // Separate external vs Wikipedia URLs
     const externalCitations = allStoredCitations.filter(c => 
@@ -70,41 +103,53 @@ export async function GET() {
     const storedCitations = [...externalCitations, ...wikipediaCitations]
 
     // Get stored DiscoveredContent
-    const storedContent = await prisma.discoveredContent.findMany({
-      where: {
-        patchId: patch.id
-      },
-      select: {
-        id: true,
-        title: true,
-        canonicalUrl: true,
-        sourceUrl: true,
-        relevanceScore: true,
-        qualityScore: true,
-        summary: true,
-        content: true,
-        createdAt: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: 100
-    })
+    let storedContent: any[]
+    try {
+      storedContent = await prisma.discoveredContent.findMany({
+        where: {
+          patchId: patch.id
+        },
+        select: {
+          id: true,
+          title: true,
+          canonicalUrl: true,
+          sourceUrl: true,
+          relevanceScore: true,
+          qualityScore: true,
+          summary: true,
+          content: true,
+          createdAt: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: 100
+      })
+    } catch (dbError: any) {
+      console.error('[Test Extraction] Database error (content):', dbError)
+      storedContent = [] // Continue with empty array
+    }
 
     // Get stored AgentMemories
-    const storedMemories = await prisma.agentMemory.findMany({
-      where: {
-        sourceUrl: { contains: 'hrw.org' }
-      },
-      select: {
-        id: true,
-        sourceTitle: true,
-        sourceUrl: true,
-        content: true,
-        createdAt: true
-      },
-      take: 50
-    })
+    let storedMemories: any[]
+    try {
+      storedMemories = await prisma.agentMemory.findMany({
+        where: {
+          sourceUrl: { contains: 'hrw.org' }
+        },
+        select: {
+          id: true,
+          sourceTitle: true,
+          sourceUrl: true,
+          content: true,
+          createdAt: true
+        },
+        take: 50
+      })
+    } catch (dbError: any) {
+      console.error('[Test Extraction] Database error (memories):', dbError)
+      storedMemories = [] // Continue with empty array
+    }
 
     // Separate extracted URLs by type
     const wikipediaUrls = extractedUrls.filter(c => c.url.includes('wikipedia.org'))
@@ -161,7 +206,7 @@ export async function GET() {
           savedContentId: c.savedContentId,
           savedMemoryId: c.savedMemoryId,
           errorMessage: c.errorMessage,
-          fromWikipediaPage: c.monitoring.wikipediaTitle,
+          fromWikipediaPage: c.monitoring?.wikipediaTitle || 'Unknown',
           lastScannedAt: c.lastScannedAt?.toISOString(),
           createdAt: c.createdAt.toISOString()
         })),
@@ -170,9 +215,13 @@ export async function GET() {
       }
     })
   } catch (error: any) {
-    console.error('[Test Extraction] Error:', error)
+    console.error('[Test Extraction] Unexpected error:', error)
+    console.error('[Test Extraction] Error stack:', error.stack)
     return NextResponse.json(
-      { error: error.message || 'Failed to extract URLs' },
+      { 
+        error: error.message || 'Failed to extract URLs',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
