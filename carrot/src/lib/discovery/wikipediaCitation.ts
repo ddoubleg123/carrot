@@ -220,7 +220,7 @@ export async function getNextCitationToProcess(
     where: {
       monitoring: { patchId },
       verificationStatus: { in: ['pending', 'verified'] }, // Only external URLs (pending_wiki excluded)
-      scanStatus: 'not_scanned', // Only process not_scanned (exclude scanning, scanned, scanned_denied)
+      scanStatus: { in: ['not_scanned', 'scanning'] }, // Include 'scanning' in case a process crashed
       relevanceDecision: null, // Only process citations that haven't been decided yet
       // Exclude Wikipedia internal links - these are marked as 'pending_wiki' but also filter by URL pattern as defensive check
       NOT: [
@@ -232,7 +232,9 @@ export async function getNextCitationToProcess(
       ]
     },
     orderBy: [
-      { aiPriorityScore: 'desc' },
+      // Prioritize citations with AI scores first, then by creation date
+      // Use nullsLast to ensure citations without scores are still processed
+      { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
       { createdAt: 'asc' }
     ],
     include: {
