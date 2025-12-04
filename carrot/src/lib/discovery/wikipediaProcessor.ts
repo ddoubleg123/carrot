@@ -145,6 +145,101 @@ function isActualArticle(content: string, url: string): boolean {
 }
 
 /**
+ * Check if a Wikipedia page (including Portal pages) is relevant to the topic
+ * This is more lenient than scoreCitationContent - we want Portal pages if they're topic-relevant
+ * because we want to crawl them to extract their citations
+ */
+async function checkWikipediaPageRelevance(
+  title: string,
+  url: string,
+  contentText: string,
+  topic: string
+): Promise<{ score: number; isRelevant: boolean; reason: string }> {
+  try {
+    const { chatStream } = await import('@/lib/llm/providers/DeepSeekClient')
+    
+    const prompt = `Analyze this Wikipedia page for relevance to "${topic}":
+
+Title: ${title}
+URL: ${url}
+Content: ${contentText.substring(0, 10000)}${contentText.length > 10000 ? '...' : ''}
+
+NOTE: This is a Wikipedia page (may be a Portal, article, or other page type). We want to know if it's relevant to "${topic}" so we can crawl it and extract citations from it.
+
+Return JSON:
+{
+  "score": 0-100,
+  "isRelevant": boolean,
+  "reason": string
+}
+
+Scoring criteria:
+1. How directly does this page relate to "${topic}"?
+2. Would this page likely contain links or citations relevant to "${topic}"?
+3. Is this page about topics related to "${topic}"?
+
+Be inclusive - Portal pages, category pages, and navigation pages are acceptable if they relate to "${topic}".
+
+Return ONLY valid JSON, no other text.`
+
+    let response = ''
+    for await (const chunk of chatStream({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a Wikipedia page relevance analyzer. Return only valid JSON objects with score (0-100), isRelevant (boolean), and reason (string).'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 500
+    })) {
+      if (chunk.type === 'token' && chunk.token) {
+        response += chunk.token
+      }
+    }
+
+    // Clean and extract JSON from response
+    let cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
+    
+    // Try to extract JSON object if response contains other text
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0]
+    }
+    
+    const result = JSON.parse(cleanResponse) as { 
+      score: number
+      isRelevant: boolean
+      reason: string
+    }
+    
+    // Ensure score is in valid range
+    const score = Math.max(0, Math.min(100, result.score || 0))
+    
+    // Determine relevance - be more lenient for Wikipedia pages
+    const isRelevant = result.isRelevant ?? (score >= 40)
+    
+    return {
+      score,
+      isRelevant,
+      reason: result.reason || `Scored ${score}/100`
+    }
+  } catch (error) {
+    console.warn('[WikipediaProcessor] Wikipedia page relevance check failed, using default:', error)
+    return {
+      score: 50,
+      isRelevant: false,
+      reason: 'Relevance check failed - default score'
+    }
+  }
+}
+
+/**
  * Score citation content using DeepSeek after fetching actual article content
  * This is called in Phase 2 after content is fetched
  */
@@ -842,10 +937,11 @@ export async function processNextCitation(
     if (isWikipediaUrl) {
       console.log(`[WikipediaProcessor] Processing Wikipedia internal link: ${citationUrl} (will add to monitoring if relevant)`)
       
-      // For Wikipedia URLs, we need to:
-      // 1. Fetch and check relevance
+      // For Wikipedia URLs (including Portal pages, etc.), we need to:
+      // 1. Check if it's relevant to the topic (even if it's a navigation/portal page)
       // 2. If relevant, add to Wikipedia monitoring (for Wikipedia-to-Wikipedia crawling)
       // 3. Mark as processed (not as external citation)
+      // Note: We want to crawl ALL relevant Wikipedia pages, including portals, to extract their citations
       
       try {
         // Fetch the Wikipedia page to check relevance
@@ -872,7 +968,9 @@ export async function processNextCitation(
           .trim()
           .substring(0, 2000) // Limit for relevance check
         
-        // Quick relevance check using DeepSeek
+        // Relevance check for Wikipedia internal links
+        // For Wikipedia pages (including Portal pages), we want to check if they're relevant to the topic
+        // We don't care if they're "articles" - we want to crawl them to extract their citations
         // Get patch topic for relevance check
         const patch = await prisma.patch.findUnique({
           where: { id: patchId },
@@ -880,14 +978,16 @@ export async function processNextCitation(
         })
         const topic = patch?.title || 'unknown'
         
-        const scoringResult = await scoreCitationContent(
+        // Use a more lenient relevance check for Wikipedia pages - we want Portal pages if they're topic-relevant
+        const scoringResult = await checkWikipediaPageRelevance(
           title,
           citationUrl,
           textContent,
           topic
         )
         
-        const isRelevant = scoringResult.isRelevant && scoringResult.score >= 60
+        // Lower threshold for Wikipedia pages - we want to be inclusive to catch Portal pages
+        const isRelevant = scoringResult.isRelevant && scoringResult.score >= 40
         
         if (isRelevant) {
           // Add to Wikipedia monitoring for Wikipedia-to-Wikipedia crawling
