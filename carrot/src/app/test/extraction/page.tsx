@@ -47,6 +47,9 @@ export default function ExtractionTestPage() {
   const [filterRelevanceDecision, setFilterRelevanceDecision] = useState<string>('all')
   const [filterUrlType, setFilterUrlType] = useState<string>('all') // 'all', 'external', 'wikipedia'
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [liveEvents, setLiveEvents] = useState<Array<{ timestamp: number; type: string; data: any }>>([])
+  const [showLiveTracker, setShowLiveTracker] = useState(false)
+  const [lastEventTime, setLastEventTime] = useState(0)
 
   useEffect(() => {
     async function fetchData() {
@@ -73,6 +76,31 @@ export default function ExtractionTestPage() {
 
     fetchData()
   }, [])
+
+  // Live tracker polling
+  useEffect(() => {
+    if (!showLiveTracker) return
+
+    const pollLiveEvents = async () => {
+      try {
+        const response = await fetch(`/api/test/extraction/live?sessionId=default&since=${lastEventTime}`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.events && result.events.length > 0) {
+            setLiveEvents(prev => [...prev, ...result.events])
+            setLastEventTime(result.lastEventTime || Date.now())
+          }
+        }
+      } catch (err) {
+        // Ignore errors
+      }
+    }
+
+    const interval = setInterval(pollLiveEvents, 1000) // Poll every second
+    pollLiveEvents() // Initial fetch
+
+    return () => clearInterval(interval)
+  }, [showLiveTracker, lastEventTime])
 
   // Get all citations (external + Wikipedia internal)
   const allCitations = useMemo(() => {
@@ -243,6 +271,59 @@ export default function ExtractionTestPage() {
         <h1 style={{ margin: '0 0 10px 0' }}>📊 Wikipedia Extraction & Database Test</h1>
         <p><strong>Patch:</strong> Israel</p>
         <p><strong>Last Updated:</strong> {new Date().toISOString()}</p>
+      </div>
+
+      {/* Live Tracker Toggle */}
+      <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <button
+          onClick={() => setShowLiveTracker(!showLiveTracker)}
+          style={{
+            padding: '10px 20px',
+            background: showLiveTracker ? '#dc3545' : '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '600'
+          }}
+        >
+          {showLiveTracker ? '⏸️ Stop Live Tracker' : '▶️ Start Live Tracker'}
+        </button>
+        {showLiveTracker && (
+          <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '6px', maxHeight: '400px', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>📡 Live Extraction Events ({liveEvents.length})</h3>
+            {liveEvents.length === 0 ? (
+              <p style={{ color: '#999', fontStyle: 'italic' }}>Waiting for extraction events...</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {liveEvents.slice(-50).reverse().map((event, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '10px',
+                      background: 'white',
+                      borderRadius: '4px',
+                      borderLeft: '4px solid',
+                      borderLeftColor: event.type.includes('error') ? '#dc3545' :
+                                     event.type.includes('complete') ? '#28a745' :
+                                     event.type.includes('started') ? '#0066cc' : '#17a2b8',
+                      fontSize: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <strong style={{ color: '#0066cc' }}>{event.type}</strong>
+                      <span style={{ color: '#999' }}>{new Date(event.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <pre style={{ margin: 0, fontSize: '11px', color: '#666', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {JSON.stringify(event.data, null, 2)}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Statistics */}

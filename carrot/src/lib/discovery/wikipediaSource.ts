@@ -156,7 +156,43 @@ export class WikipediaSource {
         
         // Extract URL from <a class="external"> links
         const urlMatch = refText.match(/<a[^>]*class=["'][^"']*external[^"']*["'][^>]*href=["']([^"']+)["']/i)
-        const url = urlMatch ? urlMatch[1] : undefined
+        let url = urlMatch ? urlMatch[1] : undefined
+        
+        // Also try citation template attributes (for REST API format)
+        if (!url) {
+          const templateUrlMatch = refText.match(/(?:url|website|access-url|archive-url)=["']([^"']+)["']/i)
+          if (templateUrlMatch) {
+            url = templateUrlMatch[1]
+          }
+        }
+        
+        // Also try direct HTTP/HTTPS pattern
+        if (!url) {
+          const httpMatch = refText.match(/(https?:\/\/[^\s"'<]+)/i)
+          if (httpMatch) {
+            url = httpMatch[1]
+          }
+        }
+        
+        // Filter out Wikipedia internal links
+        if (url) {
+          if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
+            url = undefined // Skip relative Wikipedia links
+          } else if (url.includes('wikipedia.org/wiki/') || url.includes('wikipedia.org/w/')) {
+            url = undefined // Skip Wikipedia URLs
+          } else {
+            try {
+              const urlObj = new URL(url, 'https://en.wikipedia.org')
+              const hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '')
+              if (hostname.includes('wikipedia.org') || hostname.includes('wikimedia.org') || hostname.includes('wikidata.org')) {
+                url = undefined // Skip Wikipedia domains
+              }
+            } catch {
+              // Invalid URL, skip it
+              url = undefined
+            }
+          }
+        }
         
         // Extract title from cite_web or similar
         const titleMatch = refText.match(/title=["']([^"']+)["']/i) || 
@@ -198,8 +234,30 @@ export class WikipediaSource {
           const url = linkMatch[1]
           const title = linkMatch[2]
           
-          // Skip Wikipedia internal links
-          if (url.includes('wikipedia.org') || url.startsWith('#') || url.startsWith('/')) {
+          // Skip Wikipedia internal links and relative links
+          if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../') || url.startsWith('#') || url.startsWith('/')) {
+            continue
+          }
+          
+          // Skip Wikipedia domains
+          if (url.includes('wikipedia.org') || url.includes('wikimedia.org') || url.includes('wikidata.org')) {
+            continue
+          }
+          
+          // Only include http/https URLs
+          if (!url.startsWith('http') && !url.startsWith('//')) {
+            continue
+          }
+          
+          // Double-check with URL parsing
+          try {
+            const urlObj = new URL(url, 'https://en.wikipedia.org')
+            const hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '')
+            if (hostname.includes('wikipedia.org') || hostname.includes('wikimedia.org') || hostname.includes('wikidata.org')) {
+              continue
+            }
+          } catch {
+            // Invalid URL, skip it
             continue
           }
           

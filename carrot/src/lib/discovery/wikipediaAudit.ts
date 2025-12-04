@@ -51,8 +51,20 @@ export async function auditWikipediaPageReferences(
   const html = await response.text()
   
   // 2. Extract all external URLs (not Wikipedia internal)
+  // Note: extractAllExternalUrls now properly filters Wikipedia links
   const externalUrls = extractAllExternalUrls(html, wikipediaUrl)
   const totalExternalUrls = externalUrls.length
+  
+  // Verify that no Wikipedia URLs are included
+  const wikipediaUrlsInResults = externalUrls.filter(u => {
+    const url = u.url
+    return url.includes('wikipedia.org') || url.includes('wikimedia.org') || url.includes('wikidata.org') ||
+           url.startsWith('./') || url.startsWith('/wiki/')
+  })
+  
+  if (wikipediaUrlsInResults.length > 0) {
+    console.warn(`[Audit] Warning: ${wikipediaUrlsInResults.length} Wikipedia URLs found in external URLs list - this should not happen`)
+  }
   
   // 3. Get monitoring entry for this page
   const monitoring = await prisma.wikipediaMonitoring.findFirst({

@@ -140,26 +140,33 @@ export function extractAllExternalUrls(
   }
   
   function addCitation(url: string, title?: string, context?: string, section?: string) {
-    // Convert relative Wikipedia links to absolute URLs
-    // e.g., ./History_of_South_Africa -> https://en.wikipedia.org/wiki/History_of_South_Africa
-    let normalizedUrl = url
-    if (url.startsWith('./')) {
-      // Relative Wikipedia link - convert to absolute
-      const pageName = url.replace('./', '').replace(/^\/wiki\//, '')
-      normalizedUrl = `https://en.wikipedia.org/wiki/${pageName}`
-    } else if (url.startsWith('/wiki/')) {
-      // Absolute path Wikipedia link
-      const pageName = url.replace('/wiki/', '')
-      normalizedUrl = `https://en.wikipedia.org/wiki/${pageName}`
-    } else {
-      // Already absolute URL - normalize it
-      const normalised = normaliseUrl(url, sourceUrl)
-      if (!normalised) return
-      normalizedUrl = normalised
+    // Skip relative Wikipedia links (./, /wiki/) - these are internal links
+    if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
+      return // Skip Wikipedia internal links
     }
     
-    const canonical = canonicalizeUrlFast(normalizedUrl)
+    // Only process http/https URLs
+    if (!url.startsWith('http') && !url.startsWith('//')) {
+      return
+    }
+    
+    // Normalize URL
+    const normalised = normaliseUrl(url, sourceUrl)
+    if (!normalised) return
+    
+    // Check if it's a Wikipedia URL
+    if (isWikipediaUrl(normalised)) {
+      return // Skip Wikipedia URLs
+    }
+    
+    const canonical = canonicalizeUrlFast(normalised)
     if (!canonical) return
+    
+    // Double-check: skip if canonical URL is a Wikipedia URL
+    if (isWikipediaUrl(canonical)) {
+      return
+    }
+    
     if (seenUrls.has(canonical)) return
     
     seenUrls.add(canonical)
@@ -180,12 +187,12 @@ export function extractAllExternalUrls(
     for (const refMatch of refMatches) {
       const ref = refMatch[1]
       
-      // Extract all URLs from this reference (including relative Wikipedia links)
+      // Extract all URLs from this reference (only external URLs)
       const urlMatches = ref.matchAll(/href=["']([^"']+)["']/gi)
       for (const urlMatch of urlMatches) {
         const url = urlMatch[1]
-        // Include all URLs: http/https, relative Wikipedia links (./), and absolute paths (/wiki/)
-        if (!url.startsWith('http') && !url.startsWith('//') && !url.startsWith('./') && !url.startsWith('/wiki/')) {
+        // Only include http/https URLs (skip relative Wikipedia links)
+        if (!url.startsWith('http') && !url.startsWith('//')) {
           continue
         }
         
@@ -204,22 +211,6 @@ export function extractAllExternalUrls(
     }
   }
   
-  // 1b. Extract relative Wikipedia links from main content (See also, Related articles, etc.)
-  // These are often in "See also" sections or inline links
-  const seeAlsoMatch = html.match(/<h2[^>]*>.*?See\s+also.*?<\/h2>([\s\S]*?)(?:<h2|$)/i)
-  if (seeAlsoMatch) {
-    const sectionHtml = seeAlsoMatch[1]
-    const linkMatches = sectionHtml.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
-    for (const linkMatch of linkMatches) {
-      const url = linkMatch[1]
-      const linkText = linkMatch[2]?.replace(/<[^>]+>/g, '').trim()
-      // Include relative Wikipedia links
-      if (url.startsWith('./') || url.startsWith('/wiki/')) {
-        addCitation(url, linkText, undefined, 'See also')
-      }
-    }
-  }
-  
   // 2. Extract from Further reading section
   const furtherReadingMatch = html.match(/<h2[^>]*>.*?Further\s+reading.*?<\/h2>([\s\S]*?)(?:<h2|$)/i)
   if (furtherReadingMatch) {
@@ -228,8 +219,8 @@ export function extractAllExternalUrls(
     for (const linkMatch of linkMatches) {
       const url = linkMatch[1]
       const linkText = linkMatch[2]?.replace(/<[^>]+>/g, '').trim()
-      // Include all URLs: http/https, relative Wikipedia links (./), and absolute paths (/wiki/)
-      if (url.startsWith('http') || url.startsWith('//') || url.startsWith('./') || url.startsWith('/wiki/')) {
+      // Only include http/https URLs (skip relative Wikipedia links)
+      if (url.startsWith('http') || url.startsWith('//')) {
         addCitation(url, linkText, undefined, 'Further reading')
       }
     }
@@ -243,8 +234,8 @@ export function extractAllExternalUrls(
     for (const linkMatch of linkMatches) {
       const url = linkMatch[1]
       const linkText = linkMatch[2]?.replace(/<[^>]+>/g, '').trim()
-      // Include all URLs: http/https, relative Wikipedia links (./), and absolute paths (/wiki/)
-      if (url.startsWith('http') || url.startsWith('//') || url.startsWith('./') || url.startsWith('/wiki/')) {
+      // Only include http/https URLs (skip relative Wikipedia links)
+      if (url.startsWith('http') || url.startsWith('//')) {
         addCitation(url, linkText, undefined, 'External links')
       }
     }
@@ -255,84 +246,281 @@ export function extractAllExternalUrls(
 
 /**
  * Extract Wikipedia citations with context (title, text, context)
+ * Extracts from References, Further reading, and External links sections
+ * Also parses citation templates to extract external URLs
  */
 export function extractWikipediaCitationsWithContext(
   html: string | undefined,
   sourceUrl: string,
-  limit = 100
+  limit = 10000
 ): WikipediaCitation[] {
   if (!html) return []
   
   const citations: WikipediaCitation[] = []
   const seenUrls = new Set<string>()
   
-  // Extract from references section
-  const referencesMatch = html.match(/<ol[^>]*class=["'][^"']*references[^"']*["'][^>]*>([\s\S]*?)<\/ol>/i)
-  if (!referencesMatch) return citations
+  // Helper function to check if URL is Wikipedia internal
+  function isWikipediaUrl(url: string): boolean {
+    if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
+      return true
+    }
+    if (url.includes('wikipedia.org/wiki/') || url.includes('wikipedia.org/w/')) {
+      return true
+    }
+    try {
+      const urlObj = new URL(url, sourceUrl)
+      const hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '')
+      return hostname.includes('wikipedia.org') || 
+             hostname.includes('wikimedia.org') || 
+             hostname.includes('wikidata.org')
+    } catch {
+      return false
+    }
+  }
   
-  const refsHtml = referencesMatch[1]
-  const refMatches = refsHtml.matchAll(/<li[^>]*id=["']cite_note-(\d+)["'][^>]*>([\s\S]*?)<\/li>/gi)
+  // Helper function to add citation (with filtering)
+  function addCitation(url: string, title?: string, context?: string, section?: string) {
+    // Skip Wikipedia internal links
+    if (isWikipediaUrl(url)) {
+      return
+    }
+    
+    // Normalize URL
+    const normalized = normaliseUrl(url, sourceUrl)
+    if (!normalized) return
+    
+    // Double-check: skip if normalized URL is a Wikipedia URL
+    if (isWikipediaUrl(normalized)) {
+      return
+    }
+    
+    const canonical = canonicalizeUrlFast(normalized)
+    if (!canonical) return
+    
+    // Triple-check: skip if canonical URL is a Wikipedia URL
+    if (isWikipediaUrl(canonical)) {
+      return
+    }
+    
+    if (!seenUrls.has(canonical)) {
+      seenUrls.add(canonical)
+      // Include section name in context for tracking
+      const contextWithSection = section 
+        ? `[${section}] ${context ? context.substring(0, 450) : title || ''}`.trim()
+        : (context ? context.substring(0, 500) : undefined)
+      citations.push({
+        url: canonical,
+        title,
+        context: contextWithSection,
+        text: context || title
+      })
+    }
+  }
   
-  for (const refMatch of refMatches) {
-    if (citations.length >= limit) break
+  // 1. Extract from References section (entire area, not just <ol>)
+  // Find the References h2 and everything until the next h2 or end
+  const referencesAreaMatch = html.match(/<h2[^>]*>.*?References.*?<\/h2>([\s\S]*?)(?:<h2[^>]*>|$)/i)
+  if (referencesAreaMatch) {
+    const refsAreaHtml = referencesAreaMatch[1]
     
-    const index = parseInt(refMatch[1])
-    const refHtml = refMatch[2]
+    // Extract ALL external URLs from the entire References area
+    // This includes: References <ol>, Works cited, and any other reference content
     
-    // Extract reference text
-    const textMatch = refHtml.match(/<span[^>]*class=["'][^"']*reference-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)
-    if (!textMatch) continue
-    
-    const refText = textMatch[1]
-    
-    // Extract URL from external links
-    const urlMatch = refText.match(/<a[^>]*class=["'][^"']*external[^"']*["'][^>]*href=["']([^"']+)["']/i) ||
-                    refText.match(/href=["'](https?:\/\/[^"']+)["']/i)
-    let url = urlMatch ? urlMatch[1] : undefined
-    
-    // Skip relative Wikipedia links (./PageName, /wiki/PageName)
-    if (url) {
-      if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
-        // This is a relative Wikipedia link, skip it
-        continue
-      }
-      // Skip if it's already a Wikipedia URL
-      if (url.includes('wikipedia.org/wiki/') || url.includes('wikipedia.org/w/')) {
-        continue
+    // Method 1: Extract from References <ol> (inline citations)
+    const refsOlMatch = refsAreaHtml.match(/<ol[^>]*class=["'][^"']*references[^"']*["'][^>]*>([\s\S]*?)<\/ol>/i)
+    if (refsOlMatch) {
+      const refsOlHtml = refsOlMatch[1]
+      const refMatches = refsOlHtml.matchAll(/<li[^>]*id=["']cite_note-(\d+)["'][^>]*>([\s\S]*?)<\/li>/gi)
+      
+      for (const refMatch of refMatches) {
+        if (citations.length >= limit) break
+        
+        const index = parseInt(refMatch[1])
+        const refHtml = refMatch[2]
+        
+        // Extract reference text
+        const textMatch = refHtml.match(/<span[^>]*class=["'][^"']*reference-text[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)
+        if (!textMatch) continue
+        
+        const refText = textMatch[1]
+        
+        // Extract ALL URLs from this reference (not just the first one)
+        const urlPatterns = [
+          // Standard <a href>
+          /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>/gi,
+          // Plain text URLs
+          /(https?:\/\/[^\s"'<]+)/gi,
+          // Citation template attributes
+          /(?:url|website|access-url|archive-url|archiveurl)=["']([^"']+)["']/gi
+        ]
+        
+        const foundUrls: string[] = []
+        for (const pattern of urlPatterns) {
+          const matches = Array.from(refText.matchAll(pattern))
+          for (const match of matches) {
+            const url = match[1] || match[0]
+            if (url && !foundUrls.includes(url)) {
+              foundUrls.push(url)
+            }
+          }
+        }
+        
+        // Extract title
+        const titleMatch = refText.match(/title=["']([^"']+)["']/i) || 
+                          refText.match(/<cite[^>]*>([^<]+)<\/cite>/i)
+        const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : undefined
+        
+        // Clean context text
+        const context = refText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        
+        // Add each URL found
+        for (const url of foundUrls) {
+          if (citations.length >= limit) break
+          addCitation(url, title, context, 'References')
+        }
       }
     }
     
-    // Extract title
-    const titleMatch = refText.match(/title=["']([^"']+)["']/i) || 
-                      refText.match(/<cite[^>]*>([^<]+)<\/cite>/i)
-    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : undefined
+    // Method 2: Extract from Works cited section (bibliography)
+    const worksCitedMatch = refsAreaHtml.match(/<h2[^>]*>.*?Works\s+cited.*?<\/h2>([\s\S]*?)(?:<h2|$)/i) ||
+                           refsAreaHtml.match(/<h3[^>]*>.*?Works\s+cited.*?<\/h3>([\s\S]*?)(?:<h[23]|$)/i) ||
+                           // Also check for <ul> or <ol> with class containing "references" or "bibliography"
+                           refsAreaHtml.match(/<(?:ul|ol)[^>]*class=["'][^"']*(?:references|bibliography)[^"']*["'][^>]*>([\s\S]*?)<\/(?:ul|ol)>/i)
     
-    // Clean context text
-    const context = refText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    if (worksCitedMatch) {
+      const worksHtml = worksCitedMatch[1]
+      
+      // Extract ALL URLs from Works cited
+      const urlPatterns = [
+        // Standard <a href>
+        /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>/gi,
+        // "Archived from the original" links
+        /Archived\s+from\s+the\s+original[^<]*<a[^>]+href=["']([^"']+)["'][^>]*>/gi,
+        // Plain text URLs
+        /(https?:\/\/[^\s"'<]+)/gi,
+        // Citation template attributes
+        /(?:url|website|access-url|archive-url|archiveurl)=["']([^"']+)["']/gi
+      ]
+      
+      const foundUrls = new Set<string>()
+      for (const pattern of urlPatterns) {
+        const matches = Array.from(worksHtml.matchAll(pattern))
+        for (const match of matches) {
+          const url = match[1] || match[0]
+          if (url) {
+            foundUrls.add(url)
+          }
+        }
+      }
+      
+      // Process each <li> item in Works cited to get context
+      const liMatches = Array.from(worksHtml.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi))
+      
+      for (const liMatch of liMatches) {
+        if (citations.length >= limit) break
+        
+        const liHtml = liMatch[1]
+        
+        // Extract URLs from this <li>
+        const liUrlPatterns = [
+          /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>/gi,
+          /(https?:\/\/[^\s"'<]+)/gi
+        ]
+        
+        const liUrls: string[] = []
+        for (const pattern of liUrlPatterns) {
+          const matches = Array.from(liHtml.matchAll(pattern))
+          for (const match of matches) {
+            const url = match[1] || match[0]
+            if (url && foundUrls.has(url) && !liUrls.includes(url)) {
+              liUrls.push(url)
+            }
+          }
+        }
+        
+        // Extract title/context
+        const titleMatch = liHtml.match(/<cite[^>]*>([^<]+)<\/cite>/i) ||
+                         liHtml.match(/<strong[^>]*>([^<]+)<\/strong>/i)
+        const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : undefined
+        const context = liHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        
+        // Add each URL
+        for (const url of liUrls) {
+          if (citations.length >= limit) break
+          addCitation(url, title, context, 'Works cited')
+        }
+      }
+      
+      // Also add any remaining URLs that weren't in <li> items
+      for (const url of foundUrls) {
+        if (citations.length >= limit) break
+        // Check if we already added this URL
+        const canonical = canonicalizeUrlFast(normaliseUrl(url, sourceUrl) || url)
+        if (canonical && !citations.some(c => canonicalizeUrlFast(normaliseUrl(c.url, sourceUrl) || c.url) === canonical)) {
+          addCitation(url, undefined, undefined, 'Works cited')
+        }
+      }
+    } else {
+      // If no Works cited section found, extract ALL URLs from the entire References area
+      // This catches URLs that might be in other formats
+      const allUrlPatterns = [
+        /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>/gi,
+        /(https?:\/\/[^\s"'<]+)/gi
+      ]
+      
+      const foundUrls = new Set<string>()
+      for (const pattern of allUrlPatterns) {
+        const matches = Array.from(refsAreaHtml.matchAll(pattern))
+        for (const match of matches) {
+          const url = match[1] || match[0]
+          if (url) {
+            foundUrls.add(url)
+          }
+        }
+      }
+      
+      // Add URLs that aren't Wikipedia
+      for (const url of foundUrls) {
+        if (citations.length >= limit) break
+        addCitation(url, undefined, undefined, 'References')
+      }
+    }
+  }
+  
+  // 2. Extract from Further reading section
+  const furtherReadingMatch = html.match(/<h2[^>]*>.*?Further\s+reading.*?<\/h2>([\s\S]*?)(?:<h2|$)/i)
+  if (furtherReadingMatch) {
+    const sectionHtml = furtherReadingMatch[1]
+    const linkMatches = sectionHtml.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
     
-    if (url) {
-      const normalized = normaliseUrl(url, sourceUrl)
-      if (normalized) {
-        // Double-check: skip if normalized URL is a Wikipedia URL
-        if (normalized.includes('wikipedia.org/wiki/') || normalized.includes('wikipedia.org/w/')) {
-          continue
-        }
-        const canonical = canonicalizeUrlFast(normalized)
-        if (canonical) {
-          // Triple-check: skip if canonical URL is a Wikipedia URL
-          if (canonical.includes('wikipedia.org/wiki/') || canonical.includes('wikipedia.org/w/')) {
-            continue
-          }
-          if (!seenUrls.has(canonical)) {
-            seenUrls.add(canonical)
-            citations.push({
-              url: canonical,
-              title,
-              context: context.substring(0, 500),
-              text: context
-            })
-          }
-        }
+    for (const linkMatch of linkMatches) {
+      if (citations.length >= limit) break
+      
+      const url = linkMatch[1]
+      const linkText = linkMatch[2]?.replace(/<[^>]+>/g, '').trim()
+      
+      // Only include http/https URLs (skip relative Wikipedia links)
+      if (url.startsWith('http') || url.startsWith('//')) {
+        addCitation(url, linkText, undefined, 'Further reading')
+      }
+    }
+  }
+  
+  // 3. Extract from External links section
+  const externalLinksMatch = html.match(/<h2[^>]*>.*?External\s+links.*?<\/h2>([\s\S]*?)(?:<h2|$)/i)
+  if (externalLinksMatch) {
+    const sectionHtml = externalLinksMatch[1]
+    const linkMatches = sectionHtml.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
+    
+    for (const linkMatch of linkMatches) {
+      if (citations.length >= limit) break
+      
+      const url = linkMatch[1]
+      const linkText = linkMatch[2]?.replace(/<[^>]+>/g, '').trim()
+      
+      // Only include http/https URLs (skip relative Wikipedia links)
+      if (url.startsWith('http') || url.startsWith('//')) {
+        addCitation(url, linkText, undefined, 'External links')
       }
     }
   }

@@ -15,22 +15,76 @@ export async function extractAndStoreCitations(
   monitoringId: string,
   wikipediaUrl: string,
   htmlContent: string,
-  prioritizeCitations: (citations: WikiCitation[], sourceUrl: string) => Promise<Array<WikiCitation & { score?: number }>>
+  prioritizeCitations: (citations: WikiCitation[], sourceUrl: string) => Promise<Array<WikiCitation & { score?: number }>>,
+  onProgress?: (event: { type: string; data: any }) => void
 ): Promise<{ citationsFound: number; citationsStored: number }> {
+  const emit = (type: string, data: any) => {
+    if (onProgress) {
+      onProgress({ type, data })
+    }
+    console.log(JSON.stringify({ tag: 'citation_extraction', type, ...data }))
+  }
+
+  emit('extraction_started', { wikipediaUrl, monitoringId })
   console.log(`[WikipediaCitation] Extracting citations from ${wikipediaUrl}`)
 
   // Extract citations with context (ALL citations, no limit)
   const citations = extractWikipediaCitationsWithContext(htmlContent, wikipediaUrl, 10000)
+  
+  // Validate: Check for Wikipedia URLs that shouldn't be here
+  const wikipediaUrls = citations.filter(c => {
+    const url = c.url
+    return url.includes('wikipedia.org') || url.includes('wikimedia.org') || url.includes('wikidata.org') ||
+           url.startsWith('./') || url.startsWith('/wiki/')
+  })
+  
+  if (wikipediaUrls.length > 0) {
+    console.warn(`[WikipediaCitation] WARNING: ${wikipediaUrls.length} Wikipedia URLs found in extraction results - these should have been filtered`)
+    emit('extraction_warning', { 
+      message: 'Wikipedia URLs found in extraction results',
+      count: wikipediaUrls.length,
+      sampleUrls: wikipediaUrls.slice(0, 5).map(u => u.url)
+    })
+  }
+  
+  // Count by section
+  const bySection = citations.reduce((acc, c) => {
+    const section = c.context?.includes('References') ? 'References' :
+                   c.context?.includes('Further reading') ? 'Further reading' :
+                   c.context?.includes('External links') ? 'External links' : 'Unknown'
+    acc[section] = (acc[section] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  
+  // Validation: Ensure we found citations from expected sections
+  const hasReferences = bySection['References'] > 0
+  const hasExternalLinks = bySection['External links'] > 0
+  const hasFurtherReading = bySection['Further reading'] > 0
+  
+  emit('extraction_complete', { 
+    totalFound: citations.length,
+    bySection,
+    validation: {
+      hasReferences,
+      hasExternalLinks,
+      hasFurtherReading,
+      wikipediaUrlsFound: wikipediaUrls.length
+    }
+  })
   console.log(`[WikipediaCitation] Found ${citations.length} citations`)
 
   if (citations.length === 0) {
+    emit('extraction_complete', { totalFound: 0, citationsStored: 0 })
     return { citationsFound: 0, citationsStored: 0 }
   }
 
+  emit('prioritization_started', { count: citations.length })
   // Prioritize citations using AI (for scoring, but store ALL)
   const prioritized = await prioritizeCitations(citations, wikipediaUrl)
+  emit('prioritization_complete', { count: prioritized.length })
   console.log(`[WikipediaCitation] Prioritized ${prioritized.length} citations (storing all)`)
 
+  emit('storage_started', { count: prioritized.length })
   // Store ALL citations in database (not just top 25)
   let citationsStored = 0
   for (let i = 0; i < prioritized.length; i++) {
@@ -56,6 +110,7 @@ export async function extractAndStoreCitations(
             data: { aiPriorityScore: citation.score }
           })
         }
+        emit('citation_skipped', { sourceNumber, reason: 'duplicate', url: citation.url })
         continue
       }
 
@@ -73,8 +128,15 @@ export async function extractAndStoreCitations(
         }
       })
       citationsStored++
+      emit('citation_stored', { 
+        sourceNumber, 
+        url: citation.url, 
+        title: citation.title,
+        score: citation.score 
+      })
     } catch (error) {
       console.error(`[WikipediaCitation] Error storing citation ${sourceNumber}:`, error)
+      emit('citation_error', { sourceNumber, error: String(error) })
     }
   }
 
@@ -88,6 +150,7 @@ export async function extractAndStoreCitations(
     }
   })
 
+  emit('storage_complete', { citationsStored, totalFound: citations.length })
   console.log(`[WikipediaCitation] Stored ${citationsStored} new citations`)
   return { citationsFound: citations.length, citationsStored }
 }

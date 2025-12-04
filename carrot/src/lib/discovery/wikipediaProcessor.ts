@@ -481,13 +481,27 @@ export async function processNextWikipediaPage(
         )
         const prioritized = await prioritizeFn(convertedCitations, nextPage.url)
         
-        // Store citations
+        // Store citations with live tracking
         const { extractAndStoreCitations } = await import('./wikipediaCitation')
+        
+        // Create progress callback for live tracking
+        const sessionId = options.patchHandle || 'default'
+        const onProgress = async (event: { type: string; data: any }) => {
+          try {
+            await fetch('/api/test/extraction/live', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId, type: event.type, data: event.data })
+            }).catch(() => {}) // Ignore errors - tracking is non-blocking
+          } catch {}
+        }
+        
         const result = await extractAndStoreCitations(
           nextPage.id,
           nextPage.url,
           htmlForExtraction,
-          prioritizeFn
+          prioritizeFn,
+          onProgress
         )
         
         await markCitationsExtracted(nextPage.id, result.citationsFound)
@@ -500,8 +514,39 @@ export async function processNextWikipediaPage(
     }
     
     // Convert WikipediaSource citations to format expected by storage
+    // Additional filtering to ensure no Wikipedia links slip through
     const convertedCitations = citationsFromPage
-      .filter(c => c.url && !c.url.includes('wikipedia.org')) // Filter out Wikipedia links
+      .filter(c => {
+        if (!c.url) return false
+        
+        // Skip relative Wikipedia links
+        if (c.url.startsWith('./') || c.url.startsWith('/wiki/') || c.url.startsWith('../')) {
+          return false
+        }
+        
+        // Skip Wikipedia domains
+        if (c.url.includes('wikipedia.org') || c.url.includes('wikimedia.org') || c.url.includes('wikidata.org')) {
+          return false
+        }
+        
+        // Only include http/https URLs
+        if (!c.url.startsWith('http') && !c.url.startsWith('//')) {
+          return false
+        }
+        
+        // Double-check with URL parsing
+        try {
+          const urlObj = new URL(c.url, 'https://en.wikipedia.org')
+          const hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '')
+          if (hostname.includes('wikipedia.org') || hostname.includes('wikimedia.org') || hostname.includes('wikidata.org')) {
+            return false
+          }
+        } catch {
+          return false // Invalid URL
+        }
+        
+        return true
+      })
       .map(c => ({
         url: c.url!,
         title: c.title || c.text?.substring(0, 100),
