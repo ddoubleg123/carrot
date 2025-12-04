@@ -1461,13 +1461,49 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
     wikipediaPageTitle?: string
   ): Promise<string | null> => {
     try {
+      // Get agents associated with this patch
+      const agents = await prisma.agent.findMany({
+        where: {
+          associatedPatches: {
+            has: patchHandle
+          }
+        },
+        select: { id: true },
+        take: 1
+      })
+
+      if (agents.length === 0) {
+        // No agent associated, skip memory creation
+        console.log(`[WikipediaProcessor] No agent found for patch ${patchHandle}, skipping memory creation`)
+        return null
+      }
+
+      const agentId = agents[0].id
+      
+      // Limit content length
+      const maxContentLength = 5000
+      const contentToStore = content.length > maxContentLength
+        ? content.substring(0, maxContentLength) + '...'
+        : content
+
+      // Create tags
+      const tags = [
+        patchHandle,
+        'wikipedia',
+        'citation'
+      ]
+      if (wikipediaPageTitle) {
+        tags.push(`page:${wikipediaPageTitle}`)
+      }
+
       const saved = await prisma.agentMemory.create({
         data: {
+          agent: { connect: { id: agentId } },
           sourceTitle: title,
           sourceUrl: url,
-          content,
+          content: contentToStore,
           sourceType: 'wikipedia_citation',
-          tags: wikipediaPageTitle ? [`page:${wikipediaPageTitle}`] : [],
+          tags: tags,
           confidence: 1.0,
           fedBy: 'system',
           embedding: []
