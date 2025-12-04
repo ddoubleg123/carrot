@@ -117,11 +117,12 @@ export async function getNextCitationToProcess(
   // Prioritize processing unprocessed citations first
   // Include 'failed' verification status - these may still be valid URLs that failed verification checks
   // but should be processed if they haven't been scanned yet
+  // Fix 2: Stop re-selection loop - exclude scanned_denied citations
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
-      verificationStatus: { in: ['pending', 'verified', 'failed'] }, // Include 'failed' - may still be processable
-      scanStatus: { in: ['not_scanned', 'scanning'] },
+      verificationStatus: { in: ['pending', 'verified'] }, // Exclude 'failed' - they're marked as scanned_denied
+      scanStatus: 'not_scanned', // Only process not_scanned (exclude scanning, scanned, scanned_denied)
       relevanceDecision: null // Only process citations that haven't been decided yet
     },
     orderBy: [
@@ -251,11 +252,14 @@ export async function markCitationVerificationFailed(
   citationId: string,
   errorMessage: string
 ): Promise<void> {
+  // Fix 2: Stop re-selection loop - mark as scanned_denied to prevent re-selection
   await prisma.wikipediaCitation.update({
     where: { id: citationId },
     data: {
       verificationStatus: 'failed',
-      errorMessage
+      errorMessage,
+      scanStatus: 'scanned_denied', // Prevent re-selection
+      relevanceDecision: 'denied_verify' // Mark as denied due to verification failure
     }
   })
 }

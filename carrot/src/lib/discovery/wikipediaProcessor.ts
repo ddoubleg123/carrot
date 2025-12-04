@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { createHash } from 'crypto'
 import {
   getNextWikipediaPageToProcess,
   markWikipediaPageScanning,
@@ -384,6 +385,7 @@ Return ONLY valid JSON array, no other text.`
     return citations.map(c => ({ ...c, score: 50 }))
   }
 }
+
 import { canonicalizeUrlFast, getDomainFromUrl } from './canonicalize'
 
 /**
@@ -585,6 +587,75 @@ export async function processNextWikipediaPage(
   }
 }
 
+// Fix 7: Idempotency + Rate Limits
+// Job queue with idempotency keys
+const processingJobs = new Set<string>()
+
+// Per-domain rate limiter (2 rps, burst 4)
+const domainRateLimits = new Map<string, { count: number; resetAt: number }>()
+
+function getJobKey(patchId: string, url: string): string {
+  const canonicalUrl = canonicalizeUrlFast(url) || url
+  return createHash('sha256')
+    .update(`${patchId}|${canonicalUrl}`)
+    .digest('hex')
+    .substring(0, 16)
+}
+
+async function checkRateLimit(domain: string): Promise<boolean> {
+  const limit = domainRateLimits.get(domain)
+  const now = Date.now()
+  
+  if (!limit || now > limit.resetAt) {
+    domainRateLimits.set(domain, { count: 1, resetAt: now + 1000 }) // 1 second window
+    return true
+  }
+  
+  if (limit.count >= 2) { // 2 requests per second
+    return false
+  }
+  
+  limit.count++
+  return true
+}
+
+// Fix 8: Success Criteria (SLOs) Tracking
+interface ProcessingMetrics {
+  totalProcessed: number
+  reachedExtraction: number
+  passedMinLen500: number
+  passedIsArticle: number
+  reachedSave: number
+  savedWithScore60Plus: number
+  verifyFailures: Map<string, number>
+}
+
+const metrics: ProcessingMetrics = {
+  totalProcessed: 0,
+  reachedExtraction: 0,
+  passedMinLen500: 0,
+  passedIsArticle: 0,
+  reachedSave: 0,
+  savedWithScore60Plus: 0,
+  verifyFailures: new Map()
+}
+
+function logMetrics() {
+  if (metrics.totalProcessed === 0) return
+  
+  console.info(JSON.stringify({
+    tag: 'processing_metrics',
+    metrics: {
+      totalProcessed: metrics.totalProcessed,
+      extractionRate: ((metrics.reachedExtraction / metrics.totalProcessed) * 100).toFixed(1) + '%',
+      minLen500Rate: ((metrics.passedMinLen500 / metrics.totalProcessed) * 100).toFixed(1) + '%',
+      isArticleRate: ((metrics.passedIsArticle / metrics.totalProcessed) * 100).toFixed(1) + '%',
+      saveRate: ((metrics.reachedSave / metrics.totalProcessed) * 100).toFixed(1) + '%',
+      savedWithScore60Plus: metrics.savedWithScore60Plus
+    }
+  }))
+}
+
 /**
  * Process next citation (verify, scan, and save if relevant)
  * Returns true if a citation was processed, false if none available
@@ -598,17 +669,50 @@ export async function processNextCitation(
     saveAsMemory?: (url: string, title: string, content: string, patchHandle: string, wikipediaPageTitle?: string) => Promise<string | null> // Returns AgentMemory.id
   }
 ): Promise<{ processed: boolean; citationUrl?: string; saved?: boolean; monitoringId?: string }> {
+  // Fix 8: Track metrics
+  metrics.totalProcessed++
+  
   const nextCitation = await getNextCitationToProcess(patchId)
   
   if (!nextCitation) {
+    // Log metrics when no more citations
+    logMetrics()
     console.log(`[WikipediaProcessor] No citations available to process for patch ${patchId}`)
     return { processed: false }
   }
 
+  const citationUrl = nextCitation.citationUrl
+  
+  // Fix 7: Idempotency check - prevent duplicate processing
+  const jobKey = getJobKey(patchId, citationUrl)
+  if (processingJobs.has(jobKey)) {
+    console.log(`[WikipediaProcessor] Citation already being processed (idempotency): ${citationUrl}`)
+    return { processed: false }
+  }
+  processingJobs.add(jobKey)
+  
+  // Fix 7: Rate limit check
+  const domain = getDomainFromUrl(citationUrl) || 'unknown'
+  const canProcess = await checkRateLimit(domain)
+  if (!canProcess) {
+    console.log(`[WikipediaProcessor] Rate limit exceeded for domain ${domain}, skipping: ${citationUrl}`)
+    processingJobs.delete(jobKey)
+    return { processed: false }
+  }
+  
+  // Clean up job key after processing
+  let cleanupDone = false
+  const cleanup = () => {
+    if (!cleanupDone) {
+      processingJobs.delete(jobKey)
+      cleanupDone = true
+    }
+  }
 
-  console.log(`[WikipediaProcessor] Processing citation: ${nextCitation.citationUrl}`)
+  console.log(`[WikipediaProcessor] Processing citation: ${citationUrl}`)
 
   try {
+    // Ensure cleanup is called on all exit paths
     // Get Wikipedia page info for URL conversion and tagging
     const monitoring = await prisma.wikipediaMonitoring.findUnique({
       where: { id: nextCitation.monitoringId },
@@ -616,6 +720,7 @@ export async function processNextCitation(
     })
 
     if (!monitoring) {
+      cleanup()
       console.error(`[WikipediaProcessor] Monitoring record not found for citation ${nextCitation.id}`)
       return { processed: false }
     }
@@ -639,6 +744,7 @@ export async function processNextCitation(
         nextCitation.id,
         'Not a valid URL (anchor or relative path)'
       )
+      cleanup()
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
@@ -770,6 +876,7 @@ export async function processNextCitation(
         '',
         undefined
       )
+        cleanup()
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
       }
@@ -792,6 +899,7 @@ export async function processNextCitation(
         '', // No content for low-quality URLs
         undefined // No AI score
       )
+      cleanup()
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
@@ -818,6 +926,7 @@ export async function processNextCitation(
           existing.id,
           undefined
         )
+        cleanup()
         // Check if page can be marked complete
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { 
@@ -832,24 +941,97 @@ export async function processNextCitation(
     // Mark as verifying
     await markCitationVerifying(nextCitation.id)
 
-    // Verify URL is accessible
-    let response: Response
-    try {
-      response = await fetch(citationUrl, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+    // Fix 1 & 10: Kill HEAD-only gate with HEAD→GET fallback + per-domain force GET
+    // Domains that reject HEAD but allow GET
+    const FORCE_GET_DOMAINS = [
+      'gov.il',
+      'nba.com',
+      'espn.com',
+      'wikipedia.org' // Wikipedia internal links should use GET
+    ]
+
+    function shouldForceGet(url: string): boolean {
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '')
+        return FORCE_GET_DOMAINS.some(d => domain.includes(d))
+      } catch {
+        return false
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'URL verification failed'
+    }
+
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
+
+    let response: Response | null = null
+    let html = ''
+    let ok = false
+    let status = 0
+    let verificationMethod = 'HEAD'
+
+    // Try HEAD first (lightweight) unless domain forces GET
+    if (!shouldForceGet(citationUrl)) {
+      try {
+        response = await fetch(citationUrl, {
+          method: 'HEAD',
+          headers: reqHeaders,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(10000) // 10 second timeout
+        })
+        status = response.status
+        ok = response.ok
+        verificationMethod = 'HEAD'
+      } catch (error) {
+        // HEAD failed, will try GET
+        ok = false
+      }
+    }
+
+    // Fallback to GET if HEAD failed, returned 403/405/>=400, or domain forces GET
+    if (!ok || status >= 400 || shouldForceGet(citationUrl)) {
+      try {
+        response = await fetch(citationUrl, {
+          method: 'GET',
+          headers: reqHeaders,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(30000) // 30 second timeout for GET
+        })
+        status = response.status
+        ok = response.ok
+        verificationMethod = 'GET'
+        
+        if (ok && response.status >= 200 && response.status < 300) {
+          html = await response.text() // Pass along to extractor
+        }
+      } catch (error) {
+        // GET also failed
+        ok = false
+      }
+    }
+
+    // Only fail if both HEAD and GET failed
+    if (!ok || (!html && status >= 400)) {
+      const errorMessage = `HTTP ${status} - both ${verificationMethod === 'HEAD' ? 'HEAD and GET' : 'GET'} failed`
       console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" verification failed: ${errorMessage}`)
+      
+      // Fix 4: Structured log for verification failure
+      console.info(JSON.stringify({
+        tag: 'verify_fail',
+        url: citationUrl,
+        status: status,
+        method: verificationMethod,
+        title: nextCitation.citationTitle
+      }))
+      
       await markCitationVerificationFailed(
         nextCitation.id,
         errorMessage
       )
+      cleanup()
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
       return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
     }
@@ -857,247 +1039,291 @@ export async function processNextCitation(
     // Mark as scanning
     await markCitationScanning(nextCitation.id)
 
-    // Fetch and process content
-    try {
-      response = await fetch(citationUrl, {
-        signal: AbortSignal.timeout(30000) // 30 second timeout
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const html = await response.text()
-      
-      // Robust content extraction with fallback chain
-      // Try Readability first, then ContentExtractor, then simple fallback
-      function normalizeText(t: string): string {
-        return t
-          .replace(/\u00A0/g, ' ')
-          .replace(/\s+\n/g, '\n')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim()
-      }
-
-      let textContent = ''
-      let extractionMethod = 'fallback-strip'
-      let extractedTitle = nextCitation.citationTitle || 'Untitled'
-
-      // Stage 1: Try Readability extraction (best for news/blogs)
+    // Fix 3: Always attempt extraction if we got HTML from GET fallback
+    // If we already have HTML from verification, use it; otherwise fetch
+    if (!html || html.length === 0) {
+      // Fetch and process content
       try {
-        const { extractReadableContent } = await import('@/lib/readability')
-        const readableResult = extractReadableContent(html, citationUrl)
-        const readableText = readableResult.textContent || readableResult.content || ''
-        if (readableText.length >= 600) {
-          textContent = normalizeText(readableText)
-          extractedTitle = readableResult.title || extractedTitle
-          extractionMethod = 'readability'
+        response = await fetch(citationUrl, {
+          headers: reqHeaders,
+          signal: AbortSignal.timeout(30000) // 30 second timeout
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
         }
+
+        html = await response.text()
       } catch (error) {
-        // Continue to next method
-        console.warn(`[WikipediaProcessor] Readability extraction failed for ${citationUrl}:`, error)
-      }
-
-      // Stage 2: Try ContentExtractor (better boilerplate removal)
-      if (textContent.length < 600) {
-        try {
-          const { ContentExtractor } = await import('./content-quality')
-          const extracted = await ContentExtractor.extractFromHtml(html, citationUrl)
-          const extractedText = extracted.text || ''
-          if (extractedText.length >= 600) {
-            textContent = normalizeText(extractedText)
-            extractedTitle = extracted.title || extractedTitle
-            extractionMethod = 'content-extractor'
-          }
-        } catch (error) {
-          // Continue to fallback
-          console.warn(`[WikipediaProcessor] ContentExtractor failed for ${citationUrl}:`, error)
-        }
-      }
-
-      // Stage 3: Ultra last resort fallback (keeps us from total failure)
-      if (textContent.length < 200) {
-        extractionMethod = 'fallback-strip'
-        textContent = normalizeText(
-          html
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-        )
-      }
-
-      // Calculate metrics for logging
-      const paragraphCount = (textContent.match(/\n\n/g) || []).length + 1
-      const textBytes = Buffer.byteLength(textContent, 'utf8')
-
-      // Structured log for observability
-      console.info(JSON.stringify({
-        tag: 'content_extract',
-        url: citationUrl,
-        method: extractionMethod,
-        textBytes,
-        paragraphCount,
-        title: extractedTitle
-      }))
-
-      // Phase 2: Content validation - ensure meaningful content
-      const MIN_CONTENT_LENGTH = 500
-      const meaningfulContent = textContent.trim()
-      const hasSufficientContent = meaningfulContent.length >= MIN_CONTENT_LENGTH
-      
-      if (!hasSufficientContent) {
-        console.warn(JSON.stringify({
-          tag: 'content_validate_fail',
-          url: citationUrl,
-          reason: 'min_len_500',
-          textBytes: meaningfulContent.length,
-          method: extractionMethod
-        }))
-        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: insufficient content (${meaningfulContent.length} chars, need ${MIN_CONTENT_LENGTH})`)
+        const errorMessage = error instanceof Error ? error.message : 'Content fetch failed'
+        console.error(`[WikipediaProcessor] Error fetching content for "${nextCitation.citationTitle}": ${errorMessage}`)
         await markCitationScanned(
           nextCitation.id,
           'denied',
           undefined,
           undefined,
-          meaningfulContent, // Store content even if rejected
-          undefined // No score if content is insufficient
-        )
-        await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-        return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
-      }
-
-      // Phase 2: Score content using DeepSeek with actual article content
-      // Only score if we have sufficient content (avoid sending garbage to AI)
-      if (meaningfulContent.length < 800) {
-        console.warn(JSON.stringify({
-          tag: 'content_validate_fail',
-          url: citationUrl,
-          reason: 'min_len_800_for_ai',
-          textBytes: meaningfulContent.length,
-          method: extractionMethod
-        }))
-        await markCitationScanned(
-          nextCitation.id,
-          'denied',
-          undefined,
-          undefined,
-          meaningfulContent,
+          '',
           undefined
         )
+        cleanup()
         await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
         return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
       }
+    }
+    
+    // Robust content extraction with fallback chain
+    // Try Readability first, then ContentExtractor, then simple fallback
+    function normalizeText(t: string): string {
+      return t
+        .replace(/\u00A0/g, ' ')
+        .replace(/\s+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    }
 
-      console.log(`[WikipediaProcessor] Scoring citation content for "${extractedTitle}"...`)
-      const scoringResult = await scoreCitationContent(
-        extractedTitle,
-        citationUrl,
-        meaningfulContent,
-        options.patchName
-      )
-      
-      const aiPriorityScore = scoringResult.score
-      // Keep threshold at 60 to maintain quality
-      const RELEVANCE_THRESHOLD = 60
-      const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= RELEVANCE_THRESHOLD
-      
-      console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
-        score: aiPriorityScore,
-        isRelevant: scoringResult.isRelevant,
-        reason: scoringResult.reason,
-        finalDecision: isRelevantFromDeepSeek ? 'RELEVANT' : 'NOT RELEVANT'
-      })
+    let textContent = ''
+    let extractionMethod = 'fallback-strip'
+    let extractedTitle = nextCitation.citationTitle || 'Untitled'
 
-      // Optional: Secondary validation using RelevanceEngine
-      let relevanceEngineResult: { score: number; isRelevant: boolean; reason?: string; matchedEntities: string[] } | null = null
+    // Stage 1: Try Readability extraction (best for news/blogs)
+    try {
+      const { extractReadableContent } = await import('@/lib/readability')
+      const readableResult = extractReadableContent(html, citationUrl)
+      const readableText = readableResult.textContent || readableResult.content || ''
+      if (readableText.length >= 600) {
+        textContent = normalizeText(readableText)
+        extractedTitle = readableResult.title || extractedTitle
+        extractionMethod = 'readability'
+      }
+    } catch (error) {
+      // Continue to next method
+      console.warn(`[WikipediaProcessor] Readability extraction failed for ${citationUrl}:`, error)
+    }
+
+    // Stage 2: Try ContentExtractor (better boilerplate removal)
+    if (textContent.length < 600) {
       try {
-        const { RelevanceEngine } = await import('./relevance')
-        const relevanceEngine = new RelevanceEngine()
-        await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
-        const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
-        relevanceEngineResult = await relevanceEngine.checkRelevance(
-          options.patchHandle,
+        const { ContentExtractor } = await import('./content-quality')
+        const extracted = await ContentExtractor.extractFromHtml(html, citationUrl)
+        const extractedText = extracted.text || ''
+        if (extractedText.length >= 600) {
+          textContent = normalizeText(extractedText)
+          extractedTitle = extracted.title || extractedTitle
+          extractionMethod = 'content-extractor'
+        }
+      } catch (error) {
+        // Continue to fallback
+        console.warn(`[WikipediaProcessor] ContentExtractor failed for ${citationUrl}:`, error)
+      }
+    }
+
+    // Stage 3: Ultra last resort fallback (keeps us from total failure)
+    if (textContent.length < 200) {
+      extractionMethod = 'fallback-strip'
+      textContent = normalizeText(
+        html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+      )
+    }
+
+    // Calculate metrics for logging
+    const paragraphCount = (textContent.match(/\n\n/g) || []).length + 1
+    const textBytes = Buffer.byteLength(textContent, 'utf8')
+
+    // Fix 8: Track extraction
+    metrics.reachedExtraction++
+
+    // Structured log for observability
+    console.info(JSON.stringify({
+      tag: 'content_extract',
+      url: citationUrl,
+      method: extractionMethod,
+      textBytes,
+      paragraphCount,
+      title: extractedTitle
+    }))
+
+    // Phase 2: Content validation - ensure meaningful content
+    const MIN_CONTENT_LENGTH = 500
+    const meaningfulContent = textContent.trim()
+    const hasSufficientContent = meaningfulContent.length >= MIN_CONTENT_LENGTH
+    
+    // Fix 8: Track min length 500
+    if (hasSufficientContent) {
+      metrics.passedMinLen500++
+    }
+    
+    if (!hasSufficientContent) {
+      console.warn(JSON.stringify({
+        tag: 'content_validate_fail',
+        url: citationUrl,
+        reason: 'min_len_500',
+        textBytes: meaningfulContent.length,
+        method: extractionMethod
+      }))
+      console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: insufficient content (${meaningfulContent.length} chars, need ${MIN_CONTENT_LENGTH})`)
+      await markCitationScanned(
+        nextCitation.id,
+        'denied',
+        undefined,
+        undefined,
+        meaningfulContent, // Store content even if rejected
+        undefined // No score if content is insufficient
+      )
+      cleanup()
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+    }
+
+    // Phase 2: Score content using DeepSeek with actual article content
+    // Fix 9: Softening gates - Temporarily allow AI scoring down to 600 chars (keep isArticle at 1000/3 paras for save)
+    // Only score if we have sufficient content (avoid sending garbage to AI)
+    if (meaningfulContent.length < 600) { // Changed from 800 to 600 temporarily
+      console.warn(JSON.stringify({
+        tag: 'content_validate_fail',
+        url: citationUrl,
+        reason: 'min_len_600_for_ai', // Updated reason
+        textBytes: meaningfulContent.length,
+        method: extractionMethod
+      }))
+      await markCitationScanned(
+        nextCitation.id,
+        'denied',
+        undefined,
+        undefined,
+        meaningfulContent,
+        undefined
+      )
+      cleanup()
+      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+    }
+
+    console.log(`[WikipediaProcessor] Scoring citation content for "${extractedTitle}"...`)
+    const scoringResult = await scoreCitationContent(
+      extractedTitle,
+      citationUrl,
+      meaningfulContent,
+      options.patchName
+    )
+    
+    const aiPriorityScore = scoringResult.score
+    // Keep threshold at 60 to maintain quality
+    const RELEVANCE_THRESHOLD = 60
+    const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= RELEVANCE_THRESHOLD
+    
+    console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
+      score: aiPriorityScore,
+      isRelevant: scoringResult.isRelevant,
+      reason: scoringResult.reason,
+      finalDecision: isRelevantFromDeepSeek ? 'RELEVANT' : 'NOT RELEVANT'
+    })
+    
+    // Fix 4: Structured log for AI scoring
+    console.info(JSON.stringify({
+      tag: 'ai_score',
+      url: citationUrl,
+      score: aiPriorityScore,
+      threshold: RELEVANCE_THRESHOLD,
+      isRelevant: scoringResult.isRelevant,
+      reason: scoringResult.reason,
+      title: nextCitation.citationTitle
+    }))
+
+    // Optional: Secondary validation using RelevanceEngine
+    let relevanceEngineResult: { score: number; isRelevant: boolean; reason?: string; matchedEntities: string[] } | null = null
+    try {
+      const { RelevanceEngine } = await import('./relevance')
+      const relevanceEngine = new RelevanceEngine()
+      await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
+      const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
+      relevanceEngineResult = await relevanceEngine.checkRelevance(
+        options.patchHandle,
+        nextCitation.citationTitle || 'Untitled',
+        meaningfulContent,
+        domain
+      )
+      console.log(`[WikipediaProcessor] RelevanceEngine validation:`, {
+        score: relevanceEngineResult.score,
+        isRelevant: relevanceEngineResult.isRelevant,
+        matchedEntities: relevanceEngineResult.matchedEntities,
+        reason: relevanceEngineResult.reason
+      })
+    } catch (error) {
+      console.warn(`[WikipediaProcessor] RelevanceEngine validation failed (non-fatal):`, error)
+    }
+
+    // Final relevance decision: Primary check is DeepSeek score (>= 60 and isRelevant)
+    // Secondary check (optional): RelevanceEngine can override if it strongly disagrees
+    const finalIsRelevant = isRelevantFromDeepSeek && 
+      (!relevanceEngineResult || relevanceEngineResult.isRelevant || relevanceEngineResult.score >= 0.5)
+    
+    console.log(`[WikipediaProcessor] Final relevance decision for "${nextCitation.citationTitle}":`, {
+      deepSeekScore: aiPriorityScore,
+      deepSeekRelevant: isRelevantFromDeepSeek,
+      relevanceEngineScore: relevanceEngineResult?.score,
+      relevanceEngineRelevant: relevanceEngineResult?.isRelevant,
+      finalDecision: finalIsRelevant ? 'RELEVANT' : 'NOT RELEVANT'
+    })
+    
+    let savedContentId: string | null = null
+    let savedMemoryId: string | null = null
+
+    // Save citations to DiscoveredContent
+    // Only save if DeepSeek approves (score >= 60 and isRelevant)
+    // isUseful flag will determine if it's published to the page
+    if (finalIsRelevant && options.saveAsContent) {
+      try {
+        console.log(`[WikipediaProcessor] Attempting to save citation "${nextCitation.citationTitle}" to DiscoveredContent...`)
+        savedContentId = await options.saveAsContent(
+          citationUrl, // Use converted URL
           nextCitation.citationTitle || 'Untitled',
           meaningfulContent,
-          domain
-        )
-        console.log(`[WikipediaProcessor] RelevanceEngine validation:`, {
-          score: relevanceEngineResult.score,
-          isRelevant: relevanceEngineResult.isRelevant,
-          matchedEntities: relevanceEngineResult.matchedEntities,
-          reason: relevanceEngineResult.reason
-        })
-      } catch (error) {
-        console.warn(`[WikipediaProcessor] RelevanceEngine validation failed (non-fatal):`, error)
-      }
-
-      // Final relevance decision: Primary check is DeepSeek score (>= 60 and isRelevant)
-      // Secondary check (optional): RelevanceEngine can override if it strongly disagrees
-      const finalIsRelevant = isRelevantFromDeepSeek && 
-        (!relevanceEngineResult || relevanceEngineResult.isRelevant || relevanceEngineResult.score >= 0.5)
-      
-      console.log(`[WikipediaProcessor] Final relevance decision for "${nextCitation.citationTitle}":`, {
-        deepSeekScore: aiPriorityScore,
-        deepSeekRelevant: isRelevantFromDeepSeek,
-        relevanceEngineScore: relevanceEngineResult?.score,
-        relevanceEngineRelevant: relevanceEngineResult?.isRelevant,
-        finalDecision: finalIsRelevant ? 'RELEVANT' : 'NOT RELEVANT'
-      })
-      
-      let savedContentId: string | null = null
-      let savedMemoryId: string | null = null
-
-      // Save citations to DiscoveredContent
-      // Only save if DeepSeek approves (score >= 60 and isRelevant)
-      // isUseful flag will determine if it's published to the page
-      if (finalIsRelevant && options.saveAsContent) {
-        try {
-          console.log(`[WikipediaProcessor] Attempting to save citation "${nextCitation.citationTitle}" to DiscoveredContent...`)
-          savedContentId = await options.saveAsContent(
-            citationUrl, // Use converted URL
-            nextCitation.citationTitle || 'Untitled',
-            meaningfulContent,
-            {
-              aiScore: aiPriorityScore,
-              relevanceScore: relevanceEngineResult?.score ?? 0,
-              isRelevant: true
-            }
-          ) || null
+          {
+            aiScore: aiPriorityScore,
+            relevanceScore: relevanceEngineResult?.score ?? 0,
+            isRelevant: true
+          }
+        ) || null
+        
+        if (savedContentId) {
+          const textBytes = Buffer.byteLength(meaningfulContent, 'utf8')
           
-          if (savedContentId) {
-            const textBytes = Buffer.byteLength(meaningfulContent, 'utf8')
-            console.log(`[WikipediaProcessor] ✅ Successfully saved citation to DiscoveredContent: ${savedContentId}`)
-            
-            // Trigger hero image generation in background (non-blocking)
-            // Fire and forget - don't await
-            // Use direct function call instead of HTTP to avoid URL construction issues
-            const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
-            let heroTriggered = false
-            import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
-              enrichContentId(contentId).then(() => {
-                heroTriggered = true
-                console.info(JSON.stringify({
-                  tag: 'content_saved',
-                  url: citationUrl,
-                  textBytes,
-                  score: aiPriorityScore,
-                  hero: true
-                }))
-              }).catch(err => {
-                console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
-                // Non-fatal - hero can be generated later
-                console.info(JSON.stringify({
-                  tag: 'content_saved',
-                  url: citationUrl,
-                  textBytes,
-                  score: aiPriorityScore,
-                  hero: false
-                }))
-              })
+          // Fix 8: Track save metrics
+          metrics.reachedSave++
+          if (aiPriorityScore >= 60) {
+            metrics.savedWithScore60Plus++
+          }
+          
+          // Fix 8: Track isArticle (1000+ chars, 3+ paragraphs)
+          const paragraphCount = (meaningfulContent.match(/\n\n/g) || []).length + 1
+          if (textBytes >= 1000 && paragraphCount >= 3) {
+            metrics.passedIsArticle++
+          }
+          
+          console.log(`[WikipediaProcessor] ✅ Successfully saved citation to DiscoveredContent: ${savedContentId}`)
+          
+          // Trigger hero image generation in background (non-blocking)
+          // Fire and forget - don't await
+          // Use direct function call instead of HTTP to avoid URL construction issues
+          const contentId = savedContentId // TypeScript: savedContentId is string | null, but we checked it's truthy
+          let heroTriggered = false
+          import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
+            enrichContentId(contentId).then(() => {
+              heroTriggered = true
+              console.info(JSON.stringify({
+                tag: 'content_saved',
+                url: citationUrl,
+                textBytes,
+                score: aiPriorityScore,
+                hero: true
+              }))
             }).catch(err => {
-              console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
+              console.warn(`[WikipediaProcessor] Failed to trigger hero generation for ${contentId}:`, err)
               // Non-fatal - hero can be generated later
               console.info(JSON.stringify({
                 tag: 'content_saved',
@@ -1107,87 +1333,101 @@ export async function processNextCitation(
                 hero: false
               }))
             })
-            
-            // Log immediately if hero trigger is async
-            if (!heroTriggered) {
-              console.info(JSON.stringify({
-                tag: 'content_saved',
-                url: citationUrl,
-                textBytes,
-                score: aiPriorityScore,
-                hero: 'pending'
-              }))
-            }
-          } else {
-            console.warn(`[WikipediaProcessor] ⚠️ saveAsContent returned null for citation "${nextCitation.citationTitle}" - citation was not saved`)
+          }).catch(err => {
+            console.warn(`[WikipediaProcessor] Failed to import enrichment worker for ${contentId}:`, err)
+            // Non-fatal - hero can be generated later
+            console.info(JSON.stringify({
+              tag: 'content_saved',
+              url: citationUrl,
+              textBytes,
+              score: aiPriorityScore,
+              hero: false
+            }))
+          })
+          
+          // Log immediately if hero trigger is async
+          if (!heroTriggered) {
+            console.info(JSON.stringify({
+              tag: 'content_saved',
+              url: citationUrl,
+              textBytes,
+              score: aiPriorityScore,
+              hero: 'pending'
+            }))
           }
-        } catch (error) {
-          console.error(`[WikipediaProcessor] ❌ Error saving citation "${nextCitation.citationTitle}" to DiscoveredContent:`, error)
-          // Don't throw - continue processing other citations
+        } else {
+          console.warn(`[WikipediaProcessor] ⚠️ saveAsContent returned null for citation "${nextCitation.citationTitle}" - citation was not saved`)
         }
-      } else {
-        if (!finalIsRelevant) {
-          console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${scoringResult.reason || 'Failed DeepSeek relevance check'} (score: ${aiPriorityScore}, isRelevant: ${scoringResult.isRelevant})`)
-        }
-        if (!options.saveAsContent) {
-          console.warn(`[WikipediaProcessor] ⚠️ saveAsContent function not provided - citation "${nextCitation.citationTitle}" cannot be saved`)
-        }
+      } catch (error) {
+        console.error(`[WikipediaProcessor] ❌ Error saving citation "${nextCitation.citationTitle}" to DiscoveredContent:`, error)
+        // Don't throw - continue processing other citations
       }
-
-      // Only save to AgentMemory if relevant (for AI knowledge)
-      // Pass Wikipedia page title for segregation
-      if (finalIsRelevant && options.saveAsMemory) {
-        savedMemoryId = await options.saveAsMemory(
-          citationUrl, // Use converted URL
-          nextCitation.citationTitle || 'Untitled',
-          meaningfulContent,
-          options.patchHandle,
-          monitoring?.wikipediaTitle // Pass Wikipedia page title for segregation
-        ) || null
+    } else {
+      if (!finalIsRelevant) {
+        console.log(`[WikipediaProcessor] Citation "${nextCitation.citationTitle}" rejected: ${scoringResult.reason || 'Failed DeepSeek relevance check'} (score: ${aiPriorityScore}, isRelevant: ${scoringResult.isRelevant})`)
       }
+      if (!options.saveAsContent) {
+        console.warn(`[WikipediaProcessor] ⚠️ saveAsContent function not provided - citation "${nextCitation.citationTitle}" cannot be saved`)
+      }
+    }
 
-      // Mark as scanned - store content, score, and decision
-      await markCitationScanned(
-        nextCitation.id,
-        savedContentId ? 'saved' : 'denied', // 'saved' if successfully stored in DiscoveredContent
-        savedContentId || undefined,
-        savedMemoryId || undefined,
-        meaningfulContent, // Store extracted content
-        aiPriorityScore // Store DeepSeek score from actual content
-      )
+    // Only save to AgentMemory if relevant (for AI knowledge)
+    // Pass Wikipedia page title for segregation
+    if (finalIsRelevant && options.saveAsMemory) {
+      savedMemoryId = await options.saveAsMemory(
+        citationUrl, // Use converted URL
+        nextCitation.citationTitle || 'Untitled',
+        meaningfulContent,
+        options.patchHandle,
+        monitoring?.wikipediaTitle // Pass Wikipedia page title for segregation
+      ) || null
+    }
 
-      console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'rejected'}${finalIsRelevant ? ' (relevant - added to memory)' : ' (not relevant - content stored for audit)'}`)
+    // Mark as scanned - store content, score, and decision
+    await markCitationScanned(
+      nextCitation.id,
+      savedContentId ? 'saved' : 'denied', // 'saved' if successfully stored in DiscoveredContent
+      savedContentId || undefined,
+      savedMemoryId || undefined,
+      meaningfulContent, // Store extracted content
+      aiPriorityScore // Store DeepSeek score from actual content
+    )
 
-      // If this citation is a Wikipedia URL and it's relevant, add it to monitoring
-      // This allows us to recursively extract citations from relevant Wikipedia pages
-      if (finalIsRelevant) {
-        try {
-          const urlObj = new URL(citationUrl)
-          const hostname = urlObj.hostname.toLowerCase()
-          if (hostname.includes('wikipedia.org') && urlObj.pathname.startsWith('/wiki/')) {
-            // Extract title from URL
-            const title = decodeURIComponent(urlObj.pathname.replace('/wiki/', '').replace(/_/g, ' '))
-            
-            const { addWikipediaPageToMonitoring } = await import('./wikipediaMonitoring')
-            const result = await addWikipediaPageToMonitoring(
-              patchId,
-              citationUrl,
-              title,
-              `citation from ${monitoring?.wikipediaTitle || 'unknown page'}`
-            )
-            
-            if (result.added) {
-              console.log(`[WikipediaProcessor] ✅ Added relevant Wikipedia page to monitoring: ${title}`)
-            }
+    console.log(`[WikipediaProcessor] Citation processed: ${savedContentId ? 'saved to database' : 'rejected'}${finalIsRelevant ? ' (relevant - added to memory)' : ' (not relevant - content stored for audit)'}`)
+
+    // If this citation is a Wikipedia URL and it's relevant, add it to monitoring
+    // This allows us to recursively extract citations from relevant Wikipedia pages
+    if (finalIsRelevant) {
+      try {
+        const urlObj = new URL(citationUrl)
+        const hostname = urlObj.hostname.toLowerCase()
+        if (hostname.includes('wikipedia.org') && urlObj.pathname.startsWith('/wiki/')) {
+          // Extract title from URL
+          const title = decodeURIComponent(urlObj.pathname.replace('/wiki/', '').replace(/_/g, ' '))
+          
+          const { addWikipediaPageToMonitoring } = await import('./wikipediaMonitoring')
+          const result = await addWikipediaPageToMonitoring(
+            patchId,
+            citationUrl,
+            title,
+            `citation from ${monitoring?.wikipediaTitle || 'unknown page'}`
+          )
+          
+          if (result.added) {
+            console.log(`[WikipediaProcessor] ✅ Added relevant Wikipedia page to monitoring: ${title}`)
           }
-        } catch (error) {
-          // Non-fatal - just log and continue
-          console.warn(`[WikipediaProcessor] Failed to check/add Wikipedia page to monitoring:`, error)
         }
+      } catch (error) {
+        // Non-fatal - just log and continue
+        console.warn(`[WikipediaProcessor] Failed to check/add Wikipedia page to monitoring:`, error)
       }
+    }
 
-      // Check if page can be marked complete after processing this citation
-      await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+    // Check if page can be marked complete after processing this citation
+    await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
+
+    // Cleanup idempotency key
+    cleanup()
 
       return {
         processed: true,
@@ -1195,26 +1435,19 @@ export async function processNextCitation(
         saved: finalIsRelevant,
         monitoringId: nextCitation.monitoringId
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Content fetch failed'
-      console.error(`[WikipediaProcessor] Error fetching content for "${nextCitation.citationTitle}": ${errorMessage}`)
+  } catch (error) {
+    cleanup()
+    console.error(`[WikipediaProcessor] Error processing citation:`, error)
+    if (nextCitation) {
       await markCitationVerificationFailed(
         nextCitation.id,
-        errorMessage
+        error instanceof Error ? error.message : 'Unknown error'
       )
       // Check if page can be marked complete even on error
       await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-      return { processed: true, citationUrl: citationUrl, monitoringId: nextCitation.monitoringId }
+      return { processed: true, citationUrl: nextCitation.citationUrl, monitoringId: nextCitation.monitoringId }
     }
-  } catch (error) {
-    console.error(`[WikipediaProcessor] Error processing citation:`, error)
-    await markCitationVerificationFailed(
-      nextCitation.id,
-      error instanceof Error ? error.message : 'Unknown error'
-    )
-    // Check if page can be marked complete even on error
-    await checkAndMarkPageCompleteIfAllCitationsProcessed(nextCitation.monitoringId)
-    return { processed: true, citationUrl: nextCitation.citationUrl, monitoringId: nextCitation.monitoringId }
+    return { processed: false }
   }
 }
 
