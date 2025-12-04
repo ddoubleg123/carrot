@@ -213,10 +213,10 @@ export async function getNextCitationToProcess(
   monitoringId: string
   aiPriorityScore: number | null
 } | null> {
-  // Prioritize processing external URLs first (not Wikipedia internal links)
+  // Step 1: Prioritize processing external URLs first (not Wikipedia internal links)
   // Wikipedia internal links are marked with verificationStatus='pending_wiki' and will be processed later
   // when they're added to monitoring if relevant
-  const citation = await prisma.wikipediaCitation.findFirst({
+  let citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
       verificationStatus: { in: ['pending', 'verified'] }, // Only external URLs (pending_wiki excluded)
@@ -247,6 +247,41 @@ export async function getNextCitationToProcess(
       }
     }
   })
+
+  // Step 2: If no external URLs available, process Wikipedia internal links (pending_wiki)
+  // This ensures Wikipedia links get processed after external URLs are done
+  if (!citation) {
+    citation = await prisma.wikipediaCitation.findFirst({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: 'pending_wiki', // Wikipedia internal links
+        scanStatus: { in: ['not_scanned', 'scanning'] }, // Include 'scanning' in case a process crashed
+        relevanceDecision: null, // Only process citations that haven't been decided yet
+        // Include Wikipedia internal links - these are the ones we want to process now
+        OR: [
+          { citationUrl: { startsWith: './' } },
+          { citationUrl: { startsWith: '/wiki/' } },
+          { citationUrl: { contains: 'wikipedia.org' } },
+          { citationUrl: { contains: 'wikimedia.org' } },
+          { citationUrl: { contains: 'wikidata.org' } }
+        ]
+      },
+      orderBy: [
+        // Prioritize citations with AI scores first, then by creation date
+        { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'asc' }
+      ],
+      include: {
+        monitoring: {
+          select: {
+            id: true,
+            wikipediaTitle: true,
+            status: true
+          }
+        }
+      }
+    })
+  }
 
   if (!citation) {
     // Enhanced diagnostic logging to understand why no citations are found
