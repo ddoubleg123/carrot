@@ -352,20 +352,61 @@ Return ONLY valid JSON array, no other text.`
       scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
     } catch (parseError: any) {
       // If JSON is incomplete, try to extract valid partial JSON
-      console.warn(`[WikipediaProcessor] JSON parse error at position ${parseError.message.match(/position (\d+)/)?.[1] || 'unknown'}, attempting recovery...`)
+      const positionMatch = parseError.message.match(/position (\d+)/)
+      const position = positionMatch ? parseInt(positionMatch[1]) : 0
+      console.warn(`[WikipediaProcessor] JSON parse error at position ${position}, attempting recovery...`)
       
-      // Try to extract valid JSON objects from the response
+      // Try multiple recovery strategies
+      // Strategy 1: Extract valid JSON objects from the response
       const jsonObjects = cleanResponse.match(/\{[^}]*"index"[^}]*\}/g)
       if (jsonObjects && jsonObjects.length > 0) {
         try {
           scores = jsonObjects.map(obj => JSON.parse(obj))
           console.log(`[WikipediaProcessor] Recovered ${scores.length} scores from partial JSON`)
         } catch (recoveryError) {
-          console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
-          throw parseError // Re-throw original error
+          // Strategy 2: Try to fix unterminated strings by truncating at error position
+          if (position > 0 && position < cleanResponse.length) {
+            try {
+              const truncated = cleanResponse.substring(0, position).trim()
+              // Try to find the last complete JSON object
+              const lastBrace = truncated.lastIndexOf('}')
+              if (lastBrace > 0) {
+                const partialJson = truncated.substring(0, lastBrace + 1)
+                // Try to extract array from partial JSON
+                const arrayMatch = partialJson.match(/\[[\s\S]*\]/)
+                if (arrayMatch) {
+                  scores = JSON.parse(arrayMatch[0])
+                  console.log(`[WikipediaProcessor] Recovered ${scores.length} scores by truncating at error position`)
+                } else {
+                  throw new Error('Could not extract array from truncated JSON')
+                }
+              } else {
+                throw new Error('No complete JSON objects found')
+              }
+            } catch (truncateError) {
+              console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
+              throw parseError // Re-throw original error
+            }
+          } else {
+            console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
+            throw parseError // Re-throw if we can't recover
+          }
         }
       } else {
-        throw parseError // Re-throw if we can't recover
+        // Strategy 3: Try to extract any valid JSON array from the response
+        const arrayMatches = cleanResponse.match(/\[[\s\S]{0,5000}\]/) // Limit to 5000 chars to avoid issues
+        if (arrayMatches && arrayMatches.length > 0) {
+          try {
+            scores = JSON.parse(arrayMatches[0])
+            console.log(`[WikipediaProcessor] Recovered ${scores.length} scores from array match`)
+          } catch {
+            console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
+            throw parseError
+          }
+        } else {
+          console.warn('[WikipediaProcessor] Could not recover JSON, using default scores')
+          throw parseError
+        }
       }
     }
     

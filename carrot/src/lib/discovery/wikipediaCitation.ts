@@ -31,23 +31,39 @@ export async function extractAndStoreCitations(
   // Extract citations with context (ALL citations, no limit)
   const citations = extractWikipediaCitationsWithContext(htmlContent, wikipediaUrl, 10000)
   
-  // Validate: Check for Wikipedia URLs that shouldn't be here
-  const wikipediaUrls = citations.filter(c => {
-    const url = c.url
-    return url.includes('wikipedia.org') || url.includes('wikimedia.org') || url.includes('wikidata.org') ||
-           url.startsWith('./') || url.startsWith('/wiki/')
-  })
+  // Separate external URLs from Wikipedia internal links
+  // Wikipedia internal links will be stored but marked for later processing
+  const externalCitations: typeof citations = []
+  const wikipediaCitations: typeof citations = []
   
-  if (wikipediaUrls.length > 0) {
-    console.warn(`[WikipediaCitation] WARNING: ${wikipediaUrls.length} Wikipedia URLs found in extraction results - these should have been filtered`)
-    emit('extraction_warning', { 
-      message: 'Wikipedia URLs found in extraction results',
-      count: wikipediaUrls.length,
-      sampleUrls: wikipediaUrls.slice(0, 5).map(u => u.url)
+  for (const citation of citations) {
+    const url = citation.url
+    // Check if it's a Wikipedia internal link
+    const isWikipediaLink = url.startsWith('./') || 
+                           url.startsWith('/wiki/') || 
+                           url.startsWith('../') ||
+                           url.includes('wikipedia.org') || 
+                           url.includes('wikimedia.org') || 
+                           url.includes('wikidata.org')
+    
+    if (isWikipediaLink) {
+      wikipediaCitations.push(citation)
+    } else {
+      externalCitations.push(citation)
+    }
+  }
+  
+  // Log separation
+  if (wikipediaCitations.length > 0) {
+    console.log(`[WikipediaCitation] Found ${wikipediaCitations.length} Wikipedia internal links (will be categorized for later scanning)`)
+    emit('extraction_info', { 
+      message: 'Wikipedia internal links identified for later processing',
+      wikipediaLinksCount: wikipediaCitations.length,
+      externalLinksCount: externalCitations.length
     })
   }
   
-  // Count by section
+  // Count by section (use all citations for reporting)
   const bySection = citations.reduce((acc, c) => {
     const section = c.context?.includes('References') ? 'References' :
                    c.context?.includes('Further reading') ? 'Further reading' :
@@ -63,24 +79,34 @@ export async function extractAndStoreCitations(
   
   emit('extraction_complete', { 
     totalFound: citations.length,
+    externalUrls: externalCitations.length,
+    wikipediaLinks: wikipediaCitations.length,
     bySection,
     validation: {
       hasReferences,
       hasExternalLinks,
       hasFurtherReading,
-      wikipediaUrlsFound: wikipediaUrls.length
+      wikipediaLinksFound: wikipediaCitations.length
     }
   })
-  console.log(`[WikipediaCitation] Found ${citations.length} citations`)
+  console.log(`[WikipediaCitation] Found ${citations.length} total citations (${externalCitations.length} external, ${wikipediaCitations.length} Wikipedia internal)`)
 
   if (citations.length === 0) {
     emit('extraction_complete', { totalFound: 0, citationsStored: 0 })
     return { citationsFound: 0, citationsStored: 0 }
   }
 
-  emit('prioritization_started', { count: citations.length })
-  // Prioritize citations using AI (for scoring, but store ALL)
-  const prioritized = await prioritizeCitations(citations, wikipediaUrl)
+  // Prioritize external URLs first (these will be processed immediately)
+  emit('prioritization_started', { count: externalCitations.length })
+  const prioritizedExternal = externalCitations.length > 0 
+    ? await prioritizeCitations(externalCitations, wikipediaUrl)
+    : []
+  
+  // Wikipedia internal links get default priority (they'll be processed later if relevant)
+  const prioritizedWikipedia = wikipediaCitations.map(c => ({ ...c, score: 50 }))
+  
+  // Combine: external URLs first, then Wikipedia links
+  const prioritized = [...prioritizedExternal, ...prioritizedWikipedia]
   emit('prioritization_complete', { count: prioritized.length })
   console.log(`[WikipediaCitation] Prioritized ${prioritized.length} citations (storing all)`)
 
@@ -114,7 +140,17 @@ export async function extractAndStoreCitations(
         continue
       }
 
+      // Check if this is a Wikipedia internal link
+      const isWikipediaLink = citation.url.startsWith('./') || 
+                              citation.url.startsWith('/wiki/') || 
+                              citation.url.startsWith('../') ||
+                              citation.url.includes('wikipedia.org') || 
+                              citation.url.includes('wikimedia.org') || 
+                              citation.url.includes('wikidata.org')
+      
       // Create new citation entry
+      // Wikipedia internal links are marked as 'pending_wiki' status to indicate they need Wikipedia-to-Wikipedia processing
+      // External URLs are marked as 'pending' for immediate processing
       await prisma.wikipediaCitation.create({
         data: {
           monitoringId,
@@ -123,8 +159,8 @@ export async function extractAndStoreCitations(
           citationTitle: citation.title,
           citationContext: citation.context,
           aiPriorityScore: citation.score,
-          verificationStatus: 'pending',
-          scanStatus: 'not_scanned'
+          verificationStatus: isWikipediaLink ? 'pending_wiki' : 'pending', // Mark Wikipedia links differently
+          scanStatus: 'not_scanned' // Both types start as not_scanned, but query will prioritize external
         }
       })
       citationsStored++
@@ -177,16 +213,23 @@ export async function getNextCitationToProcess(
   monitoringId: string
   aiPriorityScore: number | null
 } | null> {
-  // Prioritize processing unprocessed citations first
-  // Include 'failed' verification status - these may still be valid URLs that failed verification checks
-  // but should be processed if they haven't been scanned yet
-  // Fix 2: Stop re-selection loop - exclude scanned_denied citations
+  // Prioritize processing external URLs first (not Wikipedia internal links)
+  // Wikipedia internal links are marked with verificationStatus='pending_wiki' and will be processed later
+  // when they're added to monitoring if relevant
   const citation = await prisma.wikipediaCitation.findFirst({
     where: {
       monitoring: { patchId },
-      verificationStatus: { in: ['pending', 'verified'] }, // Exclude 'failed' - they're marked as scanned_denied
+      verificationStatus: { in: ['pending', 'verified'] }, // Only external URLs (pending_wiki excluded)
       scanStatus: 'not_scanned', // Only process not_scanned (exclude scanning, scanned, scanned_denied)
-      relevanceDecision: null // Only process citations that haven't been decided yet
+      relevanceDecision: null, // Only process citations that haven't been decided yet
+      // Exclude Wikipedia internal links - these are marked as 'pending_wiki' but also filter by URL pattern as defensive check
+      NOT: [
+        { citationUrl: { startsWith: './' } },
+        { citationUrl: { startsWith: '/wiki/' } },
+        { citationUrl: { contains: 'wikipedia.org' } },
+        { citationUrl: { contains: 'wikimedia.org' } },
+        { citationUrl: { contains: 'wikidata.org' } }
+      ]
     },
     orderBy: [
       { aiPriorityScore: 'desc' },

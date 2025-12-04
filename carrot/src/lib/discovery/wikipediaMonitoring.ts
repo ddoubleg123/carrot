@@ -264,11 +264,25 @@ export async function getNextWikipediaPageToProcess(
         { citationsExtracted: false }
       ]
     },
+    select: {
+      id: true,
+      wikipediaUrl: true,
+      wikipediaTitle: true
+    },
     orderBy: [
       { priority: 'desc' },
       { createdAt: 'asc' }
     ]
   })
+  
+  // Convert to expected format
+  if (page) {
+    page = {
+      id: page.id,
+      url: page.wikipediaUrl,
+      title: page.wikipediaTitle || ''
+    } as any
+  }
 
   // If no pages found, check for 'completed' pages that might have unprocessed citations
   // (This handles the case where pages were incorrectly marked as complete)
