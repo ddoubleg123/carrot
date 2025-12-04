@@ -375,9 +375,9 @@ export default function ExtractionTestPage() {
       </div>
 
       {/* Table */}
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', overflowX: 'auto' }}>
+      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', overflowX: 'auto', position: 'relative' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8f9fa' }}>
             <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }} onClick={() => handleSort('url')}>
                 URL {sortField === 'url' && (sortDirection === 'asc' ? '↑' : '↓')}
