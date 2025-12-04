@@ -277,10 +277,12 @@ export async function getNextWikipediaPageToProcess(
   
   // Convert to expected format
   if (page) {
+    // Ensure title is never undefined - extract from URL if needed
+    const pageTitle = page.wikipediaTitle || page.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
     page = {
       id: page.id,
       url: page.wikipediaUrl,
-      title: page.wikipediaTitle || ''
+      title: pageTitle
     } as any
   }
 
@@ -321,7 +323,9 @@ export async function getNextWikipediaPageToProcess(
 
     if (pagesWithUnprocessedCitations.length > 0) {
       const foundPage = pagesWithUnprocessedCitations[0]
-      console.log(`[WikipediaMonitoring] Found 'completed' page with unprocessed citations: ${foundPage.wikipediaTitle}. Resetting to 'scanning' status.`)
+      // Ensure title is never undefined - extract from URL if needed
+      const pageTitle = foundPage.wikipediaTitle || foundPage.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
+      console.log(`[WikipediaMonitoring] Found 'completed' page with unprocessed citations: ${pageTitle}. Resetting to 'scanning' status.`)
       
       // Reset status to 'scanning' so it can be processed
       await prismaClient.wikipediaMonitoring.update({
@@ -332,7 +336,7 @@ export async function getNextWikipediaPageToProcess(
       page = {
         id: foundPage.id,
         url: foundPage.wikipediaUrl,
-        title: foundPage.wikipediaTitle
+        title: pageTitle
       } as any
     }
   }
