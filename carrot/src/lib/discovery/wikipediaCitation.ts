@@ -321,14 +321,25 @@ export async function getNextCitationToProcess(
       }
     })
 
+    // Check for pending_wiki citations
+    const pendingWikiCitations = await prisma.wikipediaCitation.count({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: 'pending_wiki',
+        scanStatus: 'not_scanned',
+        relevanceDecision: null
+      }
+    })
+
     console.log(`[WikipediaCitation] No citations available to process for patch ${patchId}`)
     console.log(`[WikipediaCitation] Diagnostic breakdown:`)
     console.log(`  Total citations: ${totalCitations}`)
-    console.log(`  Pending + not_scanned + no decision: ${pendingCitations}`)
-    console.log(`  Verified + not_scanned + no decision: ${verifiedCitations}`)
+    console.log(`  Pending external + not_scanned + no decision: ${pendingCitations}`)
+    console.log(`  Verified external + not_scanned + no decision: ${verifiedCitations}`)
+    console.log(`  Pending Wikipedia internal links (pending_wiki): ${pendingWikiCitations}`)
     console.log(`  Already scanned: ${scannedCitations}`)
     console.log(`  Already have relevanceDecision: ${withRelevanceDecision}`)
-    console.log(`  Query conditions: verificationStatus IN ['pending','verified'] AND scanStatus IN ['not_scanned','scanning'] AND relevanceDecision IS NULL`)
+    console.log(`  Query conditions: First tries verificationStatus IN ['pending','verified'], then falls back to 'pending_wiki'`)
 
     // If there are citations but they don't match, show why
     if (totalCitations > 0 && pendingCitations === 0 && verifiedCitations === 0) {
