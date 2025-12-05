@@ -193,9 +193,11 @@ export class ContentExtractor {
       
       const result = await response.json()
       
+      // Map the API response to our expected format
+      // The summarize-content API returns: summary, keyFacts, notableQuotes, etc.
       return {
         summary: result.summary || this.generateFallbackSummary(text),
-        keyPoints: result.keyPoints || this.generateFallbackKeyPoints(text),
+        keyPoints: result.keyFacts || result.keyPoints || this.generateFallbackKeyPoints(text),
         entities: result.entities || [],
         readingTime: Math.max(1, Math.floor(text.split(/\s+/).length / 200))
       }
