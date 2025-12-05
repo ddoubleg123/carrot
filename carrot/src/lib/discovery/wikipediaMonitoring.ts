@@ -381,10 +381,13 @@ export async function getNextWikipediaPageToProcess(
     return null
   }
 
+  // Ensure title is never undefined - use the computed title with fallback
+  const finalTitle = page.title || page.wikipediaTitle || page.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
+  
   return {
     id: page.id,
     url: page.wikipediaUrl,
-    title: page.wikipediaTitle
+    title: finalTitle
   }
 }
 

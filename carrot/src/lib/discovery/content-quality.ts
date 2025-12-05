@@ -170,10 +170,39 @@ export class ContentExtractor {
       const words = text.split(/\s+/)
       const truncatedText = words.slice(0, 1500).join(' ')
       
+      // Ensure text meets minimum length requirement (API requires min 100 chars)
+      if (truncatedText.length < 100) {
+        console.warn(`[ContentExtractor] Text too short for summarization (${truncatedText.length} chars), using fallback`)
+        return {
+          summary: this.generateFallbackSummary(text),
+          keyPoints: this.generateFallbackKeyPoints(text),
+          entities: [],
+          readingTime: Math.max(1, Math.floor(text.split(/\s+/).length / 200))
+        }
+      }
+      
       // Get base URL for API calls (works in both server and client contexts)
       const baseUrl = process.env.NEXTAUTH_URL || 
                      process.env.NEXT_PUBLIC_APP_URL || 
                      (typeof window !== 'undefined' ? window.location.origin : 'https://carrot-app.onrender.com')
+      
+      // Construct valid URL from domain
+      // Handle cases where domain might already be a URL or might be empty
+      let url: string
+      if (!domain || domain.trim().length === 0) {
+        url = 'https://example.com' // Fallback URL
+      } else if (domain.startsWith('http://') || domain.startsWith('https://')) {
+        url = domain // Already a full URL
+      } else {
+        url = `https://${domain}` // Construct URL from domain
+      }
+      
+      // Validate URL format
+      try {
+        new URL(url) // Validate URL format
+      } catch {
+        url = 'https://example.com' // Fallback if invalid
+      }
       
       // Call AI summarization API - use summarize-content endpoint
       const response = await fetch(`${baseUrl}/api/ai/summarize-content`, {
@@ -181,14 +210,27 @@ export class ContentExtractor {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: truncatedText,
-          title,
-          url: `https://${domain}`, // Convert domain to URL format expected by API
+          title: title || 'Untitled',
+          url: url,
           temperature: 0.2
         })
       })
       
       if (!response.ok) {
-        throw new Error(`Summarization failed: ${response.status}`)
+        // Try to get error details from response
+        let errorDetails = `HTTP ${response.status}`
+        try {
+          const errorBody = await response.json()
+          if (errorBody.error) {
+            errorDetails += `: ${errorBody.error}`
+          }
+          if (errorBody.details) {
+            errorDetails += ` (${Array.isArray(errorBody.details) ? errorBody.details.join(', ') : errorBody.details})`
+          }
+        } catch {
+          // If we can't parse error body, just use status
+        }
+        throw new Error(`Summarization failed: ${errorDetails}`)
       }
       
       const result = await response.json()

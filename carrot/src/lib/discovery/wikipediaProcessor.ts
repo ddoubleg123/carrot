@@ -80,6 +80,7 @@ function isLowQualityUrl(url: string): boolean {
 
 /**
  * Check if content is an actual article (not a metadata/catalog page)
+ * Made more lenient - some articles are formatted as single paragraphs
  */
 function isActualArticle(content: string, url: string): boolean {
   // Must have substantial content
@@ -88,14 +89,17 @@ function isActualArticle(content: string, url: string): boolean {
   }
   
   // Check for article structure (paragraphs, not just metadata)
-  const paragraphCount = (content.match(/\n\n/g) || []).length
-  if (paragraphCount < 3) {
+  // Made more lenient: accept if >= 1 paragraph (some articles are single long paragraphs)
+  const paragraphCount = (content.match(/\n\n/g) || []).length + 1
+  if (paragraphCount < 1) {
     return false
   }
   
   // Check for narrative indicators (sentences with proper structure)
-  const hasNarrative = /\. [A-Z]/.test(content) // Sentences followed by capital letters
-  if (!hasNarrative) {
+  // Made more lenient: check for multiple sentences (not just one)
+  const sentenceCount = (content.match(/[.!?]\s+[A-Z]/g) || []).length
+  if (sentenceCount < 3) {
+    // If very few sentences, might be metadata
     return false
   }
   
@@ -326,27 +330,42 @@ Return ONLY valid JSON, no other text.`
     const score = Math.max(0, Math.min(100, result.score || 0))
     
     // Check if it's an actual article (from DeepSeek or our own check)
+    // Trust AI's judgment more - if AI says it's an article and content is substantial, accept it
     const isActualArticleFromAI = result.isActualArticle ?? true
     const isActualArticleFromContent = isActualArticle(contentText, url)
-    const isActuallyAnArticle = isActualArticleFromAI && isActualArticleFromContent
     
-    // Reject if not an actual article
-    if (!isActuallyAnArticle) {
+    // More lenient: If AI says it's an article OR our check passes, accept it
+    // Only reject if BOTH fail AND content is clearly metadata
+    const isActuallyAnArticle = isActualArticleFromAI || isActualArticleFromContent
+    
+    // Only reject if AI explicitly says it's NOT an article AND our check also fails
+    // AND content is clearly a catalog/metadata page
+    if (!isActuallyAnArticle && result.isActualArticle === false) {
       const paragraphCount = (contentText.match(/\n\n/g) || []).length + 1
       const textBytes = Buffer.byteLength(contentText, 'utf8')
-      console.warn(JSON.stringify({
-        tag: 'content_validate_fail',
-        url: url,
-        reason: 'not_article',
-        textBytes,
-        paragraphCount,
-        isActualArticleFromAI,
-        isActualArticleFromContent
-      }))
-      return {
-        score: 30, // Low score for non-articles
-        isRelevant: false,
-        reason: 'Not an actual article (metadata/catalog page)'
+      const sentenceCount = (contentText.match(/[.!?]\s+[A-Z]/g) || []).length
+      
+      // Additional check: if content is very long (>5000 chars) and has many sentences, it's likely an article
+      // even if paragraph count is low (some sites format as single paragraph)
+      const isLikelyArticle = textBytes > 5000 && sentenceCount >= 10
+      
+      if (!isLikelyArticle) {
+        console.warn(JSON.stringify({
+          tag: 'content_validate_fail',
+          url: url,
+          reason: 'not_article',
+          textBytes,
+          paragraphCount,
+          sentenceCount,
+          isActualArticleFromAI,
+          isActualArticleFromContent,
+          isLikelyArticle
+        }))
+        return {
+          score: 30, // Low score for non-articles
+          isRelevant: false,
+          reason: 'Not an actual article (metadata/catalog page)'
+        }
       }
     }
     
@@ -543,7 +562,19 @@ export async function processNextWikipediaPage(
     return { processed: false }
   }
 
-  console.log(`[WikipediaProcessor] Processing Wikipedia page: ${nextPage.title}`)
+  // Ensure title is never undefined - extract from URL if needed
+  let pageTitle = nextPage.title
+  if (!pageTitle || pageTitle === 'Unknown') {
+    // Extract title from URL as fallback
+    try {
+      const urlObj = new URL(nextPage.url)
+      pageTitle = decodeURIComponent(urlObj.pathname.replace('/wiki/', '').replace(/_/g, ' '))
+    } catch {
+      pageTitle = 'Unknown'
+    }
+  }
+
+  console.log(`[WikipediaProcessor] Processing Wikipedia page: ${pageTitle}`)
   
   // Structured logging
   try {
@@ -551,7 +582,7 @@ export async function processNextWikipediaPage(
     structuredLog('wikipedia_page_processing', {
       patchId,
       pageId: nextPage.id,
-      pageTitle: nextPage.title,
+      pageTitle: pageTitle,
       pageUrl: nextPage.url,
       timestamp: new Date().toISOString()
     })
@@ -562,13 +593,13 @@ export async function processNextWikipediaPage(
   try {
     // Mark as scanning
     await markWikipediaPageScanning(nextPage.id)
-
+    
     // Fetch Wikipedia page content
-    const page = await WikipediaSource.getPage(nextPage.title)
+    const page = await WikipediaSource.getPage(pageTitle)
     
     if (!page) {
       await markWikipediaPageError(nextPage.id, 'Failed to fetch Wikipedia page')
-      return { processed: true, pageTitle: nextPage.title }
+      return { processed: true, pageTitle: pageTitle }
     }
 
     // Store content for memory
@@ -587,7 +618,7 @@ export async function processNextWikipediaPage(
       let htmlForExtraction = page.rawHtml
       if (!htmlForExtraction) {
         try {
-          const htmlUrl = `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(nextPage.title)}`
+          const htmlUrl = `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(pageTitle)}`
           const htmlResponse = await fetch(htmlUrl, {
             headers: { 'User-Agent': 'CarrotApp/1.0 (Educational research platform)' }
           })
@@ -641,11 +672,11 @@ export async function processNextWikipediaPage(
         )
         
         await markCitationsExtracted(nextPage.id, result.citationsFound)
-        return { processed: true, pageTitle: nextPage.title, citationsFound: result.citationsFound }
+        return { processed: true, pageTitle: pageTitle, citationsFound: result.citationsFound }
       } else {
-        console.error(`[WikipediaProcessor] No citations and no HTML available for ${nextPage.title}`)
+        console.error(`[WikipediaProcessor] No citations and no HTML available for ${pageTitle}`)
         await markWikipediaPageError(nextPage.id, 'No citations found and no HTML available')
-        return { processed: true, pageTitle: nextPage.title }
+        return { processed: true, pageTitle: pageTitle }
       }
     }
     
@@ -736,7 +767,7 @@ export async function processNextWikipediaPage(
     // DON'T mark page as complete yet - wait until ALL citations are processed
     // Page will be marked complete when checkAndMarkPageCompleteIfAllCitationsProcessed is called
 
-    console.log(`[WikipediaProcessor] Completed page "${nextPage.title}": ${citationsStored} citations stored`)
+    console.log(`[WikipediaProcessor] Completed page "${pageTitle}": ${citationsStored} citations stored`)
     
     // Structured logging for completion
     try {
@@ -744,7 +775,7 @@ export async function processNextWikipediaPage(
       structuredLog('wikipedia_page_complete', {
         patchId,
         pageId: nextPage.id,
-        pageTitle: nextPage.title,
+        pageTitle: pageTitle,
         citationsFound,
         citationsStored,
         timestamp: new Date().toISOString()
@@ -755,16 +786,16 @@ export async function processNextWikipediaPage(
     
     return {
       processed: true,
-      pageTitle: nextPage.title,
+      pageTitle: pageTitle,
       citationsFound
     }
   } catch (error) {
-    console.error(`[WikipediaProcessor] Error processing page "${nextPage.title}":`, error)
+    console.error(`[WikipediaProcessor] Error processing page "${pageTitle}":`, error)
     await markWikipediaPageError(
       nextPage.id,
       error instanceof Error ? error.message : 'Unknown error'
     )
-    return { processed: true, pageTitle: nextPage.title }
+    return { processed: true, pageTitle: pageTitle }
   }
 }
 
