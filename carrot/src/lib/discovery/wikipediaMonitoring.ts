@@ -381,14 +381,14 @@ export async function getNextWikipediaPageToProcess(
     return null
   }
 
-  // Ensure title is never undefined - extract from URL if needed
-  // page is either from the first query (with title computed) or from the second query (with wikipediaTitle)
-  const finalTitle = (page as any).title || page.wikipediaTitle || page.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
+  // At this point, page has been converted to have { id, url, title } format
+  // But TypeScript doesn't know that, so we need to access it correctly
+  const pageWithTitle = page as { id: string; url: string; title: string }
   
   return {
-    id: page.id,
-    url: page.wikipediaUrl,
-    title: finalTitle
+    id: pageWithTitle.id,
+    url: pageWithTitle.url,
+    title: pageWithTitle.title
   }
 }
 
