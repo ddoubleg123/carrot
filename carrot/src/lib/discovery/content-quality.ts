@@ -170,16 +170,20 @@ export class ContentExtractor {
       const words = text.split(/\s+/)
       const truncatedText = words.slice(0, 1500).join(' ')
       
-      // Call AI summarization API
-      const response = await fetch('/api/ai/summarize', {
+      // Get base URL for API calls (works in both server and client contexts)
+      const baseUrl = process.env.NEXTAUTH_URL || 
+                     process.env.NEXT_PUBLIC_APP_URL || 
+                     (typeof window !== 'undefined' ? window.location.origin : 'https://carrot-app.onrender.com')
+      
+      // Call AI summarization API - use summarize-content endpoint
+      const response = await fetch(`${baseUrl}/api/ai/summarize-content`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: truncatedText,
           title,
-          domain,
-          maxSummaryLength: 200,
-          maxKeyPoints: 5
+          url: `https://${domain}`, // Convert domain to URL format expected by API
+          temperature: 0.2
         })
       })
       
