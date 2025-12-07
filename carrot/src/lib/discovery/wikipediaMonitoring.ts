@@ -255,7 +255,7 @@ export async function getNextWikipediaPageToProcess(
   patchId: string
 ): Promise<{ id: string; url: string; title: string } | null> {
   // First, try to find pages that need content scanning or citation extraction
-  let page = await prisma.wikipediaMonitoring.findFirst({
+  const dbPage = await prisma.wikipediaMonitoring.findFirst({
     where: {
       patchId,
       status: { in: ['pending', 'scanning', 'error'] }, // Include 'error' to allow retry
@@ -276,14 +276,15 @@ export async function getNextWikipediaPageToProcess(
   })
   
   // Convert to expected format
-  if (page) {
+  let page: { id: string; url: string; title: string } | null = null
+  if (dbPage) {
     // Ensure title is never undefined - extract from URL if needed
-    const pageTitle = page.wikipediaTitle || page.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
+    const pageTitle = dbPage.wikipediaTitle || dbPage.wikipediaUrl?.replace('https://en.wikipedia.org/wiki/', '').replace(/_/g, ' ') || 'Unknown'
     page = {
-      id: page.id,
-      url: page.wikipediaUrl,
+      id: dbPage.id,
+      url: dbPage.wikipediaUrl,
       title: pageTitle
-    } as any
+    }
   }
 
   // If no pages found, check for 'completed' pages that might have unprocessed citations
@@ -337,7 +338,7 @@ export async function getNextWikipediaPageToProcess(
         id: foundPage.id,
         url: foundPage.wikipediaUrl,
         title: pageTitle
-      } as any
+      }
     }
   }
 
@@ -381,15 +382,8 @@ export async function getNextWikipediaPageToProcess(
     return null
   }
 
-  // At this point, page has been converted to have { id, url, title } format
-  // But TypeScript doesn't know that, so we need to access it correctly
-  const pageWithTitle = page as { id: string; url: string; title: string }
-  
-  return {
-    id: pageWithTitle.id,
-    url: pageWithTitle.url,
-    title: pageWithTitle.title
-  }
+  // At this point, page is either null or has { id, url, title } format
+  return page
 }
 
 /**
