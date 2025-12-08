@@ -125,10 +125,11 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     media: {
       hero: apiItem.mediaAssets?.hero || 
             apiItem.enrichedContent?.hero || 
+            (apiItem.hero && typeof apiItem.hero === 'object' ? apiItem.hero.url : apiItem.hero) ||
             undefined,
       blurDataURL: apiItem.mediaAssets?.blurDataURL,
       dominant: apiItem.mediaAssets?.dominant,
-      source: apiItem.mediaAssets?.source,
+      source: apiItem.mediaAssets?.source || (apiItem.hero && typeof apiItem.hero === 'object' ? apiItem.hero.source : undefined),
       license: apiItem.mediaAssets?.license,
       gallery: apiItem.mediaAssets?.gallery || [],
       videoThumb: apiItem.mediaAssets?.videoThumb,
@@ -136,18 +137,22 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
     } as any, // Temporary type assertion for compatibility
     content: {
       summary150: apiItem.enrichedContent?.summary150 || 
+                  apiItem.whyItMatters?.substring(0, 150) ||
                   apiItem.citeMeta?.description ||
                   apiItem.description || 
+                  apiItem.summary?.substring(0, 150) ||
                   apiItem.content?.substring(0, 150) + '...' || 
                   'No summary available',
       keyPoints: apiItem.enrichedContent?.keyPoints || 
+                 (apiItem.facts && Array.isArray(apiItem.facts) ? apiItem.facts.slice(0, 5).map((f: any) => f.value || f.text || f).filter(Boolean) : []) ||
                  apiItem.tags?.slice(0, 5) || 
                  apiItem.citeMeta?.tags?.slice(0, 5) ||
                  ['Key information available'],
-      notableQuote: apiItem.enrichedContent?.notableQuote,
+      notableQuote: apiItem.enrichedContent?.notableQuote || 
+                    (apiItem.quotes && Array.isArray(apiItem.quotes) && apiItem.quotes.length > 0 ? apiItem.quotes[0].text : undefined),
       readingTimeMin: apiItem.metadata?.readingTime || 
                       apiItem.enrichedContent?.readingTime || 
-                      Math.max(1, Math.floor((apiItem.content?.length || 1000) / 200))
+                      Math.max(1, Math.floor((apiItem.textLength || apiItem.content?.length || 1000) / 200))
     },
     meta: {
       sourceDomain: getDomain(apiItem.url || apiItem.sourceUrl || apiItem.citeMeta?.url),
@@ -210,10 +215,29 @@ export function useDiscoveredItems(
       console.log('[useDiscoveredItems] API response data:', data)
       const rawItems = Array.isArray(data?.items) ? data.items : []
       console.log('[useDiscoveredItems] Raw items count:', rawItems.length)
+      console.log('[useDiscoveredItems] Sample items:', rawItems.slice(0, 2).map(item => ({
+        id: item.id,
+        title: item.title,
+        hasEnrichedContent: !!item.enrichedContent,
+        hasMediaAssets: !!item.mediaAssets,
+        status: item.status,
+        type: item.type
+      })))
       
       // Map and deduplicate
       const mappedItems = rawItems.map(mapToDiscoveredItem)
       const dedupedItems = deduplicateItems(mappedItems)
+      
+      console.log('[useDiscoveredItems] Mapped items count:', mappedItems.length)
+      console.log('[useDiscoveredItems] Deduplicated items count:', dedupedItems.length)
+      console.log('[useDiscoveredItems] Sample mapped items:', dedupedItems.slice(0, 2).map(item => ({
+        id: item.id,
+        title: item.title,
+        displayTitle: item.displayTitle,
+        hasHero: !!item.media?.hero,
+        hasSummary: !!item.content?.summary150,
+        status: item.status
+      })))
       
       setItems(dedupedItems)
       console.log('[useDiscoveredItems] Final items count:', dedupedItems.length)

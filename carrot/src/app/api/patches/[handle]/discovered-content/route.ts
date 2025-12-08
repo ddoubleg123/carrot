@@ -264,6 +264,35 @@ export async function GET(
       // Determine hasHero status
       const hasHero = Boolean(heroRelation && heroRelation.status === 'READY') || Boolean(heroJson)
       
+      // Extract summary for enrichedContent
+      const summary150 = (typeof item.whyItMatters === 'string' && item.whyItMatters.trim())
+        ? item.whyItMatters.trim().substring(0, 150)
+        : (metadataRaw?.summary150 || item.summary?.substring(0, 150) || '')
+      
+      // Extract key points from facts
+      const keyPoints = facts.slice(0, 5).map(f => f.value).filter(Boolean)
+      
+      // Extract notable quote
+      const notableQuote = quotes.length > 0 ? quotes[0].text : undefined
+      
+      // Build enrichedContent object for frontend compatibility
+      const enrichedContent = {
+        summary150,
+        keyPoints,
+        notableQuote,
+        readingTime: Math.max(1, Math.floor((item.textContent?.length || 1000) / 200))
+      }
+      
+      // Build mediaAssets object for frontend compatibility
+      const mediaAssets = heroRaw ? {
+        hero: heroRaw.url,
+        source: heroRaw.source,
+        license: heroRaw.source === 'ai' ? 'generated' : 'fair-use'
+      } : undefined
+      
+      // Determine status - use isUseful to determine if content is ready
+      const status = item.isUseful !== false ? 'ready' : 'pending_audit'
+      
       return {
         id: item.id,
         title: item.title,
@@ -294,7 +323,17 @@ export async function GET(
         // Additional fields for frontend
         hasHero,
         textLength: (item.textContent?.length || 0),
-        createdAt: item.createdAt?.toISOString() || new Date().toISOString()
+        createdAt: item.createdAt?.toISOString() || new Date().toISOString(),
+        // Frontend compatibility fields
+        enrichedContent,
+        mediaAssets,
+        status,
+        sourceUrl: item.sourceUrl || primaryUrl,
+        description: summary150, // Alias for summary150
+        metadata: {
+          ...metadataRaw,
+          readingTime: enrichedContent.readingTime
+        }
       }
     })
 

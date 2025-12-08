@@ -234,7 +234,6 @@ class HTTP1FetchManager {
         cache: 'no-store',
         // Additional HTTP/1.1 forcing options
         keepalive: true,
-        referrer: 'no-referrer',
         referrerPolicy: 'no-referrer',
         // Additional options to force HTTP/1.1
         integrity: undefined, // Disable integrity checks that might force HTTP/2
