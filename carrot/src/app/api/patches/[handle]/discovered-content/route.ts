@@ -223,7 +223,7 @@ export async function GET(
         heroRaw = heroJson
       } else {
         // Ultimate fallback: generate placeholder hero image
-        const domain = item.domain || (primaryUrl ? new URL(primaryUrl).hostname.replace('www.', '') : 'unknown')
+        // Use the domain variable already computed above (line 172)
         const placeholderUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(item.title.substring(0, 30))}`
         heroRaw = {
           url: placeholderUrl,
