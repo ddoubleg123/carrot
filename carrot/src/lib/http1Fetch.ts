@@ -17,8 +17,8 @@ interface HTTP1FetchOptions extends RequestInit {
 class HTTP1FetchManager {
   private static instance: HTTP1FetchManager;
   private retryCounts: Map<string, number> = new Map();
-  private maxRetries = 3;
-  private baseRetryDelay = 1000;
+  private maxRetries = 4; // Increased from 3 to 4
+  private baseRetryDelay = 2000; // Increased from 1000ms to 2000ms for slower sites
 
   static getInstance(): HTTP1FetchManager {
     if (!HTTP1FetchManager.instance) {

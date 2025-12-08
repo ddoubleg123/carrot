@@ -32,7 +32,7 @@ interface ExtractedContent {
   canonicalUrl?: string
 }
 
-const FETCH_TIMEOUT_MS = 10000 // 10s
+const FETCH_TIMEOUT_MS = 30000 // 30s - increased for slow sites
 
 /**
  * Structured logging helper with PII redaction
@@ -376,6 +376,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
 
     // Attempt image with resilient fallback chain (never fails)
     let imageUrl: string | null = null
+    let imageSource: 'og' | 'article' | 'wikipedia' | 'favicon' | 'ai' | 'placeholder' = 'placeholder'
     try {
       const { pickImageFallback } = await import('./imageFallback')
       const { normalizeUrlWithWWW } = await import('@/lib/utils/urlNormalization')
@@ -389,22 +390,74 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
         html
       })
       imageUrl = imageResult.url
+      imageSource = imageResult.source
       log('image', { traceId, ok: true, source: imageResult.source, url: imageUrl.substring(0, 100) })
     } catch (error: any) {
       // Fallback to simple extraction if pickImageFallback fails
       imageUrl = await getImageUrl(html, finalUrl, traceId).catch(() => null)
-      if (!imageUrl) {
-        // Ultimate fallback: domain favicon
+      if (imageUrl) {
+        imageSource = 'og'
+      } else {
+        // Try AI-generated hero image as fallback
         try {
-          const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : 'example.com'
-          imageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
-        } catch {
-          imageUrl = null // Hero can exist without image
+          log('image', { traceId, phase: 'ai_fallback', note: 'Attempting AI generation' })
+          const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://carrot-app.onrender.com'
+          const aiResponse = await fetch(`${baseUrl}/api/ai/generate-hero-image`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-key': process.env.INTERNAL_API_KEY || ''
+            },
+            body: JSON.stringify({
+              title: extracted.title,
+              description: excerpt.substring(0, 200),
+              topic: 'research',
+              style: 'editorial'
+            }),
+            signal: AbortSignal.timeout(15000) // 15s timeout for AI generation
+          })
+          
+          if (aiResponse.ok) {
+            const aiResult = await aiResponse.json()
+            if (aiResult.success && aiResult.imageUrl) {
+              imageUrl = aiResult.imageUrl
+              imageSource = 'ai'
+              log('image', { traceId, ok: true, source: 'ai', url: imageUrl?.substring(0, 100) || 'unknown' })
+            }
+          }
+        } catch (aiError: any) {
+          log('image', { traceId, ok: false, source: 'ai', errorCode: 'AI_GENERATION_FAILED', errorMessage: aiError.message?.substring(0, 200) })
+        }
+        
+        // Ultimate fallback: domain favicon
+        if (!imageUrl) {
+          try {
+            const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : 'example.com'
+            imageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
+            imageSource = 'favicon'
+          } catch {
+            imageUrl = null // Hero can exist without image
+          }
         }
       }
     }
 
-    // Upsert Hero
+    // Ensure we always have an imageUrl (use favicon as absolute last resort)
+    if (!imageUrl) {
+      try {
+        const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : 'example.com'
+        imageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
+        imageSource = 'favicon'
+        log('image', { traceId, ok: true, source: 'favicon', note: 'Using favicon as absolute fallback' })
+      } catch {
+        // If even favicon fails, use a placeholder
+        imageUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(extracted.title.substring(0, 30))}`
+        imageSource = 'placeholder'
+        log('image', { traceId, ok: true, source: 'placeholder', note: 'Using placeholder as last resort' })
+      }
+    }
+
+    // Upsert Hero - always with imageUrl (never null)
     const upsertStartTime = Date.now()
     log('upsert', { traceId, phase: 'start' })
 
@@ -415,7 +468,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
         excerpt,
         quoteHtml,
         quoteCharCount,
-        imageUrl: imageUrl ?? null,
+        imageUrl: imageUrl, // Always set (never null)
         sourceUrl: finalUrl,
         status: 'READY',
         updatedAt: new Date()
@@ -426,7 +479,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
         excerpt,
         quoteHtml,
         quoteCharCount,
-        imageUrl: imageUrl ?? null,
+        imageUrl: imageUrl, // Always set (never null)
         sourceUrl: finalUrl,
         status: 'READY',
         traceId
@@ -435,6 +488,25 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
 
     const upsertDurationMs = Date.now() - upsertStartTime
     log('upsert', { traceId, ok: true, durationMs: upsertDurationMs, heroId: hero.id })
+
+    // Also update DiscoveredContent.hero JSON field for API compatibility
+    try {
+      await prisma.discoveredContent.update({
+        where: { id: contentId },
+        data: {
+          hero: {
+            url: imageUrl,
+            source: imageSource,
+            license: imageSource === 'ai' ? 'generated' : 'source',
+            updatedAt: new Date().toISOString()
+          } as any
+        }
+      })
+      log('upsert', { traceId, ok: true, note: 'Updated DiscoveredContent.hero JSON field' })
+    } catch (updateError) {
+      // Non-critical - Hero table is primary source
+      log('upsert', { traceId, ok: false, note: 'Failed to update DiscoveredContent.hero JSON', errorMessage: updateError instanceof Error ? updateError.message : 'Unknown' })
+    }
 
     return {
       ok: true,
@@ -452,6 +524,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
                      error.message?.includes('parse') ? 'PARSE_FAILURE' : 'UNKNOWN_ERROR'
 
     // Still create hero record with ERROR status for retry capability
+    // But ensure it has an imageUrl (use AI fallback or favicon)
     try {
       const content = await prisma.discoveredContent.findUnique({
         where: { id: contentId },
@@ -460,10 +533,52 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
 
       if (content) {
         const sourceUrl = content.canonicalUrl || content.sourceUrl || ''
+        
+        // Try to generate AI hero image as fallback even on error
+        let fallbackImageUrl: string | null = null
+        try {
+          const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://carrot-app.onrender.com'
+          const aiResponse = await fetch(`${baseUrl}/api/ai/generate-hero-image`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-key': process.env.INTERNAL_API_KEY || ''
+            },
+            body: JSON.stringify({
+              title: content.title,
+              description: content.title.substring(0, 200),
+              topic: 'research',
+              style: 'editorial'
+            }),
+            signal: AbortSignal.timeout(10000) // 10s timeout for error recovery
+          })
+          
+          if (aiResponse.ok) {
+            const aiResult = await aiResponse.json()
+            if (aiResult.success && aiResult.imageUrl) {
+              fallbackImageUrl = aiResult.imageUrl
+            }
+          }
+        } catch (aiError) {
+          // AI generation failed, will use favicon
+        }
+        
+        // Use favicon if AI generation failed
+        if (!fallbackImageUrl) {
+          try {
+            const domain = sourceUrl ? new URL(sourceUrl).hostname : 'example.com'
+            fallbackImageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
+          } catch {
+            fallbackImageUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(content.title.substring(0, 30))}`
+          }
+        }
+        
         await prisma.hero.upsert({
           where: { contentId },
           update: {
             title: content.title,
+            imageUrl: fallbackImageUrl, // Always set (never null)
+            sourceUrl, // Required field
             status: 'ERROR',
             errorCode,
             errorMessage: error.message?.substring(0, 500) || 'Unknown error',
@@ -473,6 +588,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
           create: {
             contentId,
             title: content.title,
+            imageUrl: fallbackImageUrl, // Always set (never null)
             sourceUrl, // Required field
             status: 'ERROR',
             errorCode,

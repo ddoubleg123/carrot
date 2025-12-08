@@ -88,7 +88,14 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   const handleSelect = (item: DiscoveryCardPayload) => {
-    setSelectedItem(item)
+    // If item has urlSlug, navigate to detail page; otherwise open modal
+    const metadata = (item as any).metadata
+    const urlSlug = metadata?.urlSlug || metadata?.contentUrl?.split('/').pop()
+    if (urlSlug) {
+      window.location.href = `/patch/${patchHandle}/content/${urlSlug}`
+    } else {
+      setSelectedItem(item)
+    }
   }
 
   const handleCloseModal = () => {

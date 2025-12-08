@@ -1841,22 +1841,103 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
     const canonicalUrl = canonicalizeUrlFast(url) || url
     const domain = getDomainFromUrl(canonicalUrl) || 'unknown'
 
+    // Get patch info for groupContext
+    const patchInfo = await prisma.patch.findUnique({
+      where: { id: patchId },
+      select: { title: true, handle: true }
+    })
+    const groupContext = patchInfo?.title || 'general'
+
+    // Call summarization API to get facts/quotes
+    let facts: any[] = []
+    let quotes: any[] = []
+    let summary = content.substring(0, 240)
+    let whyItMatters = ''
+
+    try {
+      const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://carrot-app.onrender.com'
+      const summarizeResponse = await fetch(`${baseUrl}/api/ai/summarize-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: content,
+          title: title,
+          url: url,
+          groupContext: groupContext,
+          temperature: 0.2
+        }),
+        signal: AbortSignal.timeout(30000) // 30s timeout
+      })
+
+      if (summarizeResponse.ok) {
+        const summarizeResult = await summarizeResponse.json()
+        summary = summarizeResult.summary || summary
+        whyItMatters = summarizeResult.summary || ''
+        
+        // Convert keyFacts to facts array format
+        if (Array.isArray(summarizeResult.keyFacts) && summarizeResult.keyFacts.length >= 3) {
+          facts = summarizeResult.keyFacts.slice(0, 6).map((fact: string, index: number) => ({
+            label: `Fact ${index + 1}`,
+            value: fact,
+            citation: url
+          }))
+        }
+        
+        // Convert notableQuotes to quotes array format
+        if (Array.isArray(summarizeResult.notableQuotes)) {
+          quotes = summarizeResult.notableQuotes.slice(0, 3).map((quote: any) => {
+            if (typeof quote === 'string') {
+              return {
+                text: quote,
+                citation: url
+              }
+            }
+            return {
+              text: quote.quote || '',
+              speaker: quote.attribution,
+              citation: quote.sourceUrl || url
+            }
+          }).filter((q: any) => q.text && q.text.length > 10)
+        }
+      }
+    } catch (summarizeError) {
+      console.warn(`[WikipediaProcessor] Summarization failed for ${title}, using fallbacks:`, summarizeError)
+      // Use fallback facts if summarization fails
+      const sentences = content.match(/[^.!?]+[.!?]+/g) || []
+      facts = sentences.slice(0, 3).map((sentence, index) => ({
+        label: `Fact ${index + 1}`,
+        value: sentence.trim(),
+        citation: url
+      })).filter(f => f.value.length > 20)
+    }
+
+    // Generate urlSlug for detail page
+    const urlSlug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 50)}-${Math.random().toString(36).substring(2, 8)}`
+
     try {
       const saved = await prisma.discoveredContent.create({
         data: {
           patchId,
           title,
-          summary: content.substring(0, 240),
-          whyItMatters: '',
+          summary: summary,
+          whyItMatters: whyItMatters || summary.substring(0, 150),
           sourceUrl: url,
           canonicalUrl,
           domain,
           category: 'article',
           relevanceScore: relevanceData?.relevanceScore ?? (relevanceData?.aiScore ? relevanceData.aiScore / 100 : 0.5),
           qualityScore: 0,
-          facts: [],
+          facts: facts.length > 0 ? facts as any : [],
+          quotes: quotes.length > 0 ? quotes as any : [],
           provenance: [url],
-          content: content
+          content: content,
+          metadata: {
+            urlSlug: urlSlug,
+            contentUrl: `/patch/${patchInfo?.handle || 'unknown'}/content/${urlSlug}`,
+            processedAt: new Date().toISOString()
+          } as any
         }
       })
 
