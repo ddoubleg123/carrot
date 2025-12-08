@@ -215,7 +215,7 @@ export function useDiscoveredItems(
       console.log('[useDiscoveredItems] API response data:', data)
       const rawItems = Array.isArray(data?.items) ? data.items : []
       console.log('[useDiscoveredItems] Raw items count:', rawItems.length)
-      console.log('[useDiscoveredItems] Sample items:', rawItems.slice(0, 2).map(item => ({
+      console.log('[useDiscoveredItems] Sample items:', rawItems.slice(0, 2).map((item: any) => ({
         id: item.id,
         title: item.title,
         hasEnrichedContent: !!item.enrichedContent,
@@ -230,7 +230,7 @@ export function useDiscoveredItems(
       
       console.log('[useDiscoveredItems] Mapped items count:', mappedItems.length)
       console.log('[useDiscoveredItems] Deduplicated items count:', dedupedItems.length)
-      console.log('[useDiscoveredItems] Sample mapped items:', dedupedItems.slice(0, 2).map(item => ({
+      console.log('[useDiscoveredItems] Sample mapped items:', dedupedItems.slice(0, 2).map((item: DiscoveredItem) => ({
         id: item.id,
         title: item.title,
         displayTitle: item.displayTitle,
