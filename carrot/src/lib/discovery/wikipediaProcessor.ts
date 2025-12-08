@@ -275,7 +275,7 @@ Return JSON:
 
 Scoring criteria:
 1. Is this an actual article? (not a library catalog, authority file, or metadata page)
-2. How directly does it relate to "${topic}"?
+2. How directly does it relate to "${topic}"? (CRITICAL: Must be directly about "${topic}", not just tangentially related)
 3. Does it contain valuable, substantive information about "${topic}"?
 4. What is the depth and quality of information?
 
@@ -284,7 +284,10 @@ Reject (score < 60) if:
 - It's an authority file or metadata page
 - It's just metadata with no narrative content
 - Content is too short or lacks substance
-- It's not actually about "${topic}"
+- It's not actually about "${topic}" (e.g., if topic is "Israel", reject content about Ukraine, Russia, or other unrelated topics)
+- It's only tangentially related (e.g., mentions "${topic}" in passing but is primarily about something else)
+
+IMPORTANT: Be strict. Content must be DIRECTLY about "${topic}" or highly relevant to understanding "${topic}". Generic encyclopedias, unrelated topics, or content that only mentions "${topic}" in passing should be rejected.
 
 Return ONLY valid JSON, no other text.`
 

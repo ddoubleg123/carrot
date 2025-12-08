@@ -1190,9 +1190,39 @@ Return ONLY valid JSON array, no other text.`
         }
       }
 
-      // Parse AI response
-      const cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
-      const scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
+      // Parse AI response with better error handling
+      let cleanResponse = response.replace(/```json/gi, '').replace(/```/g, '').trim()
+      
+      // Try to extract JSON array if response contains other text
+      const jsonMatch = cleanResponse.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[0]
+      }
+      
+      let scores: Array<{ index: number; score: number; reason?: string }> = []
+      try {
+        scores = JSON.parse(cleanResponse) as Array<{ index: number; score: number; reason?: string }>
+      } catch (parseError: any) {
+        // If JSON is incomplete, try to extract valid partial JSON
+        const positionMatch = parseError.message.match(/position (\d+)/)
+        const position = positionMatch ? parseInt(positionMatch[1]) : 0
+        
+        // Try to extract valid JSON objects from the response
+        const jsonObjects = cleanResponse.match(/\{[^}]*"index"[^}]*\}/g)
+        if (jsonObjects && jsonObjects.length > 0) {
+          try {
+            scores = jsonObjects.map(obj => JSON.parse(obj))
+            console.log(`[EngineV21] Recovered ${scores.length} scores from partial JSON`)
+          } catch {
+            // Fallback: return citations as-is with default scores
+            console.warn('[EngineV21] Could not recover JSON, using default scores')
+            return citations.map(c => ({ ...c, score: 50 }))
+          }
+        } else {
+          console.warn('[EngineV21] Could not recover JSON, using default scores')
+          return citations.map(c => ({ ...c, score: 50 }))
+        }
+      }
       
       // Apply scores to citations
       const scored = citations.map((citation, index) => {

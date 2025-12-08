@@ -340,7 +340,9 @@ export async function GET(
         description: summary150, // Alias for summary150
         metadata: {
           ...metadataRaw,
-          readingTime: enrichedContent.readingTime
+          readingTime: enrichedContent.readingTime,
+          // Ensure urlSlug is always included for navigation
+          urlSlug: metadataRaw?.urlSlug || undefined
         }
       }
     })
