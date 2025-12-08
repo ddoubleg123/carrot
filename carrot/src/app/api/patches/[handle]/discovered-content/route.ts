@@ -232,6 +232,20 @@ export async function GET(
       }
       
       const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
+      
+      // Generate urlSlug if missing (for existing content)
+      let urlSlug = metadataRaw?.urlSlug
+      if (!urlSlug) {
+        // Generate slug from title with fallback
+        const titleSlug = item.title
+          ? item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 50)
+          : 'content'
+        // Ensure we have a valid slug (title might be empty after processing)
+        const safeTitleSlug = titleSlug || 'content'
+        // Use first 8 chars of ID (CUIDs are 25 chars, so this is safe)
+        const idSuffix = item.id.substring(0, 8) || Math.random().toString(36).substring(2, 10)
+        urlSlug = `${safeTitleSlug}-${idSuffix}`
+      }
 
       const facts: DiscoveryFact[] = factsRaw.map((fact, index) => {
         if (typeof fact === 'string') {
@@ -341,8 +355,8 @@ export async function GET(
         metadata: {
           ...metadataRaw,
           readingTime: enrichedContent.readingTime,
-          // Ensure urlSlug is always included for navigation
-          urlSlug: metadataRaw?.urlSlug || undefined
+          // Always include urlSlug for navigation (generated above if missing)
+          urlSlug: urlSlug
         }
       }
     })

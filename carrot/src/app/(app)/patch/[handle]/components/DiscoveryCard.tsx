@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiscoveryCardPayload } from '@/types/discovery-card'
 import { ExternalLink, Share2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 
 interface DiscoveryCardProps {
   item: DiscoveryCardPayload
@@ -13,9 +13,14 @@ interface DiscoveryCardProps {
 
 export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
   // Check multiple sources for hero image: hero object, mediaAssets, or fallback
+  // mediaAssets.hero is a string URL, not an object
+  const mediaAssetsHero = (item as any).mediaAssets?.hero
   const heroUrl = item.hero?.url ?? 
-                  (item as any).mediaAssets?.hero ?? 
+                  (mediaAssetsHero && typeof mediaAssetsHero === 'string' ? mediaAssetsHero : null) ??
                   null
+  
+  // Track if hero image failed to load
+  const [heroImageError, setHeroImageError] = useState(false)
   const qualityBadge = useMemo(() => {
     if (item.qualityScore >= 85) return { label: 'High quality', className: 'bg-emerald-100 text-emerald-700' }
     if (item.qualityScore >= 70) return { label: 'Good quality', className: 'bg-blue-100 text-blue-700' }
@@ -100,12 +105,13 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
        )}
 
       <div className="relative aspect-[16/9] w-full overflow-hidden">
-        {heroUrl ? (
+        {heroUrl && !heroImageError ? (
           <img
             src={heroUrl}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            onError={() => setHeroImageError(true)}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-orange-500 px-6 text-center text-lg font-semibold text-white">
