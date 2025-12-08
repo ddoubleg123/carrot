@@ -56,6 +56,10 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
   const startTime = Date.now()
   log('fetch', { traceId, url: url.substring(0, 100), phase: 'start' })
 
+  // Normalize URL before fetching
+  const { normalizeUrlWithWWW } = await import('@/lib/utils/urlNormalization')
+  const normalizedUrl = normalizeUrlWithWWW(url)
+
   // Create AbortController for timeout (declare outside try for catch access)
   const controller = new AbortController()
   let timeoutId: NodeJS.Timeout | null = null
@@ -71,7 +75,7 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
     const userAgent = process.env.CRAWLER_USER_AGENT || 
       `CarrotCrawler/1.0 (+https://carrot-app.onrender.com; contact@carrot.app)`
     
-    const response = await resilientFetch(url, {
+    const response = await resilientFetch(normalizedUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent': userAgent,
@@ -88,14 +92,14 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
 
     if (!response.ok) {
       const errorCode = response.status >= 400 && response.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX'
-      log('fetch', { traceId, url, ok: false, httpStatus: response.status, durationMs, errorCode })
+      log('fetch', { traceId, url: normalizedUrl, ok: false, httpStatus: response.status, durationMs, errorCode })
       throw new Error(`HTTP ${response.status}`)
     }
 
     const html = await response.text()
-    const finalUrl = response.url || url
+    const finalUrl = response.url || normalizedUrl
 
-    log('fetch', { traceId, url, ok: true, httpStatus: response.status, durationMs, bytes: html.length })
+    log('fetch', { traceId, url: normalizedUrl, ok: true, httpStatus: response.status, durationMs, bytes: html.length })
     return { html, finalUrl }
   } catch (error: any) {
     if (timeoutId) {
@@ -106,7 +110,7 @@ async function fetchDeepLink(url: string, traceId: string): Promise<{ html: stri
                      error.message?.includes('401') || error.message?.includes('403') ? 'PAYWALL' :
                      error.message?.includes('404') ? 'HTTP_4XX' : 'FETCH_ERROR'
     
-    log('fetch', { traceId, url, ok: false, durationMs, errorCode, errorMessage: error.message?.substring(0, 200) })
+    log('fetch', { traceId, url: normalizedUrl, ok: false, durationMs, errorCode, errorMessage: error.message?.substring(0, 200) })
     throw error
   }
 }
@@ -374,9 +378,12 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
     let imageUrl: string | null = null
     try {
       const { pickImageFallback } = await import('./imageFallback')
+      const { normalizeUrlWithWWW } = await import('@/lib/utils/urlNormalization')
+      // Normalize URL before fetching images
+      const normalizedUrl = normalizeUrlWithWWW(finalUrl)
       const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : undefined
       const imageResult = await pickImageFallback({
-        url: finalUrl,
+        url: normalizedUrl,
         domain: domain || undefined,
         title: extracted.title,
         html

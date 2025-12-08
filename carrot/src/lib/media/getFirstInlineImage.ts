@@ -1,26 +1,43 @@
 import { InlineImageResult } from './hero-types'
+import { normalizeUrlWithWWW, generateUrlVariations } from '@/lib/utils/urlNormalization'
 
 /**
  * Extract first inline image from article content
  * Uses Readability for parsing, falls back to Playwright for blocked hosts
+ * Tries URL variations if primary URL fails
  */
 export async function getFirstInlineImage(url: string): Promise<InlineImageResult | null> {
-  try {
-    console.log('[getFirstInlineImage] Extracting inline image from:', url.substring(0, 50))
-    
-    // First try with regular fetch + Readability
-    const result = await tryWithReadability(url)
-    if (result) return result
+  // Normalize URL first
+  const normalizedUrl = normalizeUrlWithWWW(url)
+  const variations = generateUrlVariations(normalizedUrl)
+  
+  // Try each URL variation
+  for (const tryUrl of variations) {
+    try {
+      console.log('[getFirstInlineImage] Extracting inline image from:', tryUrl.substring(0, 50))
+      
+      // First try with regular fetch + Readability
+      const result = await tryWithReadability(tryUrl)
+      if (result) {
+        console.log('[getFirstInlineImage] ✅ Found image with URL variation:', tryUrl)
+        return result
+      }
 
-    // Fallback to Playwright for blocked hosts
-    const playwrightResult = await tryWithPlaywright(url)
-    if (playwrightResult) return playwrightResult
-
-    return null
-  } catch (error) {
-    console.warn('[getFirstInlineImage] Error:', error)
-    return null
+      // Fallback to Playwright for blocked hosts
+      const playwrightResult = await tryWithPlaywright(tryUrl)
+      if (playwrightResult) {
+        console.log('[getFirstInlineImage] ✅ Found image with Playwright:', tryUrl)
+        return playwrightResult
+      }
+    } catch (error) {
+      console.warn('[getFirstInlineImage] Error for', tryUrl, ':', error)
+      // Continue to next variation
+      continue
+    }
   }
+  
+  console.log('[getFirstInlineImage] ❌ No images found after trying all URL variations')
+  return null
 }
 
 /**

@@ -5,11 +5,13 @@
  */
 
 import { connectionPool } from './connectionPool';
+import { normalizeUrlWithWWW, generateUrlVariations } from '@/lib/utils/urlNormalization';
 
 interface HTTP1FetchOptions extends RequestInit {
   forceHTTP1?: boolean;
   maxRetries?: number;
   retryDelay?: number;
+  tryUrlVariations?: boolean; // Enable URL variation fallback
 }
 
 class HTTP1FetchManager {
@@ -191,6 +193,9 @@ class HTTP1FetchManager {
       url = baseUrl + url;
     }
 
+    // Normalize URL (add www if domain requires it)
+    url = normalizeUrlWithWWW(url);
+
     // Validate URL format
     try {
       new URL(url);
@@ -208,11 +213,12 @@ class HTTP1FetchManager {
       forceHTTP1 = true,
       maxRetries = this.maxRetries,
       retryDelay = this.baseRetryDelay,
+      tryUrlVariations = false,
       ...fetchOptions
     } = options;
 
     // Validate and normalize URL
-    const validatedUrl = this.validateUrl(url);
+    let validatedUrl = this.validateUrl(url);
     const urlKey = new URL(validatedUrl).origin;
     const currentRetries = this.retryCounts.get(urlKey) || 0;
 
@@ -255,6 +261,43 @@ class HTTP1FetchManager {
       // Check if we should retry
       if (currentRetries < maxRetries && this.isRetryableError(err)) {
         this.retryCounts.set(urlKey, currentRetries + 1);
+        
+        // If URL variations are enabled, try variations before retrying original
+        if (tryUrlVariations && currentRetries === 1) {
+          const variations = generateUrlVariations(validatedUrl);
+          console.log(`[HTTP1Fetch] Trying URL variations (${variations.length} total)...`);
+          
+          for (const variation of variations.slice(1)) { // Skip first (already tried)
+            try {
+              const testUrl = this.validateUrl(variation);
+              const testHeaders = this.isFirebaseStorage(testUrl) 
+                ? this.createFirebaseHeaders(fetchOptions.headers)
+                : this.createHTTP1Headers(fetchOptions.headers);
+              
+              const testResponse = await fetch(testUrl, {
+                ...fetchOptions,
+                headers: testHeaders,
+                credentials: 'same-origin',
+                mode: 'cors',
+                redirect: 'follow',
+                cache: 'no-store',
+                keepalive: true,
+                referrerPolicy: 'no-referrer',
+                integrity: undefined,
+                priority: 'low',
+              });
+              
+              if (testResponse.ok) {
+                console.log(`[HTTP1Fetch] ✅ URL variation succeeded: ${variation}`);
+                this.retryCounts.delete(urlKey);
+                return testResponse;
+              }
+            } catch (variationError) {
+              // Continue to next variation
+              continue;
+            }
+          }
+        }
         
         // Handle connection failures through connection pool
         const connectionHandled = await connectionPool.handleConnectionFailure(validatedUrl, err);

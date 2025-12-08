@@ -1,55 +1,70 @@
 import ogs from 'open-graph-scraper'
 import { OpenGraphResult } from './hero-types'
+import { normalizeUrlWithWWW, generateUrlVariations } from '@/lib/utils/urlNormalization'
 
 /**
  * Extract Open Graph or Twitter Card image from URL
  * Priority: og:image → twitter:image → og:image:secure_url
+ * Tries URL variations (with/without www) if primary URL fails
  */
 export async function getOpenGraphImage(url: string): Promise<OpenGraphResult | null> {
-  try {
-    console.log('[getOpenGraphImage] Fetching OG data for:', url.substring(0, 50))
-    
-    const options = {
-      url,
-      fetchOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
-        },
-        signal: AbortSignal.timeout(10000)
-      }
-    }
-
-    const { result } = await ogs(options)
-    
-    if (!result.success) {
-      console.log('[getOpenGraphImage] OG fetch failed:', result.error)
-      return null
-    }
-
-    // Priority order: og:image → twitter:image
-    const candidates = [
-      result.ogImage?.[0]?.url,
-      result.twitterImage?.[0]?.url
-    ].filter(Boolean) as string[]
-
-    for (const imageUrl of candidates) {
-      if (await isValidImageUrl(imageUrl)) {
-        console.log('[getOpenGraphImage] Found valid OG image:', imageUrl.substring(0, 50))
-        return {
-          url: imageUrl,
-          source: 'og',
-          width: result.ogImage?.[0]?.width,
-          height: result.ogImage?.[0]?.height
+  // Normalize URL first
+  const normalizedUrl = normalizeUrlWithWWW(url)
+  const variations = generateUrlVariations(normalizedUrl)
+  
+  // Try each URL variation
+  for (const tryUrl of variations) {
+    try {
+      console.log('[getOpenGraphImage] Fetching OG data for:', tryUrl.substring(0, 50))
+      
+      const options = {
+        url: tryUrl,
+        fetchOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
+          },
+          signal: AbortSignal.timeout(10000)
         }
       }
-    }
 
-    console.log('[getOpenGraphImage] No valid OG images found')
-    return null
-  } catch (error) {
-    console.warn('[getOpenGraphImage] Error:', error)
-    return null
+      const { result } = await ogs(options)
+    
+      if (!result.success) {
+        console.log('[getOpenGraphImage] OG fetch failed for', tryUrl, ':', result.error)
+        continue // Try next variation
+      }
+
+      // Priority order: og:image → twitter:image
+      const candidates = [
+        result.ogImage?.[0]?.url,
+        result.twitterImage?.[0]?.url
+      ].filter(Boolean) as string[]
+
+      for (const imageUrl of candidates) {
+        if (await isValidImageUrl(imageUrl)) {
+          console.log('[getOpenGraphImage] ✅ Found valid OG image:', imageUrl.substring(0, 50))
+          return {
+            url: imageUrl,
+            source: 'og',
+            width: result.ogImage?.[0]?.width,
+            height: result.ogImage?.[0]?.height
+          }
+        }
+      }
+
+      // If we got here, OG fetch succeeded but no valid images found
+      // Continue to try other variations in case they have images
+      continue
+    } catch (error) {
+      console.warn('[getOpenGraphImage] Error for', tryUrl, ':', error)
+      // Continue to next variation
+      continue
+    }
   }
+  
+  // All variations failed
+  console.log('[getOpenGraphImage] ❌ No valid OG images found after trying all URL variations')
+  return null
 }
 
 /**
