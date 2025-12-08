@@ -1451,39 +1451,13 @@ export async function processNextCitation(
       title: nextCitation.citationTitle
     }))
 
-    // Optional: Secondary validation using RelevanceEngine
-    let relevanceEngineResult: { score: number; isRelevant: boolean; reason?: string; matchedEntities: string[] } | null = null
-    try {
-      const { RelevanceEngine } = await import('./relevance')
-      const relevanceEngine = new RelevanceEngine()
-      await relevanceEngine.buildEntityProfile(options.patchHandle, options.patchName)
-      const domain = new URL(citationUrl).hostname.replace(/^www\./, '')
-      relevanceEngineResult = await relevanceEngine.checkRelevance(
-        options.patchHandle,
-        nextCitation.citationTitle || 'Untitled',
-        meaningfulContent,
-        domain
-      )
-      console.log(`[WikipediaProcessor] RelevanceEngine validation:`, {
-        score: relevanceEngineResult.score,
-        isRelevant: relevanceEngineResult.isRelevant,
-        matchedEntities: relevanceEngineResult.matchedEntities,
-        reason: relevanceEngineResult.reason
-      })
-    } catch (error) {
-      console.warn(`[WikipediaProcessor] RelevanceEngine validation failed (non-fatal):`, error)
-    }
-
-    // Final relevance decision: Primary check is DeepSeek score (>= 60 and isRelevant)
-    // Secondary check (optional): RelevanceEngine can override if it strongly disagrees
-    const finalIsRelevant = isRelevantFromDeepSeek && 
-      (!relevanceEngineResult || relevanceEngineResult.isRelevant || relevanceEngineResult.score >= 0.5)
+    // Final relevance decision: Trust DeepSeek as the primary and only scorer
+    // DeepSeek is an AI that understands context, relevance, and nuance
+    const finalIsRelevant = isRelevantFromDeepSeek
     
     console.log(`[WikipediaProcessor] Final relevance decision for "${nextCitation.citationTitle}":`, {
       deepSeekScore: aiPriorityScore,
       deepSeekRelevant: isRelevantFromDeepSeek,
-      relevanceEngineScore: relevanceEngineResult?.score,
-      relevanceEngineRelevant: relevanceEngineResult?.isRelevant,
       finalDecision: finalIsRelevant ? 'RELEVANT' : 'NOT RELEVANT'
     })
     
@@ -1502,7 +1476,6 @@ export async function processNextCitation(
           meaningfulContent,
           {
             aiScore: aiPriorityScore,
-            relevanceScore: relevanceEngineResult?.score ?? 0,
             isRelevant: true
           }
         ) || null
