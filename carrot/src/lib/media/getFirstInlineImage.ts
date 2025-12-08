@@ -46,7 +46,7 @@ export async function getFirstInlineImage(url: string): Promise<InlineImageResul
 async function tryWithReadability(url: string): Promise<InlineImageResult | null> {
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    const timeoutId = setTimeout(() => controller.abort(), 8000) // Reduced from 10s to fail faster
     
     const response = await fetch(url, {
       signal: controller.signal,

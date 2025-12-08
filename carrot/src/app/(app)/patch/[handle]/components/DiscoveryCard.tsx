@@ -12,7 +12,10 @@ interface DiscoveryCardProps {
 }
 
 export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
-  const heroUrl = item.hero?.url ?? null
+  // Check multiple sources for hero image: hero object, mediaAssets, or fallback
+  const heroUrl = item.hero?.url ?? 
+                  (item as any).mediaAssets?.hero ?? 
+                  null
   const qualityBadge = useMemo(() => {
     if (item.qualityScore >= 85) return { label: 'High quality', className: 'bg-emerald-100 text-emerald-700' }
     if (item.qualityScore >= 70) return { label: 'Good quality', className: 'bg-blue-100 text-blue-700' }

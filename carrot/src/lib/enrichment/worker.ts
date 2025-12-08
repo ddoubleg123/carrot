@@ -429,16 +429,6 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
           log('image', { traceId, ok: false, source: 'ai', errorCode: 'AI_GENERATION_FAILED', errorMessage: aiError.message?.substring(0, 200) })
         }
         
-        // Ultimate fallback: domain favicon
-        if (!imageUrl) {
-          try {
-            const domain = extracted.canonicalUrl ? new URL(extracted.canonicalUrl).hostname : 'example.com'
-            imageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
-            imageSource = 'favicon'
-          } catch {
-            imageUrl = null // Hero can exist without image
-          }
-        }
       }
     }
 

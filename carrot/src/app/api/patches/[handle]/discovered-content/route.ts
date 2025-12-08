@@ -198,29 +198,37 @@ export async function GET(
       const heroRelation = (item as any).heroRecord // Hero relation from include
       const heroJson = parseJson<DiscoveryHero | null>(item.hero, null) // JSON hero field
       
-      if (heroRelation && heroRelation.status === 'READY') {
+      if (heroRelation && heroRelation.status === 'READY' && heroRelation.imageUrl) {
         // Use Hero table data (preferred)
         // Detect source from imageUrl: wikimedia URLs contain 'wikimedia.org' or 'upload.wikimedia.org'
-        const imageUrl = heroRelation.imageUrl || ''
+        const imageUrl = heroRelation.imageUrl
         let heroSource: 'ai' | 'wikimedia' | 'skeleton' = 'skeleton'
         
-        if (imageUrl) {
-          const urlLower = imageUrl.toLowerCase()
-          if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
-            heroSource = 'wikimedia'
-          } else {
-            // Assume AI-generated or other enriched images
-            heroSource = 'ai'
-          }
+        const urlLower = imageUrl.toLowerCase()
+        if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
+          heroSource = 'wikimedia'
+        } else if (urlLower.includes('via.placeholder.com') || urlLower.includes('placeholder')) {
+          heroSource = 'skeleton'
+        } else {
+          // Assume AI-generated or other enriched images
+          heroSource = 'ai'
         }
         
         heroRaw = {
           url: imageUrl,
           source: heroSource
         }
-      } else if (heroJson) {
+      } else if (heroJson && heroJson.url) {
         // Fallback to JSON hero field for backward compatibility
         heroRaw = heroJson
+      } else {
+        // Ultimate fallback: generate placeholder hero image
+        const domain = item.domain || (primaryUrl ? new URL(primaryUrl).hostname.replace('www.', '') : 'unknown')
+        const placeholderUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(item.title.substring(0, 30))}`
+        heroRaw = {
+          url: placeholderUrl,
+          source: 'skeleton'
+        }
       }
       
       const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
@@ -283,12 +291,12 @@ export async function GET(
         readingTime: Math.max(1, Math.floor((item.textContent?.length || 1000) / 200))
       }
       
-      // Build mediaAssets object for frontend compatibility
-      const mediaAssets = heroRaw ? {
+      // Build mediaAssets object for frontend compatibility - always include hero (with fallback)
+      const mediaAssets = {
         hero: heroRaw.url,
         source: heroRaw.source,
-        license: heroRaw.source === 'ai' ? 'generated' : 'fair-use'
-      } : undefined
+        license: heroRaw.source === 'ai' ? 'generated' : (heroRaw.source === 'wikimedia' ? 'fair-use' : 'generated')
+      }
       
       // Determine status - use isUseful to determine if content is ready
       const status = item.isUseful !== false ? 'ready' : 'pending_audit'

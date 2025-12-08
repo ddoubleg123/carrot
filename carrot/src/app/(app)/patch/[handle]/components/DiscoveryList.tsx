@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Loader2, Plus, Search } from 'lucide-react'
 import { DiscoveryCard } from './DiscoveryCard'
@@ -18,6 +18,7 @@ interface DiscoveryListProps {
 const INITIAL_BATCH = 6
 
 export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
+  const router = useRouter()
   const [visibleItemsCount, setVisibleItemsCount] = useState(INITIAL_BATCH)
   const [selectedItem, setSelectedItem] = useState<DiscoveryCardPayload | null>(null)
   const [healthData, setHealthData] = useState<any>(null)
@@ -88,11 +89,15 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   const handleSelect = (item: DiscoveryCardPayload) => {
+    // Try to extract urlSlug from item (may be in metadata or other fields)
+    const itemAny = item as any
+    const urlSlug = itemAny.metadata?.urlSlug || 
+                    itemAny.urlSlug || 
+                    (itemAny.metadata?.contentUrl?.split('/').pop())
+    
     // If item has urlSlug, navigate to detail page; otherwise open modal
-    const metadata = (item as any).metadata
-    const urlSlug = metadata?.urlSlug || metadata?.contentUrl?.split('/').pop()
     if (urlSlug) {
-      window.location.href = `/patch/${patchHandle}/content/${urlSlug}`
+      router.push(`/patch/${patchHandle}/content/${urlSlug}`)
     } else {
       setSelectedItem(item)
     }

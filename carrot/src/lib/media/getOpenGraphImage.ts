@@ -23,7 +23,7 @@ export async function getOpenGraphImage(url: string): Promise<OpenGraphResult | 
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0; +https://carrot.app/bot)'
           },
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(8000) // Reduced from 10s to fail faster
         }
       }
 

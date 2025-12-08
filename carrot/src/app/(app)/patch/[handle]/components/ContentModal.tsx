@@ -139,27 +139,33 @@ export default function ContentModal({ item, isOpen, onClose }: ContentModalProp
                     <BookOpen className="h-4 w-4" />
                     Facts &amp; Receipts
                   </div>
-                  <ul className="space-y-3">
-                    {item.facts.map((fact) => (
-                      <li
-                        key={`${item.id}-${fact.label}`}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
-                      >
-                        <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {fact.label}
-                        </span>
-                        <span>{fact.value}</span>
-                        <a
-                          href={fact.citation}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-2 block text-xs font-semibold text-blue-600 underline"
+                  {item.facts && Array.isArray(item.facts) && item.facts.length > 0 ? (
+                    <ul className="space-y-3">
+                      {item.facts.map((fact) => (
+                        <li
+                          key={`${item.id}-${fact.label || fact.value}`}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
                         >
-                          Citation
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
+                          <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {fact.label || 'Fact'}
+                          </span>
+                          <span>{fact.value}</span>
+                          {fact.citation && (
+                            <a
+                              href={fact.citation}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 block text-xs font-semibold text-blue-600 underline"
+                            >
+                              Citation
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-500 italic">No facts available for this content.</p>
+                  )}
                 </section>
 
                 {item.quotes.length > 0 && (
