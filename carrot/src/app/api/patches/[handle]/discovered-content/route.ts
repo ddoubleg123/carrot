@@ -168,6 +168,9 @@ export async function GET(
       filteredOut: allContent.length - filteredContent.length
     })
     
+    // Collect updates to perform after mapping
+    const urlSlugUpdates: Array<{ id: string; urlSlug: string; metadata: any }> = []
+    
     let discoveredContent: DiscoveryCardPayload[] = filteredContent.map((item) => {
       let domain = 'unknown'
       const primaryUrl = item.canonicalUrl || item.sourceUrl || ''
@@ -246,22 +249,12 @@ export async function GET(
         const idSuffix = item.id.substring(0, 8) || Math.random().toString(36).substring(2, 10)
         urlSlug = `${safeTitleSlug}-${idSuffix}`
         
-        // Save the generated urlSlug back to the database so it can be queried
-        try {
-          await prisma.discoveredContent.update({
-            where: { id: item.id },
-            data: {
-              metadata: {
-                ...(metadataRaw || {}),
-                urlSlug: urlSlug
-              }
-            }
-          })
-          console.log(`[Discovered Content] Generated and saved urlSlug for content "${item.title}": ${urlSlug}`)
-        } catch (error) {
-          console.warn(`[Discovered Content] Failed to save urlSlug for content "${item.id}":`, error)
-          // Continue anyway - urlSlug will be in the response even if save failed
-        }
+        // Queue the update to perform after mapping (can't await in map callback)
+        urlSlugUpdates.push({
+          id: item.id,
+          urlSlug: urlSlug,
+          metadata: metadataRaw || {}
+        })
       }
 
       const facts: DiscoveryFact[] = factsRaw.map((fact, index) => {
@@ -377,6 +370,31 @@ export async function GET(
         }
       }
     })
+
+    // Perform urlSlug updates after mapping (can't await in map callback)
+    if (urlSlugUpdates.length > 0) {
+      // Fire and forget - don't block the response
+      Promise.all(
+        urlSlugUpdates.map(async (update) => {
+          try {
+            await prisma.discoveredContent.update({
+              where: { id: update.id },
+              data: {
+                metadata: {
+                  ...update.metadata,
+                  urlSlug: update.urlSlug
+                }
+              }
+            })
+            console.log(`[Discovered Content] Generated and saved urlSlug for content ID: ${update.id}`)
+          } catch (error) {
+            console.warn(`[Discovered Content] Failed to save urlSlug for content "${update.id}":`, error)
+          }
+        })
+      ).catch((error) => {
+        console.warn('[Discovered Content] Error batch updating urlSlugs:', error)
+      })
+    }
 
     // Debug: Log before verification
     const beforeVerificationCount = discoveredContent.length
