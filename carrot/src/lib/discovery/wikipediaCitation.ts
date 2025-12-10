@@ -283,18 +283,15 @@ export async function getNextCitationToProcess(
     })
   }
 
-  // Step 3: If still no citations, look for high-scoring denied citations that might have been incorrectly denied
-  // These are citations that scored >= 60 (high relevance) but were still denied - likely a bug
-  // CRITICAL FIX: Remove 30-day requirement - if we just fixed the scoring logic, we should reprocess immediately
-  // Prioritize highest scores first, regardless of when they were last scanned
+  // Step 3: If still no citations, use audit system to find citations that should be reprocessed
+  // Audit system identifies anomalies (e.g., high AI score but denied) rather than time-based rules
   if (!citation) {
-    citation = await prisma.wikipediaCitation.findFirst({
+    // First, get all denied citations that match basic criteria for audit
+    const deniedCandidates = await prisma.wikipediaCitation.findMany({
       where: {
         monitoring: { patchId },
         verificationStatus: { in: ['pending', 'verified'] },
-        relevanceDecision: 'denied', // Was denied but might be incorrectly denied
-        aiPriorityScore: { gte: 60 }, // High score but denied - likely a bug
-        // Allow already-scanned citations for reprocessing (removed 30-day requirement)
+        relevanceDecision: 'denied',
         scanStatus: { in: ['not_scanned', 'scanning', 'scanned'] },
         NOT: [
           { citationUrl: { startsWith: './' } },
@@ -304,12 +301,17 @@ export async function getNextCitationToProcess(
           { citationUrl: { contains: 'wikidata.org' } }
         ]
       },
-      orderBy: [
-        { aiPriorityScore: { sort: 'desc', nulls: 'last' } }, // Highest scores first
-        { lastScannedAt: { sort: 'asc', nulls: 'last' } }, // Oldest scans first (but not required)
-        { createdAt: 'asc' } // Fallback to createdAt if lastScannedAt is null
-      ],
-      include: {
+      select: {
+        id: true,
+        citationUrl: true,
+        citationTitle: true,
+        aiPriorityScore: true,
+        relevanceDecision: true,
+        verificationStatus: true,
+        scanStatus: true,
+        contentText: true,
+        lastScannedAt: true,
+        createdAt: true,
         monitoring: {
           select: {
             id: true,
@@ -317,19 +319,50 @@ export async function getNextCitationToProcess(
             status: true
           }
         }
-      }
+      },
+      // Get a reasonable batch to audit (prioritize high scores first)
+      orderBy: [
+        { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
+        { lastScannedAt: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'asc' }
+      ],
+      take: 100 // Audit up to 100 candidates
     })
+
+    // Audit each candidate and find the best one to reprocess
+    const { auditCitationForReprocessing } = await import('./citationAudit')
     
-    if (citation) {
-      console.log(`[WikipediaCitation] Found high-scoring denied citation for reprocessing: "${citation.citationTitle}" (score: ${citation.aiPriorityScore}, denied but score >= 60)`)
+    let bestCandidate: typeof deniedCandidates[0] | null = null
+    let bestAuditScore = 0
+
+    for (const candidate of deniedCandidates) {
+      const auditResult = auditCitationForReprocessing({
+        aiPriorityScore: candidate.aiPriorityScore,
+        relevanceDecision: candidate.relevanceDecision,
+        verificationStatus: candidate.verificationStatus,
+        scanStatus: candidate.scanStatus,
+        contentText: candidate.contentText,
+        lastScannedAt: candidate.lastScannedAt,
+        createdAt: candidate.createdAt,
+        citationUrl: candidate.citationUrl
+      })
+
+      if (auditResult.shouldReprocess && auditResult.auditScore > bestAuditScore) {
+        bestCandidate = candidate
+        bestAuditScore = auditResult.auditScore
+      }
+    }
+
+    if (bestCandidate) {
+      console.log(`[WikipediaCitation] Found citation for reprocessing via audit: "${bestCandidate.citationTitle}" (audit score: ${bestAuditScore.toFixed(1)})`)
       // Reset scanStatus and relevanceDecision to allow reprocessing
       await prisma.wikipediaCitation.update({
-        where: { id: citation.id },
+        where: { id: bestCandidate.id },
         data: { scanStatus: 'not_scanned', relevanceDecision: null }
       })
       // Refetch to get updated values
       const updated = await prisma.wikipediaCitation.findUnique({
-        where: { id: citation.id },
+        where: { id: bestCandidate.id },
         include: {
           monitoring: {
             select: {
