@@ -341,9 +341,23 @@ Return ONLY valid JSON, no other text.`
     // Only reject if BOTH fail AND content is clearly metadata
     const isActuallyAnArticle = isActualArticleFromAI || isActualArticleFromContent
     
+    // Determine relevance (must be actual article AND relevant)
+    const RELEVANCE_THRESHOLD = 60
+    
+    // CRITICAL FIX: If AI gives a high score (>= 60) and says isRelevant: true,
+    // trust the AI even if our local isActualArticle check fails.
+    // The AI has better context understanding than our simple heuristics.
+    const isRelevantFromAI = result.isRelevant ?? (score >= RELEVANCE_THRESHOLD)
+    const hasHighAIScore = score >= RELEVANCE_THRESHOLD
+    
+    // If AI says it's relevant with high score, trust it even if local check fails
+    // Only require isActuallyAnArticle if AI score is low or AI explicitly says not relevant
+    const shouldTrustAI = hasHighAIScore && isRelevantFromAI && (isActualArticleFromAI || contentText.length >= 2000)
+    
     // Only reject if AI explicitly says it's NOT an article AND our check also fails
     // AND content is clearly a catalog/metadata page
-    if (!isActuallyAnArticle && result.isActualArticle === false) {
+    // BUT: If AI gives high score and says relevant, trust it
+    if (!shouldTrustAI && !isActuallyAnArticle && result.isActualArticle === false) {
       const paragraphCount = (contentText.match(/\n\n/g) || []).length + 1
       const textBytes = Buffer.byteLength(contentText, 'utf8')
       const sentenceCount = (contentText.match(/[.!?]\s+[A-Z]/g) || []).length
@@ -372,14 +386,13 @@ Return ONLY valid JSON, no other text.`
       }
     }
     
-    // Determine relevance (must be actual article AND relevant)
-    const RELEVANCE_THRESHOLD = 60
-    const isRelevant = result.isRelevant ?? (score >= RELEVANCE_THRESHOLD)
+    // Final decision: Trust AI if it has high confidence, otherwise require both checks
+    const finalIsRelevant = shouldTrustAI || (isRelevantFromAI && isActuallyAnArticle)
     
     return {
       score,
-      isRelevant: isRelevant && isActuallyAnArticle, // Must be both relevant AND an article
-      reason: result.reason || `Scored ${score}/100${!isActuallyAnArticle ? ' (not an article)' : ''}`
+      isRelevant: finalIsRelevant,
+      reason: result.reason || `Scored ${score}/100${!isActuallyAnArticle && !shouldTrustAI ? ' (not an article)' : ''}`
     }
   } catch (error) {
     console.warn('[WikipediaProcessor] Content scoring failed, using default:', error)

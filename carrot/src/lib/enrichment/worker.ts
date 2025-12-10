@@ -376,7 +376,7 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
 
     // Attempt image with resilient fallback chain (never fails)
     let imageUrl: string | null = null
-    let imageSource: 'og' | 'article' | 'wikipedia' | 'favicon' | 'ai' | 'placeholder' = 'placeholder'
+    let imageSource: 'og' | 'article' | 'wikipedia' | 'favicon' | 'ai' | 'wikimedia' | 'placeholder' = 'placeholder'
     try {
       const { pickImageFallback } = await import('./imageFallback')
       const { normalizeUrlWithWWW } = await import('@/lib/utils/urlNormalization')
@@ -427,6 +427,54 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
           }
         } catch (aiError: any) {
           log('image', { traceId, ok: false, source: 'ai', errorCode: 'AI_GENERATION_FAILED', errorMessage: aiError.message?.substring(0, 200) })
+        }
+        
+        // If AI failed or returned no image, try Wikimedia Commons search
+        if (!imageUrl) {
+          try {
+            log('image', { traceId, phase: 'wikimedia_fallback', note: 'Attempting Wikimedia Commons search' })
+            const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://carrot-app.onrender.com'
+            
+            // Extract search terms from title (remove common words, use first 2-3 meaningful words)
+            const searchTerms = extracted.title
+              .split(/\s+/)
+              .filter(word => word.length > 3 && !['the', 'and', 'for', 'with', 'from', 'about'].includes(word.toLowerCase()))
+              .slice(0, 3)
+              .join(' ')
+            
+            const wikimediaResponse = await fetch(`${baseUrl}/api/media/wikimedia-search`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-internal-key': process.env.INTERNAL_API_KEY || ''
+              },
+              body: JSON.stringify({
+                query: searchTerms || extracted.title.substring(0, 50),
+                limit: 5
+              }),
+              signal: AbortSignal.timeout(10000) // 10s timeout for Wikimedia search
+            })
+            
+            if (wikimediaResponse.ok) {
+              const wikimediaData = await wikimediaResponse.json()
+              if (wikimediaData.images && wikimediaData.images.length > 0) {
+                // Use the first image - API returns actual image URL
+                const firstImage = wikimediaData.images[0]
+                if (firstImage.url) {
+                  imageUrl = firstImage.url
+                  imageSource = 'wikimedia'
+                  log('image', { traceId, ok: true, source: 'wikimedia', url: imageUrl.substring(0, 100), title: firstImage.title })
+                } else if (firstImage.thumbnail) {
+                  // Fallback to thumbnail if url not available
+                  imageUrl = firstImage.thumbnail
+                  imageSource = 'wikimedia'
+                  log('image', { traceId, ok: true, source: 'wikimedia', url: imageUrl.substring(0, 100), title: firstImage.title, note: 'using thumbnail' })
+                }
+              }
+            }
+          } catch (wikimediaError: any) {
+            log('image', { traceId, ok: false, source: 'wikimedia', errorCode: 'WIKIMEDIA_SEARCH_FAILED', errorMessage: wikimediaError.message?.substring(0, 200) })
+          }
         }
         
       }
