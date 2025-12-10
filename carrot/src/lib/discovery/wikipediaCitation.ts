@@ -283,6 +283,135 @@ export async function getNextCitationToProcess(
     })
   }
 
+  // Step 3: If still no citations, look for high-scoring denied citations that might have been incorrectly denied
+  // These are citations that scored >= 60 (high relevance) but were still denied - likely a bug
+  if (!citation) {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    // Find citations that were denied but have high scores - these might be incorrectly denied
+    // Use OR to handle citations without lastScannedAt (use createdAt instead)
+    citation = await prisma.wikipediaCitation.findFirst({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: { in: ['pending', 'verified'] },
+        relevanceDecision: 'denied', // Was denied but might be incorrectly denied
+        aiPriorityScore: { gte: 60 }, // High score but denied - likely a bug
+        OR: [
+          { lastScannedAt: { lt: thirtyDaysAgo } }, // Processed more than 30 days ago
+          { 
+            lastScannedAt: null,
+            createdAt: { lt: thirtyDaysAgo } // If never scanned, use createdAt (processed >30 days ago)
+          }
+        ],
+        // Allow already-scanned citations for reprocessing
+        scanStatus: { in: ['not_scanned', 'scanning', 'scanned'] },
+        NOT: [
+          { citationUrl: { startsWith: './' } },
+          { citationUrl: { startsWith: '/wiki/' } },
+          { citationUrl: { contains: 'wikipedia.org' } },
+          { citationUrl: { contains: 'wikimedia.org' } },
+          { citationUrl: { contains: 'wikidata.org' } }
+        ]
+      },
+      orderBy: [
+        { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
+        { lastScannedAt: { sort: 'asc', nulls: 'last' } }, // Oldest first (most likely to benefit from improved logic)
+        { createdAt: 'asc' } // Fallback to createdAt if lastScannedAt is null
+      ],
+      include: {
+        monitoring: {
+          select: {
+            id: true,
+            wikipediaTitle: true,
+            status: true
+          }
+        }
+      }
+    })
+    
+    if (citation) {
+      console.log(`[WikipediaCitation] Found high-scoring denied citation for reprocessing: "${citation.citationTitle}" (score: ${citation.aiPriorityScore}, denied but score >= 60)`)
+      // Reset scanStatus and relevanceDecision to allow reprocessing
+      await prisma.wikipediaCitation.update({
+        where: { id: citation.id },
+        data: { scanStatus: 'not_scanned', relevanceDecision: null }
+      })
+      // Refetch to get updated values
+      const updated = await prisma.wikipediaCitation.findUnique({
+        where: { id: citation.id },
+        include: {
+          monitoring: {
+            select: {
+              id: true,
+              wikipediaTitle: true,
+              status: true
+            }
+          }
+        }
+      })
+      if (updated) citation = updated
+    }
+  }
+
+  // Step 4: If still no citations, look for citations marked as "saved" but save failed (savedContentId is null)
+  // These are citations that were marked as saved but the actual save to DiscoveredContent failed
+  if (!citation) {
+    citation = await prisma.wikipediaCitation.findFirst({
+      where: {
+        monitoring: { patchId },
+        verificationStatus: { in: ['pending', 'verified'] },
+        relevanceDecision: 'saved', // Marked as saved
+        savedContentId: null, // But save actually failed
+        // Allow already-scanned citations for reprocessing
+        scanStatus: { in: ['not_scanned', 'scanning', 'scanned'] },
+        NOT: [
+          { citationUrl: { startsWith: './' } },
+          { citationUrl: { startsWith: '/wiki/' } },
+          { citationUrl: { contains: 'wikipedia.org' } },
+          { citationUrl: { contains: 'wikimedia.org' } },
+          { citationUrl: { contains: 'wikidata.org' } }
+        ]
+      },
+      orderBy: [
+        { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
+        { lastScannedAt: 'asc' }
+      ],
+      include: {
+        monitoring: {
+          select: {
+            id: true,
+            wikipediaTitle: true,
+            status: true
+          }
+        }
+      }
+    })
+    
+    if (citation) {
+      console.log(`[WikipediaCitation] Found citation with failed save for reprocessing: "${citation.citationTitle}" (marked as saved but savedContentId is null)`)
+      // Reset scanStatus and relevanceDecision to allow reprocessing
+      await prisma.wikipediaCitation.update({
+        where: { id: citation.id },
+        data: { scanStatus: 'not_scanned', relevanceDecision: null }
+      })
+      // Refetch to get updated values
+      const updated = await prisma.wikipediaCitation.findUnique({
+        where: { id: citation.id },
+        include: {
+          monitoring: {
+            select: {
+              id: true,
+              wikipediaTitle: true,
+              status: true
+            }
+          }
+        }
+      })
+      if (updated) citation = updated
+    }
+  }
+
   if (!citation) {
     // Enhanced diagnostic logging to understand why no citations are found
     const totalCitations = await prisma.wikipediaCitation.count({
@@ -364,6 +493,30 @@ export async function getNextCitationToProcess(
         console.log(`  ℹ️  All citations have been scanned`)
       } else if (withRelevanceDecision === totalCitations) {
         console.log(`  ℹ️  All citations have a relevance decision`)
+        
+        // Check for reprocessing candidates
+        const highScoringDenied = await prisma.wikipediaCitation.count({
+          where: {
+            monitoring: { patchId },
+            relevanceDecision: 'denied',
+            aiPriorityScore: { gte: 60 },
+            lastScannedAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // 30 days ago
+          }
+        })
+        
+        const failedSaves = await prisma.wikipediaCitation.count({
+          where: {
+            monitoring: { patchId },
+            relevanceDecision: 'saved',
+            savedContentId: null
+          }
+        })
+        
+        if (highScoringDenied > 0 || failedSaves > 0) {
+          console.log(`  🔄 Reprocessing candidates available:`)
+          console.log(`    - High-scoring denied (score >= 60, processed >30 days ago): ${highScoringDenied}`)
+          console.log(`    - Failed saves (marked saved but savedContentId is null): ${failedSaves}`)
+        }
       } else {
         console.log(`  ⚠️  Some citations may be in unexpected states`)
       }

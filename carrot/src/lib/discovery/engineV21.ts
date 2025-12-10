@@ -1136,9 +1136,17 @@ export class DiscoveryEngineV21 {
     }
 
     try {
-      // Get topic/entity info for context
-      const topic = this.options.patchHandle || 'Chicago Bulls'
-      const aliases = ['Michael Jordan', 'Chicago Bulls', 'basketball', 'NBA']
+      // Get topic/entity info for context - use patch name and handle
+      const topic = this.options.patchName || this.options.patchHandle || 'unknown'
+      // Generate aliases from patch name and handle (fallback to empty array if not available)
+      // This prevents hardcoded Bulls aliases from being used for other patches
+      const aliases: string[] = []
+      if (this.options.patchName && this.options.patchName !== topic) {
+        aliases.push(this.options.patchName)
+      }
+      if (this.options.patchHandle && this.options.patchHandle !== topic) {
+        aliases.push(this.options.patchHandle)
+      }
       
       // Build prompt for citation prioritization
       const citationsText = citations.map((c, i) => 
