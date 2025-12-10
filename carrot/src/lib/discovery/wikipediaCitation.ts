@@ -285,26 +285,16 @@ export async function getNextCitationToProcess(
 
   // Step 3: If still no citations, look for high-scoring denied citations that might have been incorrectly denied
   // These are citations that scored >= 60 (high relevance) but were still denied - likely a bug
+  // CRITICAL FIX: Remove 30-day requirement - if we just fixed the scoring logic, we should reprocess immediately
+  // Prioritize highest scores first, regardless of when they were last scanned
   if (!citation) {
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    
-    // Find citations that were denied but have high scores - these might be incorrectly denied
-    // Use OR to handle citations without lastScannedAt (use createdAt instead)
     citation = await prisma.wikipediaCitation.findFirst({
       where: {
         monitoring: { patchId },
         verificationStatus: { in: ['pending', 'verified'] },
         relevanceDecision: 'denied', // Was denied but might be incorrectly denied
         aiPriorityScore: { gte: 60 }, // High score but denied - likely a bug
-        OR: [
-          { lastScannedAt: { lt: thirtyDaysAgo } }, // Processed more than 30 days ago
-          { 
-            lastScannedAt: null,
-            createdAt: { lt: thirtyDaysAgo } // If never scanned, use createdAt (processed >30 days ago)
-          }
-        ],
-        // Allow already-scanned citations for reprocessing
+        // Allow already-scanned citations for reprocessing (removed 30-day requirement)
         scanStatus: { in: ['not_scanned', 'scanning', 'scanned'] },
         NOT: [
           { citationUrl: { startsWith: './' } },
@@ -315,8 +305,8 @@ export async function getNextCitationToProcess(
         ]
       },
       orderBy: [
-        { aiPriorityScore: { sort: 'desc', nulls: 'last' } },
-        { lastScannedAt: { sort: 'asc', nulls: 'last' } }, // Oldest first (most likely to benefit from improved logic)
+        { aiPriorityScore: { sort: 'desc', nulls: 'last' } }, // Highest scores first
+        { lastScannedAt: { sort: 'asc', nulls: 'last' } }, // Oldest scans first (but not required)
         { createdAt: 'asc' } // Fallback to createdAt if lastScannedAt is null
       ],
       include: {
