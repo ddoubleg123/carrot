@@ -6,10 +6,10 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { handle: string } }
+  { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
-    const handle = params.handle
+    const { handle } = await params
 
     // Find the patch
     const patch = await prisma.patch.findFirst({
