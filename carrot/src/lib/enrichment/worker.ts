@@ -461,14 +461,16 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
                 // Use the first image - API returns actual image URL
                 const firstImage = wikimediaData.images[0]
                 if (firstImage.url) {
-                  imageUrl = firstImage.url
+                  const url = firstImage.url
+                  imageUrl = url
                   imageSource = 'wikimedia'
-                  log('image', { traceId, ok: true, source: 'wikimedia', url: imageUrl.substring(0, 100), title: firstImage.title })
+                  log('image', { traceId, ok: true, source: 'wikimedia', url: url.substring(0, 100), title: firstImage.title })
                 } else if (firstImage.thumbnail) {
                   // Fallback to thumbnail if url not available
-                  imageUrl = firstImage.thumbnail
+                  const thumbnail = firstImage.thumbnail
+                  imageUrl = thumbnail
                   imageSource = 'wikimedia'
-                  log('image', { traceId, ok: true, source: 'wikimedia', url: imageUrl.substring(0, 100), title: firstImage.title, note: 'using thumbnail' })
+                  log('image', { traceId, ok: true, source: 'wikimedia', url: thumbnail.substring(0, 100), title: firstImage.title, note: 'using thumbnail' })
                 }
               }
             }
