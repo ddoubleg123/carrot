@@ -245,6 +245,23 @@ export async function GET(
         // Use first 8 chars of ID (CUIDs are 25 chars, so this is safe)
         const idSuffix = item.id.substring(0, 8) || Math.random().toString(36).substring(2, 10)
         urlSlug = `${safeTitleSlug}-${idSuffix}`
+        
+        // Save the generated urlSlug back to the database so it can be queried
+        try {
+          await prisma.discoveredContent.update({
+            where: { id: item.id },
+            data: {
+              metadata: {
+                ...(metadataRaw || {}),
+                urlSlug: urlSlug
+              }
+            }
+          })
+          console.log(`[Discovered Content] Generated and saved urlSlug for content "${item.title}": ${urlSlug}`)
+        } catch (error) {
+          console.warn(`[Discovered Content] Failed to save urlSlug for content "${item.id}":`, error)
+          // Continue anyway - urlSlug will be in the response even if save failed
+        }
       }
 
       const facts: DiscoveryFact[] = factsRaw.map((fact, index) => {

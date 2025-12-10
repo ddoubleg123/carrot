@@ -26,7 +26,8 @@ export default async function ContentPage({ params }: ContentPageProps) {
   }
 
   // Find content directly by slug using JSON query
-  const content = await prisma.discoveredContent.findFirst({
+  // Try Prisma JSON path query first
+  let content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
       metadata: {
@@ -62,6 +63,60 @@ export default async function ContentPage({ params }: ContentPageProps) {
       }
     }
   });
+
+  // Fallback: If JSON query fails, fetch all content and filter in memory
+  // This handles cases where Prisma JSON queries don't work or metadata structure differs
+  if (!content) {
+    console.warn(`[ContentPage] JSON query failed for slug "${slug}", trying fallback approach`)
+    const allContent = await prisma.discoveredContent.findMany({
+      where: {
+        patchId: patch.id
+      },
+      select: {
+        id: true,
+        title: true,
+        sourceUrl: true,
+        canonicalUrl: true,
+        relevanceScore: true,
+        qualityScore: true,
+        whyItMatters: true,
+        summary: true,
+        facts: true,
+        quotes: true,
+        provenance: true,
+        hero: true,
+        isControversy: true,
+        isHistory: true,
+        category: true,
+        metadata: true,
+        patch: {
+          select: {
+            id: true,
+            title: true,
+            handle: true,
+            description: true,
+            tags: true
+          }
+        }
+      }
+    })
+
+    // Filter in memory to find matching slug
+    content = allContent.find(item => {
+      const metadata = item.metadata as any
+      const itemSlug = metadata?.urlSlug
+      return itemSlug === slug
+    }) || null
+
+    if (!content) {
+      console.error(`[ContentPage] Content not found for slug "${slug}" in patch "${handle}"`)
+      console.error(`[ContentPage] Available slugs:`, allContent.map(item => {
+        const metadata = item.metadata as any
+        return metadata?.urlSlug || 'NO_SLUG'
+      }).slice(0, 10))
+      notFound()
+    }
+  }
 
   if (!content) {
     notFound();
@@ -145,7 +200,7 @@ export async function generateMetadata({ params }: ContentPageProps) {
   }
 
   // Find content directly by slug using JSON query
-  const content = await prisma.discoveredContent.findFirst({
+  let content = await prisma.discoveredContent.findFirst({
     where: {
       patchId: patch.id,
       metadata: {
@@ -160,6 +215,27 @@ export async function generateMetadata({ params }: ContentPageProps) {
       metadata: true
     }
   });
+
+  // Fallback: If JSON query fails, fetch all content and filter in memory
+  if (!content) {
+    const allContent = await prisma.discoveredContent.findMany({
+      where: {
+        patchId: patch.id
+      },
+      select: {
+        title: true,
+        summary: true,
+        whyItMatters: true,
+        metadata: true
+      }
+    })
+
+    content = allContent.find(item => {
+      const metadata = item.metadata as any
+      const itemSlug = metadata?.urlSlug
+      return itemSlug === slug
+    }) || null
+  }
 
   if (!content) {
     return {
