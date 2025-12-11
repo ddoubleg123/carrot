@@ -17,12 +17,14 @@ export async function GET(
   try {
     const { id } = await params
     
-    // Check cache first
+    // Check cache first (but skip cache for now to ensure fixes are applied)
+    // TODO: Re-enable cache after verifying fixes work
     const cacheKey = `content:preview:${id}`
     const cached = previewCache.get(cacheKey)
-    if (cached) {
-      return NextResponse.json(cached)
-    }
+    // Temporarily disable cache to ensure fixes are applied
+    // if (cached) {
+    //   return NextResponse.json(cached)
+    // }
     
     // Fetch content from database
     const content = await prisma.discoveredContent.findUnique({
@@ -273,28 +275,40 @@ export async function GET(
     }
 
     // Always run grammar/language cleanup on summary and key facts
+    // Run BEFORE caching to ensure cleaned content is cached
     if (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) {
       try {
         console.log(`[ContentPreview] Running grammar cleanup for ${id}`)
         
-        const cleanupResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ai/cleanup-content`, {
+        // Use request URL to build cleanup endpoint URL (works in both dev and production)
+        const requestUrl = new URL(request.url)
+        const baseUrl = `${requestUrl.protocol}//${requestUrl.host}`
+        const cleanupUrl = `${baseUrl}/api/ai/cleanup-content`
+        
+        console.log(`[ContentPreview] Cleanup URL: ${cleanupUrl}`)
+        
+        const cleanupResponse = await fetch(cleanupUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             summary: preview.summary,
             keyFacts: preview.keyPoints,
             title: content.title
-          })
+          }),
+          // Add timeout to prevent hanging
+          signal: AbortSignal.timeout(15000) // 15 second timeout
         })
 
         if (cleanupResponse.ok) {
           const cleanupData = await cleanupResponse.json()
           
           if (cleanupData.summary && cleanupData.summary.length > 0) {
+            console.log(`[ContentPreview] Summary cleaned: ${preview.summary.substring(0, 50)}... → ${cleanupData.summary.substring(0, 50)}...`)
             preview.summary = cleanupData.summary
           }
           
           if (cleanupData.keyFacts && Array.isArray(cleanupData.keyFacts) && cleanupData.keyFacts.length > 0) {
+            console.log(`[ContentPreview] Key facts cleaned: ${preview.keyPoints.length} → ${cleanupData.keyFacts.length}`)
             preview.keyPoints = cleanupData.keyFacts
           }
           
@@ -303,10 +317,11 @@ export async function GET(
             console.log(`[ContentPreview] Improvements:`, cleanupData.improvements)
           }
         } else {
-          console.warn(`[ContentPreview] Grammar cleanup failed for ${id}: ${cleanupResponse.status}`)
+          const errorText = await cleanupResponse.text()
+          console.warn(`[ContentPreview] Grammar cleanup failed for ${id}: ${cleanupResponse.status} - ${errorText.substring(0, 200)}`)
         }
-      } catch (cleanupError) {
-        console.warn(`[ContentPreview] Error during grammar cleanup for ${id}:`, cleanupError)
+      } catch (cleanupError: any) {
+        console.warn(`[ContentPreview] Error during grammar cleanup for ${id}:`, cleanupError.message)
         // Continue with original content if cleanup fails
       }
     }

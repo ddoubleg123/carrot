@@ -330,13 +330,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
           >
             {/* Left Panel - Content */}
             <Panel defaultSize={leftPanelSize} minSize={45} className="flex flex-col">
-              <div 
-                className="flex-1 overflow-y-auto p-6 custom-scrollbar" 
-                style={{ 
-                  scrollbarWidth: 'thin', 
-                  scrollbarColor: '#cbd5e1 #f1f5f9'
-                }}
-              >
+              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
                 {isLoading ? (
                   <div className="space-y-6 animate-pulse">
                     <div className="h-6 bg-gray-200 rounded w-3/4"></div>
@@ -363,7 +357,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     )}
 
                     {/* Executive Summary */}
-                    <section className="max-h-64 overflow-y-auto pr-2 custom-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+                    <section className="max-h-64 overflow-y-auto pr-3 custom-scrollbar">
                       <h2 className="text-lg font-semibold text-slate-900 mb-3">Executive Summary</h2>
                       <p className="text-slate-700 leading-relaxed">
                         {content.summary}
@@ -490,7 +484,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
 
             {/* Right Panel - Comments */}
             <Panel defaultSize={rightPanelSize} minSize={25} className="flex flex-col">
-              <div className="flex-1 overflow-y-auto bg-slate-50 border-l border-slate-200 custom-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+              <div className="flex-1 overflow-y-auto bg-slate-50 border-l border-slate-200 custom-scrollbar">
                 <div className="p-6">
                   <h3 className="text-lg font-semibold text-slate-900 mb-4">Comments</h3>
                   
