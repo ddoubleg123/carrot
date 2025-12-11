@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { enrichContentWithDeepSeek } from '@/lib/summarize/enrichContent'
 import { fetchWithProxy } from '@/lib/fetchProxy'
 import { extractReadableContent } from '@/lib/readability'
-
-const prisma = new PrismaClient()
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -209,8 +208,6 @@ export async function POST(request: NextRequest) {
       { error: 'Backfill failed', details: error.message },
       { status: 500 }
     )
-  } finally {
-    await prisma.$disconnect()
   }
 }
 
