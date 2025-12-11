@@ -29,11 +29,78 @@ export const SummaryContractSchema = z.object({
 export type SummaryContract = z.infer<typeof SummaryContractSchema>
 
 /**
+ * Truncate string at word boundary to fit within max length
+ */
+function truncateAtWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  
+  // Truncate to maxLength, then find last space before that point
+  const truncated = text.substring(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+  
+  if (lastSpace > maxLength * 0.8) {
+    // If we found a space reasonably close to the end, truncate there
+    return truncated.substring(0, lastSpace).trim() + '...'
+  }
+  
+  // Otherwise, just truncate and add ellipsis
+  return truncated.trim() + '...'
+}
+
+/**
+ * Auto-truncate data to fit within limits before validation
+ */
+function autoTruncate(data: any): any {
+  const result = { ...data }
+  
+  // Truncate summary if needed (max 240)
+  if (result.summary && typeof result.summary === 'string' && result.summary.length > 240) {
+    result.summary = truncateAtWordBoundary(result.summary, 240)
+    console.log(`[AutoTruncate] Summary truncated from ${data.summary.length} to ${result.summary.length} chars`)
+  }
+  
+  // Truncate context if needed (max 300)
+  if (result.context && typeof result.context === 'string' && result.context.length > 300) {
+    result.context = truncateAtWordBoundary(result.context, 300)
+    console.log(`[AutoTruncate] Context truncated from ${data.context.length} to ${result.context.length} chars`)
+  }
+  
+  // Truncate key facts if needed (max 200 each)
+  if (result.keyFacts && Array.isArray(result.keyFacts)) {
+    result.keyFacts = result.keyFacts.map((fact: any, index: number) => {
+      if (fact.text && typeof fact.text === 'string' && fact.text.length > 200) {
+        const originalLength = fact.text.length
+        fact = { ...fact, text: truncateAtWordBoundary(fact.text, 200) }
+        console.log(`[AutoTruncate] Key fact ${index + 1} truncated from ${originalLength} to ${fact.text.length} chars`)
+      }
+      return fact
+    })
+    
+    // Limit to max 8 facts
+    if (result.keyFacts.length > 8) {
+      console.log(`[AutoTruncate] Key facts limited from ${result.keyFacts.length} to 8`)
+      result.keyFacts = result.keyFacts.slice(0, 8)
+    }
+  }
+  
+  // Limit entities to max 10
+  if (result.entities && Array.isArray(result.entities) && result.entities.length > 10) {
+    console.log(`[AutoTruncate] Entities limited from ${result.entities.length} to 10`)
+    result.entities = result.entities.slice(0, 10)
+  }
+  
+  return result
+}
+
+/**
  * Validate summary contract and reject boilerplate language
+ * Auto-truncates content that slightly exceeds limits instead of failing
  */
 export function validateSummary(data: unknown): { valid: boolean; errors?: string[]; data?: SummaryContract } {
   try {
-    const parsed = SummaryContractSchema.parse(data)
+    // Auto-truncate before validation
+    const truncated = autoTruncate(data)
+    const parsed = SummaryContractSchema.parse(truncated)
     
     // Additional quality checks
     const errors: string[] = []
