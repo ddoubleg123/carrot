@@ -37,12 +37,16 @@ Requirements:
 ${keyFacts.map((fact: string, i: number) => `${i + 1}. ${fact}`).join('\n')}
 
 Requirements:
-- Each fact must be a complete, meaningful sentence
+- Each fact must be a COMPLETE, meaningful sentence with proper subject and predicate
 - Fix grammar, spelling, and punctuation
-- Remove fragments and incomplete thoughts
-- Ensure each fact is substantive and informative
+- COMPLETE fragments and incomplete thoughts - if a fact is incomplete, either complete it with context or remove it
+- Remove standalone phrases, sentence fragments, and incomplete statements
+- If a fact starts with "It", "That", "This", "They", etc. without clear context, either add context or remove it
+- If a fact is a quote fragment, complete it or remove it
+- Ensure each fact is substantive and informative (standalone and understandable)
 - Each fact should be 20-200 characters
 - Maintain factual accuracy
+- DO NOT include facts that are incomplete or require context from other facts
 
 ` : ''}Return ONLY valid JSON in this exact format:
 {

@@ -302,14 +302,48 @@ export async function GET(
         if (cleanupResponse.ok) {
           const cleanupData = await cleanupResponse.json()
           
+          let shouldUpdate = false
+          
           if (cleanupData.summary && cleanupData.summary.length > 0) {
             console.log(`[ContentPreview] Summary cleaned: ${preview.summary.substring(0, 50)}... → ${cleanupData.summary.substring(0, 50)}...`)
             preview.summary = cleanupData.summary
+            shouldUpdate = true
           }
           
           if (cleanupData.keyFacts && Array.isArray(cleanupData.keyFacts) && cleanupData.keyFacts.length > 0) {
             console.log(`[ContentPreview] Key facts cleaned: ${preview.keyPoints.length} → ${cleanupData.keyFacts.length}`)
             preview.keyPoints = cleanupData.keyFacts
+            shouldUpdate = true
+          }
+          
+          // Persist cleaned content to database
+          if (shouldUpdate) {
+            try {
+              const currentMetadata = (content.metadata as any) || {}
+              const updatedMetadata = {
+                ...currentMetadata,
+                grammarCleaned: true,
+                grammarCleanedAt: new Date().toISOString(),
+                summary150: preview.summary,
+                keyPoints: preview.keyPoints
+              }
+
+              await prisma.discoveredContent.update({
+                where: { id },
+                data: {
+                  summary: preview.summary,
+                  facts: preview.keyPoints.map((fact: string) => ({
+                    label: 'Fact',
+                    value: fact
+                  })),
+                  metadata: updatedMetadata as Prisma.JsonObject
+                }
+              })
+
+              console.log(`[ContentPreview] 💾 Persisted cleaned content to database`)
+            } catch (updateError: any) {
+              console.warn(`[ContentPreview] Failed to persist cleaned content:`, updateError.message)
+            }
           }
           
           console.log(`[ContentPreview] ✅ Grammar cleanup successful for ${id}`)
