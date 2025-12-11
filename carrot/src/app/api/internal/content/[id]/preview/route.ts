@@ -272,6 +272,45 @@ export async function GET(
       }
     }
 
+    // Always run grammar/language cleanup on summary and key facts
+    if (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) {
+      try {
+        console.log(`[ContentPreview] Running grammar cleanup for ${id}`)
+        
+        const cleanupResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/ai/cleanup-content`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            summary: preview.summary,
+            keyFacts: preview.keyPoints,
+            title: content.title
+          })
+        })
+
+        if (cleanupResponse.ok) {
+          const cleanupData = await cleanupResponse.json()
+          
+          if (cleanupData.summary && cleanupData.summary.length > 0) {
+            preview.summary = cleanupData.summary
+          }
+          
+          if (cleanupData.keyFacts && Array.isArray(cleanupData.keyFacts) && cleanupData.keyFacts.length > 0) {
+            preview.keyPoints = cleanupData.keyFacts
+          }
+          
+          console.log(`[ContentPreview] ✅ Grammar cleanup successful for ${id}`)
+          if (cleanupData.improvements && cleanupData.improvements.length > 0) {
+            console.log(`[ContentPreview] Improvements:`, cleanupData.improvements)
+          }
+        } else {
+          console.warn(`[ContentPreview] Grammar cleanup failed for ${id}: ${cleanupResponse.status}`)
+        }
+      } catch (cleanupError) {
+        console.warn(`[ContentPreview] Error during grammar cleanup for ${id}:`, cleanupError)
+        // Continue with original content if cleanup fails
+      }
+    }
+
     // Verify link status
     try {
       const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(preview.source.url)}`)

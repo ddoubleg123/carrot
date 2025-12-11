@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import ContentModalV2 from '../[id]/ContentModalV2'
 import { DiscoveredItem } from '@/types/discovered-content'
+import CarrotSpinner from '@/components/ui/CarrotSpinner'
 
 interface ContentPageClientProps {
   item: DiscoveredItem
@@ -30,8 +31,7 @@ export default function ContentPageClient({ item }: ContentPageClientProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading content...</p>
+          <CarrotSpinner label="Loading content..." size={32} />
         </div>
       </div>
     )

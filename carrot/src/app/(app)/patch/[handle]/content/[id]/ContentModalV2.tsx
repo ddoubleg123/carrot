@@ -8,6 +8,7 @@ import { ExternalLink, Share2, Clock, Calendar, AlertTriangle, X } from 'lucide-
 import { pickHero, getDominantColor } from '@/lib/media/hero'
 import { DiscoveredItem } from '@/types/discovered-content'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
+import CarrotSpinner from '@/components/ui/CarrotSpinner'
 
 interface ContentModalV2Props {
   contentId: string
@@ -197,10 +198,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
         {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading content...</p>
-            </div>
+            <CarrotSpinner label="Loading content..." size={32} />
           </div>
         )}
         
@@ -221,20 +219,22 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
         {!isLoading && content && (
           <>
         {/* Header Strip - Taller and more prominent */}
-        <div className="relative h-24 md:h-28 bg-gradient-to-r from-slate-900 to-slate-700 text-white">
-          {/* Hero Background */}
-          {content?.hero && (
+        <div className="relative h-24 md:h-28 bg-gradient-to-r from-slate-900 to-slate-700 text-white overflow-hidden">
+          {/* Hero Background - Show as a strip */}
+          {(content?.media?.hero || content?.hero) && (
             <div 
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{ 
-                backgroundImage: `url(${content.hero})`,
-                filter: 'brightness(0.4)'
+                backgroundImage: `url(${content?.media?.hero || content?.hero})`,
+                backgroundPosition: 'center',
+                backgroundSize: 'cover',
+                filter: 'brightness(0.5) saturate(1.2)'
               }}
             />
           )}
           
-          {/* Overlay Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/35 to-black/0" />
+          {/* Overlay Gradient - Lighter to show more of the image */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/20" />
           
           {/* Content */}
           <div className="relative z-10 flex items-center justify-between h-full px-6">
@@ -330,7 +330,13 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
           >
             {/* Left Panel - Content */}
             <Panel defaultSize={leftPanelSize} minSize={45} className="flex flex-col">
-              <div className="flex-1 overflow-y-auto p-6">
+              <div 
+                className="flex-1 overflow-y-auto p-6 custom-scrollbar" 
+                style={{ 
+                  scrollbarWidth: 'thin', 
+                  scrollbarColor: '#cbd5e1 #f1f5f9'
+                }}
+              >
                 {isLoading ? (
                   <div className="space-y-6 animate-pulse">
                     <div className="h-6 bg-gray-200 rounded w-3/4"></div>
@@ -357,7 +363,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     )}
 
                     {/* Executive Summary */}
-                    <section>
+                    <section className="max-h-64 overflow-y-auto pr-2 custom-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
                       <h2 className="text-lg font-semibold text-slate-900 mb-3">Executive Summary</h2>
                       <p className="text-slate-700 leading-relaxed">
                         {content.summary}
@@ -433,12 +439,30 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     <section className="pt-4 border-t border-slate-200">
                       <div className="text-sm text-slate-600">
                         <p>
-                          <strong>Source:</strong> {content.meta?.domain} 
-                          {content.meta?.canonicalUrl && (
+                          <strong>Source:</strong>{' '}
+                          {content.meta?.url ? (
+                            <a 
+                              href={content.meta.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline font-medium"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                if (content?.meta?.url) {
+                                  verifyAndOpenLink(content.meta.url)
+                                }
+                              }}
+                            >
+                              {content.meta.domain || content.meta.url}
+                            </a>
+                          ) : (
+                            <span>{content.meta?.domain || 'Unknown'}</span>
+                          )}
+                          {content.meta?.canonicalUrl && content.meta.canonicalUrl !== content.meta?.url && (
                             <span> • <a 
                               href={content.meta.canonicalUrl} 
                               target="_blank" 
-                              rel="noopener"
+                              rel="noopener noreferrer"
                               className="text-blue-600 hover:underline"
                             >
                               {content.meta.canonicalUrl}
@@ -466,7 +490,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
 
             {/* Right Panel - Comments */}
             <Panel defaultSize={rightPanelSize} minSize={25} className="flex flex-col">
-              <div className="flex-1 overflow-y-auto bg-slate-50 border-l border-slate-200">
+              <div className="flex-1 overflow-y-auto bg-slate-50 border-l border-slate-200 custom-scrollbar" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
                 <div className="p-6">
                   <h3 className="text-lg font-semibold text-slate-900 mb-4">Comments</h3>
                   
