@@ -30,15 +30,19 @@ export type SummaryContract = z.infer<typeof SummaryContractSchema>
 
 /**
  * Truncate string at word boundary to fit within max length
+ * Accounts for ellipsis to ensure final length doesn't exceed maxLength
  */
 function truncateAtWordBoundary(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text
   
-  // Truncate to maxLength, then find last space before that point
-  const truncated = text.substring(0, maxLength)
+  // Reserve 3 chars for ellipsis
+  const targetLength = maxLength - 3
+  
+  // Truncate to targetLength, then find last space before that point
+  const truncated = text.substring(0, targetLength)
   const lastSpace = truncated.lastIndexOf(' ')
   
-  if (lastSpace > maxLength * 0.8) {
+  if (lastSpace > targetLength * 0.8) {
     // If we found a space reasonably close to the end, truncate there
     return truncated.substring(0, lastSpace).trim() + '...'
   }
