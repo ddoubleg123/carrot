@@ -16,9 +16,36 @@ interface ReadabilityResult {
 
 // Simple readability implementation
 export function extractReadableContent(html: string, url?: string): ReadabilityResult {
-  // Simple regex-based extraction (works in Node.js)
+  // Extract title - prefer page title over site name
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-  const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
+  let title = titleMatch ? titleMatch[1].trim() : 'Untitled'
+  
+  // Clean up title - remove site name if it's just a generic site name
+  // e.g., "Zionist movement | Internet Encyclopedia of Ukraine" -> "Zionist movement"
+  const titleParts = title.split(/\s*[|\-–—]\s*/)
+  if (titleParts.length > 1) {
+    // Check if first part is more specific (longer or contains keywords)
+    const firstPart = titleParts[0].trim()
+    const lastPart = titleParts[titleParts.length - 1].trim()
+    
+    // If first part is short and generic, use last part
+    // If first part is longer/more specific, use first part
+    if (firstPart.length > 10 && !firstPart.match(/^(Internet|Encyclopedia|The|A|An)\s/i)) {
+      title = firstPart
+    } else if (lastPart.length > 10) {
+      title = lastPart
+    }
+  }
+  
+  // Also try to find h1 heading as a better title source
+  const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+  if (h1Match) {
+    const h1Title = h1Match[1].trim()
+    // Use h1 if it's more specific than the page title
+    if (h1Title.length > 5 && h1Title.length < 100) {
+      title = h1Title
+    }
+  }
   
   // Remove script and style tags
   let cleanHtml = html
@@ -51,11 +78,71 @@ export function extractReadableContent(html: string, url?: string): ReadabilityR
   }
   
   // Extract text content (remove HTML tags)
-  const textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  let textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  
+  // Filter out common menu/navigation patterns
+  const menuPatterns = [
+    /^Menu\s+Menu\s+Home\s+About[^.]*?/i, // "Menu Menu Home About..."
+    /^IEU\s+User\s+Info\s+Home\s+About/i, // "IEU User Info Home About..."
+    /Home\s+About\s+IEU\s+User\s+Info\s+Contact/i, // "Home About IEU User Info Contact"
+    /Search:\s*[^.]*?/i, // "Search: ..."
+    /Donate\s+to\s+IEU/i, // "Donate to IEU"
+    /Contact\s+Address\s+Donors/i, // "Contact Address Donors"
+    /Address\s+Donate\s+to\s+IEU/i, // "Address Donate to IEU"
+    /&lt;&lt;&lt;\s*&gt;&gt;&gt;\s*print/i, // "<<< >>> print"
+  ]
+  
+  // Remove menu text from the beginning (try multiple times to catch all patterns)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let changed = false
+    for (const pattern of menuPatterns) {
+      const before = textContent
+      textContent = textContent.replace(pattern, '').trim()
+      if (textContent !== before) {
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+  
+  // Also remove common navigation words if they appear at the start
+  const navigationWords = ['menu', 'home', 'about', 'search', 'contact', 'donate', 'index', 'user', 'info', 'ieU']
+  const words = textContent.split(/\s+/)
+  let startIndex = 0
+  let foundRealContent = false
+  
+  // Skip navigation words at the beginning until we find real content
+  for (let i = 0; i < Math.min(30, words.length); i++) {
+    const word = words[i].toLowerCase().replace(/[^a-z]/g, '')
+    const cleanWord = word.replace(/[&<>;]/g, '') // Remove HTML entities
+    
+    if (navigationWords.includes(cleanWord) && !foundRealContent) {
+      startIndex = i + 1
+    } else if (cleanWord.length > 4 && !navigationWords.includes(cleanWord)) {
+      // Found a real content word (longer than 4 chars and not a nav word)
+      foundRealContent = true
+      // But if we're still in the first 10 words, might be a heading, so continue
+      if (i > 10) {
+        break
+      }
+    }
+  }
+  
+  textContent = words.slice(startIndex).join(' ').trim()
+  
+  // Remove any remaining HTML entities at the start
+  textContent = textContent.replace(/^[&<>;0-9\s]+/i, '').trim()
+  
+  // Remove duplicate title at the start (e.g., "Zionist movement Zionist movement" -> "Zionist movement")
+  const titleWords = title.split(/\s+/).filter(w => w.length > 2)
+  if (titleWords.length > 0) {
+    const titlePattern = new RegExp(`^(${titleWords.join('\\s+')}\\s+){2,}`, 'i')
+    textContent = textContent.replace(titlePattern, titleWords.join(' ') + '. ').trim()
+  }
   
   // Generate excerpt (first 200 words)
-  const words = textContent.split(/\s+/).slice(0, 200)
-  const excerpt = words.join(' ') + (words.length === 200 ? '...' : '')
+  const excerptWords = textContent.split(/\s+/).slice(0, 200)
+  const excerpt = excerptWords.join(' ') + (excerptWords.length === 200 ? '...' : '')
   
   // Extract metadata
   const bylineMatch = html.match(/<meta[^>]*name="author"[^>]*content="([^"]*)"[^>]*>/i) ||
