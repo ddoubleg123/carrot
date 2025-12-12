@@ -107,11 +107,31 @@ export default async function PatchPage({
     }));
 
     const actualFollowerCount = actualFollowers.length;
-    const botSubscriptionsWithBotData = patchWithName.botSubscriptions.map(sub => ({
-      id: sub.id,
-      botId: sub.botId,
-      ownerUserId: sub.ownerUserId,
-      createdAt: sub.createdAt
+    
+    // Fetch agents associated with this patch
+    const agents = await prisma.agent.findMany({
+      where: {
+        isActive: true,
+        associatedPatches: {
+          has: handle
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    // Map agents to botSubscriptions format for RightRail compatibility
+    const botSubscriptionsWithBotData = agents.map(agent => ({
+      id: `agent-${agent.id}`,
+      botId: agent.id,
+      ownerUserId: null,
+      createdAt: agent.createdAt,
+      bot: {
+        id: agent.id,
+        name: agent.name,
+        avatar: (agent.metadata as any)?.avatar || undefined
+      }
     }));
 
     // Format events for timeline

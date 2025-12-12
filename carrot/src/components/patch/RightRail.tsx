@@ -190,29 +190,40 @@ export default function RightRail({
             <div className="grid grid-cols-[24px_1fr] items-start gap-x-3">
               <div></div>
               <div>
-                {connectedAgents.length > 0 ? (
+                {botSubscriptions && botSubscriptions.length > 0 ? (
                   <div className="space-y-3">
-                    {connectedAgents.map((agent) => {
-                      const Icon = getAgentIcon(agent.type);
-                      const colorClass = getAgentColor(agent.type);
+                    {botSubscriptions.map((subscription) => {
+                      const agent = subscription.bot;
+                      const Icon = getAgentIcon('content-analyzer'); // Default icon type
+                      const colorClass = getAgentColor('content-analyzer');
+                      
                       return (
-                        <div key={agent.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div key={subscription.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full ${colorClass} flex items-center justify-center`}>
-                              <Icon className="w-4 h-4 text-white" />
-                            </div>
+                            {agent.avatar ? (
+                              <Avatar className="w-8 h-8">
+                                <AvatarImage src={agent.avatar} alt={agent.name} />
+                                <AvatarFallback className="bg-orange-500 text-white text-xs">
+                                  {agent.name.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                            ) : (
+                              <div className={`w-8 h-8 rounded-full ${colorClass} flex items-center justify-center`}>
+                                <Icon className="w-4 h-4 text-white" />
+                              </div>
+                            )}
                             <div>
                               <p className="text-sm font-medium text-slate-900">
                                 {agent.name}
                               </p>
                               <p className="text-xs text-slate-600 flex items-center gap-1">
                                 <Activity className="w-3 h-3" />
-                                Last indexed {formatLastIndexed(agent.lastIndexed)}
+                                {subscription.lastIndexed ? `Last indexed ${formatLastIndexed(subscription.lastIndexed)}` : 'Active'}
                               </p>
                             </div>
                           </div>
                           <Badge variant="outline" className="text-xs">
-                            {agent.status === 'active' ? 'Active' : 'Inactive'}
+                            Active
                           </Badge>
                         </div>
                       );

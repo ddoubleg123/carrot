@@ -6,6 +6,8 @@ import prisma from '@/lib/prisma';
 import { OPEN_EVIDENCE_V2 } from '@/lib/flags';
 import { generateGuideSnapshot } from '@/lib/discovery/planner';
 import { initializeWikipediaMonitoring } from '@/lib/discovery/wikipediaMonitoring';
+import { AgentRegistry } from '@/lib/ai-agents/agentRegistry';
+import { generateAgentAvatar, generateFallbackAvatar } from '@/lib/ai-agents/agentAvatarGenerator';
 
 function sanitizeEntity(rawEntity: any) {
   if (!rawEntity || typeof rawEntity !== 'object') return undefined;
@@ -192,6 +194,63 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
         });
     } catch (wikiError) {
       console.error('[API] Error setting up Wikipedia monitoring:', wikiError);
+      // Non-fatal - continue with patch creation
+    }
+
+    // Auto-create AI agent for this patch (background task - don't block response)
+    try {
+      console.log('[API] Creating AI agent for new patch:', { patchId: patch.id, title: patch.title });
+      
+      // Run in background - don't await to avoid blocking response
+      (async () => {
+        try {
+          // Generate avatar for the agent
+          const avatarResult = await generateAgentAvatar({
+            patchTitle: patch.title,
+            patchDescription: patch.description,
+            tags: patch.tags as string[] || []
+          });
+          
+          // Use generated avatar or fallback
+          const avatarUrl = avatarResult.success && avatarResult.avatarUrl 
+            ? avatarResult.avatarUrl 
+            : generateFallbackAvatar(patch.title);
+          
+          // Create the agent
+          const agent = await AgentRegistry.createAgent({
+            name: `${patch.title} Specialist`,
+            persona: `I am an AI agent specialized in ${patch.title}. ${patch.description || 'I learn everything about this topic by reading all relevant content, data, and information that is scanned and stored. I continuously monitor and analyze new information to build comprehensive knowledge about this subject.'}`,
+            domainExpertise: (patch.tags as string[]) || [],
+            associatedPatches: [patch.handle],
+            metadata: {
+              avatar: avatarUrl,
+              role: 'patch-specialist',
+              expertise: (patch.tags as string[]) || [],
+              patchId: patch.id,
+              patchHandle: patch.handle,
+              createdAt: new Date().toISOString()
+            },
+            knowledgeProfile: {
+              expertise: patch.title,
+              strengths: ['Content analysis', 'Information synthesis', 'Topic monitoring'],
+              limitations: ['Requires content to be scanned and stored']
+            }
+          });
+          
+          console.log('[API] ✅ Successfully created AI agent:', { agentId: agent.id, agentName: agent.name });
+          
+          // Set up content feeding for the newly created agent
+          // The agent will automatically receive content as it's discovered and stored
+          // via the feedCarrotContentToAgents function when content is saved
+          console.log('[API] ✅ Agent ready to receive content from discovery pipeline');
+          
+        } catch (agentError) {
+          console.error('[API] Failed to create AI agent for patch:', agentError);
+          // Non-fatal - patch creation still succeeds
+        }
+      })();
+    } catch (agentSetupError) {
+      console.error('[API] Error setting up AI agent creation:', agentSetupError);
       // Non-fatal - continue with patch creation
     }
 
