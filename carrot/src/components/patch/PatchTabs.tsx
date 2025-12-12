@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PatchComposer from './PatchComposer';
@@ -22,7 +22,6 @@ const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'documents', label: 'Documents' },
   { id: 'timeline', label: 'Timeline' },
-  { id: 'sources', label: 'Sources' },
   { id: 'discussions', label: 'Discussions' }
 ];
 
@@ -44,6 +43,12 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     }
     const newUrl = params.toString() ? `?${params.toString()}` : '';
     router.push(`/patch/${patch.handle}${newUrl}`);
+  };
+
+  const handleDiscoveryClick = () => {
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.set('tab', 'discovery');
+    router.push(`/patch/${patch.handle}?${params.toString()}`);
   };
 
   return (
@@ -68,6 +73,21 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                     {tab.label}
                   </button>
                 ))}
+                
+                {/* Discovery Button - styled like Refresh button */}
+                <Button
+                  onClick={handleDiscoveryClick}
+                  variant="outline"
+                  size="sm"
+                  className={`ml-4 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap flex-shrink-0 ${
+                    activeTab === 'discovery'
+                      ? 'bg-[#FF6A00] text-white border-[#FF6A00]'
+                      : 'text-[#60646C] hover:text-[#0B0B0F] hover:bg-gray-100 border-gray-300'
+                  }`}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Discovery
+                </Button>
                 
                 {/* Create Post Button - now in the same row as tabs */}
                 <Button

@@ -9,7 +9,7 @@ import RightRail from '@/components/patch/RightRail'
 import TimelineView from '@/components/patch/TimelineView'
 import Overview from '@/components/patch/Overview'
 import DocumentsView from '@/components/patch/DocumentsView'
-import SourcesView from '@/components/patch/SourcesView'
+import DiscoveryView from '@/components/patch/DiscoveryView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
@@ -159,7 +159,7 @@ export default async function PatchPage({
                   {activeTab === 'overview' && <Overview patch={patchWithName} />}
                   {activeTab === 'documents' && <DocumentsView patch={patchWithName} />}
                   {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
-                  {activeTab === 'sources' && <SourcesView patch={patchWithName} patchHandle={handle} />}
+                  {activeTab === 'discovery' && <DiscoveryView patch={patchWithName} />}
                   {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
                 </PatchTabs>
               </div>
