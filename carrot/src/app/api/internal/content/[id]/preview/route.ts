@@ -81,6 +81,26 @@ export async function GET(
       }
     })()
 
+    // Check if hero is directly from Wikipedia - if so, don't display it
+    // Wikipedia pages should be used to find deep source links, not as direct sources
+    let heroUrl = heroData?.url || null
+    const sourceUrl = content.sourceUrl || ''
+    const isWikipediaSource = sourceUrl.includes('wikipedia.org') || 
+                              sourceUrl.includes('wikimedia.org') ||
+                              sourceUrl.includes('wikidata.org')
+    const isWikipediaHero = heroUrl && (
+      heroUrl.includes('wikipedia.org') || 
+      heroUrl.includes('wikimedia.org') ||
+      heroUrl.includes('wikidata.org')
+    )
+    
+    // If the source is Wikipedia OR the hero is from Wikipedia, don't display it
+    // (but keep it in the database for reference)
+    if (isWikipediaSource || isWikipediaHero) {
+      console.log(`[ContentPreview] Filtering out Wikipedia hero for ${id} (source: ${isWikipediaSource}, hero: ${isWikipediaHero})`)
+      heroUrl = null
+    }
+
     const preview: ContentPreview = {
       id: content.id,
       title: content.title,
@@ -90,7 +110,7 @@ export async function GET(
       entities: metadata.entities || [],
       timeline: metadata.timeline || [],
       media: {
-        hero: heroData?.url,
+        hero: heroUrl,
         dominant: heroData?.dominantColor || heroData?.dominant
       },
       source: {

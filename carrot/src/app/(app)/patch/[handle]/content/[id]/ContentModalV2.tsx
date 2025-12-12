@@ -329,8 +329,8 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
             className="h-full"
           >
             {/* Left Panel - Content */}
-            <Panel defaultSize={leftPanelSize} minSize={45} className="flex flex-col">
-              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <Panel defaultSize={leftPanelSize} minSize={45} className="flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-scroll p-6 custom-scrollbar" style={{ maxHeight: 'calc(90vh - 112px)' }}>
                 {isLoading ? (
                   <div className="space-y-6 animate-pulse">
                     <div className="h-6 bg-gray-200 rounded w-3/4"></div>
@@ -357,7 +357,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     )}
 
                     {/* Executive Summary */}
-                    <section className="max-h-64 overflow-y-auto pr-3 custom-scrollbar">
+                    <section className="max-h-64 overflow-y-scroll pr-3 custom-scrollbar">
                       <h2 className="text-lg font-semibold text-slate-900 mb-3">Executive Summary</h2>
                       <p className="text-slate-700 leading-relaxed">
                         {content.summary}
@@ -483,8 +483,8 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
             <PanelResizeHandle className="w-2 bg-slate-200 hover:bg-slate-300 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-col-resize" />
 
             {/* Right Panel - Comments */}
-            <Panel defaultSize={rightPanelSize} minSize={25} className="flex flex-col">
-              <div className="flex-1 overflow-y-auto bg-slate-50 border-l border-slate-200 custom-scrollbar">
+            <Panel defaultSize={rightPanelSize} minSize={25} className="flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-scroll bg-slate-50 border-l border-slate-200 custom-scrollbar" style={{ maxHeight: 'calc(90vh - 112px)' }}>
                 <div className="p-6">
                   <h3 className="text-lg font-semibold text-slate-900 mb-4">Comments</h3>
                   
