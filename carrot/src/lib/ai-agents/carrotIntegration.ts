@@ -275,10 +275,9 @@ export class CarrotIntegration {
     if (patch.description) parts.push(patch.description);
     if (patch.tags && patch.tags.length > 0) parts.push(patch.tags.join(' '));
     
-    // Add content from recent posts
+    // Add content from ALL posts (no limit)
     if (patch.posts && patch.posts.length > 0) {
       const postContent = patch.posts
-        .slice(0, 5) // Take first 5 posts
         .map((post: any) => post.title || post.body || '')
         .filter(Boolean)
         .join(' ');
@@ -313,8 +312,8 @@ export class CarrotIntegration {
         where: { id: patchId },
         include: {
           posts: {
-            take: 20,
             orderBy: { createdAt: 'desc' },
+            // NO LIMIT - feed ALL posts
           },
           facts: true,
           events: true,
@@ -329,11 +328,11 @@ export class CarrotIntegration {
       // Get agents associated with this patch
       const agents = await this.getPatchAgents(patchId);
 
-      // Feed recent content to agents
+      // Feed ALL content to agents (no limits)
       for (const agent of agents) {
         try {
-          // Feed recent posts
-          for (const post of patch.posts.slice(0, 5)) {
+          // Feed ALL posts (no limit)
+          for (const post of patch.posts) {
             const content = `${post.title || ''} ${post.body || ''}`.trim();
             if (content) {
               await FeedService.feedAgent(agent.id, {
@@ -347,8 +346,8 @@ export class CarrotIntegration {
             }
           }
 
-          // Feed facts
-          for (const fact of patch.facts.slice(0, 3)) {
+          // Feed ALL facts (no limit)
+          for (const fact of patch.facts) {
             const content = `${fact.label}: ${fact.value}`;
             await FeedService.feedAgent(agent.id, {
               content,
@@ -359,8 +358,8 @@ export class CarrotIntegration {
             });
           }
 
-          // Feed events
-          for (const event of patch.events.slice(0, 3)) {
+          // Feed ALL events (no limit)
+          for (const event of patch.events) {
             const content = `${event.title}: ${event.summary}`;
             await FeedService.feedAgent(agent.id, {
               content,
