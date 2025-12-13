@@ -9,7 +9,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { packDiscoveredContent, sanitizeForAgent } from './packers'
+// Use explicit file path to help webpack resolve
+import { packDiscoveredContent, sanitizeForAgent } from '@/lib/agent/packers'
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
 import { FeedService, FeedItem } from '@/lib/ai-agents/feedService'
 import { createHash } from 'crypto'
