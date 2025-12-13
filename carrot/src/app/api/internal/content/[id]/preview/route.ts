@@ -38,6 +38,7 @@ export async function GET(
         metadata: true,
         hero: true,
         sourceUrl: true,
+        canonicalUrl: true,
         category: true,
         patch: {
           select: {
