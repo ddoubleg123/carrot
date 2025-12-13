@@ -76,17 +76,17 @@ export async function POST(
 
     for (const content of discoveredContent) {
       // Check if already processed
-      const existingMemory = await prisma.agentMemory.findUnique({
+      const contentHash = content.contentHash || calculateContentHash(
+        content.title,
+        content.summary,
+        content.textContent
+      )
+      
+      const existingMemory = await prisma.agentMemory.findFirst({
         where: {
-          patchId_discoveredContentId_contentHash: {
-            patchId: patch.id,
-            discoveredContentId: content.id,
-            contentHash: content.contentHash || calculateContentHash(
-              content.title,
-              content.summary,
-              content.textContent
-            )
-          }
+          patchId: patch.id,
+          discoveredContentId: content.id,
+          contentHash: contentHash
         }
       })
 

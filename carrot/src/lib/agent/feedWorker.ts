@@ -260,13 +260,11 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     }
 
     // Check idempotency - has this content already been fed?
-    const existingMemory = await prisma.agentMemory.findUnique({
+    const existingMemory = await prisma.agentMemory.findFirst({
       where: {
-        patchId_discoveredContentId_contentHash: {
-          patchId: queueItem.patchId,
-          discoveredContentId: queueItem.discoveredContentId,
-          contentHash: queueItem.contentHash
-        }
+        patchId: queueItem.patchId,
+        discoveredContentId: queueItem.discoveredContentId,
+        contentHash: queueItem.contentHash
       }
     })
 
