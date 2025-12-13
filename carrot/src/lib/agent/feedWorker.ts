@@ -214,7 +214,7 @@ const CONFIG = {
  * Process a single queue item
  */
 export async function processFeedQueueItem(queueItemId: string): Promise<{ success: boolean; error?: string }> {
-  const queueItem = await prisma.agentMemoryFeedQueue.findUnique({
+  const queueItem = await (prisma as any).agentMemoryFeedQueue.findUnique({
     where: { id: queueItemId },
     include: {
       discoveredContent: true
@@ -234,7 +234,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
   }
 
   // Mark as processing
-  await prisma.agentMemoryFeedQueue.update({
+  await (prisma as any).agentMemoryFeedQueue.update({
     where: { id: queueItemId },
     data: {
       status: 'PROCESSING',
@@ -249,7 +249,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     // Quality gates
     const gateResult = await checkQualityGates(content, queueItem.patchId)
     if (!gateResult.passed) {
-      await prisma.agentMemoryFeedQueue.update({
+      await (prisma as any).agentMemoryFeedQueue.update({
         where: { id: queueItemId },
         data: {
           status: 'FAILED',
@@ -272,7 +272,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
 
     if (existingMemory) {
       // Already processed - mark as done
-      await prisma.agentMemoryFeedQueue.update({
+      await (prisma as any).agentMemoryFeedQueue.update({
         where: { id: queueItemId },
         data: { status: 'DONE' }
       })
@@ -282,7 +282,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     // Get patch agent
     const agents = await AgentRegistry.getAgentsByPatches([queueItem.patchId])
     if (agents.length === 0) {
-      await prisma.agentMemoryFeedQueue.update({
+      await (prisma as any).agentMemoryFeedQueue.update({
         where: { id: queueItemId },
         data: {
           status: 'FAILED',
@@ -352,7 +352,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     })
 
     // Mark queue item as done
-    await prisma.agentMemoryFeedQueue.update({
+    await (prisma as any).agentMemoryFeedQueue.update({
       where: { id: queueItemId },
       data: { status: 'DONE' }
     })
@@ -366,7 +366,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     console.error(`[FeedWorker] ❌ Error processing ${queueItemId}:`, errorMessage)
 
     // Update queue item with error
-    await prisma.agentMemoryFeedQueue.update({
+    await (prisma as any).agentMemoryFeedQueue.update({
       where: { id: queueItemId },
       data: {
         status: queueItem.attempts >= CONFIG.MAX_ATTEMPTS ? 'FAILED' : 'PENDING',
@@ -489,7 +489,7 @@ export async function processFeedQueue(options: {
     where.patchId = options.patchId
   }
 
-  const queueItems = await prisma.agentMemoryFeedQueue.findMany({
+  const queueItems = await (prisma as any).agentMemoryFeedQueue.findMany({
     where,
     orderBy: [
       { priority: 'desc' },
@@ -537,7 +537,7 @@ export async function enqueueDiscoveredContent(
 ): Promise<{ enqueued: boolean; reason?: string }> {
   try {
     // Check if already enqueued
-    const existing = await prisma.agentMemoryFeedQueue.findFirst({
+    const existing = await (prisma as any).agentMemoryFeedQueue.findFirst({
       where: {
         AND: [
           { patchId: { equals: patchId } },
@@ -567,7 +567,7 @@ export async function enqueueDiscoveredContent(
     }
 
     // Enqueue
-    await prisma.agentMemoryFeedQueue.create({
+    await (prisma as any).agentMemoryFeedQueue.create({
       data: {
         patchId,
         discoveredContentId,
