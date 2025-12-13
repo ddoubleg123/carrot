@@ -437,9 +437,9 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                           {content.meta?.url ? (
                             <a 
                               href={content.meta.url} 
-                              target="_blank" 
+                              target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline font-medium"
+                              className="text-blue-600 hover:underline font-medium cursor-pointer"
                               onClick={(e) => {
                                 e.preventDefault()
                                 if (content?.meta?.url) {
@@ -449,8 +449,10 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                             >
                               {content.meta.domain || content.meta.url}
                             </a>
+                          ) : content.meta?.domain ? (
+                            <span className="text-slate-600">{content.meta.domain}</span>
                           ) : (
-                            <span>{content.meta?.domain || 'Unknown'}</span>
+                            <span className="text-slate-500">Unknown</span>
                           )}
                           {content.meta?.canonicalUrl && content.meta.canonicalUrl !== content.meta?.url && (
                             <span> • <a 

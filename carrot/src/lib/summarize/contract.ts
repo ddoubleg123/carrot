@@ -20,7 +20,7 @@ export const SummaryContractSchema = z.object({
     .max(8, 'No more than 8 key facts'),
   context: z.string()
     .min(50, 'Context must be at least 50 characters')
-    .max(300, 'Context must not exceed 300 characters'),
+    .max(1500, 'Context must not exceed 1500 characters (up to 3 paragraphs for fair use)'),
   entities: z.array(z.string())
     .min(0)
     .max(10, 'No more than 10 entities')
@@ -63,9 +63,9 @@ function autoTruncate(data: any): any {
     console.log(`[AutoTruncate] Summary truncated from ${data.summary.length} to ${result.summary.length} chars`)
   }
   
-  // Truncate context if needed (max 300)
-  if (result.context && typeof result.context === 'string' && result.context.length > 300) {
-    result.context = truncateAtWordBoundary(result.context, 300)
+  // Truncate context if needed (max 1500 for fair use - up to 3 paragraphs)
+  if (result.context && typeof result.context === 'string' && result.context.length > 1500) {
+    result.context = truncateAtWordBoundary(result.context, 1500)
     console.log(`[AutoTruncate] Context truncated from ${data.context.length} to ${result.context.length} chars`)
   }
   
@@ -192,10 +192,15 @@ Generate a JSON summary following these STRICT rules:
    - NO generic statements
    - NO marketing language
 
-3. **Context** (50-300 chars):
-   - ONE paragraph explaining why this matters to the group (${groupTags.join(', ')})
-   - Connect to group interests
-   - Be specific
+3. **Context** (50-1500 chars, 2-3 paragraphs):
+   - Explain why this matters to the group (${groupTags.join(', ')})
+   - Connect to group interests with specific details
+   - **CRITICAL**: When directly quoting source material, ALWAYS use quotation marks: "quoted text" - Source attribution
+   - If you are paraphrasing or summarizing, do NOT use quotes
+   - If you are using exact words from the source, you MUST use quotes
+   - Continue until the explanation is complete (up to 3 paragraphs for fair use)
+   - Do NOT truncate mid-sentence - ensure complete thoughts and full paragraphs
+   - Each paragraph should be 3-5 sentences and complete a thought
 
 4. **Entities** (3-10):
    - Extract people, teams, organizations, places mentioned
@@ -222,7 +227,7 @@ Generate a JSON summary following these STRICT rules:
     { "text": "Jordan averaged 43.7 points per game in the series" },
     { "text": "Larry Bird scored 36 points, Kevin McHale added 27 points for Boston" }
   ],
-  "context": "This performance established Jordan as an elite playoff performer early in his career and set the standard for individual dominance in postseason basketball that defined the Bulls' dynasty era.",
+  "context": "This performance established Jordan as an elite playoff performer early in his career. As Larry Bird noted after the game, \"God disguised as Michael Jordan\" - highlighting the extraordinary nature of the performance. This set the standard for individual dominance in postseason basketball that defined the Bulls' dynasty era.",
   "entities": ["Michael Jordan", "Larry Bird", "Boston Celtics", "Chicago Bulls", "Kevin McHale", "Elgin Baylor"]
 }
 

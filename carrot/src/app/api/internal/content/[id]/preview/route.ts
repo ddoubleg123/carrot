@@ -101,9 +101,93 @@ export async function GET(
       heroUrl = null
     }
 
+    // Improve title if it's generic
+    function improveTitle(originalTitle: string, summary: string, keyPoints: string[]): string {
+      const genericPhrases = [
+        'official website',
+        'official site',
+        'home',
+        'welcome',
+        'about us',
+        'contact',
+        'news',
+        'updates',
+        'news and updates'
+      ]
+      
+      const titleLower = originalTitle.toLowerCase().trim()
+      const hasGenericPhrase = genericPhrases.some(phrase => titleLower === phrase || titleLower.includes(phrase))
+      
+      // If title is generic or too short, try to create a better one
+      if (hasGenericPhrase || originalTitle.length < 10) {
+        // Try to extract from summary first
+        if (summary && summary.length > 20) {
+          // Take first meaningful sentence or phrase from summary
+          const firstSentence = summary.split(/[.!?]/)[0].trim()
+          if (firstSentence.length > 15 && firstSentence.length < 100) {
+            // Capitalize first letter
+            const improved = firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1)
+            console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${improved}" (from summary)`)
+            return improved
+          }
+          
+          // Fallback: extract meaningful words from summary
+          const words = summary.split(' ').slice(0, 12)
+          const meaningfulWords = words.filter((word: string) => 
+            word.length > 2 && 
+            !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an'].includes(word.toLowerCase())
+          ).slice(0, 8)
+          
+          if (meaningfulWords.length >= 3) {
+            const improved = meaningfulWords.map((word: string) => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ')
+            console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${improved}" (from summary words)`)
+            return improved
+          }
+        }
+        
+        // Try key points if summary didn't work
+        if (keyPoints && keyPoints.length > 0) {
+          const firstFact = keyPoints[0]
+          if (firstFact && firstFact.length > 15 && firstFact.length < 100) {
+            // Extract subject from first fact
+            const improved = firstFact.charAt(0).toUpperCase() + firstFact.slice(1)
+            console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${improved}" (from key fact)`)
+            return improved
+          }
+        }
+      }
+      
+      // Clean up title (remove site name suffixes)
+      const cleanTitle = originalTitle
+        .replace(/\s*\|.*$/, '') // Remove " | Site Name" suffixes
+        .replace(/\s*-\s*.*$/, '') // Remove " - Site Name" suffixes
+        .replace(/\s*::.*$/, '') // Remove " :: Site Name" suffixes
+        .trim()
+      
+      return cleanTitle || originalTitle || 'Untitled Content'
+    }
+    
+    const improvedTitle = improveTitle(content.title, baseSummary, baseKeyPoints)
+    
+    // Update database title if it was improved
+    if (improvedTitle !== content.title && improvedTitle.length > 10) {
+      try {
+        await prisma.discoveredContent.update({
+          where: { id },
+          data: { title: improvedTitle }
+        })
+        console.log(`[ContentPreview] Updated database title for ${id}`)
+      } catch (error) {
+        console.error(`[ContentPreview] Failed to update title:`, error)
+        // Non-fatal - continue with improved title in preview
+      }
+    }
+
     const preview: ContentPreview = {
       id: content.id,
-      title: content.title,
+      title: improvedTitle,
       summary: baseSummary.substring(0, 240),
       keyPoints: baseKeyPoints,
       excerptHtml: '',
@@ -123,7 +207,10 @@ export async function GET(
       meta: {
         author: metadata.author,
         publishDate: metadata.publishDate,
-        readingTime: metadata.readingTimeMin || Math.ceil((baseSummary || '').length / 1000)
+        readingTime: metadata.readingTimeMin || Math.ceil((baseSummary || '').length / 1000),
+        domain: sourceDomain,
+        url: content.sourceUrl || '',
+        canonicalUrl: content.canonicalUrl || content.sourceUrl || ''
       }
     }
     
