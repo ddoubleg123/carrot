@@ -535,13 +535,11 @@ export async function enqueueDiscoveredContent(
 ): Promise<{ enqueued: boolean; reason?: string }> {
   try {
     // Check if already enqueued
-    const existing = await prisma.agentMemoryFeedQueue.findUnique({
+    const existing = await prisma.agentMemoryFeedQueue.findFirst({
       where: {
-        patchId_discoveredContentId_contentHash: {
-          patchId,
-          discoveredContentId,
-          contentHash
-        }
+        patchId,
+        discoveredContentId,
+        contentHash
       }
     })
 
@@ -550,13 +548,11 @@ export async function enqueueDiscoveredContent(
     }
 
     // Check if already processed
-    const existingMemory = await prisma.agentMemory.findUnique({
+    const existingMemory = await prisma.agentMemory.findFirst({
       where: {
-        patchId_discoveredContentId_contentHash: {
-          patchId,
-          discoveredContentId,
-          contentHash
-        }
+        patchId,
+        discoveredContentId,
+        contentHash
       }
     })
 
