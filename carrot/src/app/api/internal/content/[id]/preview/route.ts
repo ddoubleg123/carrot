@@ -186,10 +186,35 @@ export async function GET(
       }
     }
 
+    // Helper function to truncate summary at sentence boundary (up to ~240 chars)
+    function truncateSummaryAtSentence(text: string, maxLength: number = 240): string {
+      if (text.length <= maxLength) return text
+      
+      // Find the last complete sentence before maxLength
+      const truncated = text.substring(0, maxLength)
+      const lastPeriod = truncated.lastIndexOf('.')
+      const lastExclamation = truncated.lastIndexOf('!')
+      const lastQuestion = truncated.lastIndexOf('?')
+      const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion)
+      
+      if (lastSentenceEnd > maxLength * 0.7) {
+        // If we found a sentence end reasonably close to the limit, use it
+        return text.substring(0, lastSentenceEnd + 1).trim()
+      }
+      
+      // Otherwise, truncate at word boundary
+      const lastSpace = truncated.lastIndexOf(' ')
+      if (lastSpace > maxLength * 0.8) {
+        return text.substring(0, lastSpace).trim()
+      }
+      
+      return truncated.trim()
+    }
+
     const preview: ContentPreview = {
       id: content.id,
       title: improvedTitle,
-      summary: baseSummary.substring(0, 240),
+      summary: truncateSummaryAtSentence(baseSummary),
       keyPoints: baseKeyPoints,
       excerptHtml: '',
       entities: metadata.entities || [],
@@ -232,7 +257,7 @@ export async function GET(
           
           // Update preview with extracted content
           if (!preview.summary && readable.excerpt) {
-            preview.summary = readable.excerpt.substring(0, 240)
+            preview.summary = truncateSummaryAtSentence(readable.excerpt)
           }
           
           if (preview.keyPoints.length === 0) {
@@ -367,7 +392,7 @@ export async function GET(
         
         // Last resort fallback
         if (preview.summary.length < 120) {
-          preview.summary = baseSummary.substring(0, 240)
+          preview.summary = truncateSummaryAtSentence(baseSummary)
         }
         
         if (preview.keyPoints.length < 3) {

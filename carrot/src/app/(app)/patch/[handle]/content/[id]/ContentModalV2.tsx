@@ -228,13 +228,13 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                 backgroundImage: `url(${content?.media?.hero || content?.hero})`,
                 backgroundPosition: 'center',
                 backgroundSize: 'cover',
-                filter: 'brightness(0.5) saturate(1.2)'
+                filter: 'brightness(0.7) saturate(1.1)'
               }}
             />
           )}
           
           {/* Overlay Gradient - Lighter to show more of the image */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/10" />
           
           {/* Content */}
           <div className="relative z-10 flex items-center justify-between h-full px-6">
@@ -357,7 +357,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     )}
 
                     {/* Executive Summary */}
-                    <section className="max-h-64 overflow-y-scroll pr-3 custom-scrollbar">
+                    <section>
                       <h2 className="text-lg font-semibold text-slate-900 mb-3">Executive Summary</h2>
                       <p className="text-slate-700 leading-relaxed">
                         {content.summary}
@@ -376,6 +376,37 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                             </div>
                           ))}
                         </div>
+                      </section>
+                    )}
+
+                    {/* Timeline */}
+                    {content.timeline && content.timeline.length > 0 && (
+                      <section>
+                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Timeline</h2>
+                        <div className="space-y-3">
+                          {content.timeline.map((item: any, index: number) => (
+                            <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                              <div className="flex items-center gap-1 text-sm font-medium text-blue-600 min-w-[80px]">
+                                <Calendar className="h-3 w-3" />
+                                {item.date || 'Date unknown'}
+                              </div>
+                              <div className="text-sm text-slate-700 flex-1">
+                                {item.fact || item.content || item.text}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Excerpt / Additional Content */}
+                    {content.excerptHtml && (
+                      <section>
+                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Excerpt</h2>
+                        <div 
+                          className="prose prose-sm max-w-none text-slate-700 leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: content.excerptHtml }}
+                        />
                       </section>
                     )}
 
