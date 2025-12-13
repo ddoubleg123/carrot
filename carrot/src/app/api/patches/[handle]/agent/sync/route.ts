@@ -7,8 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { enqueueDiscoveredContent, calculateContentHash } from '@/lib/agent/feedWorker'
 
@@ -20,8 +19,8 @@ export async function POST(
 ) {
   try {
     // Check authentication (admin only)
-    const session = await getServerSession(authOptions)
-    if (!session?.user) {
+    const session: any = await auth()
+    if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
