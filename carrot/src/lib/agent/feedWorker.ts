@@ -263,11 +263,11 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     const existingMemory = await prisma.agentMemory.findFirst({
       where: {
         AND: [
-          { patchId: queueItem.patchId },
-          { discoveredContentId: queueItem.discoveredContentId },
-          { contentHash: queueItem.contentHash }
+          { patchId: { equals: queueItem.patchId } },
+          { discoveredContentId: { equals: queueItem.discoveredContentId } },
+          { contentHash: { equals: queueItem.contentHash } }
         ]
-      }
+      } as any
     })
 
     if (existingMemory) {
@@ -540,9 +540,9 @@ export async function enqueueDiscoveredContent(
     const existing = await prisma.agentMemoryFeedQueue.findFirst({
       where: {
         AND: [
-          { patchId },
-          { discoveredContentId },
-          { contentHash }
+          { patchId: { equals: patchId } },
+          { discoveredContentId: { equals: discoveredContentId } },
+          { contentHash: { equals: contentHash } }
         ]
       }
     })
@@ -555,11 +555,11 @@ export async function enqueueDiscoveredContent(
     const existingMemory = await prisma.agentMemory.findFirst({
       where: {
         AND: [
-          { patchId },
-          { discoveredContentId },
-          { contentHash }
+          { patchId: { equals: patchId } },
+          { discoveredContentId: { equals: discoveredContentId } },
+          { contentHash: { equals: contentHash } }
         ]
-      }
+      } as any
     })
 
     if (existingMemory) {
