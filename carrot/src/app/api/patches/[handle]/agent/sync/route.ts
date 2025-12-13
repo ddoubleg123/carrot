@@ -84,9 +84,11 @@ export async function POST(
       
       const existingMemory = await prisma.agentMemory.findFirst({
         where: {
-          patchId: patch.id,
-          discoveredContentId: content.id,
-          contentHash: contentHash
+          AND: [
+            { patchId: patch.id },
+            { discoveredContentId: content.id },
+            { contentHash: contentHash }
+          ]
         }
       })
 

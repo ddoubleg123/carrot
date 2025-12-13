@@ -262,9 +262,11 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     // Check idempotency - has this content already been fed?
     const existingMemory = await prisma.agentMemory.findFirst({
       where: {
-        patchId: queueItem.patchId,
-        discoveredContentId: queueItem.discoveredContentId,
-        contentHash: queueItem.contentHash
+        AND: [
+          { patchId: queueItem.patchId },
+          { discoveredContentId: queueItem.discoveredContentId },
+          { contentHash: queueItem.contentHash }
+        ]
       }
     })
 
@@ -537,9 +539,11 @@ export async function enqueueDiscoveredContent(
     // Check if already enqueued
     const existing = await prisma.agentMemoryFeedQueue.findFirst({
       where: {
-        patchId,
-        discoveredContentId,
-        contentHash
+        AND: [
+          { patchId },
+          { discoveredContentId },
+          { contentHash }
+        ]
       }
     })
 
@@ -550,9 +554,11 @@ export async function enqueueDiscoveredContent(
     // Check if already processed
     const existingMemory = await prisma.agentMemory.findFirst({
       where: {
-        patchId,
-        discoveredContentId,
-        contentHash
+        AND: [
+          { patchId },
+          { discoveredContentId },
+          { contentHash }
+        ]
       }
     })
 
