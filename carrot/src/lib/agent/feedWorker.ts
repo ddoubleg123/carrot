@@ -9,11 +9,196 @@
  */
 
 import { prisma } from '@/lib/prisma'
-// Use explicit file path to help webpack resolve
-import { packDiscoveredContent, sanitizeForAgent } from '@/lib/agent/packers'
+import { extractKeyPoints, extractTimeline, extractEntities } from '@/lib/readability'
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
 import { FeedService, FeedItem } from '@/lib/ai-agents/feedService'
 import { createHash } from 'crypto'
+
+// Inline packer functions to avoid webpack module resolution issues
+interface PackedContent {
+  title: string
+  summary: string
+  facts: Array<{ text: string; date?: string }>
+  entities: Array<{ name: string; type: string }>
+  timeline: Array<{ date: string; what: string; refs: string[] }>
+  rawTextPtr: string
+}
+
+async function packDiscoveredContent(
+  content: {
+    id: string
+    title: string
+    summary?: string | null
+    whyItMatters?: string | null
+    facts?: any
+    keyFacts?: any
+    textContent?: string | null
+    sourceUrl: string
+    publishDate?: Date | null
+    domain?: string | null
+    metadata?: any
+  }
+): Promise<PackedContent> {
+  const fullText = content.textContent || content.summary || content.whyItMatters || ''
+  
+  // Extract summary (4-6 sentences)
+  const source = content.summary || content.whyItMatters || ''
+  const sentences = source
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 10)
+  const selected = sentences.slice(0, 6)
+  const summary = selected
+    .map((s, i) => {
+      if (i === selected.length - 1) {
+        return s.match(/[.!?]$/) ? s : s + '.'
+      }
+      return s + '.'
+    })
+    .join(' ')
+  
+  // Extract facts
+  const facts: Array<{ text: string; date?: string }> = []
+  if (content.facts) {
+    const factArray = Array.isArray(content.facts) ? content.facts : []
+    for (const fact of factArray.slice(0, 12)) {
+      if (typeof fact === 'string') {
+        facts.push({ text: fact })
+      } else if (fact && typeof fact === 'object') {
+        const text = fact.text || fact.value || fact.label
+        const date = fact.date
+        if (text && typeof text === 'string' && text.length >= 20) {
+          facts.push({ text: String(text), date: date ? String(date) : undefined })
+        }
+      }
+    }
+  }
+  if (facts.length < 12 && content.keyFacts) {
+    const keyFactsArray = Array.isArray(content.keyFacts) ? content.keyFacts : []
+    for (const fact of keyFactsArray) {
+      if (facts.length >= 12) break
+      if (typeof fact === 'string' && fact.length >= 20) {
+        facts.push({ text: fact })
+      }
+    }
+  }
+  if (facts.length < 12 && fullText.length > 100) {
+    try {
+      const extracted = extractKeyPoints(fullText, 12 - facts.length)
+      for (const point of extracted) {
+        if (facts.length >= 12) break
+        if (point.length >= 20 && point.length <= 200) {
+          facts.push({ text: point })
+        }
+      }
+    } catch (error) {
+      console.warn('[FeedWorker] Failed to extract key points:', error)
+    }
+  }
+  
+  // Extract entities
+  const entities: Array<{ name: string; type: string }> = []
+  if (content.metadata?.entities && Array.isArray(content.metadata.entities)) {
+    for (const entity of content.metadata.entities.slice(0, 20)) {
+      if (typeof entity === 'string') {
+        entities.push({ name: entity, type: 'unknown' })
+      } else if (entity && typeof entity === 'object') {
+        const name = entity.name || entity.text
+        const type = entity.type || 'unknown'
+        if (name && typeof name === 'string') {
+          entities.push({ name: String(name), type: String(type) })
+        }
+      }
+    }
+  }
+  if (entities.length < 20 && fullText.length > 100) {
+    try {
+      const extracted = extractEntities(fullText)
+      for (const entity of extracted) {
+        if (entities.length >= 20) break
+        const exists = entities.some(e => e.name.toLowerCase() === entity.name.toLowerCase())
+        if (!exists) {
+          entities.push({
+            name: entity.name,
+            type: entity.type || 'unknown'
+          })
+        }
+      }
+    } catch (error) {
+      console.warn('[FeedWorker] Failed to extract entities:', error)
+    }
+  }
+  
+  // Extract timeline
+  const timeline: Array<{ date: string; what: string; refs: string[] }> = []
+  if (content.metadata?.timeline && Array.isArray(content.metadata.timeline)) {
+    for (const item of content.metadata.timeline.slice(0, 10)) {
+      if (item && typeof item === 'object') {
+        const date = item.date || item.fact?.date
+        const what = item.fact || item.content || item.text || item.what
+        const refs = item.refs || item.references || []
+        if (date && what) {
+          timeline.push({
+            date: String(date),
+            what: String(what),
+            refs: Array.isArray(refs) ? refs.map(String) : []
+          })
+        }
+      }
+    }
+  }
+  if (timeline.length < 10 && fullText.length > 200) {
+    try {
+      const extracted = extractTimeline(fullText)
+      for (const item of extracted.slice(0, 10 - timeline.length)) {
+        timeline.push({
+          date: item.date || 'Date unknown',
+          what: item.content || item.fact || '',
+          refs: []
+        })
+      }
+    } catch (error) {
+      console.warn('[FeedWorker] Failed to extract timeline:', error)
+    }
+  }
+  
+  return {
+    title: content.title,
+    summary,
+    facts: facts.slice(0, 12),
+    entities: entities.slice(0, 20),
+    timeline: timeline.slice(0, 10),
+    rawTextPtr: `discovered_content:${content.id}`
+  }
+}
+
+function sanitizeForAgent(content: string, maxQuotedChars: number = 1200): string {
+  let sanitized = content
+    .replace(/\s+/g, ' ')
+    .replace(/\[.*?\]/g, '')
+    .trim()
+  
+  if (sanitized.length > maxQuotedChars) {
+    const truncated = sanitized.substring(0, maxQuotedChars)
+    const lastPeriod = truncated.lastIndexOf('.')
+    const lastExclamation = truncated.lastIndexOf('!')
+    const lastQuestion = truncated.lastIndexOf('?')
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion)
+    
+    if (lastSentenceEnd > maxQuotedChars * 0.8) {
+      sanitized = sanitized.substring(0, lastSentenceEnd + 1)
+    } else {
+      const lastSpace = truncated.lastIndexOf(' ')
+      if (lastSpace > maxQuotedChars * 0.8) {
+        sanitized = sanitized.substring(0, lastSpace) + '...'
+      } else {
+        sanitized = truncated + '...'
+      }
+    }
+  }
+  
+  return sanitized
+}
 
 // Configuration
 const CONFIG = {
