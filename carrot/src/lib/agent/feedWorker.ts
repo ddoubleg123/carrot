@@ -9,8 +9,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-// Import from packers directly to avoid webpack resolution issues
-import type { PackedContent, ContentPackOptions } from './packers'
 import { packDiscoveredContent, sanitizeForAgent } from './packers'
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
 import { FeedService, FeedItem } from '@/lib/ai-agents/feedService'
