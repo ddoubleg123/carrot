@@ -36,6 +36,7 @@ export async function GET(
         whyItMatters: true,
         facts: true,
         quotes: true,
+        textContent: true,
         metadata: true,
         hero: true,
         sourceUrl: true,
@@ -67,66 +68,119 @@ export async function GET(
     const baseSummary: string = metadata.summary150 || content.summary || content.whyItMatters || ''
     
     // Helper function to extract fair use quotes (up to 3 paragraphs, max 1200 chars)
-    function extractFairUseQuotes(quotes: any[], metadata: any): string {
+    function extractFairUseQuotes(quotes: any[], metadata: any, textContent: string | null): string {
       const MAX_QUOTE_CHARS = 1200
       const MAX_PARAGRAPHS = 3
       
-      if (!quotes || quotes.length === 0) {
-        // Try to extract from metadata fairUseQuote if available
-        if (metadata?.fairUseQuote?.quoteHtml) {
-          const quoteHtml = metadata.fairUseQuote.quoteHtml
-          // Strip HTML tags and get text, limit to 1200 chars
-          const text = quoteHtml.replace(/<[^>]*>/g, '').trim()
-          if (text.length <= MAX_QUOTE_CHARS) {
-            return text
+      // First, try to use existing quotes array
+      if (quotes && quotes.length > 0) {
+        const quoteTexts: string[] = []
+        let totalChars = 0
+        
+        for (const quote of quotes.slice(0, MAX_PARAGRAPHS)) {
+          let quoteText = ''
+          if (typeof quote === 'string') {
+            quoteText = quote
+          } else if (quote && typeof quote === 'object') {
+            quoteText = quote.quote || quote.text || quote.content || ''
+          }
+          
+          if (quoteText && quoteText.trim().length > 0) {
+            const trimmed = quoteText.trim()
+            if (totalChars + trimmed.length <= MAX_QUOTE_CHARS) {
+              quoteTexts.push(trimmed)
+              totalChars += trimmed.length
+            } else {
+              // Add partial quote if there's room
+              const remaining = MAX_QUOTE_CHARS - totalChars
+              if (remaining > 50) {
+                const partial = trimmed.substring(0, remaining)
+                const lastPeriod = partial.lastIndexOf('.')
+                if (lastPeriod > remaining * 0.8) {
+                  quoteTexts.push(partial.substring(0, lastPeriod + 1))
+                }
+              }
+              break
+            }
+          }
+        }
+        
+        if (quoteTexts.length > 0) {
+          return quoteTexts.join('\n\n')
+        }
+      }
+      
+      // Try to extract from metadata fairUseQuote if available
+      if (metadata?.fairUseQuote?.quoteHtml) {
+        const quoteHtml = metadata.fairUseQuote.quoteHtml
+        // Strip HTML tags and get text, limit to 1200 chars
+        const text = quoteHtml.replace(/<[^>]*>/g, '').trim()
+        if (text.length <= MAX_QUOTE_CHARS) {
+          return text
+        }
+        // Truncate at sentence boundary
+        const truncated = text.substring(0, MAX_QUOTE_CHARS)
+        const lastPeriod = truncated.lastIndexOf('.')
+        const lastExclamation = truncated.lastIndexOf('!')
+        const lastQuestion = truncated.lastIndexOf('?')
+        const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion)
+        if (lastSentenceEnd > MAX_QUOTE_CHARS * 0.8) {
+          return text.substring(0, lastSentenceEnd + 1)
+        }
+        return truncated + '...'
+      }
+      
+      // Extract quotes from textContent if available
+      if (textContent && textContent.length > 100) {
+        // Look for quoted text (text between quotation marks)
+        const quotedMatches = textContent.match(/"([^"]{50,400})"/g)
+        if (quotedMatches && quotedMatches.length > 0) {
+          const quoteTexts: string[] = []
+          let totalChars = 0
+          
+          for (const match of quotedMatches.slice(0, MAX_PARAGRAPHS)) {
+            const quoteText = match.replace(/"/g, '').trim()
+            if (quoteText.length >= 50) {
+              if (totalChars + quoteText.length <= MAX_QUOTE_CHARS) {
+                quoteTexts.push(quoteText)
+                totalChars += quoteText.length
+              } else {
+                break
+              }
+            }
+          }
+          
+          if (quoteTexts.length > 0) {
+            return quoteTexts.join('\n\n')
+          }
+        }
+        
+        // If no quoted text found, extract first 3 substantial paragraphs
+        const paragraphs = textContent
+          .split(/\n\n+/)
+          .map(p => p.trim())
+          .filter(p => p.length >= 100 && p.length <= 500)
+          .slice(0, MAX_PARAGRAPHS)
+        
+        if (paragraphs.length > 0) {
+          const combined = paragraphs.join('\n\n')
+          if (combined.length <= MAX_QUOTE_CHARS) {
+            return combined
           }
           // Truncate at sentence boundary
-          const truncated = text.substring(0, MAX_QUOTE_CHARS)
+          const truncated = combined.substring(0, MAX_QUOTE_CHARS)
           const lastPeriod = truncated.lastIndexOf('.')
           const lastExclamation = truncated.lastIndexOf('!')
           const lastQuestion = truncated.lastIndexOf('?')
           const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion)
           if (lastSentenceEnd > MAX_QUOTE_CHARS * 0.8) {
-            return text.substring(0, lastSentenceEnd + 1)
+            return combined.substring(0, lastSentenceEnd + 1)
           }
           return truncated + '...'
         }
-        return ''
       }
       
-      // Process quotes array
-      const quoteTexts: string[] = []
-      let totalChars = 0
-      
-      for (const quote of quotes.slice(0, MAX_PARAGRAPHS)) {
-        let quoteText = ''
-        if (typeof quote === 'string') {
-          quoteText = quote
-        } else if (quote && typeof quote === 'object') {
-          quoteText = quote.quote || quote.text || quote.content || ''
-        }
-        
-        if (quoteText && quoteText.trim().length > 0) {
-          const trimmed = quoteText.trim()
-          if (totalChars + trimmed.length <= MAX_QUOTE_CHARS) {
-            quoteTexts.push(trimmed)
-            totalChars += trimmed.length
-          } else {
-            // Add partial quote if there's room
-            const remaining = MAX_QUOTE_CHARS - totalChars
-            if (remaining > 50) {
-              const partial = trimmed.substring(0, remaining)
-              const lastPeriod = partial.lastIndexOf('.')
-              if (lastPeriod > remaining * 0.8) {
-                quoteTexts.push(partial.substring(0, lastPeriod + 1))
-              }
-            }
-            break
-          }
-        }
-      }
-      
-      return quoteTexts.join('\n\n')
+      return ''
     }
     const baseKeyPoints: string[] = Array.isArray(metadata.keyPoints)
       ? metadata.keyPoints
@@ -279,7 +333,7 @@ export async function GET(
     }
 
     // Extract fair use quotes
-    const fairUseQuotes = extractFairUseQuotes(quotes, metadata)
+    const fairUseQuotes = extractFairUseQuotes(quotes, metadata, content.textContent)
 
     const preview: ContentPreview = {
       id: content.id,
