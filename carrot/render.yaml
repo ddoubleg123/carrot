@@ -43,6 +43,10 @@ services:
         fromDatabase:
           name: carrot-db
           property: resend_api_key
+      - key: DEEPSEEK_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: deepseek_api_key
       - key: INGEST_WORKER_SECRET
         value: dev_ingest_secret
       - key: INGEST_CALLBACK_URL
