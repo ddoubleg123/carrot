@@ -153,7 +153,7 @@ async function packDiscoveredContent(
       for (const item of extracted.slice(0, 10 - timeline.length)) {
         timeline.push({
           date: item.date || 'Date unknown',
-          what: item.content || item.fact || '',
+          what: item.content || '',
           refs: []
         })
       }
