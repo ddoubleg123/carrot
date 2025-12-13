@@ -1445,9 +1445,13 @@ export async function processNextCitation(
     )
     
     const aiPriorityScore = scoringResult.score
-    // Keep threshold at 60 to maintain quality
-    const RELEVANCE_THRESHOLD = 60
-    const isRelevantFromDeepSeek = scoringResult.isRelevant && aiPriorityScore >= RELEVANCE_THRESHOLD
+    // Lower threshold to 50 to be more inclusive - trust high scores even if isRelevant is false
+    const RELEVANCE_THRESHOLD = 50
+    // More lenient: If score is high (>= 70), trust it even if isRelevant is false
+    // This handles cases where AI gives high score but marks isRelevant as false
+    const hasHighScore = aiPriorityScore >= 70
+    const hasPassingScore = aiPriorityScore >= RELEVANCE_THRESHOLD
+    const isRelevantFromDeepSeek = hasHighScore || (scoringResult.isRelevant && hasPassingScore)
     
     console.log(`[WikipediaProcessor] DeepSeek content scoring for "${nextCitation.citationTitle}":`, {
       score: aiPriorityScore,
