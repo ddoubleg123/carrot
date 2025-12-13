@@ -29,6 +29,9 @@ export interface ContentPreview {
     author?: string
     publishDate?: string
     readingTime?: number
+    domain?: string
+    url?: string
+    canonicalUrl?: string
   }
 }
 
