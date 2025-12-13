@@ -379,34 +379,20 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                       </section>
                     )}
 
-                    {/* Timeline */}
-                    {content.timeline && content.timeline.length > 0 && (
+                    {/* Fair Use Quotes */}
+                    {content.quotes && content.quotes.trim().length > 0 && (
                       <section>
-                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Timeline</h2>
-                        <div className="space-y-3">
-                          {content.timeline.map((item: any, index: number) => (
-                            <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                              <div className="flex items-center gap-1 text-sm font-medium text-blue-600 min-w-[80px]">
-                                <Calendar className="h-3 w-3" />
-                                {item.date || 'Date unknown'}
-                              </div>
-                              <div className="text-sm text-slate-700 flex-1">
-                                {item.fact || item.content || item.text}
-                              </div>
-                            </div>
+                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Quotes</h2>
+                        <div className="space-y-4">
+                          {content.quotes.split('\n\n').map((paragraph: string, index: number) => (
+                            <blockquote 
+                              key={index}
+                              className="border-l-4 border-blue-500 pl-4 py-2 italic text-slate-700 bg-blue-50 rounded-r-lg leading-relaxed"
+                            >
+                              "{paragraph.trim()}"
+                            </blockquote>
                           ))}
                         </div>
-                      </section>
-                    )}
-
-                    {/* Excerpt / Additional Content */}
-                    {content.excerptHtml && (
-                      <section>
-                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Excerpt</h2>
-                        <div 
-                          className="prose prose-sm max-w-none text-slate-700 leading-relaxed"
-                          dangerouslySetInnerHTML={{ __html: content.excerptHtml }}
-                        />
                       </section>
                     )}
 

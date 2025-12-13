@@ -4,6 +4,7 @@ export interface ContentPreview {
   summary: string
   keyPoints: string[]
   excerptHtml: string
+  quotes?: string // Fair use quotes (up to 3 paragraphs, max 1200 chars)
   context?: string
   entities: Array<{
     name: string
