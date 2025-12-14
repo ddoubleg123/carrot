@@ -507,7 +507,7 @@ export async function processFeedQueue(options: {
 
   // Process in parallel (up to concurrency limit)
   const results = await Promise.allSettled(
-    queueItems.map(item => processFeedQueueItem(item.id))
+    queueItems.map((item: any) => processFeedQueueItem(item.id))
   )
 
   for (const result of results) {
