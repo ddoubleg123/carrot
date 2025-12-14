@@ -348,7 +348,7 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
         entities: packed.entities as any,
         timeline: packed.timeline as any,
         rawTextPtr: packed.rawTextPtr
-      }
+      } as any
     })
 
     // Mark queue item as done
