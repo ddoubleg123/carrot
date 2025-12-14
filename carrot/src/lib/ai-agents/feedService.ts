@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export interface FeedItem {
   content: string;
-  sourceType: 'url' | 'file' | 'post' | 'manual';
+  sourceType: 'url' | 'file' | 'post' | 'manual' | 'discovery';
   sourceUrl?: string;
   sourceTitle?: string;
   sourceAuthor?: string;
