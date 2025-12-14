@@ -160,6 +160,7 @@ export class FeedService {
       console.log(`[FeedService] Attempting to create memory for agent ${agentId}, content length: ${contentToStore.length}`);
 
       // Create real memory in database
+      // Note: Using type assertion because patchId column doesn't exist in DB yet
       const memory = await prisma.agentMemory.create({
         data: {
           agentId,
@@ -174,7 +175,9 @@ export class FeedService {
           threadId: feedItem.threadId,
           topicId: feedItem.topicId,
           fedBy: fedBy || 'system'
-        }
+          // Note: patchId, discoveredContentId, contentHash, summary, facts, entities, timeline, rawTextPtr
+          // are not included because the database columns don't exist yet
+        } as any
       });
 
       memoryIds.push(memory.id);

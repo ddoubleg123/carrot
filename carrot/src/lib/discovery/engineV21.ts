@@ -635,6 +635,29 @@ export class DiscoveryEngineV21 {
                 })
                 
                 console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id} (relevance: ${finalRelevanceScore.toFixed(2)}, useful: ${relevanceData?.isRelevant ?? false})`)
+                
+                // Enqueue for agent feeding (background, non-blocking)
+                try {
+                  const { enqueueDiscoveredContent, calculateContentHash } = await import('@/lib/agent/feedWorker')
+                  const contentHash = savedItem.contentHash || calculateContentHash(
+                    savedItem.title,
+                    savedItem.summary,
+                    savedItem.textContent
+                  )
+                  await enqueueDiscoveredContent(
+                    savedItem.id,
+                    this.options.patchId,
+                    contentHash,
+                    0 // Default priority
+                  ).catch(err => {
+                    // Non-fatal - log but don't fail
+                    console.warn(`[WikipediaProcessor] Failed to enqueue content for agent feeding:`, err)
+                  })
+                } catch (enqueueError) {
+                  // Non-fatal - log but don't fail
+                  console.warn(`[WikipediaProcessor] Error importing enqueue function:`, enqueueError)
+                }
+                
                 return savedItem.id
               } catch (error: any) {
                 console.error(`[WikipediaProcessor] Error saving citation to DiscoveredContent:`, error)
@@ -2927,6 +2950,28 @@ Return ONLY valid JSON array, no other text.`
           // Structured logging
           const { discoveryLogger } = await import('./structuredLogger')
           discoveryLogger.save(true, savedItem.id, canonicalUrl, candidate.meta?.publishDate?.toString() || null)
+          
+          // Enqueue for agent feeding (background, non-blocking)
+          try {
+            const { enqueueDiscoveredContent, calculateContentHash } = await import('@/lib/agent/feedWorker')
+            const contentHash = savedItem.contentHash || calculateContentHash(
+              savedItem.title,
+              savedItem.summary,
+              savedItem.textContent
+            )
+            await enqueueDiscoveredContent(
+              savedItem.id,
+              patchId,
+              contentHash,
+              0 // Default priority
+            ).catch(err => {
+              // Non-fatal - log but don't fail
+              console.warn(`[EngineV21] Failed to enqueue content for agent feeding:`, err)
+            })
+          } catch (enqueueError) {
+            // Non-fatal - log but don't fail
+            console.warn(`[EngineV21] Error importing enqueue function:`, enqueueError)
+          }
           
           // Structured logging for successful save (persist)
           const { slog } = await import('@/lib/log')

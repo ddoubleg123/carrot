@@ -53,32 +53,89 @@ export function extractReadableContent(html: string, url?: string): ReadabilityR
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
   
-  // Try to find main content area
+  // Try to find main content area - expanded selectors for better extraction
   const contentSelectors = [
     /<article[^>]*>([\s\S]*?)<\/article>/i,
     /<main[^>]*>([\s\S]*?)<\/main>/i,
     /<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
     /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-    /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+    /<div[^>]*class="[^"]*article-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*post-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*id="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*id="[^"]*main[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*id="[^"]*article[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<section[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
+    /<section[^>]*class="[^"]*article[^"]*"[^>]*>([\s\S]*?)<\/section>/i
   ]
   
   let content = ''
+  let bestContent = ''
+  let bestLength = 0
+  
+  // Try all selectors and pick the one with most content
   for (const selector of contentSelectors) {
-    const match = cleanHtml.match(selector)
-    if (match && match[1]) {
-      content = match[1]
-      break
+    const matches = cleanHtml.matchAll(new RegExp(selector.source, 'gi'))
+    for (const match of matches) {
+      if (match[1]) {
+        const matchContent = match[1]
+        const textLength = matchContent.replace(/<[^>]*>/g, '').trim().length
+        if (textLength > bestLength) {
+          bestContent = matchContent
+          bestLength = textLength
+        }
+      }
     }
   }
   
-  // Fallback to body content
-  if (!content) {
+  if (bestContent) {
+    content = bestContent
+  } else {
+    // Fallback: try to find the largest div/section with substantial text
     const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-    content = bodyMatch ? bodyMatch[1] : cleanHtml
+    if (bodyMatch) {
+      const bodyContent = bodyMatch[1]
+      
+      // Find all divs and sections, pick the one with most text
+      const blockMatches = bodyContent.matchAll(/<(div|section)[^>]*>([\s\S]*?)<\/(div|section)>/gi)
+      for (const match of blockMatches) {
+        if (match[2]) {
+          const blockText = match[2].replace(/<[^>]*>/g, '').trim()
+          if (blockText.length > bestLength && blockText.length > 500) {
+            bestContent = match[2]
+            bestLength = blockText.length
+          }
+        }
+      }
+      
+      content = bestContent || bodyContent
+    } else {
+      content = cleanHtml
+    }
   }
   
-  // Extract text content (remove HTML tags)
-  let textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  // Extract text content (remove HTML tags, but preserve structure)
+  // First, convert block elements to newlines
+  let textContent = content
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/td>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/\n\s*\n\s*\n+/g, '\n\n') // Normalize multiple newlines
+    .trim()
   
   // Filter out common menu/navigation patterns
   const menuPatterns = [

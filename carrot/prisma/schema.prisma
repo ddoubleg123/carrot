@@ -650,25 +650,58 @@ model Agent {
 }
 
 model AgentMemory {
-  id           String   @id @default(cuid())
-  agentId      String   @map("agent_id")
-  content      String // The actual memory content
-  embedding    Float[] // Vector embedding of the content
-  sourceType   String // "url", "file", "post", "manual", etc.
-  sourceUrl    String? // Original source URL
-  sourceTitle  String? // Title of the source
-  sourceAuthor String? // Author of the source
-  tags         String[] // Topic tags, sentiment, bias labels, etc.
-  confidence   Float    @default(1.0) // Confidence score for this memory
-  threadId     String? // Associated Carrot group page thread ID
-  topicId      String? // Associated topic ID
-  fedBy        String? // User ID who fed this memory
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  agentId            String   @map("agent_id")
+  content            String // The actual memory content
+  embedding          Float[] // Vector embedding of the content
+  sourceType         String // "url", "file", "post", "manual", "discovery", etc.
+  sourceUrl          String? // Original source URL
+  sourceTitle        String? // Title of the source
+  sourceAuthor       String? // Author of the source
+  tags               String[] // Topic tags, sentiment, bias labels, etc.
+  confidence         Float    @default(1.0) // Confidence score for this memory
+  threadId           String? // Associated Carrot group page thread ID
+  topicId            String? // Associated topic ID
+  fedBy              String? // User ID who fed this memory
+  // Discovery-specific fields
+  patchId            String?   @map("patch_id") // Patch this memory belongs to
+  discoveredContentId String?   @map("discovered_content_id") // FK to DiscoveredContent
+  contentHash        String?   @map("content_hash") // Hash of content for dedup
+  summary            String?   @db.Text // Summary (4-6 sentences)
+  facts              Json? // Array of fact objects {text, date?}
+  entities           Json? // Array of entity objects {name, type}
+  timeline           Json? // Array of timeline items {date, what, refs}
+  rawTextPtr         String?   @map("raw_text_ptr") // Pointer to full text (not duplication)
+  createdAt          DateTime @default(now())
 
   agent             Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
   wikipediaCitation WikipediaCitation?
+  discoveredContent DiscoveredContent? @relation(fields: [discoveredContentId], references: [id], onDelete: SetNull)
 
+  @@unique([patchId, discoveredContentId, contentHash])
+  @@index([patchId, discoveredContentId])
+  @@index([contentHash])
   @@map("agent_memories")
+}
+
+model AgentMemoryFeedQueue {
+  id                 String   @id @default(cuid())
+  patchId            String   @map("patch_id")
+  discoveredContentId String   @map("discovered_content_id")
+  contentHash        String   @map("content_hash")
+  enqueuedAt         DateTime @default(now()) @map("enqueued_at")
+  pickedAt           DateTime? @map("picked_at")
+  attempts           Int      @default(0)
+  lastError           String?  @map("last_error") @db.Text
+  status              String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  priority            Int      @default(0) // Higher = more priority
+
+  discoveredContent   DiscoveredContent @relation(fields: [discoveredContentId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, discoveredContentId, contentHash])
+  @@index([patchId, status, enqueuedAt])
+  @@index([status, enqueuedAt])
+  @@map("agent_memory_feed_queue")
 }
 
 model AgentFeedEvent {
@@ -792,6 +825,8 @@ model DiscoveredContent {
   patch              Patch               @relation(fields: [patchId], references: [id], onDelete: Cascade)
   heroRecord         Hero?               @relation("HeroToContent") // One-to-one relation (renamed to avoid conflict with JSON hero field)
   wikipediaCitations WikipediaCitation[]
+  agentMemories      AgentMemory[] // Memories created from this content
+  feedQueueItems     AgentMemoryFeedQueue[] // Queue items for this content
 
   @@unique([patchId, canonicalUrl])
   @@index([patchId])

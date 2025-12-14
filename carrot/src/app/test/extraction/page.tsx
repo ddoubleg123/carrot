@@ -50,6 +50,32 @@ export default function ExtractionTestPage() {
   const [liveEvents, setLiveEvents] = useState<Array<{ timestamp: number; type: string; data: any }>>([])
   const [showLiveTracker, setShowLiveTracker] = useState(false)
   const [lastEventTime, setLastEventTime] = useState(0)
+  const [stats, setStats] = useState<any>(null)
+  const [showDashboard, setShowDashboard] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+
+  // Fetch stats
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch('/api/test/extraction/stats')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            setStats(result)
+          }
+        }
+      } catch (err) {
+        // Ignore errors
+      }
+    }
+
+    fetchStats()
+    if (autoRefresh) {
+      const interval = setInterval(fetchStats, 5000) // Refresh every 5 seconds
+      return () => clearInterval(interval)
+    }
+  }, [autoRefresh])
 
   useEffect(() => {
     async function fetchData() {
@@ -75,7 +101,11 @@ export default function ExtractionTestPage() {
     }
 
     fetchData()
-  }, [])
+    if (autoRefresh) {
+      const interval = setInterval(fetchData, 10000) // Refresh every 10 seconds
+      return () => clearInterval(interval)
+    }
+  }, [autoRefresh])
 
   // Live tracker polling
   useEffect(() => {
@@ -268,10 +298,208 @@ export default function ExtractionTestPage() {
     <div style={{ maxWidth: '1800px', margin: '0 auto', padding: '20px', fontFamily: 'system-ui', background: '#f5f5f5', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ background: 'white', padding: '30px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        <h1 style={{ margin: '0 0 10px 0' }}>📊 Wikipedia Extraction & Database Test</h1>
-        <p><strong>Patch:</strong> Israel</p>
-        <p><strong>Last Updated:</strong> {new Date().toISOString()}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <div>
+            <h1 style={{ margin: '0 0 10px 0' }}>📊 Citation Processing Dashboard</h1>
+            <p style={{ margin: 0 }}><strong>Patch:</strong> {stats?.patch?.title || 'Israel'}</p>
+            <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>
+              <strong>Last Updated:</strong> {stats?.timestamp ? new Date(stats.timestamp).toLocaleTimeString() : 'Loading...'}
+              {autoRefresh && <span style={{ marginLeft: '10px', color: '#28a745' }}>🔄 Auto-refreshing every 5s</span>}
+            </p>
+          </div>
+          <div>
+            <button
+              onClick={() => setShowDashboard(!showDashboard)}
+              style={{
+                padding: '8px 16px',
+                background: showDashboard ? '#28a745' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                marginRight: '10px',
+                fontSize: '14px'
+              }}
+            >
+              {showDashboard ? '📊 Dashboard' : '📋 Table View'}
+            </button>
+            <button
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              style={{
+                padding: '8px 16px',
+                background: autoRefresh ? '#17a2b8' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              {autoRefresh ? '⏸️ Pause' : '▶️ Auto-refresh'}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Real-time Dashboard */}
+      {showDashboard && stats && (
+        <div style={{ marginBottom: '20px' }}>
+          {/* Processing Progress */}
+          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '20px' }}>📈 Processing Progress</h2>
+            <div style={{ marginBottom: '15px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>Overall Progress</span>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>{stats.citations.progressPercent}%</span>
+              </div>
+              <div style={{ width: '100%', height: '30px', background: '#e9ecef', borderRadius: '15px', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${stats.citations.progressPercent}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #28a745, #20c997)',
+                  transition: 'width 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}>
+                  {stats.citations.scanned.toLocaleString()} / {stats.citations.total.toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Total Citations</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#0066cc' }}>{stats.citations.total.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Processed</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#17a2b8' }}>{stats.citations.scanned.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>✅ Saved</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#28a745' }}>{stats.citations.saved.toLocaleString()}</div>
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>{stats.citations.processingRate} save rate</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>❌ Denied</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc3545' }}>{stats.citations.denied.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>⏳ Pending</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#ffc107' }}>{stats.citations.pending.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>📄 With Content</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#6c757d' }}>{stats.citations.withContent.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent Learning Stats */}
+          <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '20px' }}>🤖 Agent Learning</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Total Memories</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#0066cc' }}>{stats.agent.totalMemories.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>From Discovery</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#28a745' }}>{stats.agent.discoveryMemories.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Feed Queue - Queued</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#ffc107' }}>{stats.agent.feedQueue.queued.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Feed Queue - Done</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#28a745' }}>{stats.agent.feedQueue.done.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Feed Queue - Failed</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc3545' }}>{stats.agent.feedQueue.failed.toLocaleString()}</div>
+              </div>
+            </div>
+            
+            {/* Recent Memories */}
+            {stats.agent.recentMemories.length > 0 && (
+              <div>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '16px' }}>Recent Agent Memories</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+                  {stats.agent.recentMemories.map((memory: any, idx: number) => (
+                    <div key={idx} style={{ padding: '12px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid #28a745' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                        <strong style={{ fontSize: '14px' }}>{memory.title || 'Untitled'}</strong>
+                        <span style={{ fontSize: '12px', color: '#666' }}>{new Date(memory.createdAt).toLocaleTimeString()}</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>
+                        {memory.url.substring(0, 80)}...
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#999' }}>
+                        {memory.contentLength.toLocaleString()} chars • {memory.preview.substring(0, 100)}...
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Saved Content */}
+          {stats.discoveredContent.recent.length > 0 && (
+            <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ margin: '0 0 20px 0', fontSize: '20px' }}>
+                💾 Discovered Content ({stats.discoveredContent.total} total, {stats.discoveredContent.withHero} with heroes)
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto' }}>
+                {stats.discoveredContent.recent.map((content: any, idx: number) => (
+                  <div key={idx} style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid #28a745' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <strong style={{ fontSize: '14px' }}>{content.title}</strong>
+                      <span style={{ fontSize: '12px', color: '#666' }}>{new Date(content.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>
+                      {content.url.substring(0, 80)}...
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#999', marginBottom: '5px' }}>
+                      {content.contentLength.toLocaleString()} chars • {content.summary?.substring(0, 100) || 'No summary'}...
+                    </div>
+                    <div style={{ fontSize: '11px', color: content.hasHero ? '#28a745' : '#999' }}>
+                      {content.hasHero ? '✅ Has hero image' : '⏳ No hero image yet'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent Saved Citations */}
+          {stats.citations.recentSaved.length > 0 && (
+            <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ margin: '0 0 20px 0', fontSize: '20px' }}>✅ Recently Saved Citations</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto' }}>
+                {stats.citations.recentSaved.map((citation: any, idx: number) => (
+                  <div key={idx} style={{ padding: '15px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid #28a745' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <strong style={{ fontSize: '14px' }}>{citation.title || 'Untitled'}</strong>
+                      <span style={{ fontSize: '12px', color: '#666' }}>{citation.scannedAt ? new Date(citation.scannedAt).toLocaleTimeString() : 'N/A'}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>
+                      {citation.url.substring(0, 80)}...
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#999' }}>
+                      Score: {citation.score || 'N/A'} • {citation.contentLength.toLocaleString()} chars • Saved as: {citation.savedContentId || 'N/A'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Tracker Toggle */}
       <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
@@ -354,6 +582,9 @@ export default function ExtractionTestPage() {
         </div>
       </div>
 
+      {/* Table View - Only show when dashboard is hidden */}
+      {!showDashboard && (
+        <>
       {/* Filters */}
       <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
@@ -748,6 +979,8 @@ export default function ExtractionTestPage() {
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
   )
 }
