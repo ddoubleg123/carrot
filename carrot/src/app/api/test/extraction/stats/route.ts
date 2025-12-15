@@ -92,8 +92,10 @@ export async function GET() {
         where: {
           monitoring: { patchId: patch.id },
           relevanceDecision: 'denied',
-          contentText: { not: null },
-          contentText: { not: '' }
+          AND: [
+            { contentText: { not: null } },
+            { contentText: { not: '' } }
+          ]
         },
         orderBy: { lastScannedAt: 'desc' },
         take: 10,
