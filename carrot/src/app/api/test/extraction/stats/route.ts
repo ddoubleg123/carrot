@@ -162,7 +162,7 @@ export async function GET() {
     const agent = await prisma.agent.findFirst({
       where: {
         associatedPatches: {
-          has: patchHandle
+          has: 'israel' // Patch handle for Israel patch
         },
         isActive: true
       },
