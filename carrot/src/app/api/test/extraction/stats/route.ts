@@ -65,8 +65,10 @@ export async function GET() {
       prisma.wikipediaCitation.count({
         where: {
           monitoring: { patchId: patch.id },
-          contentText: { not: null },
-          contentText: { not: '' }
+          AND: [
+            { contentText: { not: null } },
+            { contentText: { not: '' } }
+          ]
         }
       }),
       prisma.wikipediaCitation.findMany({
