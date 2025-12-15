@@ -158,12 +158,13 @@ export async function GET() {
       })
     ])
 
-    // Get agent for this patch
+    // Get agent for this patch (agents are associated via associatedPatches array)
     const agent = await prisma.agent.findFirst({
       where: {
-        patches: {
-          some: { id: patch.id }
-        }
+        associatedPatches: {
+          has: patchHandle
+        },
+        isActive: true
       },
       select: { id: true }
     })
