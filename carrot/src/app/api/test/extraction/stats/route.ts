@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -132,9 +133,7 @@ export async function GET() {
             path: ['source'],
             equals: 'wikipedia-citation'
           },
-          NOT: {
-            hero: null
-          }
+          hero: { not: Prisma.JsonNull }
         }
       }),
       prisma.discoveredContent.findMany({
