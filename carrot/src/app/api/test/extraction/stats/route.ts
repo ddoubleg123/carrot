@@ -132,7 +132,9 @@ export async function GET() {
             path: ['source'],
             equals: 'wikipedia-citation'
           },
-          hero: { not: null }
+          NOT: {
+            hero: null
+          }
         }
       }),
       prisma.discoveredContent.findMany({
