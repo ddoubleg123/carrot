@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       ...(maxPatches ? { take: maxPatches } : {})
     })
 
-    const patchIds = [...new Set(patchesWithQueue.map((q: any) => q.patchId))]
+    const patchIds: string[] = Array.from(new Set(patchesWithQueue.map((q: any) => String(q.patchId))))
 
     const results = []
     let totalProcessed = 0
