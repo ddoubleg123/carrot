@@ -260,6 +260,7 @@ export function extractWikipediaCitationsWithContext(
   const seenUrls = new Set<string>()
   
   // Helper function to check if URL is Wikipedia internal
+  // Includes ALL Wikipedia/Wikimedia domains (wiktionary, wikinews, wikiquote, etc.)
   function isWikipediaUrl(url: string): boolean {
     if (url.startsWith('./') || url.startsWith('/wiki/') || url.startsWith('../')) {
       return true
@@ -270,9 +271,20 @@ export function extractWikipediaCitationsWithContext(
     try {
       const urlObj = new URL(url, sourceUrl)
       const hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '')
+      // Filter out ALL Wikipedia/Wikimedia domains
       return hostname.includes('wikipedia.org') || 
              hostname.includes('wikimedia.org') || 
-             hostname.includes('wikidata.org')
+             hostname.includes('wikidata.org') ||
+             hostname.includes('wiktionary.org') ||
+             hostname.includes('wikinews.org') ||
+             hostname.includes('wikiquote.org') ||
+             hostname.includes('wikisource.org') ||
+             hostname.includes('wikibooks.org') ||
+             hostname.includes('wikiversity.org') ||
+             hostname.includes('wikivoyage.org') ||
+             hostname.includes('wikimediafoundation.org') ||
+             hostname.includes('mediawiki.org') ||
+             hostname.includes('toolforge.org') // Wikipedia toolforge tools
     } catch {
       return false
     }

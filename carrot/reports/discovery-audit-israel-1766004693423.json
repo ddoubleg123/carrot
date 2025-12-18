@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-12-17T20:51:33.423Z",
+  "patch": {
+    "id": "cmip4pwb40001rt1t7a13p27g",
+    "handle": "israel",
+    "title": "Israel"
+  },
+  "metrics": {
+    "totalProcessed": 20,
+    "newlyScanned": 9,
+    "newlySaved": 0,
+    "newlyDenied": 9,
+    "saveRate": 0,
+    "contentExtraction": {
+      "citationsWithContent": 5,
+      "averageLength": 3052.8,
+      "minLength": 362,
+      "maxLength": 7282
+    },
+    "aiScoring": {
+      "citationsWithScores": 4,
+      "averageScore": 71.25,
+      "minScore": 30,
+      "maxScore": 85,
+      "highScores": 3,
+      "mediumScores": 0,
+      "lowScores": 1
+    },
+    "discoveredContentCreated": 4
+  },
+  "errors": []
+}

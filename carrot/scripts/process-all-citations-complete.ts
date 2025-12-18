@@ -1,26 +1,27 @@
 /**
- * Process ALL Citations - Complete Pipeline
+ * Process ALL Citations - Complete Run
  * 
- * Processes ALL unprocessed citations (not just denied ones)
- * For each saved citation:
- * - Feeds to agent (auto-feed pipeline)
- * - Generates hero image
- * 
- * This will process all 8,000+ citations until complete
+ * This script processes ALL citations from scratch, including:
+ * - Resetting failed citations
+ * - Processing all unprocessed citations
+ * - Enhanced content extraction
+ * - Agent feeding
+ * - Hero generation
  * 
  * Usage:
- *   ts-node scripts/process-all-citations-complete.ts --patch=israel --batch-size=10
+ *   npx tsx scripts/process-all-citations-complete.ts --patch=israel --batch-size=20 --pause=2000
  */
 
 import 'dotenv/config'
 import { prisma } from '../src/lib/prisma'
-import { processNextCitation } from '../src/lib/discovery/wikipediaProcessor'
 import { getNextCitationToProcess } from '../src/lib/discovery/wikipediaCitation'
+import { processNextCitation } from '../src/lib/discovery/wikipediaProcessor'
 
 interface Args {
   patch?: string
   batchSize?: number
   pauseBetweenBatches?: number
+  resetFailed?: boolean
 }
 
 async function parseArgs(): Promise<Args> {
@@ -34,20 +35,46 @@ async function parseArgs(): Promise<Args> {
       args.batchSize = parseInt(arg.split('=')[1])
     } else if (arg.startsWith('--pause=')) {
       args.pauseBetweenBatches = parseInt(arg.split('=')[1])
+    } else if (arg === '--reset-failed') {
+      args.resetFailed = true
     }
   }
   
   return args
 }
 
-async function processAllCitationsComplete(
+async function resetFailedCitations(patchId: string) {
+  console.log('🔄 Resetting failed citations...')
+  
+  const result = await prisma.wikipediaCitation.updateMany({
+    where: {
+      monitoring: { patchId },
+      verificationStatus: 'failed'
+    },
+    data: {
+      verificationStatus: 'pending',
+      scanStatus: 'not_scanned',
+      relevanceDecision: null,
+      savedContentId: null,
+      errorMessage: null,
+      lastScannedAt: null
+    }
+  })
+  
+  console.log(`   ✅ Reset ${result.count} failed citations`)
+}
+
+async function processAllCitations(
   patchHandle: string,
-  batchSize: number = 10,
-  pauseBetweenBatches: number = 2000
+  batchSize: number = 20,
+  pauseBetweenBatches: number = 2000,
+  resetFailed: boolean = false
 ) {
-  console.log(`\n🚀 Processing ALL citations for patch: ${patchHandle}\n`)
+  console.log(`\n🚀 Processing ALL citations for: ${patchHandle}\n`)
   console.log(`   Batch size: ${batchSize}`)
-  console.log(`   Pause between batches: ${pauseBetweenBatches}ms\n`)
+  console.log(`   Pause between batches: ${pauseBetweenBatches}ms`)
+  console.log(`   Reset failed: ${resetFailed}`)
+  console.log()
 
   // Get patch
   const patch = await prisma.patch.findUnique({
@@ -60,6 +87,12 @@ async function processAllCitationsComplete(
     process.exit(1)
   }
 
+  // Reset failed citations if requested
+  if (resetFailed) {
+    await resetFailedCitations(patch.id)
+    console.log()
+  }
+
   // Get initial stats
   const total = await prisma.wikipediaCitation.count({
     where: { monitoring: { patchId: patch.id } }
@@ -68,8 +101,14 @@ async function processAllCitationsComplete(
   const unprocessed = await prisma.wikipediaCitation.count({
     where: {
       monitoring: { patchId: patch.id },
-      scanStatus: { in: ['not_scanned', 'scanning'] },
-      relevanceDecision: null
+      OR: [
+        { scanStatus: 'not_scanned' },
+        { scanStatus: 'scanning' },
+        { 
+          scanStatus: 'scanned',
+          relevanceDecision: null
+        }
+      ]
     }
   })
 
@@ -80,10 +119,18 @@ async function processAllCitationsComplete(
     }
   })
 
+  const denied = await prisma.wikipediaCitation.count({
+    where: {
+      monitoring: { patchId: patch.id },
+      relevanceDecision: 'denied'
+    }
+  })
+
   console.log(`📊 Initial Stats:`)
-  console.log(`   Total citations: ${total}`)
-  console.log(`   Already saved: ${saved}`)
-  console.log(`   Ready to process: ${unprocessed}`)
+  console.log(`   Total citations: ${total.toLocaleString()}`)
+  console.log(`   Already saved: ${saved.toLocaleString()}`)
+  console.log(`   Already denied: ${denied.toLocaleString()}`)
+  console.log(`   Ready to process: ${unprocessed.toLocaleString()}`)
   console.log()
 
   let processed = 0
@@ -93,7 +140,7 @@ async function processAllCitationsComplete(
   const startTime = Date.now()
   let lastProgressTime = Date.now()
 
-  console.log('🔄 Processing citations continuously...\n')
+  console.log('🔄 Processing citations...\n')
   console.log('Press Ctrl+C to stop gracefully\n')
 
   while (true) {
@@ -132,7 +179,7 @@ async function processAllCitationsComplete(
             return existing.id
           }
 
-          // Save to DiscoveredContent
+          // Save to DiscoveredContent with full content
           const saved = await prisma.discoveredContent.create({
             data: {
               patchId: patch.id,
@@ -144,18 +191,20 @@ async function processAllCitationsComplete(
               category: 'article',
               relevanceScore: metadata?.aiScore || 0.5,
               qualityScore: 0,
-              textContent: content,
+              textContent: content, // Store full extracted content
               facts: [],
               provenance: [url],
               metadata: {
                 source: 'wikipedia-citation',
                 aiScore: metadata?.aiScore,
-                isRelevant: metadata?.isRelevant
+                isRelevant: metadata?.isRelevant,
+                extractionMethod: metadata?.extractionMethod || 'unknown',
+                contentLength: content.length
               }
             }
           })
 
-          console.log(`   ✅ Saved: ${saved.id}`)
+          console.log(`   ✅ Saved: ${saved.id} (${content.length} chars)`)
 
           // Enqueue for agent feeding (auto-feed pipeline)
           try {
@@ -225,21 +274,33 @@ async function processAllCitationsComplete(
       if (processed % batchSize === 0) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
         const batchTime = ((Date.now() - lastProgressTime) / 1000).toFixed(1)
-        const rate = (batchSize / (parseFloat(batchTime) as any)).toFixed(1)
+        const rate = (batchSize / parseFloat(batchTime)).toFixed(1)
         const remaining = await prisma.wikipediaCitation.count({
           where: {
             monitoring: { patchId: patch.id },
-            scanStatus: { in: ['not_scanned', 'scanning'] },
-            relevanceDecision: null
+            OR: [
+              { scanStatus: 'not_scanned' },
+              { scanStatus: 'scanning' },
+              { 
+                scanStatus: 'scanned',
+                relevanceDecision: null
+              }
+            ]
           }
         })
+        
+        const saveRate = processed > 0 ? ((savedCount / processed) * 100).toFixed(1) : '0.0'
+        const estimatedMinutes = remaining > 0 && parseFloat(rate) > 0 
+          ? ((remaining / parseFloat(rate)) / 60).toFixed(1) 
+          : 'N/A'
         
         console.log(`\n📊 Progress: ${processed} processed (${savedCount} saved, ${deniedCount} denied, ${failed} failed)`)
         console.log(`   Batch time: ${batchTime}s (${rate} citations/s)`)
         console.log(`   Total time: ${elapsed}s`)
-        console.log(`   Remaining: ~${remaining}`)
-        console.log(`   Save rate: ${((savedCount / processed) * 100).toFixed(1)}%`)
-        console.log(`   Estimated time remaining: ${((remaining / parseFloat(rate)) / 60).toFixed(1)} minutes\n`)
+        console.log(`   Remaining: ~${remaining.toLocaleString()}`)
+        console.log(`   Save rate: ${saveRate}%`)
+        console.log(`   Estimated time remaining: ${estimatedMinutes} minutes`)
+        console.log()
         
         lastProgressTime = Date.now()
         
@@ -260,14 +321,17 @@ async function processAllCitationsComplete(
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  const rate = processed > 0 ? (processed / parseFloat(elapsed)).toFixed(1) : '0'
+  const saveRate = processed > 0 ? ((savedCount / processed) * 100).toFixed(1) : '0.0'
+  
   console.log('\n📊 Final Summary:')
-  console.log(`   ✅ Processed: ${processed}`)
-  console.log(`   💾 Saved: ${savedCount}`)
-  console.log(`   ❌ Denied: ${deniedCount}`)
-  console.log(`   ⚠️  Failed: ${failed}`)
+  console.log(`   ✅ Processed: ${processed.toLocaleString()}`)
+  console.log(`   💾 Saved: ${savedCount.toLocaleString()}`)
+  console.log(`   ❌ Denied: ${deniedCount.toLocaleString()}`)
+  console.log(`   ⚠️  Failed: ${failed.toLocaleString()}`)
   console.log(`   ⏱️  Time: ${elapsed}s`)
-  console.log(`   📈 Rate: ${(processed / (elapsed as any)).toFixed(1)}/s`)
-  console.log(`   💾 Save rate: ${((savedCount / processed) * 100).toFixed(1)}%`)
+  console.log(`   📈 Rate: ${rate}/s`)
+  console.log(`   💾 Save rate: ${saveRate}%`)
   console.log()
 }
 
@@ -275,10 +339,11 @@ async function main() {
   try {
     const args = await parseArgs()
     const patchHandle = args.patch || 'israel'
-    const batchSize = args.batchSize || 10
+    const batchSize = args.batchSize || 20
     const pauseBetweenBatches = args.pauseBetweenBatches || 2000
+    const resetFailed = args.resetFailed || false
     
-    await processAllCitationsComplete(patchHandle, batchSize, pauseBetweenBatches)
+    await processAllCitations(patchHandle, batchSize, pauseBetweenBatches, resetFailed)
   } catch (error) {
     console.error('❌ Error:', error)
     process.exit(1)
@@ -288,4 +353,3 @@ async function main() {
 }
 
 main()
-

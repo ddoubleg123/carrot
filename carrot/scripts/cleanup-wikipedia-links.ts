@@ -1,21 +1,20 @@
+#!/usr/bin/env tsx
 /**
- * Cleanup script to mark old Wikipedia internal links as denied
- * These were stored before we implemented proper filtering
+ * Cleanup Wikipedia Links from Citations Table
+ * 
+ * Removes Wikipedia internal links from the citations table
+ * These should not be stored as citations - they're internal references
  */
 
-import { prisma } from '../src/lib/prisma'
+import 'dotenv/config'
+import { PrismaClient } from '@prisma/client'
 
-async function main() {
-  const args = process.argv.slice(2)
-  const patchHandle = args.find(a => a.startsWith('--patch='))?.split('=')[1] || 'israel'
-  const dryRun = args.includes('--dry-run')
+const prisma = new PrismaClient()
 
-  console.log(`\n=== Cleaning Up Wikipedia Internal Links ===\n`)
-  console.log(`Patch: ${patchHandle}`)
-  console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE (will update database)'}\n`)
-
+async function cleanupWikipediaLinks(patchHandle: string, dryRun: boolean = false) {
   const patch = await prisma.patch.findUnique({
-    where: { handle: patchHandle }
+    where: { handle: patchHandle },
+    select: { id: true, title: true }
   })
 
   if (!patch) {
@@ -23,104 +22,121 @@ async function main() {
     process.exit(1)
   }
 
-  // Find all Wikipedia internal links
+  console.log(`🧹 Cleaning up Wikipedia Links for: ${patch.title}\n`)
+  console.log(`   Dry Run: ${dryRun}\n`)
+
+  // Find all Wikipedia links
   const wikipediaLinks = await prisma.wikipediaCitation.findMany({
     where: {
-      monitoring: {
-        patchId: patch.id
-      },
+      monitoring: { patchId: patch.id },
       OR: [
-        { citationUrl: { contains: 'wikipedia.org' } },
         { citationUrl: { startsWith: './' } },
         { citationUrl: { startsWith: '/wiki/' } },
+        { citationUrl: { startsWith: '../' } },
+        { citationUrl: { contains: 'wikipedia.org' } },
         { citationUrl: { contains: 'wikimedia.org' } },
-        { citationUrl: { contains: 'wikidata.org' } }
+        { citationUrl: { contains: 'wikidata.org' } },
+        { citationUrl: { contains: 'wiktionary.org' } },
+        { citationUrl: { contains: 'wikinews.org' } },
+        { citationUrl: { contains: 'wikiquote.org' } },
+        { citationUrl: { contains: 'wikisource.org' } },
+        { citationUrl: { contains: 'wikibooks.org' } },
+        { citationUrl: { contains: 'wikiversity.org' } },
+        { citationUrl: { contains: 'wikivoyage.org' } },
+        { citationUrl: { contains: 'wikimediafoundation.org' } },
+        { citationUrl: { contains: 'mediawiki.org' } },
+        { citationUrl: { contains: 'toolforge.org' } }
       ]
     },
-    include: {
-      monitoring: {
-        select: {
-          wikipediaTitle: true
-        }
-      }
-    },
-    take: 10000 // Limit to prevent timeout
+    select: {
+      id: true,
+      citationUrl: true,
+      verificationStatus: true
+    }
   })
 
-  console.log(`Found ${wikipediaLinks.length} Wikipedia internal links\n`)
+  console.log(`Found ${wikipediaLinks.length} Wikipedia links to remove\n`)
 
   if (wikipediaLinks.length === 0) {
-    console.log('No Wikipedia links to clean up')
-    process.exit(0)
+    console.log('✅ No Wikipedia links to clean up')
+    await prisma.$disconnect()
+    return
   }
-
-  // Group by status
-  const byStatus = wikipediaLinks.reduce((acc, link) => {
-    const status = link.scanStatus
-    acc[status] = (acc[status] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-
-  console.log(`Current status breakdown:`)
-  Object.entries(byStatus).forEach(([status, count]) => {
-    console.log(`  ${status}: ${count}`)
-  })
-
-  // Show sample
-  console.log(`\nSample Wikipedia links (first 10):`)
-  wikipediaLinks.slice(0, 10).forEach((link, i) => {
-    console.log(`  ${i + 1}. [${link.monitoring.wikipediaTitle}] ${link.citationUrl}`)
-    console.log(`     Status: ${link.scanStatus}, Decision: ${link.relevanceDecision || 'null'}`)
-  })
 
   if (dryRun) {
-    console.log(`\n⚠️  DRY RUN - No changes made`)
-    console.log(`Run without --dry-run to update database`)
-    process.exit(0)
+    console.log('🔍 DRY RUN - Would delete the following:\n')
+    wikipediaLinks.slice(0, 20).forEach((c, i) => {
+      console.log(`  ${i + 1}. ${c.citationUrl.substring(0, 80)}...`)
+    })
+    if (wikipediaLinks.length > 20) {
+      console.log(`  ... and ${wikipediaLinks.length - 20} more`)
+    }
+    console.log(`\nTotal: ${wikipediaLinks.length} citations would be deleted`)
+    await prisma.$disconnect()
+    return
   }
 
-  // Update all Wikipedia links to denied
-  console.log(`\n=== Updating Database ===\n`)
+  // Delete them
+  console.log('Deleting Wikipedia links...\n')
   
-  const result = await prisma.wikipediaCitation.updateMany({
+  const result = await prisma.wikipediaCitation.deleteMany({
     where: {
-      id: { in: wikipediaLinks.map(l => l.id) }
-    },
-    data: {
-      scanStatus: 'scanned_denied',
-      relevanceDecision: 'denied_verify',
-      verificationStatus: 'failed',
-      errorMessage: 'Wikipedia internal link - filtered during extraction'
+      id: { in: wikipediaLinks.map(c => c.id) }
     }
   })
 
-  console.log(`✅ Updated ${result.count} Wikipedia links`)
-  console.log(`   - Set scanStatus: scanned_denied`)
-  console.log(`   - Set relevanceDecision: denied_verify`)
-  console.log(`   - Set verificationStatus: failed`)
+  console.log(`✅ Deleted ${result.count} Wikipedia links`)
 
-  // Verify
-  const remaining = await prisma.wikipediaCitation.count({
+  // Verify cleanup
+  const remainingWikipedia = await prisma.wikipediaCitation.count({
     where: {
-      monitoring: {
-        patchId: patch.id
-      },
+      monitoring: { patchId: patch.id },
       OR: [
-        { citationUrl: { contains: 'wikipedia.org' } },
         { citationUrl: { startsWith: './' } },
-        { citationUrl: { startsWith: '/wiki/' } }
-      ],
-      scanStatus: { not: 'scanned_denied' }
+        { citationUrl: { contains: 'wikipedia.org' } },
+        { citationUrl: { contains: 'wikimedia.org' } }
+      ]
     }
   })
 
-  console.log(`\nRemaining Wikipedia links with non-denied status: ${remaining}`)
+  const externalCount = await prisma.wikipediaCitation.count({
+    where: {
+      monitoring: { patchId: patch.id },
+      citationUrl: {
+        startsWith: 'http'
+      },
+      NOT: [
+        { citationUrl: { contains: 'wikipedia.org' } },
+        { citationUrl: { contains: 'wikimedia.org' } },
+        { citationUrl: { contains: 'wikidata.org' } },
+        { citationUrl: { contains: 'wiktionary.org' } },
+        { citationUrl: { contains: 'wikinews.org' } },
+        { citationUrl: { contains: 'wikiquote.org' } },
+        { citationUrl: { contains: 'wikisource.org' } },
+        { citationUrl: { contains: 'wikibooks.org' } },
+        { citationUrl: { contains: 'wikiversity.org' } },
+        { citationUrl: { contains: 'wikivoyage.org' } },
+        { citationUrl: { contains: 'wikimediafoundation.org' } },
+        { citationUrl: { contains: 'mediawiki.org' } },
+        { citationUrl: { contains: 'toolforge.org' } }
+      ]
+    }
+  })
 
-  process.exit(0)
+  console.log(`\n📊 After Cleanup:`)
+  console.log(`   Remaining Wikipedia Links: ${remainingWikipedia}`)
+  console.log(`   External Citations: ${externalCount}`)
+
+  await prisma.$disconnect()
 }
 
-main().catch(e => {
-  console.error(e)
-  process.exit(1)
-})
+const args = process.argv.slice(2)
+const patchHandle = args.find(arg => arg.startsWith('--patch='))?.split('=')[1] || 'israel'
+const dryRun = args.includes('--dry-run')
 
+cleanupWikipediaLinks(patchHandle, dryRun)
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error('Error:', error)
+    process.exit(1)
+  })

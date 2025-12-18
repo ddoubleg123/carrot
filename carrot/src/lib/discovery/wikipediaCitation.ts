@@ -96,71 +96,123 @@ export async function extractAndStoreCitations(
     return { citationsFound: 0, citationsStored: 0 }
   }
 
-  // Prioritize external URLs first (these will be processed immediately)
+  // ONLY store external URLs - Wikipedia internal links should NOT be stored as citations
+  // They are internal page references, not source citations
   emit('prioritization_started', { count: externalCitations.length })
   const prioritizedExternal = externalCitations.length > 0 
     ? await prioritizeCitations(externalCitations, wikipediaUrl)
     : []
   
-  // Wikipedia internal links get default priority (they'll be processed later if relevant)
-  const prioritizedWikipedia = wikipediaCitations.map(c => ({ ...c, score: 50 }))
+  // Skip Wikipedia internal links - they are NOT citations
+  // If we need to track Wikipedia page relationships, use a separate table
+  console.log(`[WikipediaCitation] Skipping ${wikipediaCitations.length} Wikipedia internal links (not citations)`)
   
-  // Combine: external URLs first, then Wikipedia links
-  const prioritized = [...prioritizedExternal, ...prioritizedWikipedia]
+  const prioritized = prioritizedExternal
   emit('prioritization_complete', { count: prioritized.length })
-  console.log(`[WikipediaCitation] Prioritized ${prioritized.length} citations (storing all)`)
+  console.log(`[WikipediaCitation] Prioritized ${prioritized.length} external citations (storing all)`)
 
   emit('storage_started', { count: prioritized.length })
-  // Store ALL citations in database (not just top 25)
+  // Store ALL external citations in database
   let citationsStored = 0
   for (let i = 0; i < prioritized.length; i++) {
     const citation = prioritized[i]
-    const sourceNumber = i + 1 // Reference number on Wikipedia page
+    // Use sequential numbering for external citations only
+    const sourceNumber = i + 1
 
     try {
-      // Check if already exists
-      const existing = await prisma.wikipediaCitation.findUnique({
+      // Check if this URL already exists for this monitoring (deduplicate by URL, not sourceNumber)
+      // sourceNumber can change between extractions, but URL should be stable
+      const existing = await prisma.wikipediaCitation.findFirst({
         where: {
-          monitoringId_sourceNumber: {
-            monitoringId,
-            sourceNumber
-          }
+          monitoringId,
+          citationUrl: citation.url
         }
       })
 
       if (existing) {
-        // Update if priority score changed
+        // Citation with this URL already exists - update it if needed
+        // Note: We can't change sourceNumber if it conflicts with unique constraint
+        // So we'll keep the existing sourceNumber but update other fields
+        const updates: any = {}
         if (citation.score !== undefined && citation.score !== existing.aiPriorityScore) {
+          updates.aiPriorityScore = citation.score
+        }
+        if (citation.title && citation.title !== existing.citationTitle) {
+          updates.citationTitle = citation.title
+        }
+        if (citation.context && citation.context !== existing.citationContext) {
+          updates.citationContext = citation.context
+        }
+        
+        if (Object.keys(updates).length > 0) {
           await prisma.wikipediaCitation.update({
             where: { id: existing.id },
-            data: { aiPriorityScore: citation.score }
+            data: updates
           })
         }
-        emit('citation_skipped', { sourceNumber, reason: 'duplicate', url: citation.url })
+        emit('citation_skipped', { sourceNumber, reason: 'duplicate_url', url: citation.url, existingSourceNumber: existing.sourceNumber })
         continue
       }
+      
+      // Check if sourceNumber is already taken (due to unique constraint)
+      // If so, find next available sourceNumber
+      let finalSourceNumber = sourceNumber
+      let sourceNumberCheck = await prisma.wikipediaCitation.findUnique({
+        where: {
+          monitoringId_sourceNumber: {
+            monitoringId,
+            sourceNumber: finalSourceNumber
+          }
+        }
+      })
+      
+      if (sourceNumberCheck) {
+        // Source number taken - find next available
+        const maxSourceNumber = await prisma.wikipediaCitation.findFirst({
+          where: { monitoringId },
+          orderBy: { sourceNumber: 'desc' },
+          select: { sourceNumber: true }
+        })
+        finalSourceNumber = (maxSourceNumber?.sourceNumber || 0) + 1
+        console.log(`[WikipediaCitation] Source number ${sourceNumber} taken, using ${finalSourceNumber} for ${citation.url}`)
+      }
 
-      // Check if this is a Wikipedia internal link
+      // Double-check: This should only be external URLs (Wikipedia links filtered out above)
+      // But add defensive check to ensure no Wikipedia links slip through
+      // Include ALL Wikipedia/Wikimedia domains
       const isWikipediaLink = citation.url.startsWith('./') || 
                               citation.url.startsWith('/wiki/') || 
                               citation.url.startsWith('../') ||
                               citation.url.includes('wikipedia.org') || 
                               citation.url.includes('wikimedia.org') || 
-                              citation.url.includes('wikidata.org')
+                              citation.url.includes('wikidata.org') ||
+                              citation.url.includes('wiktionary.org') ||
+                              citation.url.includes('wikinews.org') ||
+                              citation.url.includes('wikiquote.org') ||
+                              citation.url.includes('wikisource.org') ||
+                              citation.url.includes('wikibooks.org') ||
+                              citation.url.includes('wikiversity.org') ||
+                              citation.url.includes('wikivoyage.org') ||
+                              citation.url.includes('wikimediafoundation.org') ||
+                              citation.url.includes('mediawiki.org') ||
+                              citation.url.includes('toolforge.org')
       
-      // Create new citation entry
-      // Wikipedia internal links are marked as 'pending_wiki' status to indicate they need Wikipedia-to-Wikipedia processing
-      // External URLs are marked as 'pending' for immediate processing
+      if (isWikipediaLink) {
+        console.warn(`[WikipediaCitation] Skipping Wikipedia link that slipped through: ${citation.url}`)
+        continue
+      }
+      
+      // Create new citation entry for external URL only
       await prisma.wikipediaCitation.create({
         data: {
           monitoringId,
-          sourceNumber,
+          sourceNumber: finalSourceNumber,
           citationUrl: citation.url,
           citationTitle: citation.title,
           citationContext: citation.context,
           aiPriorityScore: citation.score,
-          verificationStatus: isWikipediaLink ? 'pending_wiki' : 'pending', // Mark Wikipedia links differently
-          scanStatus: 'not_scanned' // Both types start as not_scanned, but query will prioritize external
+          verificationStatus: 'pending', // All stored citations are external URLs
+          scanStatus: 'not_scanned'
         }
       })
       citationsStored++
@@ -176,19 +228,19 @@ export async function extractAndStoreCitations(
     }
   }
 
-  // Update monitoring record
+  // Update monitoring record with actual external citation count
   await prisma.wikipediaMonitoring.update({
     where: { id: monitoringId },
     data: {
-      citationCount: prioritized.length,
+      citationCount: prioritized.length, // Only count external citations
       citationsExtracted: true,
       lastExtractedAt: new Date()
     }
   })
 
-  emit('storage_complete', { citationsStored, totalFound: citations.length })
-  console.log(`[WikipediaCitation] Stored ${citationsStored} new citations`)
-  return { citationsFound: citations.length, citationsStored }
+  emit('storage_complete', { citationsStored, totalFound: externalCitations.length })
+  console.log(`[WikipediaCitation] Stored ${citationsStored} external citations (skipped ${wikipediaCitations.length} Wikipedia internal links)`)
+  return { citationsFound: externalCitations.length, citationsStored }
 }
 
 /**
