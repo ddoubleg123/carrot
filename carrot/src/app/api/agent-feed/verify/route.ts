@@ -162,15 +162,15 @@ export async function GET(request: NextRequest) {
 
     // Overall summary
     const totalDiscovered = verification.patches.reduce(
-      (sum, p) => sum + p.stats.discoveredContent,
+      (sum: number, p) => sum + p.stats.discoveredContent,
       0
     )
     const totalFed = verification.patches.reduce(
-      (sum, p) => sum + p.stats.fed,
+      (sum: number, p) => sum + p.stats.fed,
       0
     )
     const totalMissing = verification.patches.reduce(
-      (sum, p) => sum + p.stats.missing,
+      (sum: number, p) => sum + p.stats.missing,
       0
     )
 
