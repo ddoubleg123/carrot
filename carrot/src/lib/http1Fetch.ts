@@ -240,7 +240,7 @@ class HTTP1FetchManager {
         cache: 'no-store',
         // Additional HTTP/1.1 forcing options
         keepalive: true,
-        referrerPolicy: 'no-referrer',
+        referrerPolicy: 'strict-origin-when-cross-origin', // Changed from 'no-referrer' to avoid validation error
         // Additional options to force HTTP/1.1
         integrity: undefined, // Disable integrity checks that might force HTTP/2
         priority: 'low', // Lower priority to avoid HTTP/2 optimizations
