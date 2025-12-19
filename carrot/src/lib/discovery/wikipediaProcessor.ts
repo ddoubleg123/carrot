@@ -1318,6 +1318,41 @@ export async function processNextCitation(
     let extractionMethod = 'fallback-strip'
     let extractedTitle = nextCitation.citationTitle || 'Untitled'
 
+    // Helper function to check if a title is poor quality
+    const isPoorTitle = (title: string): boolean => {
+      if (!title || title.trim().length < 3) return true
+      const trimmed = title.trim()
+      return /^10\.\d{4,}\//.test(trimmed) || // DOI pattern
+             /^untitled$/i.test(trimmed) ||
+             /^book part$/i.test(trimmed) ||
+             /^article$/i.test(trimmed) ||
+             /^page$/i.test(trimmed) ||
+             /^document$/i.test(trimmed) ||
+             /^content$/i.test(trimmed) ||
+             /^https?:\/\//.test(trimmed) || // URLs as titles
+             /^[a-z0-9]{8,}$/i.test(trimmed) // Random alphanumeric strings
+    }
+
+    // Helper function to extract title from URL as fallback
+    const extractTitleFromUrl = (url: string): string | null => {
+      try {
+        const urlObj = new URL(url)
+        const pathParts = urlObj.pathname.split('/').filter(p => p && p.length > 2)
+        if (pathParts.length > 0) {
+          const lastPart = pathParts[pathParts.length - 1]
+          // Decode URL-encoded title
+          const decoded = decodeURIComponent(lastPart.replace(/[-_]/g, ' '))
+          // Only use if it looks like a real title (not a hash, not too short/long)
+          if (decoded.length >= 5 && decoded.length < 200 && !isPoorTitle(decoded)) {
+            return decoded
+          }
+        }
+      } catch (e) {
+        // URL parsing failed
+      }
+      return null
+    }
+
     // Stage 1: Try Readability extraction (best for news/blogs)
     try {
       const { extractReadableContent } = await import('@/lib/readability')
@@ -1325,7 +1360,12 @@ export async function processNextCitation(
       const readableText = readableResult.textContent || readableResult.content || ''
       if (readableText.length >= 600) {
         textContent = normalizeText(readableText)
-        extractedTitle = readableResult.title || extractedTitle
+        // Prefer extracted title if citation title is poor
+        if (readableResult.title && !isPoorTitle(readableResult.title)) {
+          extractedTitle = readableResult.title
+        } else if (isPoorTitle(extractedTitle) && readableResult.title) {
+          extractedTitle = readableResult.title // Use even if not perfect, better than poor
+        }
         extractionMethod = 'readability'
       }
     } catch (error) {
@@ -1341,12 +1381,26 @@ export async function processNextCitation(
         const extractedText = extracted.text || ''
         if (extractedText.length >= 600) {
           textContent = normalizeText(extractedText)
-          extractedTitle = extracted.title || extractedTitle
+          // Prefer extracted title if current title is poor
+          if (extracted.title && !isPoorTitle(extracted.title)) {
+            extractedTitle = extracted.title
+          } else if (isPoorTitle(extractedTitle) && extracted.title) {
+            extractedTitle = extracted.title // Use even if not perfect, better than poor
+          }
           extractionMethod = 'content-extractor'
         }
       } catch (error) {
         // Continue to fallback
         console.warn(`[WikipediaProcessor] ContentExtractor failed for ${citationUrl}:`, error)
+      }
+    }
+
+    // Stage 2.5: If title is still poor, try extracting from URL
+    if (isPoorTitle(extractedTitle)) {
+      const urlTitle = extractTitleFromUrl(citationUrl)
+      if (urlTitle) {
+        extractedTitle = urlTitle
+        console.log(`[WikipediaProcessor] Extracted title from URL: "${extractedTitle}"`)
       }
     }
 

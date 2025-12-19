@@ -529,18 +529,47 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
     const upsertDurationMs = Date.now() - upsertStartTime
     log('upsert', { traceId, ok: true, durationMs: upsertDurationMs, heroId: hero.id })
 
-    // Also update DiscoveredContent.hero JSON field for API compatibility
+    // Also update DiscoveredContent.hero JSON field and title if better
     try {
+      const currentContent = await prisma.discoveredContent.findUnique({
+        where: { id: contentId },
+        select: { title: true }
+      })
+
+      const updateData: any = {
+        hero: {
+          url: imageUrl,
+          source: imageSource,
+          license: imageSource === 'ai' ? 'generated' : 'source',
+          updatedAt: new Date().toISOString()
+        } as any
+      }
+
+      // Update title if extracted title is better (longer, more descriptive)
+      if (currentContent && extracted.title) {
+        const currentTitle = currentContent.title
+        const extractedTitle = extracted.title.trim()
+        
+        // Update if extracted title is better (not a DOI, longer, more words)
+        const isPoorTitle = /^10\.\d{4,}\//.test(currentTitle) || 
+                           /^untitled$/i.test(currentTitle) ||
+                           /^book part$/i.test(currentTitle) ||
+                           currentTitle.length < 5
+        
+        const isBetterTitle = extractedTitle.length >= 5 &&
+                             extractedTitle.length > currentTitle.length &&
+                             extractedTitle.split(' ').length >= 2 &&
+                             !/^10\.\d{4,}\//.test(extractedTitle)
+        
+        if (isPoorTitle || isBetterTitle) {
+          updateData.title = extractedTitle
+          log('upsert', { traceId, ok: true, note: `Updated DiscoveredContent.title: "${currentTitle.substring(0, 30)}" → "${extractedTitle.substring(0, 30)}"` })
+        }
+      }
+
       await prisma.discoveredContent.update({
         where: { id: contentId },
-        data: {
-          hero: {
-            url: imageUrl,
-            source: imageSource,
-            license: imageSource === 'ai' ? 'generated' : 'source',
-            updatedAt: new Date().toISOString()
-          } as any
-        }
+        data: updateData
       })
       log('upsert', { traceId, ok: true, note: 'Updated DiscoveredContent.hero JSON field' })
     } catch (updateError) {
