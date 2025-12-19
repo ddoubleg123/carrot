@@ -1489,10 +1489,10 @@ export async function processNextCitation(
     // isUseful flag will determine if it's published to the page
     if (finalIsRelevant && options.saveAsContent) {
       try {
-        console.log(`[WikipediaProcessor] Attempting to save citation "${nextCitation.citationTitle}" to DiscoveredContent...`)
+        console.log(`[WikipediaProcessor] Attempting to save citation "${extractedTitle}" to DiscoveredContent...`)
         savedContentId = await options.saveAsContent(
           citationUrl, // Use converted URL
-          nextCitation.citationTitle || 'Untitled',
+          extractedTitle || nextCitation.citationTitle || 'Untitled',
           meaningfulContent,
           {
             aiScore: aiPriorityScore,

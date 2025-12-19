@@ -17,15 +17,18 @@
 import 'dotenv/config'
 import { processFeedQueue } from '../src/lib/agent/feedWorker'
 import { prisma } from '../src/lib/prisma'
+import { selfAuditAndFix } from './self-audit-and-fix'
 
 const PROCESS_INTERVAL = parseInt(process.env.AGENT_FEED_INTERVAL || '10000') // 10 seconds
 const BATCH_SIZE = parseInt(process.env.AGENT_FEED_BATCH_SIZE || '20')
 const VERIFY_INTERVAL = parseInt(process.env.AGENT_FEED_VERIFY_INTERVAL || '60000') // 1 minute
+const AUDIT_INTERVAL = parseInt(process.env.SELF_AUDIT_INTERVAL || '3600000') // 1 hour
 
 let isRunning = true
 let processedTotal = 0
 let failedTotal = 0
 let lastVerification: Date | null = null
+let lastAudit: Date | null = null
 
 async function processAllQueues() {
   try {
@@ -169,6 +172,24 @@ async function runWorker() {
       if (now - lastProcessTime >= VERIFY_INTERVAL) {
         await verifySystem()
         lastProcessTime = now
+      }
+
+      // Periodic self-audit and auto-fix
+      if (!lastAudit || (now - lastAudit.getTime()) >= AUDIT_INTERVAL) {
+        console.log('[AutoFeedWorker] 🔍 Running self-audit and auto-fix...')
+        try {
+          const auditResults = await selfAuditAndFix()
+          console.log(`[AutoFeedWorker] ✅ Self-audit complete:`)
+          console.log(`   Fixed ${auditResults.untitledFixed} untitled items`)
+          console.log(`   Fixed ${auditResults.agentMemoryFixed} AgentMemory entries`)
+          console.log(`   Reset ${auditResults.stuckQueueItemsReset} stuck queue items`)
+          if (auditResults.errors.length > 0) {
+            console.warn(`   Errors: ${auditResults.errors.length}`)
+          }
+          lastAudit = new Date()
+        } catch (error) {
+          console.error('[AutoFeedWorker] Self-audit error:', error)
+        }
       }
 
       // Wait before next batch

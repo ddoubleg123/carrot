@@ -1,201 +1,146 @@
+#!/usr/bin/env tsx
 /**
- * Backfill Agent Memory Script
- * 
- * Enqueues existing discovered content for agent feeding
- * 
- * Usage:
- *   ts-node scripts/backfill-agent-memory.ts --patch=handle --since=2024-01-01 --limit=100 --dry-run
+ * Backfill AgentMemory Entries
+ * Links existing AgentMemory entries to DiscoveredContent by matching content/sourceUrl
  */
 
 import 'dotenv/config'
-import { prisma } from '../src/lib/prisma'
-import { enqueueDiscoveredContent, calculateContentHash } from '../src/lib/agent/feedWorker'
+import { PrismaClient } from '@prisma/client'
 
-interface Args {
-  patch?: string
-  since?: string
-  limit?: number
-  dryRun?: boolean
-  resume?: boolean
-}
+const prisma = new PrismaClient()
 
-async function parseArgs(): Promise<Args> {
-  const args: Args = {}
-  
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i]
-    if (arg.startsWith('--patch=')) {
-      args.patch = arg.split('=')[1]
-    } else if (arg.startsWith('--since=')) {
-      args.since = arg.split('=')[1]
-    } else if (arg.startsWith('--limit=')) {
-      args.limit = parseInt(arg.split('=')[1])
-    } else if (arg === '--dry-run') {
-      args.dryRun = true
-    } else if (arg === '--resume') {
-      args.resume = true
-    }
-  }
-  
-  return args
-}
+async function backfillAgentMemory(patchHandle: string, dryRun: boolean = true) {
+  const patch = await prisma.patch.findUnique({
+    where: { handle: patchHandle },
+    select: { id: true, title: true }
+  })
 
-async function backfillAgentMemory(args: Args) {
-  console.log('[Backfill] Starting agent memory backfill...')
-  console.log('[Backfill] Args:', args)
-
-  const where: any = {}
-
-  // Filter by patch
-  if (args.patch) {
-    const patch = await prisma.patch.findUnique({
-      where: { handle: args.patch },
-      select: { id: true, title: true }
-    })
-
-    if (!patch) {
-      console.error(`[Backfill] Patch not found: ${args.patch}`)
-      process.exit(1)
-    }
-
-    where.patchId = patch.id
-    console.log(`[Backfill] Patch: ${patch.title} (${patch.id})`)
+  if (!patch) {
+    console.error('Patch not found')
+    process.exit(1)
   }
 
-  // Filter by date
-  if (args.since) {
-    where.createdAt = { gte: new Date(args.since) }
-    console.log(`[Backfill] Since: ${args.since}`)
-  }
-
-  // Quality gates
-  const MIN_TEXT_BYTES = 600
-  const MIN_RELEVANCE = 60
-
-  // Find discovered content
-  const discoveredContent = await prisma.discoveredContent.findMany({
-    where,
+  // Find AgentMemory entries missing discovery fields
+  const memories = await prisma.agentMemory.findMany({
+    where: {
+      OR: [
+        { patchId: null },
+        { discoveredContentId: null }
+      ],
+      sourceType: 'discovery'
+    },
     select: {
       id: true,
       patchId: true,
-      title: true,
-      summary: true,
-      textContent: true,
+      discoveredContentId: true,
+      sourceUrl: true,
+      sourceTitle: true,
       contentHash: true,
-      relevanceScore: true,
-      qualityScore: true,
-      createdAt: true
-    },
-    orderBy: { createdAt: 'desc' },
-    take: args.limit || 1000
+      content: true
+    }
   })
 
-  console.log(`[Backfill] Found ${discoveredContent.length} items to process`)
+  console.log(`\n📋 Found ${memories.length} AgentMemory entries missing discovery fields\n`)
 
-  let enqueued = 0
-  let skipped = 0
-  let failed = 0
+  let updated = 0
+  let notFound = 0
 
-  for (let i = 0; i < discoveredContent.length; i++) {
-    const content = discoveredContent[i]
-    
-    if (i % 10 === 0) {
-      console.log(`[Backfill] Progress: ${i}/${discoveredContent.length} (enqueued: ${enqueued}, skipped: ${skipped}, failed: ${failed})`)
-    }
+  for (const memory of memories) {
+    // Try to find matching DiscoveredContent
+    let discoveredContent = null
 
-    // Check quality gates
-    const textBytes = (content.textContent || content.summary || '').length
-    if (textBytes < MIN_TEXT_BYTES) {
-      skipped++
-      continue
-    }
-
-    if (content.relevanceScore < MIN_RELEVANCE) {
-      skipped++
-      continue
-    }
-
-    // Check if already processed
-    const contentHash = content.contentHash || calculateContentHash(
-      content.title,
-      content.summary,
-      content.textContent
-    )
-
-    const existingMemory = await prisma.agentMemory.findUnique({
-      where: {
-        patchId_discoveredContentId_contentHash: {
-          patchId: content.patchId,
-          discoveredContentId: content.id,
-          contentHash
+    // Method 1: Match by sourceUrl
+    if (memory.sourceUrl) {
+      discoveredContent = await prisma.discoveredContent.findFirst({
+        where: {
+          OR: [
+            { sourceUrl: memory.sourceUrl },
+            { canonicalUrl: memory.sourceUrl }
+          ],
+          patchId: patch.id
+        },
+        select: {
+          id: true,
+          title: true,
+          sourceUrl: true
         }
-      }
-    })
-
-    if (existingMemory) {
-      skipped++
-      continue
+      })
     }
 
-    // Check if already enqueued
-    const existingQueue = await prisma.agentMemoryFeedQueue.findUnique({
-      where: {
-        patchId_discoveredContentId_contentHash: {
-          patchId: content.patchId,
-          discoveredContentId: content.id,
-          contentHash
+    // Method 2: Match by contentHash if available
+    if (!discoveredContent && memory.contentHash) {
+      discoveredContent = await prisma.discoveredContent.findFirst({
+        where: {
+          contentHash: memory.contentHash,
+          patchId: patch.id
+        },
+        select: {
+          id: true,
+          title: true,
+          sourceUrl: true
         }
-      }
-    })
-
-    if (existingQueue) {
-      skipped++
-      continue
+      })
     }
 
-    // Enqueue
-    if (!args.dryRun) {
-      const result = await enqueueDiscoveredContent(
-        content.id,
-        content.patchId,
-        contentHash,
-        0
-      )
+    // Method 3: Match by sourceTitle
+    if (!discoveredContent && memory.sourceTitle) {
+      discoveredContent = await prisma.discoveredContent.findFirst({
+        where: {
+          title: memory.sourceTitle,
+          patchId: patch.id
+        },
+        select: {
+          id: true,
+          title: true,
+          sourceUrl: true
+        }
+      })
+    }
 
-      if (result.enqueued) {
-        enqueued++
-      } else {
-        failed++
-        console.warn(`[Backfill] Failed to enqueue ${content.id}: ${result.reason}`)
+    if (discoveredContent) {
+      console.log(`✅ Found match: "${discoveredContent.title}"`)
+      console.log(`   Memory ID: ${memory.id}`)
+      console.log(`   DiscoveredContent ID: ${discoveredContent.id}`)
+      console.log(`   Updating: patchId=${patch.id}, discoveredContentId=${discoveredContent.id}\n`)
+
+      if (!dryRun) {
+        await prisma.agentMemory.update({
+          where: { id: memory.id },
+          data: {
+            patchId: patch.id,
+            discoveredContentId: discoveredContent.id
+          }
+        })
       }
+      updated++
     } else {
-      enqueued++ // Count as would-be enqueued
-      console.log(`[Backfill] [DRY RUN] Would enqueue: ${content.title.substring(0, 50)}...`)
+      console.log(`⚠️  No match found for memory: ${memory.id}`)
+      console.log(`   Source URL: ${memory.sourceUrl?.substring(0, 60) || 'N/A'}...`)
+      console.log(`   Source Title: ${memory.sourceTitle || 'N/A'}\n`)
+      notFound++
     }
   }
 
-  console.log('\n[Backfill] Summary:')
-  console.log(`  Enqueued: ${enqueued}`)
-  console.log(`  Skipped: ${skipped}`)
-  console.log(`  Failed: ${failed}`)
-  console.log(`  Total: ${discoveredContent.length}`)
+  console.log(`\n📊 Summary:`)
+  console.log(`   Total memories: ${memories.length}`)
+  console.log(`   Matched: ${updated}`)
+  console.log(`   Not found: ${notFound}`)
+  console.log(`   Mode: ${dryRun ? 'DRY RUN' : 'LIVE UPDATE'}\n`)
 
-  if (args.dryRun) {
-    console.log('\n[Backfill] DRY RUN - no changes made')
+  if (dryRun) {
+    console.log('💡 Run with --live to apply updates\n')
   }
+
+  await prisma.$disconnect()
 }
 
-async function main() {
-  try {
-    const args = await parseArgs()
-    await backfillAgentMemory(args)
-  } catch (error) {
-    console.error('[Backfill] Error:', error)
+const args = process.argv.slice(2)
+const patchHandle = args.find(arg => arg.startsWith('--patch='))?.split('=')[1] || 'israel'
+const live = args.includes('--live')
+
+backfillAgentMemory(patchHandle, !live)
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error('Error:', error)
     process.exit(1)
-  } finally {
-    await prisma.$disconnect()
-  }
-}
-
-main()
-
+  })
