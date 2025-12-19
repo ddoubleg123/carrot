@@ -319,21 +319,9 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
     // Build memory content
     const memoryContent = buildMemoryContent(packed, content)
 
-    // Feed to agent
-    const feedItem: FeedItem = {
-      content: memoryContent,
-      sourceType: 'discovery',
-      sourceUrl: content.sourceUrl,
-      sourceTitle: content.title,
-      sourceAuthor: content.domain || undefined,
-      tags: [content.category || 'article'].filter(Boolean),
-      threadId: content.id,
-      topicId: queueItem.patchId
-    }
-
-    const feedResult = await FeedService.feedAgent(agent.id, feedItem, 'auto-discovery')
-
-    // Create AgentMemory record
+    // Create AgentMemory record directly with all discovery fields
+    // Note: We create directly instead of using FeedService.feedAgent() because
+    // FeedService doesn't support discovery-specific fields (patchId, discoveredContentId, etc.)
     await prisma.agentMemory.create({
       data: {
         agentId: agent.id,
