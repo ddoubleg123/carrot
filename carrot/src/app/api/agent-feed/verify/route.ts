@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
 
     verification.summary = {
       totalPatches: patches.length,
-      healthyPatches: verification.patches.filter(p => p.healthy).length,
+      healthyPatches: verification.patches.filter((p: any) => p.healthy).length,
       totalDiscoveredContent: totalDiscovered,
       totalFed: totalFed,
       totalMissing: totalMissing,
