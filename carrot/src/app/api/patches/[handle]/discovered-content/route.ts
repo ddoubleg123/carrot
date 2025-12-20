@@ -209,28 +209,50 @@ export async function GET(
         const originalTitle = item.title || ''
         const summary = fullSummary
         
-        // Check if title is poor (domain-based, DOI, etc.)
+        // Check if title is poor (domain-based, DOI, numbers-only, etc.)
         const poorTitlePatterns = [
           /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
           /^doi\.org/i,
           /^[0-9.]+(\/[0-9a-z]+)+$/i,
           /^(book part|untitled)$/i,
-          /^cambridge\.org/i
+          /^cambridge\.org/i,
+          /^\d+\s+\d+\s+[A-Z]/i, // Pattern like "235 2 The Diaspora"
+          /^[0-9]+\s+[0-9]+\s+/i, // Starts with numbers like "235 2"
+          /^[0-9]+\s+[A-Z]/i, // Starts with number then capital like "235 The"
+          /^[A-Z]{1,2}$/i, // Single or double letters like "AE", "JI"
+          /^--\s+/i, // Starts with "--"
+          /^It was just that/i // Incomplete sentences
         ]
         const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
         
         if (isPoorTitle && summary && summary.length > 20) {
+          // Skip common non-meaningful prefixes
+          const skipPrefixes = [
+            'book contents', 'frontmatter', 'introduction', 'chapter', 'page',
+            'javascript is disabled', 'sign in', 'check out', 'advanced embedding',
+            'summary', 'abstract', 'table of contents'
+          ]
+          
           // Try to extract first meaningful sentence from summary
-          const sentences = summary.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 10)
+          const sentences = summary.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => {
+            const sLower = s.toLowerCase()
+            return s.length > 10 && !skipPrefixes.some(prefix => sLower.startsWith(prefix))
+          })
+          
           for (const sentence of sentences) {
             if (sentence.length > 15 && sentence.length < 100) {
               // Check if it's a meaningful sentence (not just "Sign in" or "Check out")
               const meaningfulWords = sentence.split(' ').filter((w: string) => 
                 w.length > 2 && 
-                !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look'].includes(w.toLowerCase())
+                !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look', 'book', 'contents', 'frontmatter', 'introduction', 'chapter', 'page', 'summary', 'abstract'].includes(w.toLowerCase())
               )
-              if (meaningfulWords.length >= 3) {
+              if (meaningfulWords.length >= 4) {
                 const improved = sentence.charAt(0).toUpperCase() + sentence.slice(1)
+                // Truncate if too long
+                if (improved.length > 80) {
+                  const words = improved.split(' ')
+                  return words.slice(0, 10).join(' ')
+                }
                 return improved
               }
             }
