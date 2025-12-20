@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { DiscoveryCardPayload, DiscoveryContested, DiscoveryFact, DiscoveryHero, DiscoveryQuote } from '@/types/discovery-card'
+import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -236,7 +237,6 @@ export async function GET(
         heroRaw = heroJson
       } else {
         // Ultimate fallback: generate SVG placeholder (no external DNS dependency)
-        const { generateSVGPlaceholder } = await import('@/lib/media/fallbackImages')
         const placeholderUrl = generateSVGPlaceholder(item.title, 800, 400)
         heroRaw = {
           url: placeholderUrl,

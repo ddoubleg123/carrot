@@ -3,6 +3,8 @@
  * Tries Wikimedia Commons, OpenVerse, then skeleton
  */
 
+import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
+
 export interface HeroFallbackResult {
   url: string
   source: 'wikimedia' | 'openverse' | 'skeleton'
@@ -113,7 +115,6 @@ export async function searchOpenVerse(
  */
 export function generateSkeletonHero(topic: string): HeroFallbackResult {
   // Use SVG placeholder instead of external service to avoid DNS issues
-  const { generateSVGPlaceholder } = require('@/lib/media/fallbackImages')
   const placeholderUrl = generateSVGPlaceholder(topic, 1280, 720)
   
   return {
