@@ -229,8 +229,11 @@ class HTTP1FetchManager {
 
     try {
       // Use native fetch with HTTP/1.1 forcing - no global throttling
+      // Remove referrerPolicy from fetchOptions if present to avoid conflicts
+      const { referrerPolicy: _, referrer: __, ...cleanFetchOptions } = fetchOptions as any
+      
       const response = await fetch(validatedUrl, {
-        ...fetchOptions,
+        ...cleanFetchOptions,
         headers,
         // Force HTTP/1.1 behavior
         credentials: 'same-origin',
@@ -240,7 +243,7 @@ class HTTP1FetchManager {
         cache: 'no-store',
         // Additional HTTP/1.1 forcing options
         keepalive: true,
-        referrerPolicy: 'strict-origin-when-cross-origin', // Changed from 'no-referrer' to avoid validation error
+        // Don't set referrerPolicy - let browser/Node.js use default to avoid validation errors
         // Additional options to force HTTP/1.1
         integrity: undefined, // Disable integrity checks that might force HTTP/2
         priority: 'low', // Lower priority to avoid HTTP/2 optimizations
@@ -274,15 +277,18 @@ class HTTP1FetchManager {
                 ? this.createFirebaseHeaders(fetchOptions.headers)
                 : this.createHTTP1Headers(fetchOptions.headers);
               
+              // Remove referrerPolicy from fetchOptions if present to avoid conflicts
+              const { referrerPolicy: _, referrer: __, ...cleanTestOptions } = fetchOptions as any
+              
               const testResponse = await fetch(testUrl, {
-                ...fetchOptions,
+                ...cleanTestOptions,
                 headers: testHeaders,
                 credentials: 'same-origin',
                 mode: 'cors',
                 redirect: 'follow',
                 cache: 'no-store',
                 keepalive: true,
-                referrerPolicy: 'no-referrer',
+                // Don't set referrerPolicy - let browser/Node.js use default to avoid validation errors
                 integrity: undefined,
                 priority: 'low',
               });
