@@ -44,33 +44,35 @@ const getDomain = (url?: string) => {
  */
 function generateDisplayTitle(apiItem: any): string {
   const originalTitle = apiItem.title || ''
-  const summary = apiItem.enrichedContent?.summary150 || apiItem.description || ''
+  const summary = apiItem.enrichedContent?.summary150 || apiItem.description || apiItem.whyItMatters || ''
   const citeMeta = apiItem.citeMeta || {}
   
-  // Check if title contains generic phrases
-  const genericPhrases = [
-    'News and Updates',
-    'Official Website', 
-    'Home',
-    'Welcome',
-    'About Us',
-    'Contact',
-    'News',
-    'Updates'
+  // Check if title is a poor title (domain-based, DOI, etc.)
+  const poorTitlePatterns = [
+    /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i, // "domain.org - ..."
+    /^doi\.org/i, // "doi.org - ..."
+    /^[0-9.]+(\/[0-9a-z]+)+$/i, // DOI patterns like "10.1017/..."
+    /^(book part|untitled)$/i, // Generic terms
+    /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*type\s*-\s*/i // "domain.org - type - ..."
   ]
   
-  const hasGenericPhrase = genericPhrases.some(phrase => 
-    originalTitle.toLowerCase().includes(phrase.toLowerCase())
-  )
+  const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
   
-  // If title is generic or empty, try to create a better one from summary
-  if (hasGenericPhrase || originalTitle.length < 10) {
+  // If title is poor, try to create a better one
+  if (isPoorTitle || originalTitle.length < 10) {
+    // First, try summary
     if (summary && summary.length > 20) {
-      // Take first 8-12 meaningful words from summary and capitalize
+      // Extract first meaningful sentence from summary
+      const firstSentence = summary.split(/[.!?]/)[0].trim()
+      if (firstSentence.length > 15 && firstSentence.length < 100) {
+        return firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1)
+      }
+      
+      // Fallback: take first 8-12 meaningful words from summary
       const words = summary.split(' ').slice(0, 12)
       const meaningfulWords = words.filter((word: string) => 
         word.length > 2 && 
-        !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(word.toLowerCase())
+        !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an'].includes(word.toLowerCase())
       ).slice(0, 8)
       
       if (meaningfulWords.length >= 3) {
@@ -79,12 +81,36 @@ function generateDisplayTitle(apiItem: any): string {
         ).join(' ')
       }
     }
+    
+    // Try to extract from URL if available
+    const url = apiItem.url || apiItem.sourceUrl || ''
+    if (url) {
+      try {
+        const urlObj = new URL(url)
+        const pathParts = urlObj.pathname.split('/').filter(p => p && p.length > 2)
+        const lastPart = pathParts[pathParts.length - 1]
+        if (lastPart && lastPart.length > 5 && lastPart.length < 80) {
+          const decoded = decodeURIComponent(lastPart)
+            .replace(/[-_]/g, ' ')
+            .replace(/\.[a-z]{2,4}$/i, '')
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ')
+          if (decoded.length > 10 && decoded.length < 80) {
+            return decoded
+          }
+        }
+      } catch (e) {
+        // URL parsing failed, continue
+      }
+    }
   }
   
-  // Remove common site name suffixes
-  const cleanTitle = originalTitle
+  // Clean up title (remove domain prefixes, etc.)
+  let cleanTitle = originalTitle
+    .replace(/^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i, '') // Remove "domain.org - " prefix
     .replace(/\s*\|.*$/, '') // Remove " | Site Name" suffixes
-    .replace(/\s*-\s*.*$/, '') // Remove " - Site Name" suffixes
+    .replace(/\s*-\s*type\s*-\s*.*$/i, '') // Remove " - type - ..." suffixes
     .replace(/\s*::.*$/, '') // Remove " :: Site Name" suffixes
     .trim()
   

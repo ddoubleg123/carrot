@@ -335,9 +335,37 @@ export async function GET(
       // Determine status - use isUseful to determine if content is ready
       const status = item.isUseful !== false ? 'ready' : 'pending_audit'
       
+      // Generate improved display title
+      const improvedTitle = (() => {
+        const originalTitle = item.title || ''
+        // Check if title is poor (domain-based, DOI, etc.)
+        const poorTitlePatterns = [
+          /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
+          /^doi\.org/i,
+          /^[0-9.]+(\/[0-9a-z]+)+$/i,
+          /^(book part|untitled)$/i
+        ]
+        const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
+        
+        if (isPoorTitle && summary150 && summary150.length > 20) {
+          // Extract first sentence from summary
+          const firstSentence = summary150.split(/[.!?]/)[0].trim()
+          if (firstSentence.length > 15 && firstSentence.length < 100) {
+            return firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1)
+          }
+        }
+        
+        // Clean up title
+        return originalTitle
+          .replace(/^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i, '')
+          .replace(/\s*-\s*type\s*-\s*.*$/i, '')
+          .trim() || originalTitle
+      })()
+      
       return {
         id: item.id,
-        title: item.title,
+        title: improvedTitle, // Use improved title
+        displayTitle: improvedTitle, // Also set displayTitle for frontend
         url: primaryUrl,
         canonicalUrl: primaryUrl,
         domain,

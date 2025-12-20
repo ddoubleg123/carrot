@@ -14,12 +14,24 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
   // Check multiple sources for hero image: hero object, mediaAssets, or fallback
   // mediaAssets.hero is a string URL, not an object
   const mediaAssetsHero = (item as any).mediaAssets?.hero
-  const heroUrl = item.hero?.url ?? 
+  const heroObjectUrl = item.hero && typeof item.hero === 'object' ? item.hero.url : null
+  const heroStringUrl = typeof item.hero === 'string' ? item.hero : null
+  const heroUrl = heroObjectUrl ?? heroStringUrl ?? 
                   (mediaAssetsHero && typeof mediaAssetsHero === 'string' ? mediaAssetsHero : null) ??
                   null
   
   // Track if hero image failed to load
   const [heroImageError, setHeroImageError] = useState(false)
+  
+  // Log for debugging
+  if (!heroUrl) {
+    console.log('[DiscoveryCard] No hero URL found for item:', {
+      id: item.id,
+      title: item.title,
+      hero: item.hero,
+      mediaAssets: (item as any).mediaAssets
+    })
+  }
 
   const handleShare = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -102,7 +114,9 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
       </div>
 
       <div className="flex flex-col gap-3 p-5">
-        <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">{item.title}</h3>
+        <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">
+          {(item as any).displayTitle || item.title}
+        </h3>
         
         <div className="mt-auto" onClick={(event) => event.stopPropagation()}>
           <Button variant="outline" size="sm" className="w-full" onClick={handleShare}>

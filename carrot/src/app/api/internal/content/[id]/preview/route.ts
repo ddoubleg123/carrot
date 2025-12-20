@@ -534,9 +534,16 @@ export async function GET(
 
     // Always run grammar/language cleanup on summary and key facts
     // Run BEFORE caching to ensure cleaned content is cached
-    if (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) {
+    // Only run if content exists and hasn't been cleaned recently
+    const metadata = (content.metadata as any) || {}
+    const needsCleanup = (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) &&
+                         !metadata.grammarCleaned // Skip if already cleaned
+    
+    if (needsCleanup) {
       try {
         console.log(`[ContentPreview] Running grammar cleanup for ${id}`)
+        console.log(`[ContentPreview] Summary length: ${preview.summary?.length || 0}`)
+        console.log(`[ContentPreview] Key points count: ${preview.keyPoints?.length || 0}`)
         
         // Use request URL to build cleanup endpoint URL (works in both dev and production)
         const requestUrl = new URL(request.url)
@@ -549,12 +556,12 @@ export async function GET(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            summary: preview.summary,
-            keyFacts: preview.keyPoints,
-            title: content.title
+            summary: preview.summary || '',
+            keyFacts: preview.keyPoints || [],
+            title: improvedTitle
           }),
           // Add timeout to prevent hanging
-          signal: AbortSignal.timeout(15000) // 15 second timeout
+          signal: AbortSignal.timeout(20000) // 20 second timeout (increased for DeepSeek)
         })
 
         if (cleanupResponse.ok) {
@@ -610,11 +617,23 @@ export async function GET(
           }
         } else {
           const errorText = await cleanupResponse.text()
-          console.warn(`[ContentPreview] Grammar cleanup failed for ${id}: ${cleanupResponse.status} - ${errorText.substring(0, 200)}`)
+          console.error(`[ContentPreview] ❌ Grammar cleanup failed for ${id}: ${cleanupResponse.status}`)
+          console.error(`[ContentPreview] Error response: ${errorText.substring(0, 500)}`)
         }
       } catch (cleanupError: any) {
-        console.warn(`[ContentPreview] Error during grammar cleanup for ${id}:`, cleanupError.message)
+        console.error(`[ContentPreview] ❌ Error during grammar cleanup for ${id}:`, cleanupError)
+        console.error(`[ContentPreview] Error details:`, {
+          message: cleanupError.message,
+          name: cleanupError.name,
+          stack: cleanupError.stack?.substring(0, 500)
+        })
         // Continue with original content if cleanup fails
+      }
+    } else {
+      if (metadata.grammarCleaned) {
+        console.log(`[ContentPreview] ⏭️  Skipping cleanup for ${id} (already cleaned at ${metadata.grammarCleanedAt})`)
+      } else {
+        console.log(`[ContentPreview] ⏭️  Skipping cleanup for ${id} (no content to clean)`)
       }
     }
 
