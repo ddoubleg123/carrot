@@ -221,11 +221,11 @@ export async function GET(
         
         if (isPoorTitle && summary && summary.length > 20) {
           // Try to extract first meaningful sentence from summary
-          const sentences = summary.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10)
+          const sentences = summary.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 10)
           for (const sentence of sentences) {
             if (sentence.length > 15 && sentence.length < 100) {
               // Check if it's a meaningful sentence (not just "Sign in" or "Check out")
-              const meaningfulWords = sentence.split(' ').filter(w => 
+              const meaningfulWords = sentence.split(' ').filter((w: string) => 
                 w.length > 2 && 
                 !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look'].includes(w.toLowerCase())
               )
