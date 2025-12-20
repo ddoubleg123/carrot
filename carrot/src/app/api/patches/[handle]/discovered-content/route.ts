@@ -201,27 +201,37 @@ export async function GET(
       const heroRelation = (item as any).heroRecord // Hero relation from include
       const heroJson = parseJson<DiscoveryHero | null>(item.hero, null) // JSON hero field
       
-      if (heroRelation && heroRelation.status === 'READY' && heroRelation.imageUrl) {
-        // Use Hero table data (preferred)
-        // Detect source from imageUrl: wikimedia URLs contain 'wikimedia.org' or 'upload.wikimedia.org'
+      // Use Hero table data if it has an image URL (even if ERROR status - better than nothing)
+      if (heroRelation && heroRelation.imageUrl) {
         const imageUrl = heroRelation.imageUrl
-        let heroSource: 'ai' | 'wikimedia' | 'skeleton' = 'skeleton'
-        
         const urlLower = imageUrl.toLowerCase()
-        if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
-          heroSource = 'wikimedia'
-        } else if (urlLower.includes('via.placeholder.com') || urlLower.includes('placeholder')) {
-          heroSource = 'skeleton'
-        } else {
-          // Assume AI-generated or other enriched images
-          heroSource = 'ai'
-        }
         
-        heroRaw = {
-          url: imageUrl,
-          source: heroSource
+        // Skip favicon URLs - they're too small to be useful
+        if (urlLower.includes('favicon') || urlLower.includes('google.com/s2/favicons')) {
+          // Don't use favicon URLs, fall through to next option
+        } else {
+          // Use Hero table data (preferred)
+          // Detect source from imageUrl: wikimedia URLs contain 'wikimedia.org' or 'upload.wikimedia.org'
+          let heroSource: 'ai' | 'wikimedia' | 'skeleton' = 'skeleton'
+          
+          if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
+            heroSource = 'wikimedia'
+          } else if (urlLower.includes('via.placeholder.com') || urlLower.includes('placeholder')) {
+            heroSource = 'skeleton'
+          } else {
+            // Assume AI-generated or other enriched images
+            heroSource = 'ai'
+          }
+          
+          heroRaw = {
+            url: imageUrl,
+            source: heroSource
+          }
         }
-      } else if (heroJson && heroJson.url) {
+      }
+      
+      // Fallback to JSON hero field if Hero table didn't provide a good image
+      if (!heroRaw && heroJson && heroJson.url) {
         // Fallback to JSON hero field for backward compatibility
         heroRaw = heroJson
       } else {
