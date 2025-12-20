@@ -535,7 +535,6 @@ export async function GET(
     // Always run grammar/language cleanup on summary and key facts
     // Run BEFORE caching to ensure cleaned content is cached
     // Only run if content exists and hasn't been cleaned recently
-    const metadata = (content.metadata as any) || {}
     const needsCleanup = (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) &&
                          !metadata.grammarCleaned // Skip if already cleaned
     
