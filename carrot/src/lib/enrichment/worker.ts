@@ -9,6 +9,7 @@ import { JSDOM } from 'jsdom'
 import { v4 as uuidv4 } from 'uuid'
 import { clampFairUseToHtml } from '@/lib/fairUse'
 import { sanitizeLogEntry } from '@/lib/logging/redact'
+import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
 
 // Note: @mozilla/readability is not installed - we use DOM fallback only
 // The extractContent function uses DOM heuristics for content extraction
@@ -490,10 +491,10 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
         imageSource = 'favicon'
         log('image', { traceId, ok: true, source: 'favicon', note: 'Using favicon as absolute fallback' })
       } catch {
-        // If even favicon fails, use a placeholder
-        imageUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(extracted.title.substring(0, 30))}`
+        // If even favicon fails, use SVG placeholder (no external DNS dependency)
+        imageUrl = generateSVGPlaceholder(extracted.title, 800, 400)
         imageSource = 'placeholder'
-        log('image', { traceId, ok: true, source: 'placeholder', note: 'Using placeholder as last resort' })
+        log('image', { traceId, ok: true, source: 'placeholder', note: 'Using SVG placeholder as last resort' })
       }
     }
 
@@ -638,7 +639,8 @@ export async function enrichContentId(contentId: string): Promise<EnrichmentResu
             const domain = sourceUrl ? new URL(sourceUrl).hostname : 'example.com'
             fallbackImageUrl = `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`
           } catch {
-            fallbackImageUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(content.title.substring(0, 30))}`
+            // Use SVG placeholder (no external DNS dependency)
+            fallbackImageUrl = generateSVGPlaceholder(content.title, 800, 400)
           }
         }
         

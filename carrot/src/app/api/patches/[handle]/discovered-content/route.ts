@@ -235,9 +235,9 @@ export async function GET(
         // Fallback to JSON hero field for backward compatibility
         heroRaw = heroJson
       } else {
-        // Ultimate fallback: generate placeholder hero image
-        // Use the domain variable already computed above (line 172)
-        const placeholderUrl = `https://via.placeholder.com/800x400/667eea/ffffff?text=${encodeURIComponent(item.title.substring(0, 30))}`
+        // Ultimate fallback: generate SVG placeholder (no external DNS dependency)
+        const { generateSVGPlaceholder } = await import('@/lib/media/fallbackImages')
+        const placeholderUrl = generateSVGPlaceholder(item.title, 800, 400)
         heroRaw = {
           url: placeholderUrl,
           source: 'skeleton'

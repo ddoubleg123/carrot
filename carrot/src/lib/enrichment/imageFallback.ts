@@ -6,6 +6,7 @@
 
 import { getOpenGraphImage } from '@/lib/media/getOpenGraphImage'
 import { getFirstInlineImage } from '@/lib/media/getFirstInlineImage'
+import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
 
 export interface ImageFallbackResult {
   url: string
@@ -55,12 +56,11 @@ function getDomainFavicon(domain: string): string {
 }
 
 /**
- * Generate a placeholder image URL
+ * Generate a placeholder image (SVG data URI)
  */
 function generatePlaceholder(title: string, domain?: string): string {
-  const text = encodeURIComponent(title.substring(0, 30))
-  const bgColor = '667eea'
-  return `https://via.placeholder.com/800x400/${bgColor}/ffffff?text=${text}`
+  // Use SVG placeholder instead of external service to avoid DNS issues
+  return generateSVGPlaceholder(title, 800, 400)
 }
 
 /**

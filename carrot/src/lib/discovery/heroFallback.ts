@@ -112,9 +112,9 @@ export async function searchOpenVerse(
  * Generate skeleton/placeholder image
  */
 export function generateSkeletonHero(topic: string): HeroFallbackResult {
-  // Return a branded placeholder URL
-  // In production, this could be a generated SVG or a static placeholder
-  const placeholderUrl = `https://via.placeholder.com/1280x720/4A5568/FFFFFF?text=${encodeURIComponent(topic)}`
+  // Use SVG placeholder instead of external service to avoid DNS issues
+  const { generateSVGPlaceholder } = require('@/lib/media/fallbackImages')
+  const placeholderUrl = generateSVGPlaceholder(topic, 1280, 720)
   
   return {
     url: placeholderUrl,

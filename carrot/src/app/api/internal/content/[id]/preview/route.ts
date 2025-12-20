@@ -629,10 +629,16 @@ export async function GET(
       console.warn(`[ContentPreview] Link verification failed for ${id}:`, error)
     }
     
-    // Cache the result for 6 hours
-    previewCache.set(cacheKey, preview)
+    // Cache the result for 6 hours (but skip cache for now to ensure fixes are applied)
+    // TODO: Re-enable cache after verifying fixes work
+    // previewCache.set(cacheKey, preview)
     
-    return NextResponse.json(preview)
+    const response = NextResponse.json(preview)
+    // Ensure no caching on client side
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    return response
     
   } catch (error) {
     console.error('[ContentPreview] Error:', error)
