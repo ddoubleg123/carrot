@@ -197,6 +197,69 @@ export async function GET(
       const quotesRaw = parseJson<DiscoveryQuote[]>(item.quotes, [])
       const provenanceRaw = parseJson<string[]>(item.provenance, [])
       
+      // Extract summary for title improvement (needed before hero image generation)
+      const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
+      const summary150 = (typeof item.whyItMatters === 'string' && item.whyItMatters.trim())
+        ? item.whyItMatters.trim().substring(0, 150)
+        : (metadataRaw?.summary150 || item.summary?.substring(0, 150) || '')
+      const fullSummary = item.summary || item.whyItMatters || summary150 || ''
+      
+      // Generate improved display title FIRST (needed for hero placeholder)
+      const improvedTitle = (() => {
+        const originalTitle = item.title || ''
+        const summary = fullSummary
+        
+        // Check if title is poor (domain-based, DOI, etc.)
+        const poorTitlePatterns = [
+          /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
+          /^doi\.org/i,
+          /^[0-9.]+(\/[0-9a-z]+)+$/i,
+          /^(book part|untitled)$/i,
+          /^cambridge\.org/i
+        ]
+        const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
+        
+        if (isPoorTitle && summary && summary.length > 20) {
+          // Try to extract first meaningful sentence from summary
+          const sentences = summary.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10)
+          for (const sentence of sentences) {
+            if (sentence.length > 15 && sentence.length < 100) {
+              // Check if it's a meaningful sentence (not just "Sign in" or "Check out")
+              const meaningfulWords = sentence.split(' ').filter(w => 
+                w.length > 2 && 
+                !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look'].includes(w.toLowerCase())
+              )
+              if (meaningfulWords.length >= 3) {
+                const improved = sentence.charAt(0).toUpperCase() + sentence.slice(1)
+                return improved
+              }
+            }
+          }
+          
+          // Fallback: extract meaningful words from summary
+          const words = summary.split(' ').slice(0, 15)
+          const meaningfulWords = words.filter((word: string) => 
+            word.length > 3 && 
+            !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look', 'enjoy', 'easier', 'access', 'your', 'favorite', 'features'].includes(word.toLowerCase())
+          ).slice(0, 8)
+          
+          if (meaningfulWords.length >= 3) {
+            return meaningfulWords.map((word: string) => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ')
+          }
+        }
+        
+        // Clean up title (remove domain prefixes)
+        const cleaned = originalTitle
+          .replace(/^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i, '')
+          .replace(/\s*-\s*type\s*-\s*.*$/i, '')
+          .replace(/\s*-\s*10\.1017.*$/i, '') // Remove DOI suffixes
+          .trim()
+        
+        return cleaned || originalTitle
+      })()
+      
       // Prefer Hero table over JSON hero field
       let heroRaw: DiscoveryHero | null = null
       const heroRelation = (item as any).heroRecord // Hero relation from include
@@ -210,6 +273,7 @@ export async function GET(
         // Skip favicon URLs - they're too small to be useful
         if (urlLower.includes('favicon') || urlLower.includes('google.com/s2/favicons')) {
           // Don't use favicon URLs, fall through to next option
+          console.log(`[Discovered Content] Skipping favicon URL for ${item.id}: ${imageUrl}`)
         } else {
           // Use Hero table data (preferred)
           // Detect source from imageUrl: wikimedia URLs contain 'wikimedia.org' or 'upload.wikimedia.org'
@@ -218,6 +282,8 @@ export async function GET(
           if (urlLower.includes('wikimedia.org') || urlLower.includes('upload.wikimedia.org') || urlLower.includes('commons.wikimedia.org')) {
             heroSource = 'wikimedia'
           } else if (urlLower.includes('via.placeholder.com') || urlLower.includes('placeholder')) {
+            heroSource = 'skeleton'
+          } else if (imageUrl.startsWith('data:image/svg')) {
             heroSource = 'skeleton'
           } else {
             // Assume AI-generated or other enriched images
@@ -233,18 +299,25 @@ export async function GET(
       
       // Fallback to JSON hero field if Hero table didn't provide a good image
       if (!heroRaw && heroJson && heroJson.url) {
-        // Fallback to JSON hero field for backward compatibility
-        heroRaw = heroJson
-      } else {
-        // Ultimate fallback: generate SVG placeholder (no external DNS dependency)
-        const placeholderUrl = generateSVGPlaceholder(item.title, 800, 400)
+        const jsonUrl = heroJson.url
+        const jsonUrlLower = jsonUrl.toLowerCase()
+        // Also skip favicons in JSON hero
+        if (!jsonUrlLower.includes('favicon') && !jsonUrlLower.includes('google.com/s2/favicons')) {
+          heroRaw = heroJson
+        }
+      }
+      
+      // Ultimate fallback: generate SVG placeholder (no external DNS dependency)
+      // Use improved title if available, otherwise use original
+      if (!heroRaw) {
+        const titleForPlaceholder = improvedTitle || item.title || 'Content'
+        const placeholderUrl = generateSVGPlaceholder(titleForPlaceholder, 800, 400)
         heroRaw = {
           url: placeholderUrl,
           source: 'skeleton'
         }
+        console.log(`[Discovered Content] Generated SVG placeholder for ${item.id} with title: "${titleForPlaceholder}"`)
       }
-      
-      const metadataRaw = parseJson<Record<string, any>>(item.metadata, {})
       
       // Generate urlSlug if missing (for existing content)
       let urlSlug = metadataRaw?.urlSlug
@@ -306,11 +379,6 @@ export async function GET(
       // Determine hasHero status
       const hasHero = Boolean(heroRelation && heroRelation.status === 'READY') || Boolean(heroJson)
       
-      // Extract summary for enrichedContent
-      const summary150 = (typeof item.whyItMatters === 'string' && item.whyItMatters.trim())
-        ? item.whyItMatters.trim().substring(0, 150)
-        : (metadataRaw?.summary150 || item.summary?.substring(0, 150) || '')
-      
       // Extract key points from facts
       const keyPoints = facts.slice(0, 5).map(f => f.value).filter(Boolean)
       
@@ -334,33 +402,6 @@ export async function GET(
       
       // Determine status - use isUseful to determine if content is ready
       const status = item.isUseful !== false ? 'ready' : 'pending_audit'
-      
-      // Generate improved display title
-      const improvedTitle = (() => {
-        const originalTitle = item.title || ''
-        // Check if title is poor (domain-based, DOI, etc.)
-        const poorTitlePatterns = [
-          /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
-          /^doi\.org/i,
-          /^[0-9.]+(\/[0-9a-z]+)+$/i,
-          /^(book part|untitled)$/i
-        ]
-        const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
-        
-        if (isPoorTitle && summary150 && summary150.length > 20) {
-          // Extract first sentence from summary
-          const firstSentence = summary150.split(/[.!?]/)[0].trim()
-          if (firstSentence.length > 15 && firstSentence.length < 100) {
-            return firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1)
-          }
-        }
-        
-        // Clean up title
-        return originalTitle
-          .replace(/^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i, '')
-          .replace(/\s*-\s*type\s*-\s*.*$/i, '')
-          .trim() || originalTitle
-      })()
       
       return {
         id: item.id,
