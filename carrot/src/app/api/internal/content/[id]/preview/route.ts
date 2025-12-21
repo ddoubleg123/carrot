@@ -26,7 +26,7 @@ export async function GET(
     //   return NextResponse.json(cached)
     // }
     
-    // Fetch content from database
+    // Fetch content from database (include Hero table for images)
     const content = await prisma.discoveredContent.findUnique({
       where: { id },
       select: {
@@ -38,10 +38,18 @@ export async function GET(
         quotes: true,
         textContent: true,
         metadata: true,
-        hero: true,
+        hero: true, // JSON hero field (backward compatibility)
         sourceUrl: true,
         canonicalUrl: true,
         category: true,
+        heroRecord: { // Hero table (preferred)
+          select: {
+            id: true,
+            imageUrl: true,
+            status: true,
+            sourceUrl: true
+          }
+        },
         patch: {
           select: {
             title: true,
@@ -59,6 +67,7 @@ export async function GET(
     // Extract metadata from JSON fields
     let metadata = (content.metadata as any) || {}
     const heroData = (content.hero as any) || {}
+    const heroRecord = (content as any).heroRecord // Hero table (preferred)
     const facts = Array.isArray(content.facts as any)
       ? (content.facts as any[])
       : []
@@ -203,9 +212,29 @@ export async function GET(
       }
     })()
 
+    // Prefer Hero table over JSON hero field
+    let heroUrl: string | null = null
+    if (heroRecord && heroRecord.imageUrl) {
+      const imageUrl = heroRecord.imageUrl
+      const urlLower = imageUrl.toLowerCase()
+      
+      // Skip favicon URLs - they're too small to be useful
+      if (!urlLower.includes('favicon') && !urlLower.includes('google.com/s2/favicons')) {
+        heroUrl = imageUrl
+      }
+    }
+    
+    // Fallback to JSON hero field if Hero table didn't provide a good image
+    if (!heroUrl && heroData?.url) {
+      const jsonUrl = heroData.url
+      const jsonUrlLower = jsonUrl.toLowerCase()
+      if (!jsonUrlLower.includes('favicon') && !jsonUrlLower.includes('google.com/s2/favicons')) {
+        heroUrl = jsonUrl
+      }
+    }
+    
     // Check if hero is directly from Wikipedia - if so, don't display it
     // Wikipedia pages should be used to find deep source links, not as direct sources
-    let heroUrl = heroData?.url || null
     const sourceUrl = content.sourceUrl || ''
     const isWikipediaSource = sourceUrl.includes('wikipedia.org') || 
                               sourceUrl.includes('wikimedia.org') ||
@@ -223,41 +252,83 @@ export async function GET(
       heroUrl = null
     }
 
-    // Improve title if it's generic
+    // Improve title if it's generic or poor
     function improveTitle(originalTitle: string, summary: string, keyPoints: string[]): string {
-      const genericPhrases = [
-        'official website',
-        'official site',
-        'home',
-        'welcome',
-        'about us',
-        'contact',
-        'news',
-        'updates',
-        'news and updates'
+      // Comprehensive list of poor title patterns (matching discovered-content API)
+      const poorTitlePatterns = [
+        /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
+        /^doi\.org/i,
+        /^[0-9.]+(\/[0-9a-z]+)+$/i,
+        /^(book part|untitled)$/i,
+        /^cambridge\.org/i,
+        /^\d+\s+\d+\s+[A-Z]/i,
+        /^[0-9]+\s+[0-9]+\s+/i,
+        /^[0-9]+\s+[A-Z]/i,
+        /^[A-Z]{1,2}$/i,
+        /^--\s+/i,
+        /^It was just that/i,
+        /^Book contents/i,
+        /^Frontmatter/i,
+        /^JavaScript is disabled/i,
+        /^Advanced embedding/i,
+        /^Some features of this site/i,
+        /^official website/i,
+        /^official site/i,
+        /^home$/i,
+        /^welcome$/i,
+        /^about us/i,
+        /^contact$/i,
+        /^news$/i,
+        /^updates$/i,
+        /^news and updates$/i
       ]
       
-      const titleLower = originalTitle.toLowerCase().trim()
-      const hasGenericPhrase = genericPhrases.some(phrase => titleLower === phrase || titleLower.includes(phrase))
+      const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
       
-      // If title is generic or too short, try to create a better one
-      if (hasGenericPhrase || originalTitle.length < 10) {
+      // If title is poor or too short, try to create a better one
+      if (isPoorTitle || originalTitle.length < 10) {
         // Try to extract from summary first
         if (summary && summary.length > 20) {
-          // Take first meaningful sentence or phrase from summary
-          const firstSentence = summary.split(/[.!?]/)[0].trim()
-          if (firstSentence.length > 15 && firstSentence.length < 100) {
-            // Capitalize first letter
-            const improved = firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1)
-            console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${improved}" (from summary)`)
-            return improved
+          // Skip common non-meaningful prefixes
+          const skipPrefixes = [
+            'book contents', 'frontmatter', 'introduction', 'chapter', 'page',
+            'javascript is disabled', 'sign in', 'check out', 'advanced embedding',
+            'summary', 'abstract', 'table of contents', 'some features of this site'
+          ]
+          
+          // Try to extract first meaningful sentence from summary
+          const sentences = summary.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => {
+            const sLower = s.toLowerCase()
+            return s.length > 10 && !skipPrefixes.some(prefix => sLower.startsWith(prefix))
+          })
+          
+          for (const sentence of sentences) {
+            if (sentence.length > 15 && sentence.length < 100) {
+              // Check if it's a meaningful sentence (not just "Sign in" or "Check out")
+              const meaningfulWords = sentence.split(' ').filter((w: string) => 
+                w.length > 2 && 
+                !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look', 'book', 'contents', 'frontmatter', 'introduction', 'chapter', 'page', 'summary', 'abstract'].includes(w.toLowerCase())
+              )
+              if (meaningfulWords.length >= 4) {
+                const improved = sentence.charAt(0).toUpperCase() + sentence.slice(1)
+                // Truncate if too long
+                if (improved.length > 80) {
+                  const words = improved.split(' ')
+                  const truncated = words.slice(0, 10).join(' ')
+                  console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${truncated}" (from summary)`)
+                  return truncated
+                }
+                console.log(`[ContentPreview] Improved title from "${originalTitle}" to "${improved}" (from summary)`)
+                return improved
+              }
+            }
           }
           
           // Fallback: extract meaningful words from summary
-          const words = summary.split(' ').slice(0, 12)
+          const words = summary.split(' ').slice(0, 15)
           const meaningfulWords = words.filter((word: string) => 
-            word.length > 2 && 
-            !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an'].includes(word.toLowerCase())
+            word.length > 3 && 
+            !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an', 'sign', 'check', 'out', 'new', 'look', 'enjoy', 'easier', 'access', 'your', 'favorite', 'features'].includes(word.toLowerCase())
           ).slice(0, 8)
           
           if (meaningfulWords.length >= 3) {
@@ -346,7 +417,7 @@ export async function GET(
       timeline: metadata.timeline || [],
       media: {
         hero: heroUrl,
-        dominant: heroData?.dominantColor || heroData?.dominant
+        dominant: heroRecord?.imageUrl?.includes('wikimedia') ? undefined : (heroData?.dominantColor || heroData?.dominant)
       },
       source: {
         url: content.sourceUrl || '',
