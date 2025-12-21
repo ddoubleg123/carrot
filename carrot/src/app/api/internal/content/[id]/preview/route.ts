@@ -6,6 +6,7 @@ import { sanitizeHtml, formatHtmlForDisplay } from '@/lib/sanitizeHtml'
 import { fetchWithProxy } from '@/lib/fetchProxy'
 import { canonicalizeUrl } from '@/lib/canonicalize'
 import { ContentPreview } from '@/types/content-preview'
+import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
 
 // Simple in-memory cache (in production, use Redis)
 const previewCache = new Map<string, ContentPreview>()
