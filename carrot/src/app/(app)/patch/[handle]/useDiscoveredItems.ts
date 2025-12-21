@@ -137,6 +137,10 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
   // Generate displayTitle - prefer specific titles over generic ones
   const displayTitle = generateDisplayTitle(apiItem)
 
+  // Preserve hero and mediaAssets for DiscoveryCard component compatibility
+  const hero = apiItem.hero || (apiItem.mediaAssets?.hero ? { url: apiItem.mediaAssets.hero, source: apiItem.mediaAssets.source } : undefined)
+  const mediaAssets = apiItem.mediaAssets || (apiItem.hero && typeof apiItem.hero === 'object' ? { hero: apiItem.hero.url, source: apiItem.hero.source } : undefined)
+  
   return {
     id: apiItem.id || `item-${Math.random()}`,
     type: apiItem.type || 'article',
@@ -148,6 +152,9 @@ function mapToDiscoveredItem(apiItem: any): DiscoveredItem {
             apiItem.status === 'requires_review' ? 'pending_audit' : 
             (apiItem.status as any) || 'ready',
     displayTitle, // Add the generated display title
+    // Preserve hero and mediaAssets for DiscoveryCard component
+    hero: hero as any,
+    mediaAssets: mediaAssets as any,
     media: {
       hero: apiItem.mediaAssets?.hero || 
             apiItem.enrichedContent?.hero || 
