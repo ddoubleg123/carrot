@@ -416,7 +416,7 @@ export async function GET(
       entities: metadata.entities || [],
       timeline: metadata.timeline || [],
       media: {
-        hero: heroUrl,
+        hero: heroUrl || undefined,
         dominant: heroRecord?.imageUrl?.includes('wikimedia') ? undefined : (heroData?.dominantColor || heroData?.dominant)
       },
       source: {
