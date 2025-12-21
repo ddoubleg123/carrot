@@ -280,7 +280,19 @@ export async function GET(
         /^contact$/i,
         /^news$/i,
         /^updates$/i,
-        /^news and updates$/i
+        /^news and updates$/i,
+        /^Favorite Share Flag/i,
+        /^Share or Embed/i,
+        /^Share to/i,
+        /^Copy Link/i,
+        /^EMBED/i,
+        /^Item Preview/i,
+        /^remove-circle/i,
+        /^Flag this item/i,
+        /^Graphic Violence/i,
+        /^Explicit Sexual/i,
+        /^This is.*Item Preview/i,
+        /^Bookreader/i
       ]
       
       const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
@@ -416,7 +428,8 @@ export async function GET(
       entities: metadata.entities || [],
       timeline: metadata.timeline || [],
       media: {
-        hero: heroUrl || undefined,
+        // Always provide a hero image (use SVG placeholder if none available)
+        hero: heroUrl || generateSVGPlaceholder(improvedTitle, 800, 400),
         dominant: heroRecord?.imageUrl?.includes('wikimedia') ? undefined : (heroData?.dominantColor || heroData?.dominant)
       },
       source: {
@@ -605,9 +618,10 @@ export async function GET(
 
     // Always run grammar/language cleanup on summary and key facts
     // Run BEFORE caching to ensure cleaned content is cached
-    // Only run if content exists and hasn't been cleaned recently
+    // Always run cleanup to ensure content quality (even if previously cleaned, re-verify)
+    // Only skip if explicitly marked as high quality
     const needsCleanup = (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) &&
-                         !metadata.grammarCleaned // Skip if already cleaned
+                         (!metadata.grammarCleaned || metadata.contentQuality === 'poor' || metadata.forceRecheck)
     
     if (needsCleanup) {
       try {
