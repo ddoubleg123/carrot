@@ -34,4 +34,12 @@ export type DiscoveredItem = {
     urlSlug?: string;
     [key: string]: any;
   };
+  // Optional fields for DiscoveryCard compatibility
+  hero?: { url: string; source: 'ai' | 'wikimedia' | 'skeleton' } | string | null;
+  mediaAssets?: {
+    hero?: string;
+    source?: string;
+    license?: string;
+    [key: string]: any;
+  };
 };
