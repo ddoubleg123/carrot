@@ -621,8 +621,19 @@ export async function GET(
     // Run BEFORE caching to ensure cleaned content is cached
     // Always run cleanup to ensure content quality (even if previously cleaned, re-verify)
     // Only skip if explicitly marked as high quality
-    const needsCleanup = (preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)) &&
-                         (!metadata.grammarCleaned || metadata.contentQuality === 'poor' || metadata.forceRecheck)
+    // FIXED: Be more aggressive - run cleanup if content exists and either:
+    // 1. Never been cleaned, OR
+    // 2. Content quality is poor, OR
+    // 3. Cleaned more than 7 days ago (re-verify), OR
+    // 4. Force recheck flag is set
+    const hasContent = preview.summary || (preview.keyPoints && preview.keyPoints.length > 0)
+    const neverCleaned = !metadata.grammarCleaned
+    const isPoorQuality = metadata.contentQuality === 'poor'
+    const needsRecheck = metadata.forceRecheck === true
+    const cleanedLongAgo = metadata.grammarCleanedAt ? 
+      (Date.now() - new Date(metadata.grammarCleanedAt).getTime() > 7 * 24 * 60 * 60 * 1000) : false
+    
+    const needsCleanup = hasContent && (neverCleaned || isPoorQuality || needsRecheck || cleanedLongAgo)
     
     if (needsCleanup) {
       try {
@@ -712,6 +723,25 @@ export async function GET(
           name: cleanupError.name,
           stack: cleanupError.stack?.substring(0, 500)
         })
+        
+        // Mark as failed in metadata so we can retry later
+        try {
+          const currentMetadata = (content.metadata as any) || {}
+          await prisma.discoveredContent.update({
+            where: { id },
+            data: {
+              metadata: {
+                ...currentMetadata,
+                cleanupFailed: true,
+                cleanupFailedAt: new Date().toISOString(),
+                cleanupError: cleanupError.message
+              } as Prisma.JsonObject
+            }
+          })
+        } catch (updateError) {
+          console.warn(`[ContentPreview] Failed to update metadata with cleanup error:`, updateError)
+        }
+        
         // Continue with original content if cleanup fails
       }
     } else {
