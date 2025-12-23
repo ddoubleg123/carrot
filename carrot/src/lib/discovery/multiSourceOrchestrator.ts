@@ -70,6 +70,7 @@ export class MultiSourceOrchestrator {
     let wikipediaPageCount = 0
     let wikipediaCitationCount = 0
     let newsArticleCount = 0
+    let annasArchiveBookCount = 0
 
     // Step 2: Search Wikipedia and extract citations
     if (strategy.primarySources.includes('Wikipedia') && strategy.wikipediaQueries.length > 0) {
@@ -89,6 +90,7 @@ export class MultiSourceOrchestrator {
     // Step 4: Search Anna's Archive (books, papers, documents)
     if (strategy.primarySources.includes('AnnasArchive') || strategy.primarySources.includes('Books')) {
       const annasArchiveSources = await this.searchAnnasArchive(strategy)
+      annasArchiveBookCount = annasArchiveSources.length
       allSources.push(...annasArchiveSources)
     }
 
@@ -362,7 +364,7 @@ export class MultiSourceOrchestrator {
               url: result.url,
               type: 'book',
               description: preview || `${result.author ? `By ${result.author}. ` : ''}${result.year ? `Published ${result.year}. ` : ''}Available on Anna's Archive.`,
-              content: preview,
+              content: preview || undefined,
               source: "Anna's Archive",
               metadata: {
                 author: result.author,
