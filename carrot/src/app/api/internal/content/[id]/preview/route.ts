@@ -234,23 +234,20 @@ export async function GET(
       }
     }
     
-    // Check if hero is directly from Wikipedia - if so, don't display it
-    // Wikipedia pages should be used to find deep source links, not as direct sources
+    // FIXED: Don't filter out Wikimedia images - they're fine to display!
+    // Wikimedia Commons images are high-quality and properly licensed
+    // Only filter if the SOURCE URL is Wikipedia (not the hero image)
     const sourceUrl = content.sourceUrl || ''
-    const isWikipediaSource = sourceUrl.includes('wikipedia.org') || 
-                              sourceUrl.includes('wikimedia.org') ||
-                              sourceUrl.includes('wikidata.org')
-    const isWikipediaHero = heroUrl && (
-      heroUrl.includes('wikipedia.org') || 
-      heroUrl.includes('wikimedia.org') ||
-      heroUrl.includes('wikidata.org')
-    )
+    const isWikipediaSource = sourceUrl.includes('wikipedia.org/wiki/') || 
+                              sourceUrl.includes('wikipedia.org/w/')
     
-    // If the source is Wikipedia OR the hero is from Wikipedia, don't display it
-    // (but keep it in the database for reference)
-    if (isWikipediaSource || isWikipediaHero) {
-      console.log(`[ContentPreview] Filtering out Wikipedia hero for ${id} (source: ${isWikipediaSource}, hero: ${isWikipediaHero})`)
+    // Only filter hero if the SOURCE is a Wikipedia article page (not Wikimedia Commons)
+    // Wikimedia Commons images are great and should be shown
+    if (isWikipediaSource && !sourceUrl.includes('commons.wikimedia.org')) {
+      console.log(`[ContentPreview] Filtering out hero for Wikipedia source page ${id}`)
       heroUrl = null
+    } else if (heroUrl) {
+      console.log(`[ContentPreview] Using hero image for ${id}: ${heroUrl.substring(0, 60)}...`)
     }
 
     // Improve title if it's generic or poor
@@ -715,6 +712,24 @@ export async function GET(
           const errorText = await cleanupResponse.text()
           console.error(`[ContentPreview] ❌ Grammar cleanup failed for ${id}: ${cleanupResponse.status}`)
           console.error(`[ContentPreview] Error response: ${errorText.substring(0, 500)}`)
+          
+          // Mark as failed so we can retry later
+          try {
+            const currentMetadata = (content.metadata as any) || {}
+            await prisma.discoveredContent.update({
+              where: { id },
+              data: {
+                metadata: {
+                  ...currentMetadata,
+                  cleanupFailed: true,
+                  cleanupFailedAt: new Date().toISOString(),
+                  cleanupError: `HTTP ${cleanupResponse.status}: ${errorText.substring(0, 200)}`
+                } as Prisma.JsonObject
+              }
+            })
+          } catch (updateError) {
+            console.warn(`[ContentPreview] Failed to update metadata with cleanup error:`, updateError)
+          }
         }
       } catch (cleanupError: any) {
         console.error(`[ContentPreview] ❌ Error during grammar cleanup for ${id}:`, cleanupError)
