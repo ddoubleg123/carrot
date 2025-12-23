@@ -645,16 +645,22 @@ export async function GET(
         
         console.log(`[ContentPreview] Cleanup URL: ${cleanupUrl}`)
         
+        // IMPORTANT: Use internal API key if available to avoid auth issues
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (process.env.INTERNAL_API_KEY) {
+          headers['x-internal-key'] = process.env.INTERNAL_API_KEY
+        }
+        
         const cleanupResponse = await fetch(cleanupUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             summary: preview.summary || '',
             keyFacts: preview.keyPoints || [],
             title: improvedTitle
           }),
           // Add timeout to prevent hanging
-          signal: AbortSignal.timeout(20000) // 20 second timeout (increased for DeepSeek)
+          signal: AbortSignal.timeout(30000) // 30 second timeout (increased for DeepSeek)
         })
 
         if (cleanupResponse.ok) {
