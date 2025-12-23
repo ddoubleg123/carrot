@@ -115,6 +115,7 @@ export class MultiSourceOrchestrator {
         wikipediaPages: wikipediaPageCount,
         wikipediaCitations: wikipediaCitationCount,
         newsArticles: newsArticleCount,
+        annasArchiveBooks: annasArchiveBookCount,
         totalSources: relevantSources.length,
         duplicatesRemoved: this.duplicateCount
       }
@@ -325,6 +326,11 @@ export class MultiSourceOrchestrator {
 
       for (const query of searchQueries) {
         try {
+          // Rate limiting: Add delay between queries to respect site limits
+          if (searchQueries.indexOf(query) > 0) {
+            await new Promise(resolve => setTimeout(resolve, 3000)) // 3 second delay between queries
+          }
+          
           const results = await searchAnnasArchive({
             query,
             language: 'en',
