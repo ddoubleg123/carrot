@@ -60,7 +60,8 @@ Generate a comprehensive search strategy to discover the BEST authoritative cont
    - Use Stack Overflow or GitHub-appropriate terms
 
 5. **primarySources**: Prioritize which sources to use:
-   - Options: "Wikipedia", "NewsAPI", "arXiv", "PubMed", "StackOverflow", "GitHub"
+   - Options: "Wikipedia", "NewsAPI", "AnnasArchive", "Books", "arXiv", "PubMed", "StackOverflow", "GitHub"
+   - "AnnasArchive" or "Books" for academic books, papers, and documents
    - List in priority order (most important first)
 
 6. **searchDepth**: Choose one:

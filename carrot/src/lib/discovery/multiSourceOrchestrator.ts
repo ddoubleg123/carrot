@@ -1,22 +1,26 @@
 import { SearchCoordinator, type SearchStrategy } from './searchCoordinator'
 import { WikipediaSource, type WikipediaPage, type WikipediaCitation } from './wikipediaSource'
 import { NewsSource, type NewsArticle } from './newsSource'
+import { searchAnnasArchive, annasArchiveToDiscoveredSource, type AnnasArchiveResult } from './annasArchiveSource'
 import { canonicalize } from './canonicalization'
 import { RelevanceEngine } from './relevance'
 
 export interface DiscoveredSource {
   title: string
   url: string
-  type: 'article' | 'news' | 'wikipedia' | 'citation'
+  type: 'article' | 'news' | 'wikipedia' | 'citation' | 'book'
   description: string
   content?: string
-  source: string // e.g., "Wikipedia", "NewsAPI", "Wikipedia Citation"
+  source: string // e.g., "Wikipedia", "NewsAPI", "Wikipedia Citation", "Anna's Archive"
   metadata: {
     author?: string
     publishedAt?: string
     sourceDomain?: string
     parentWikipediaPage?: string // For citations
     citationIndex?: number
+    year?: number
+    isbn?: string
+    fileType?: string
   }
   relevanceScore: number
 }
@@ -82,9 +86,15 @@ export class MultiSourceOrchestrator {
       allSources.push(...newsSources)
     }
 
-    // Step 4: TODO: Add other sources (arXiv, PubMed, etc.)
+    // Step 4: Search Anna's Archive (books, papers, documents)
+    if (strategy.primarySources.includes('AnnasArchive') || strategy.primarySources.includes('Books')) {
+      const annasArchiveSources = await this.searchAnnasArchive(strategy)
+      allSources.push(...annasArchiveSources)
+    }
 
-    // Step 4: Apply relevance filtering
+    // Step 5: TODO: Add other sources (arXiv, PubMed, etc.)
+
+    // Step 6: Apply relevance filtering
     console.log('[MultiSourceOrchestrator] Applying relevance filtering...')
     const relevantSources = await this.filterRelevantSources(allSources, topicName)
     
@@ -293,6 +303,78 @@ export class MultiSourceOrchestrator {
 
     } catch (error: any) {
       console.error('[NewsAPI] Error:', error)
+    }
+
+    return sources
+  }
+
+  /**
+   * Search Anna's Archive for books, papers, and documents
+   */
+  private async searchAnnasArchive(strategy: SearchStrategy): Promise<DiscoveredSource[]> {
+    const sources: DiscoveredSource[] = []
+
+    try {
+      // Determine how many results based on search depth
+      const limit = strategy.searchDepth === 'shallow' ? 10 
+                   : strategy.searchDepth === 'medium' ? 20 
+                   : 30
+
+      // Use Wikipedia queries as search terms (they're usually good keywords)
+      const searchQueries = strategy.wikipediaQueries.slice(0, 3) // Use top 3 queries
+
+      for (const query of searchQueries) {
+        try {
+          const results = await searchAnnasArchive({
+            query,
+            language: 'en',
+            fileType: 'all',
+            limit: Math.ceil(limit / searchQueries.length) // Distribute limit across queries
+          })
+
+          for (const result of results) {
+            // Canonicalize URL
+            const canonicalResult = await canonicalize(result.url)
+            
+            if (this.seenUrls.has(canonicalResult.canonicalUrl)) {
+              this.duplicateCount++
+              continue
+            }
+            this.seenUrls.add(canonicalResult.canonicalUrl)
+
+            // Get preview if available
+            let preview: string | null = null
+            try {
+              const { getAnnasArchivePreview } = await import('./annasArchiveSource')
+              preview = await getAnnasArchivePreview(result)
+            } catch (previewError) {
+              // Preview is optional, continue without it
+            }
+
+            sources.push({
+              title: result.title,
+              url: result.url,
+              type: 'book',
+              description: preview || `${result.author ? `By ${result.author}. ` : ''}${result.year ? `Published ${result.year}. ` : ''}Available on Anna's Archive.`,
+              content: preview,
+              source: "Anna's Archive",
+              metadata: {
+                author: result.author,
+                year: result.year,
+                isbn: result.isbn,
+                fileType: result.fileType,
+                sourceDomain: 'annas-archive.org'
+              },
+              relevanceScore: 75 // Books are high quality but need relevance scoring
+            })
+          }
+        } catch (error: any) {
+          console.error(`[AnnasArchive] Error searching for "${query}":`, error)
+        }
+      }
+
+    } catch (error: any) {
+      console.error('[AnnasArchive] Search error:', error)
     }
 
     return sources
