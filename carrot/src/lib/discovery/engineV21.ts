@@ -636,6 +636,15 @@ export class DiscoveryEngineV21 {
                 
                 console.log(`[WikipediaProcessor] Saved citation to DiscoveredContent: ${savedItem.id} (relevance: ${finalRelevanceScore.toFixed(2)}, useful: ${relevanceData?.isRelevant ?? false})`)
                 
+                // Trigger automatic content cleanup (non-blocking)
+                import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+                  autoCleanupContent(savedItem.id).catch(err => {
+                    console.warn(`[EngineV21] Auto-cleanup failed for ${savedItem.id}:`, err)
+                  })
+                }).catch(() => {
+                  // Ignore import errors - cleanup can happen later
+                })
+                
                 // Enqueue for agent feeding (background, non-blocking)
                 try {
                   const { enqueueDiscoveredContent, calculateContentHash } = await import('@/lib/agent/feedWorker')
@@ -2909,6 +2918,18 @@ Return ONLY valid JSON array, no other text.`
                     } as Prisma.JsonObject
                   }
                 })
+            
+            // Trigger automatic content cleanup (non-blocking, after transaction)
+            const contentId = content.id
+            setImmediate(() => {
+              import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+                autoCleanupContent(contentId).catch(err => {
+                  console.warn(`[EngineV21] Auto-cleanup failed for ${contentId}:`, err)
+                })
+              }).catch(() => {
+                // Ignore import errors - cleanup can happen later
+              })
+            })
             
             // Create hero if threshold met (transactional)
             if (shouldCreateHero) {

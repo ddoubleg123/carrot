@@ -1480,6 +1480,15 @@ export class DiscoveryOrchestrator {
         }
       })
  
+      // Trigger automatic content cleanup (non-blocking)
+      import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+        autoCleanupContent(savedItem.id).catch(err => {
+          console.warn(`[Orchestrator] Auto-cleanup failed for ${savedItem.id}:`, err)
+        })
+      }).catch(() => {
+        // Ignore import errors - cleanup can happen later
+      })
+
       // Return properly formatted DiscoveredItem
       return {
         id: savedItem.id,

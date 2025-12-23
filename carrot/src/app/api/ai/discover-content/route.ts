@@ -192,6 +192,15 @@ Generate 3-5 relevant pieces of content that would be valuable for this group.`
           }
         });
         
+        // Trigger automatic content cleanup (non-blocking)
+        import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+          autoCleanupContent(stored.id).catch(err => {
+            console.warn(`[Discover Content] Auto-cleanup failed for ${stored.id}:`, err)
+          })
+        }).catch(() => {
+          // Ignore import errors - cleanup can happen later
+        })
+        
         storedContent.push(stored);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

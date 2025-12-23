@@ -322,6 +322,15 @@ export class OneAtATimeWorker {
         }
       })
       
+      // Trigger automatic content cleanup (non-blocking)
+      import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+        autoCleanupContent(savedItem.id).catch(err => {
+          console.warn(`[OneAtATimeWorker] Auto-cleanup failed for ${savedItem.id}:`, err)
+        })
+      }).catch(() => {
+        // Ignore import errors - cleanup can happen later
+      })
+
       return { id: savedItem.id }
       
     } catch (error: any) {

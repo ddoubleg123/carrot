@@ -85,6 +85,17 @@ export async function POST(req: Request, context: { params: Promise<{}> }) {
       throw error;
     }
 
+    // Trigger automatic content cleanup (non-blocking)
+    if (item?.id) {
+      import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+        autoCleanupContent(item.id).catch(err => {
+          console.warn(`[Content API] Auto-cleanup failed for ${item.id}:`, err)
+        })
+      }).catch(() => {
+        // Ignore import errors - cleanup can happen later
+      })
+    }
+
     // Normalise metadata helper
     const baseMetadata: Prisma.JsonObject = (() => {
       if (item?.metadata && typeof item.metadata === 'object' && item.metadata !== null) {

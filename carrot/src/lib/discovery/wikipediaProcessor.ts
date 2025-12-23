@@ -2015,6 +2015,15 @@ export async function reprocessCitation(citationId: string): Promise<{ processed
         }
       })
 
+      // Trigger automatic content cleanup (non-blocking)
+      import('@/lib/enrichment/autoCleanup').then(({ autoCleanupContent }) => {
+        autoCleanupContent(saved.id).catch(err => {
+          console.warn(`[WikipediaProcessor] Auto-cleanup failed for ${saved.id}:`, err)
+        })
+      }).catch(() => {
+        // Ignore import errors - cleanup can happen later
+      })
+
       // Trigger hero image generation
       try {
         const { enrichContentId } = await import('@/lib/enrichment/worker')
