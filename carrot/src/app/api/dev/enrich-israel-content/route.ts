@@ -126,13 +126,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get content items that need enrichment
+    // Note: Can't filter JSON fields with { not: null }, so we'll filter in memory
     const contentItems = await prisma.discoveredContent.findMany({
       where: {
         patchId: patch.id,
-        OR: [
-          { summary: { not: null } },
-          { facts: { not: null } }
-        ]
+        summary: { not: null } // At least have a summary
       },
       select: {
         id: true,
@@ -145,19 +143,26 @@ export async function POST(request: NextRequest) {
       },
       take: 50 // Process in batches
     })
+    
+    // Filter to only items that have content to enrich (summary or facts)
+    const itemsToEnrich = contentItems.filter(item => {
+      const hasSummary = item.summary && item.summary.length > 0
+      const hasFacts = Array.isArray(item.facts) && item.facts.length > 0
+      return hasSummary || hasFacts
+    })
 
-    console.log(`[EnrichIsrael] Found ${contentItems.length} items to enrich`)
+    console.log(`[EnrichIsrael] Found ${itemsToEnrich.length} items to enrich (from ${contentItems.length} total)`)
 
     const results = {
-      total: contentItems.length,
+      total: itemsToEnrich.length,
       enriched: 0,
       failed: 0,
       skipped: 0,
       errors: [] as string[]
     }
 
-    for (let i = 0; i < contentItems.length; i++) {
-      const item = contentItems[i]
+    for (let i = 0; i < itemsToEnrich.length; i++) {
+      const item = itemsToEnrich[i]
       const metadata = (item.metadata as any) || {}
 
       // Skip if recently cleaned (within 24 hours)
@@ -171,7 +176,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        console.log(`[EnrichIsrael] [${i + 1}/${contentItems.length}] Enriching: ${item.id}`)
+        console.log(`[EnrichIsrael] [${i + 1}/${itemsToEnrich.length}] Enriching: ${item.id}`)
 
         // Grammar cleanup
         if (item.summary || (item.facts && Array.isArray(item.facts) && item.facts.length > 0)) {
