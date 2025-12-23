@@ -32,6 +32,7 @@ export interface DiscoveryResult {
     wikipediaPages: number
     wikipediaCitations: number
     newsArticles: number
+    annasArchiveBooks: number
     totalSources: number
     duplicatesRemoved: number
   }
