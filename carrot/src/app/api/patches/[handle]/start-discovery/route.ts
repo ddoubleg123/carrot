@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
-import { BullsDiscoveryOrchestrator } from '@/lib/discovery/bullsDiscoveryOrchestrator';
-import { OneAtATimeWorker } from '@/lib/discovery/oneAtATimeWorker';
+// Removed BullsDiscoveryOrchestrator - all discovery now uses generic engine
+// Removed OneAtATimeWorker - all discovery now uses generic engine
 import { getGroupProfile } from '@/lib/discovery/groupProfiles';
 import {
   isDiscoveryV21Enabled,
@@ -285,77 +285,8 @@ export async function POST(
       })
     }
 
-    // Check if this is Chicago Bulls group
-    const groupProfile = getGroupProfile('chicago-bulls')
-    if (!groupProfile) {
-      return NextResponse.json({ 
-        error: 'Group profile not found',
-        code: 'GROUP_PROFILE_NOT_FOUND',
-        patchId: patch.id
-      }, { status: 400 });
-    }
-    
-    console.log('[Start Discovery] Starting Bulls-specific discovery for patch:', {
-      patchId: patch.id,
-      handle,
-      title: patch.title,
-      tags: patch.tags,
-      description: patch.description
-    });
-    
-    // 🚀 OPTIMIZATION: Build URL cache of ALL processed URLs (approved + denied)
-    const processedUrls = await prisma.discoveredContent.findMany({
-      where: { patchId: patch.id },
-      select: { 
-        sourceUrl: true, 
-        canonicalUrl: true,
-        title: true
-      }
-    });
-    
-    // Create URL cache for fast lookups
-    const urlCache = new Set<string>();
-    processedUrls.forEach(item => {
-      if (item.sourceUrl) urlCache.add(item.sourceUrl);
-      if (item.canonicalUrl) urlCache.add(item.canonicalUrl);
-    });
-    
-    console.log('[Start Discovery] 🗄️ URL Cache built:', {
-      totalProcessed: processedUrls.length,
-      cacheSize: urlCache.size
-    });
-    
-    // Execute Bulls-Specific Discovery
-    console.log('[Start Discovery] Initializing Bulls Discovery Orchestrator...')
-    const orchestrator = new BullsDiscoveryOrchestrator()
-    
-    let discoveryResult
-    try {
-      discoveryResult = await orchestrator.discover(
-        patch.title,
-        patch.description || '',
-        patch.tags
-      )
-      
-      console.log('[Start Discovery] ✅ Bulls discovery complete:', {
-        totalSources: discoveryResult.sources.length,
-        wikipediaPages: discoveryResult.stats.wikipediaPages,
-        wikipediaCitations: discoveryResult.stats.wikipediaCitations,
-        duplicatesRemoved: discoveryResult.stats.duplicatesRemoved,
-        relevanceFiltered: discoveryResult.stats.relevanceFiltered
-      })
-    } catch (error: any) {
-      console.error('[Start Discovery] Bulls orchestrator error:', error)
-      return NextResponse.json({ 
-        error: 'Failed to discover content',
-        code: 'ORCHESTRATOR_ERROR',
-        message: error.message,
-        patchId: patch.id
-      }, { status: 500 });
-    }
-    
-    // Convert DiscoveredSource format for one-at-a-time processing
-    const discoveredSources = discoveryResult.sources
+    // All discovery now uses the generic DiscoveryEngineV21
+    // No Bulls-specific logic - works for all patches
 
     // If streaming, create SSE stream
     if (isStreaming) {
@@ -367,45 +298,9 @@ export async function POST(
         writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
       }
       
-      // Process in background using one-at-a-time worker
-      ;(async () => {
-        try {
-          sendEvent('state', { phase: 'wikipedia' })
-          sendEvent('wikipedia:start', { count: discoveredSources.length })
-          
-          // Initialize one-at-a-time worker
-          const worker = new OneAtATimeWorker()
-          
-          // Process sources one at a time
-          const result = await worker.processSources(
-            discoveredSources,
-            patch.id,
-            handle,
-            sendEvent
-          )
-          
-          console.log(`[Start Discovery] One-at-a-time processing complete:`, {
-            saved: result.saved,
-            rejected: result.rejected,
-            duplicates: result.duplicates
-          })
-          
-          // Send complete event
-          sendEvent('complete', { 
-            done: result.saved, 
-            rejected: result.rejected,
-            duplicates: result.duplicates
-          })
-          sendEvent('state', { phase: 'completed' })
-          
-        } catch (error) {
-          console.error('[Start Discovery] Stream error:', error)
-          sendEvent('error', { message: error instanceof Error ? error.message : 'Unknown error' })
-          sendEvent('state', { phase: 'error' })
-        } finally {
-          writer.close()
-        }
-      })()
+      // Legacy Bulls-specific worker removed - all discovery uses generic engine
+      // This path should not be reached when DISCOVERY_V21 is enabled
+      writer.close()
       
       return new Response(stream.readable, {
         headers: {
@@ -416,42 +311,14 @@ export async function POST(
       })
     }
     
-    // Non-streaming fallback using one-at-a-time worker
-    const worker = new OneAtATimeWorker()
-    
-    try {
-      const result = await worker.processSources(
-        discoveredSources,
-        patch.id,
-        handle,
-        (event, data) => console.log(`[Start Discovery] ${event}:`, data)
-      )
-      
-      console.log('[Start Discovery] Non-streaming summary:', {
-        discovered: discoveredSources.length,
-        saved: result.saved,
-        rejected: result.rejected,
-        duplicates: result.duplicates
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Started content discovery for "${patch.title}"`,
-        itemsDiscovered: discoveredSources.length,
-        itemsSaved: result.saved,
-        itemsRejected: result.rejected,
-        itemsDuplicate: result.duplicates,
-        items: [], // Will be populated by SSE in streaming mode
-        rejections: []
-      });
-    } catch (error) {
-      console.error('[Start Discovery] Non-streaming error:', error)
-      return NextResponse.json({
-        success: false,
-        error: 'Discovery failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 })
-    }
+    // All discovery now uses the generic DiscoveryEngineV21 (handled above)
+    // Legacy Bulls-specific path removed - no longer needed
+    // If we reach here, it means DISCOVERY_V21 is disabled, which should not happen
+    return NextResponse.json({
+      error: 'Discovery engine not available',
+      code: 'ENGINE_NOT_AVAILABLE',
+      message: 'Please enable DISCOVERY_V21 feature flag'
+    }, { status: 500 })
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'

@@ -59,24 +59,8 @@ export class RelevanceEngine {
     const matchedEntities: string[] = []
     let score = 0
     
-    // FIRST: Check for BLACKLIST terms (hard reject for Bulls group)
-    if (profile.groupName === 'Chicago Bulls') {
-      const blacklistTerms = [
-        'blackhawks', 'hockey', 'nhl', 'stanley cup', 'puck', 'ice hockey',
-        'goalie', 'defenseman', 'forward line', 'power play', 'hat trick'
-      ]
-      
-      for (const term of blacklistTerms) {
-        if (text.includes(term)) {
-          return {
-            isRelevant: false,
-            score: 0,
-            reason: `Rejected: Contains hockey/NHL term "${term}" - this is Chicago BULLS (basketball), not Blackhawks (hockey)`,
-            matchedEntities: []
-          }
-        }
-      }
-    }
+    // Note: Blacklist terms can be added per-profile if needed in the future
+    // For now, we rely on entity matching and scoring for all topics
     
     // Check for primary entities (highest weight)
     for (const entity of profile.primaryEntities) {
@@ -121,7 +105,6 @@ export class RelevanceEngine {
     }
     
     // Check if content has group-specific entity mentions
-    // For Bulls, require specific entity mentions. For other groups, be more lenient.
     const hasGroupEntity = profile.primaryEntities.some(entity => 
       text.includes(entity.toLowerCase())
     ) || profile.people.some(person => 
@@ -132,14 +115,9 @@ export class RelevanceEngine {
       text.includes(keyword.toLowerCase())
     )
     
-    // For Bulls, require both score and entity. For other groups, be much more lenient
-    const isBullsGroup = profile.groupName === 'Chicago Bulls'
-    
-    // For non-Bulls groups: if title/content mentions the group name or any entity, it's relevant
-    // OR if score is decent (>= 0.3)
-    const isRelevant = isBullsGroup 
-      ? (score >= 0.7 && hasGroupEntity)  // Bulls: strict
-      : (hasGroupEntity || score >= 0.3)  // Others: very lenient - entity match OR decent score
+    // Universal relevance check: entity match OR decent score
+    // This works for all topics, not just Bulls
+    const isRelevant = hasGroupEntity || score >= 0.3
     
     return {
       isRelevant,

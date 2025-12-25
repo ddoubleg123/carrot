@@ -1470,7 +1470,7 @@ Return ONLY valid JSON array, no other text.`
         /\/feed/,
         /\/rss/,
         /\/news\/?$/,  // /news or /news/
-        /\/news$/,     // /bulls/news (news at end of path)
+        /\/news$/,     // /topic/news (news at end of path)
         /\/articles\/?$/,
         /\/blog\/?$/,
         /\/sites\/[^\/]+\/?$/,
@@ -1494,9 +1494,9 @@ Return ONLY valid JSON array, no other text.`
       // Check for category-like patterns - also check if path ends with "news"
       if (pathSegments.length >= 2) {
         const lastSegment = pathSegments[pathSegments.length - 1]
-        const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles', 'bulls']
+        const categoryWords = ['news', 'sports', 'tag', 'category', 'archive', 'blog', 'articles']
         
-        // Special case: /bulls/news or /team/news pattern
+        // Special case: /topic/news or /team/news pattern
         if (lastSegment === 'news' && pathSegments.length === 2) {
           return true
         }

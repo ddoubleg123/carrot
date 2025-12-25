@@ -205,9 +205,7 @@ export class HeroImagePipeline {
       const multiWord = properNouns.find(noun => noun.split(/\s+/).length >= 2)
       return multiWord || properNouns[0]
     }
-    if (titleLower.includes('bulls')) {
-      return 'Chicago Bulls'
-    }
+    // Removed Bulls-specific logic - topic detection is now generic
     return null
   }
   

@@ -4,7 +4,8 @@ import { isUrlSeen } from '@/lib/discovery/seenUrl'
 import { DISCOVERY_CONFIG, getMinUniqueDomains } from '@/lib/discovery/config'
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
-import { getStaticBullsSeeds, getStaticSeedDomains } from './staticSeeds'
+// Removed Bulls-specific static seeds - discovery is now generic
+import { getStaticSeedDomains } from './staticSeeds'
 import { getPatchFeatures } from '@/lib/config/features'
 
 const DATA_HOST_PATH_EXCEPTIONS = new Set([
@@ -979,8 +980,8 @@ function buildGenericFallbackSeeds(topic: string): PlannerSeedCandidate[] {
 function buildFallbackPlan(topic: string, aliases: string[]): DiscoveryPlan {
   const generatedAt = new Date().toISOString()
   const mustTerms = [topic, ...aliases].filter(Boolean)
-  const isChicagoBulls = /chicago\s+bulls/i.test(topic)
-  const seeds = isChicagoBulls ? buildChicagoBullsFallbackSeeds(topic) : buildGenericFallbackSeeds(topic)
+  // Removed Bulls-specific seed generation - all topics now use generic seeds
+  const seeds = buildGenericFallbackSeeds(topic)
 
   return {
     topic,
@@ -1232,36 +1233,12 @@ export const __plannerPrompts = {
  * Generate fallback domain pack for sports/basketball topics
  */
 function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSeedCandidate[] {
-  const topicLower = topic.toLowerCase()
-  const isBasketball = topicLower.includes('bulls') || topicLower.includes('basketball') || topicLower.includes('nba')
-  
-  if (!isBasketball) {
-    // Generic fallback for other topics
-    return [
-      { url: `https://www.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 1 },
-      { url: `https://www.reuters.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2 },
-      { url: `https://apnews.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2 },
-    ] as PlannerSeedCandidate[]
-  }
-  
-  // Basketball-specific domain pack (enhanced with required domains)
-  const fallbackSeeds: PlannerSeedCandidate[] = [
-    { url: 'https://www.nba.com/bulls/news', category: 'official', angle: 'Official news', priority: 1, sourceType: 'official' },
-    { url: 'https://www.espn.com/nba/team/_/name/chi/chicago-bulls', category: 'media', angle: 'Team coverage', priority: 1 },
-    { url: 'https://www.theathletic.com/nba/team/chicago-bulls', category: 'longform', angle: 'Analysis', priority: 1 },
-    { url: 'https://www.cbssports.com/nba/teams/CHI/chicago-bulls', category: 'media', angle: 'News', priority: 1 },
-    { url: 'https://sports.yahoo.com/nba/teams/chicago-bulls', category: 'media', angle: 'News', priority: 1 },
-    { url: 'https://bleacherreport.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 2 },
-    { url: 'https://apnews.com/hub/nba', category: 'media', angle: 'News', priority: 2 },
-    { url: 'https://www.reddit.com/r/chicagobulls', category: 'media', angle: 'Fan discussion', priority: 3 },
-    { url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 3 },
-    { url: 'https://www.nbcsports.com/chicago/bulls', category: 'media', angle: 'Local coverage', priority: 2 },
-    { url: 'https://chicago.suntimes.com/bulls', category: 'media', angle: 'Local news', priority: 2 },
-    { url: 'https://www.chicagotribune.com/sports/bulls', category: 'media', angle: 'Local news', priority: 2 },
-    { url: 'https://www.sbnation.com/chicago-bulls', category: 'media', angle: 'Fan coverage', priority: 3 },
-  ]
-  
-  return fallbackSeeds
+  // Generic fallback seeds for all topics
+  return [
+    { url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 1, sourceType: 'wikipedia' },
+    { url: `https://www.reuters.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2, sourceType: 'media' },
+    { url: `https://apnews.com/search?q=${encodeURIComponent(topic)}`, category: 'media', angle: 'News', priority: 2, sourceType: 'media' },
+  ] as PlannerSeedCandidate[]
 }
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {

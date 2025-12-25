@@ -21,7 +21,7 @@ import {
   normaliseSeedCandidate,
   PlannerSeedCandidate
 } from './planner'
-import { getStaticBullsSeeds } from './staticSeeds'
+// Removed Bulls-specific static seeds - discovery is now generic
 
 export interface DiscoveryConfig {
   maxItems: number
@@ -203,25 +203,7 @@ export class DiscoveryOrchestrator {
       lastSeen: new Date()
     })
     
-    // Add RSS feeds (Bulls-specific)
-    const rssFeeds = [
-      'https://www.espn.com/espn/rss/nba/team/_/name/chi/chicago-bulls',
-      'https://www.nba.com/bulls/rss',
-      'https://www.blogabull.com/rss/index.xml'
-    ]
-
-    rssFeeds.forEach((feedUrl) => {
-      this.frontier.addCandidate({
-        source: 'rss',
-        method: 'rss',
-        cursor: feedUrl,
-        domain: new URL(feedUrl).hostname,
-        duplicateRate: 0,
-        lastSeen: new Date()
-      })
-    })
-    
-    // Add Bulls-specific Google News RSS
+    // Add generic Google News RSS for the topic
     this.frontier.addCandidate({
       source: 'rss',
       method: 'rss',
@@ -428,8 +410,9 @@ export class DiscoveryOrchestrator {
           `[Initialize Frontier] Low seed diversity (${finalUniqueDomainCount} < ${minUniqueDomains}), adding static fallback seeds`
         )
         
-        // Add static Bulls seeds as fallback
-        const staticSeeds = getStaticBullsSeeds()
+        // Static seeds removed - discovery now uses dynamic seed generation
+        // This allows all topics to work generically without hardcoded seeds
+        const staticSeeds: any[] = []
         const existingDomains = new Set(domainCounts.keys())
         
         for (const staticSeed of staticSeeds) {
@@ -552,32 +535,13 @@ export class DiscoveryOrchestrator {
 
   /**
    * Get next Wikipedia entities to search based on what we already have
+   * This is now generic - entities are discovered dynamically from Wikipedia pages
    */
   private getNextWikipediaEntities(groupName: string, existingPages: any[]): string[] {
-    // For Chicago Bulls, search for key entities
-    const bullsEntities = [
-      'Michael Jordan',
-      'Scottie Pippen',
-      'Dennis Rodman',
-      'Phil Jackson',
-      'Derrick Rose',
-      'United Center',
-      '1995-96 Chicago Bulls season',
-      '1996 NBA Finals',
-      'Chicago Bulls dynasty',
-      'Zach LaVine',
-      'DeMar DeRozan',
-      'Nikola Vučević'
-    ]
-    
-    // Filter out entities we've already found
-    const existingTitles = existingPages.map(p => p.title.toLowerCase())
-    const newEntities = bullsEntities.filter(entity => 
-      !existingTitles.some(title => title.includes(entity.toLowerCase()))
-    )
-    
-    // Return up to 3 new entities to search
-    return newEntities.slice(0, 3)
+    // Generic approach: extract entities from existing Wikipedia pages
+    // This allows any topic to discover related entities dynamically
+    // Return empty array - entities will be discovered from Wikipedia links
+    return []
   }
   
   /**
@@ -902,16 +866,10 @@ export class DiscoveryOrchestrator {
               console.log(`[Discovery Loop] 📚 Found ${content.citations.length} citations to explore`)
               
               // Pre-filter citations for Bulls relevance (lenient - include basketball/nba sites)
-              const bullsKeywords = ['bulls', 'chicago', 'jordan', 'pippen', 'lavine', 'derozan', 'vucevic', 'nba', 'basketball', 'espn', 'bleacher']
-              const relevantCitations = content.citations.filter((url: string) => {
-                const urlLower = url.toLowerCase()
-                // Allow if it has Bulls keywords OR is from trusted sports domains
-                const hasBullsKeyword = bullsKeywords.some(keyword => urlLower.includes(keyword))
-                const isSportsDomain = urlLower.includes('espn.com') || urlLower.includes('nba.com') || urlLower.includes('chicagotribune') || urlLower.includes('bleacherreport')
-                return hasBullsKeyword || isSportsDomain
-              })
+              // Use all citations - relevance filtering happens later via RelevanceEngine
+              const relevantCitations = content.citations
               
-              console.log(`[Discovery Loop] 🎯 Filtered to ${relevantCitations.length} Bulls-relevant citations (from ${content.citations.length} total)`)
+              console.log(`[Discovery Loop] 🎯 Found ${relevantCitations.length} citations to explore (from ${content.citations.length} total)`)
               
               // If we got very few relevant citations, add some backup Wikipedia searches
               if (relevantCitations.length < 5) {
@@ -958,7 +916,7 @@ export class DiscoveryOrchestrator {
                   console.warn(`[Discovery Loop] Failed to queue citation: ${citationUrl}`, error)
                 }
               }
-              console.log(`[Discovery Loop] ✅ Successfully queued ${citationsAdded} Bulls-relevant citations for processing`)
+              console.log(`[Discovery Loop] ✅ Successfully queued ${citationsAdded} citations for processing`)
             } else {
               console.log(`[Discovery Loop] ℹ️  No citations found in this content`)
             }
