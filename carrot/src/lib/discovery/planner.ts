@@ -1256,6 +1256,12 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     
     if (patch) {
       console.log('[Seed Planner] Running MultiSourceOrchestrator to discover additional sources...')
+      console.log('[Seed Planner] Patch info:', {
+        title: patch.title,
+        description: patch.description?.substring(0, 100),
+        tags: patch.tags.filter((t): t is string => typeof t === 'string')
+      })
+      
       const discoveryResult = await orchestrator.discover(
         patch.title,
         patch.description || '',
@@ -1269,6 +1275,16 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
         news: discoveryResult.stats.newsArticles,
         annasArchive: discoveryResult.stats.annasArchiveBooks
       })
+      
+      // Log Anna's Archive sources specifically
+      const annasArchiveSources = discoveryResult.sources.filter(s => s.source === "Anna's Archive")
+      if (annasArchiveSources.length > 0) {
+        console.log(`[Seed Planner] Found ${annasArchiveSources.length} Anna's Archive sources:`, 
+          annasArchiveSources.map(s => ({ title: s.title, url: s.url }))
+        )
+      } else {
+        console.warn('[Seed Planner] No Anna\'s Archive sources found')
+      }
       
       // Convert Anna's Archive results to seed candidates
       const annasArchiveSeeds: PlannerSeedCandidate[] = discoveryResult.sources
@@ -1291,7 +1307,10 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
           plan.seedCandidates = []
         }
         plan.seedCandidates.push(...annasArchiveSeeds)
-        console.log(`[Seed Planner] Added ${annasArchiveSeeds.length} Anna's Archive books to seed candidates`)
+        console.log(`[Seed Planner] ✅ Added ${annasArchiveSeeds.length} Anna's Archive books to seed candidates`)
+        console.log(`[Seed Planner] Sample Anna's Archive seeds:`, annasArchiveSeeds.slice(0, 3).map(s => ({ title: s.titleGuess, url: s.url })))
+      } else {
+        console.warn(`[Seed Planner] ⚠️  No Anna's Archive seeds to add (filtered ${discoveryResult.sources.filter(s => s.type === 'book' && s.source === "Anna's Archive").length} sources)`)
       }
       
       // Also add Wikipedia citations as seeds (they're high quality)
@@ -1355,7 +1374,8 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     })
     
     if (llmDomains.size < 10) {
-      const staticSeeds = getStaticBullsSeeds()
+      // Removed Bulls-specific static seeds - discovery is now generic
+      const staticSeeds: any[] = []
       const staticDomains = getStaticSeedDomains()
       
       // Add static seeds that aren't already in the list
@@ -1534,8 +1554,14 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     return 0
   })
 
+  let annasArchiveCount = 0
   sortedSeeds.forEach((seed, index) => {
     if (!seed.url) return
+
+    // Track Anna's Archive seeds
+    if (seed.notes?.includes("Anna's Archive")) {
+      annasArchiveCount++
+    }
 
     const item: FrontierItem = {
       id: `direct_seed:${Date.now()}:${index}:${seed.url}`,
@@ -1566,6 +1592,10 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
 
     tasks.push(addToFrontier(patchId, item))
   })
+  
+  if (annasArchiveCount > 0) {
+    console.log(`[Seed Planner] ✅ Enqueued ${annasArchiveCount} Anna's Archive seeds to frontier`)
+  }
 
   await Promise.all(tasks)
   await enqueueQueriesFromPlan(patchId, plan)

@@ -37,13 +37,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       runId = await getActiveRun(patch.id) || undefined
     }
 
-    if (!runId) {
-      return NextResponse.json({ error: 'No active discovery run found' }, { status: 404 })
-    }
+    // Always set run state to suspended, even if we can't find the active run
+    // This ensures the engine stops if it's running (engineV21 checks this state)
+    await setRunState(patch.id, 'suspended').catch(() => undefined)
 
-    const stopped = stopOpenEvidenceRun(runId)
-    if (!stopped) {
-      return NextResponse.json({ error: 'Discovery run is not active' }, { status: 409 })
+    if (runId) {
+      const stopped = stopOpenEvidenceRun(runId)
+      if (!stopped) {
+        console.warn(`[DiscoveryStop] Run ${runId} not found in active runs, but state set to suspended`)
+      }
+    } else {
+      console.warn(`[DiscoveryStop] No active run found for patch ${patch.id}, but state set to suspended`)
     }
 
     // Stop discovery state
@@ -54,7 +58,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     await clearActiveRun(patch.id).catch(() => undefined)
-    await setRunState(patch.id, 'suspended').catch(() => undefined)
 
     return NextResponse.json({
       success: true,

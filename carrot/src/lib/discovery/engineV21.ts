@@ -991,11 +991,19 @@ export class DiscoveryEngineV21 {
 
   private async ensureLiveState(context: string): Promise<boolean> {
     const state = await this.getCurrentRunState()
-    if (state && state !== 'live') {
+    if (state === 'suspended') {
+      // Suspended means stopped - exit immediately
       this.structuredLog('run_state_exit', { state, context })
       this.stopRequested = true
       return false
     }
+    if (state === 'paused') {
+      // Paused means wait - don't process but don't exit
+      // Wait a bit before checking again
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      return true // Continue loop to check again
+    }
+    // 'live' or null - continue processing
     return true
   }
 
@@ -2488,11 +2496,13 @@ Return ONLY valid JSON array, no other text.`
         this.structuredLog('entity_missing', {
           url: canonicalUrl,
           provider: candidate.provider,
-          angle
+          angle,
+          title: extracted.title,
+          textLength: extracted.text?.length || 0
         })
         await this.emitAudit('fetch', 'fail', {
           candidateUrl: canonicalUrl,
-          error: { message: 'entity_missing' }
+          error: { message: 'entity_missing', title: extracted.title, textLength: extracted.text?.length || 0 }
         })
         this.eventStream.skipped('low_relevance', canonicalUrl, { reason: 'entity_missing' })
         await this.persistMetricsSnapshot('running', countersBefore)
@@ -2501,23 +2511,30 @@ Return ONLY valid JSON array, no other text.`
 
       const simhash = SimHash.generate(extracted.text)
       const hashString = simhash.toString()
-      if (await isNearDuplicate(redisPatchId, hashString, DUPLICATE_HASH_THRESHOLD)) {
+      
+      // Check Redis for near-duplicates (checks against all previous content - last 1000 entries)
+      // This is more aggressive than in-memory check because it checks historical content
+      const redisDuplicate = await isNearDuplicate(redisPatchId, hashString, DUPLICATE_HASH_THRESHOLD)
+      if (redisDuplicate) {
         await this.incrementMetric('duplicates')
         this.metricsTracker.recordDuplicate()
         logger.logDuplicate(canonicalUrl, 'B', candidate.provider)
         this.structuredLog('duplicate_simhash', {
           url: canonicalUrl,
           provider: candidate.provider,
-          contentHash: hashString
+          contentHash: hashString.substring(0, 20) + '...', // Log first 20 chars only
+          source: 'redis',
+          threshold: DUPLICATE_HASH_THRESHOLD,
+          scope: 'all_previous_content_last_1000'
         })
         await this.emitAudit('duplicate_check', 'fail', {
           candidateUrl: canonicalUrl,
           provider: candidate.provider,
-          decisions: { action: 'drop', reason: 'near_duplicate' }
+          decisions: { action: 'drop', reason: 'near_duplicate_redis', threshold: DUPLICATE_HASH_THRESHOLD }
         })
-        this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'near_duplicate' })
+        this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'near_duplicate_redis' })
         await this.persistMetricsSnapshot('running', countersBefore)
-        return { saved: false, reason: 'near_duplicate', angle, host }
+        return { saved: false, reason: 'near_duplicate_redis', angle, host }
       }
 
       this.eventStream.stage('vetting', { url: canonicalUrl })
@@ -2700,39 +2717,44 @@ Return ONLY valid JSON array, no other text.`
         this.eventStream.stage('hero', { url: canonicalUrl, eligible: false })
       }
 
-      // Don't mark as seen yet - only after successful save
-      await markContentHash(this.redisPatchId, hashString).catch(() => undefined)
-
-      // Content-level near-duplicate using SimHash (Hamming ≤ 7)
+      // In-memory duplicate check for this run only (redundant with Redis check, but faster for same-run duplicates)
+      // Only check if Redis check passed (to avoid double-checking)
       try {
         const contentForHash = (extracted?.text || '').slice(0, 5000)
         if (contentForHash.length > 0) {
           const hash = SimHash.generate(contentForHash)
           for (const existing of this.simhashes) {
             const d = SimHash.hammingDistance(hash, existing)
-            if (d <= 7) {
+            if (d <= DUPLICATE_HASH_THRESHOLD) {
+              // In-memory duplicate found (same run)
               await this.incrementMetric('duplicates')
               this.metricsTracker.recordDuplicate()
               this.structuredLog('duplicate_simhash', {
                 url: canonicalUrl,
                 provider: candidate.provider,
-                hamming: d
+                hamming: d,
+                source: 'in_memory',
+                threshold: DUPLICATE_HASH_THRESHOLD
               })
               await this.emitAudit('duplicate_check', 'fail', {
                 candidateUrl: canonicalUrl,
                 provider: candidate.provider,
-                decisions: { action: 'drop', reason: 'near_duplicate', hamming: d }
+                decisions: { action: 'drop', reason: 'near_duplicate_in_memory', hamming: d }
               })
+              this.eventStream.skipped('duplicate', canonicalUrl, { reason: 'near_duplicate_in_memory' })
               await this.persistMetricsSnapshot('running', countersBefore)
-              return { saved: false, reason: 'near_duplicate', angle, host }
+              return { saved: false, reason: 'near_duplicate_in_memory', angle, host }
             }
           }
+          // Add to in-memory cache for this run
           this.simhashes.push(hash)
           if (this.simhashes.length > 2000) this.simhashes.shift()
         }
       } catch {
         // best-effort; ignore errors
       }
+      
+      // Note: markContentHash is called AFTER successful save (see line ~3237)
 
       const viewSourceOk = await checkViewSource(canonicalUrl)
 
@@ -3214,6 +3236,9 @@ Return ONLY valid JSON array, no other text.`
         await markAngleCovered(this.options.runId, angle).catch(() => undefined)
       }
       
+      // Mark content hash in Redis for future duplicate detection (only after successful save)
+      await markContentHash(this.redisPatchId, hashString).catch(() => undefined)
+      
       // Mark URL as seen in durable tracking (markUrlSeen already imported above)
       const { markUrlSeen: markSeen } = await import('./seenTracker')
       await markSeen(this.options.patchId, canonicalUrl, this.options.runId, domain || undefined).catch(() => undefined)
@@ -3369,6 +3394,21 @@ Return ONLY valid JSON array, no other text.`
     }
   }
 
+  /**
+   * Check if URL is from Anna's Archive
+   */
+  private isAnnasArchiveUrl(url: string): boolean {
+    try {
+      const urlObj = new URL(url)
+      const hostname = urlObj.hostname.toLowerCase()
+      const pathname = urlObj.pathname.toLowerCase()
+      return hostname.includes('annas-archive.org') && 
+             (pathname.includes('/md5/') || pathname.includes('/book/') || pathname.includes('/file/'))
+    } catch {
+      return false
+    }
+  }
+
   private async fetchAndExtractContent(args: {
     canonicalUrl: string
     candidate: FrontierItem
@@ -3395,6 +3435,58 @@ Return ONLY valid JSON array, no other text.`
       let extracted: ExtractedContent | null = null
       const fetchStartTime = Date.now() // Declare at start of loop for use in error handling
       let renderUsed = false // Declare at start of loop for use in logging
+      
+      // Check if this is an Anna's Archive URL - use special extraction
+      if (this.isAnnasArchiveUrl(branch.url)) {
+        try {
+          console.log(`[EngineV21] Detected Anna's Archive URL, using book extraction: ${branch.url.substring(0, 100)}`)
+          const { extractBookContent } = await import('../../../scripts/extract-annas-archive-book')
+          const fullContent = await extractBookContent(branch.url)
+          
+          if (!fullContent || fullContent.length < 100) {
+            console.warn(`[EngineV21] Anna's Archive extraction failed or too short (${fullContent?.length || 0} chars)`)
+            lastError = new Error('annas_archive_extraction_failed')
+            continue
+          }
+          
+          // Extract title from URL or content
+          let title = 'Untitled Book'
+          try {
+            const titleResponse = await fetch(branch.url, {
+              headers: { 'User-Agent': FETCH_USER_AGENT }
+            })
+            if (titleResponse.ok) {
+              const titleHtml = await titleResponse.text()
+              const titleMatch = titleHtml.match(/<title[^>]*>([^<]+)<\/title>/i)
+              if (titleMatch) {
+                title = titleMatch[1].replace(/\s*[-|]\s*Anna's Archive.*$/i, '').trim()
+              }
+            }
+          } catch {
+            // Use default title
+          }
+          
+          console.log(`[EngineV21] ✅ Extracted ${fullContent.length} chars from Anna's Archive: ${title}`)
+          
+          // Create ExtractedContent from book content
+          const bookExtracted: ExtractedContent = {
+            title,
+            text: fullContent.substring(0, 20000) // Limit for processing
+            // No rawHtml for books (optional field)
+          }
+          
+          return {
+            extracted: bookExtracted,
+            branch: branch.branch,
+            finalUrl: branch.url,
+            renderUsed: false
+          }
+        } catch (error: any) {
+          console.error(`[EngineV21] Anna's Archive extraction error:`, error)
+          lastError = error
+          continue
+        }
+      }
       
       try {
         const response = await this.fetchWithRetry(
@@ -3901,16 +3993,20 @@ Return ONLY valid JSON array, no other text.`
     }
 
     const title = content.title?.toLowerCase?.() ?? ''
+    const isUntitled = title === 'untitled' || title === '' || title.length < 3
     // Check more text (first 500 words instead of 200) for better entity detection
     const words = content.text?.split(/\s+/).slice(0, 500).join(' ').toLowerCase() ?? ''
     const body = content.text?.toLowerCase?.() ?? ''
 
-    // Check title first (most reliable)
-    for (const term of terms) {
-      if (!term) continue
-      if (title.includes(term)) return true
+    // Check title first (most reliable) - but skip if title is "Untitled" or empty
+    if (!isUntitled) {
+      for (const term of terms) {
+        if (!term) continue
+        if (title.includes(term)) return true
+      }
     }
 
+    // For PDFs and untitled content, rely on text content
     // Check first 500 words (improved from 200)
     for (const term of terms) {
       if (!term) continue
@@ -3924,6 +4020,13 @@ Return ONLY valid JSON array, no other text.`
         if (!term) continue
         if (body.includes(term)) return true
       }
+    }
+    
+    // For PDFs with "Untitled" but substantial content, be more lenient
+    // If content is >1000 chars and we have terms, check if any term appears in content
+    if (isUntitled && body.length > 1000 && terms.size > 0) {
+      // Allow if content is substantial - entity might be in the document
+      return true
     }
 
     // If content is substantial (>1000 chars) but no entity found, be more lenient

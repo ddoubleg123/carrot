@@ -253,26 +253,51 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
 
   const pause = useCallback(async () => {
     try {
-      await fetch(`/api/patches/${patchHandle}/discovery/pause`, {
+      console.log('[DiscoveryStream] Toggling pause state...')
+      const response = await fetch(`/api/patches/${patchHandle}/discovery/pause`, {
         method: 'POST'
       })
-
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to pause: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('[DiscoveryStream] Pause response:', result)
+      
       setState(prev => ({
         ...prev,
-        isPaused: !prev.isPaused
+        isPaused: result.runState === 'paused',
+        runState: result.runState,
+        currentStatus: result.runState === 'paused' ? 'Discovery paused' : 'Discovery resumed'
       }))
     } catch (error) {
       console.error('[DiscoveryStream] Failed to pause:', error)
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to pause discovery'
+      }))
     }
   }, [patchHandle])
 
   const stop = useCallback(async () => {
     try {
-      await fetch(`/api/patches/${patchHandle}/discovery/stop`, {
+      console.log('[DiscoveryStream] Stopping discovery...')
+      const response = await fetch(`/api/patches/${patchHandle}/discovery/stop`, {
         method: 'POST'
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to stop: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('[DiscoveryStream] Stop response:', result)
     } catch (error) {
       console.error('[DiscoveryStream] Failed to stop:', error)
+      // Still update UI even if API call fails
     } finally {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -284,9 +309,10 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         ...prev,
         isActive: false,
         isPaused: false,
-        currentStatus: '',
+        currentStatus: 'Discovery stopped',
         itemsFound: items.length,
-        runId: undefined
+        runId: undefined,
+        runState: 'suspended'
       }))
     }
   }, [closeEventSource, items.length, patchHandle])

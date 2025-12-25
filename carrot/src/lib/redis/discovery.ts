@@ -208,18 +208,32 @@ export async function isNearDuplicate(patchId: string, contentHash: string, thre
   const client = await getRedisClient()
   const key = HASHES_KEY(patchId)
 
-  // Get all hashes (last 1k)
+  // Get all hashes (last 1k) - checks against ALL previous content, not just this run
   const hashes = await client.zrevrange(key, 0, 1000)
 
   const hashNum = BigInt(contentHash)
+  let minDistance = Infinity
+  let closestMatch: string | null = null
 
   for (const existingHashStr of hashes) {
     const existingHash = BigInt(existingHashStr)
     const hammingDistance = calculateHammingDistance(hashNum, existingHash)
 
+    if (hammingDistance < minDistance) {
+      minDistance = hammingDistance
+      closestMatch = existingHashStr
+    }
+
     if (hammingDistance <= threshold) {
+      // Log the duplicate detection for debugging
+      console.log(`[Redis Duplicate] Found near-duplicate: Hamming distance ${hammingDistance} (threshold: ${threshold})`)
       return true
     }
+  }
+
+  // Log closest match even if not a duplicate (for debugging threshold tuning)
+  if (hashes.length > 0 && minDistance < threshold + 3) {
+    console.log(`[Redis Duplicate] Closest match: Hamming distance ${minDistance} (threshold: ${threshold}, below threshold+3)`)
   }
 
   return false
