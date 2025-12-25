@@ -203,10 +203,14 @@ export async function auditAndFixGrammarQuality(
         citation: item.sourceUrl || ''
       }))
 
+      // Update both summary and whyItMatters (API uses whyItMatters if it exists)
+      const improvedSummary = deepSeekResult.summary || item.summary || ''
+      
       await prisma.discoveredContent.update({
         where: { id: item.id },
         data: {
-          summary: deepSeekResult.summary || item.summary,
+          summary: improvedSummary,
+          whyItMatters: improvedSummary, // CRITICAL: Update whyItMatters since API prefers it over summary
           facts: updatedFacts as any,
           quotes: (deepSeekResult.notableQuotes || []) as any,
           qualityScore: deepSeekResult.qualityScore || item.qualityScore || 0,

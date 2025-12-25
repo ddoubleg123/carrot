@@ -157,7 +157,8 @@ export async function auditAndFixHeroImages(
       }
 
       if (heroResult && heroResult.url) {
-        // Update the item with new hero image
+        // Update both the JSON hero field AND the Hero table
+        // First update the JSON field
         await prisma.discoveredContent.update({
           where: { id: item.id },
           data: {
@@ -170,6 +171,30 @@ export async function auditAndFixHeroImages(
             } as any
           }
         })
+
+        // Also update/create Hero table record (preferred source for API)
+        try {
+          await prisma.hero.upsert({
+            where: { contentId: item.id },
+            create: {
+              contentId: item.id,
+              title: item.title,
+              excerpt: item.summary || null,
+              imageUrl: heroResult.url,
+              sourceUrl: item.sourceUrl || '',
+              status: 'READY'
+            },
+            update: {
+              imageUrl: heroResult.url,
+              status: 'READY',
+              updatedAt: new Date()
+            }
+          })
+          console.log(`   ✅ Hero table updated`)
+        } catch (heroTableError: any) {
+          console.warn(`   ⚠️  Hero table update failed (non-critical): ${heroTableError.message}`)
+          // Continue anyway - JSON field update is sufficient
+        }
 
         result.fixed++
         console.log(`   ✅ Fixed! Source: ${heroResult.source}, URL: ${heroResult.url.substring(0, 60)}...`)

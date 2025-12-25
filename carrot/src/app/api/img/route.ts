@@ -218,6 +218,38 @@ async function fetchUpstream(req: Request, target: URL) {
         throw new Error(`Server error ${upstream.status}: ${upstream.statusText}`);
       }
       
+      // Handle 429 Too Many Requests (rate limiting) - retry with exponential backoff
+      if (upstream.status === 429) {
+        const retryAfter = upstream.headers.get('retry-after');
+        const retryDelay = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+        
+        console.warn('[api/img] Rate limited (429) - will retry', {
+          url: target.toString().substring(0, 100) + '...',
+          attempt,
+          retryAfter: retryAfter || 'calculated',
+          retryDelay
+        });
+        
+        // If this is the last attempt, return placeholder instead of failing
+        if (attempt === maxRetries) {
+          const placeholderSvg = svgPlaceholder('rate-limited');
+          return new NextResponse(placeholderSvg, {
+            status: 200,
+            headers: {
+              'Content-Type': 'image/svg+xml; charset=utf-8',
+              'Cache-Control': 'public, max-age=60', // Cache for 1 minute
+              'Access-Control-Allow-Origin': '*',
+              'X-Proxy': 'img-rate-limit-fallback',
+              'Retry-After': retryAfter || '60'
+            },
+          });
+        }
+        
+        // Wait before retrying, then throw to trigger retry logic
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        throw new Error('Rate limited (429) - retrying');
+      }
+      
       if (upstream.status === 403) {
         console.warn('[api/img] Access forbidden - URL may be expired or invalid', {
           url: target.toString().substring(0, 100) + '...',
@@ -237,7 +269,8 @@ async function fetchUpstream(req: Request, target: URL) {
         lastError.message.includes('ERR_HTTP_PROTOCOL_ERROR') ||
         lastError.message.includes('fetch failed') ||
         lastError.message.includes('NetworkError') ||
-        lastError.message.includes('timeout');
+        lastError.message.includes('timeout') ||
+        lastError.message.includes('Rate limited (429)');
       
       console.error(`[api/img] Fetch failed (attempt ${attempt}/${maxRetries})`, {
         error: lastError.message,
