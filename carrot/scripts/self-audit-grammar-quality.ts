@@ -177,25 +177,24 @@ export async function auditAndFixGrammarQuality(
       
       // Use HTTP fetch (works both locally and on server)
       const summarizeResponse = await fetch(`${apiUrl}/api/ai/summarize-content`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            text: contentText,
-            title: item.title,
-            url: item.sourceUrl || '',
-            groupContext: patchHandle,
-            temperature: 0.2
-          })
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: contentText,
+          title: item.title,
+          url: item.sourceUrl || '',
+          groupContext: patchHandle,
+          temperature: 0.2
         })
+      })
 
-        if (!summarizeResponse.ok) {
-          throw new Error(`DeepSeek API failed: ${summarizeResponse.status}`)
-        }
-
-        deepSeekResult = await summarizeResponse.json()
+      if (!summarizeResponse.ok) {
+        throw new Error(`DeepSeek API failed: ${summarizeResponse.status}`)
       }
+
+      deepSeekResult = await summarizeResponse.json()
 
       // Update the item with improved content
       const updatedFacts = (deepSeekResult.keyFacts || []).map((fact: string, index: number) => ({
