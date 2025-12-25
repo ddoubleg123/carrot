@@ -117,36 +117,34 @@ export async function auditAndFixHeroImages(
       console.log(`   🎨 Generating hero image...`)
       let heroResult
       
+      // Always use hero pipeline directly (avoids re-fetching content from Anna's Archive)
+      // This is faster and more reliable since we already have title and summary
       if (isLocal) {
-        // Use enrichment worker directly when running locally
-        console.log(`   [Local] Using enrichment worker directly...`)
-        const { enrichContentId } = await import('../src/lib/enrichment/worker')
-        const enrichmentResult = await enrichContentId(item.id)
-        
-        if (enrichmentResult.ok) {
-          // Get the hero from the Hero table
-          const heroRecord = await prisma.hero.findUnique({
-            where: { contentId: item.id },
-            select: { imageUrl: true }
+        // Use hero pipeline directly when running locally
+        // Try localhost:3005 first, fall back to production if not available
+        let localBaseUrl = 'http://localhost:3005'
+        try {
+          const testResponse = await fetch(`${localBaseUrl}/api/healthz`, { 
+            signal: AbortSignal.timeout(1000) 
           })
-          
-          if (heroRecord?.imageUrl) {
-            const urlLower = heroRecord.imageUrl.toLowerCase()
-            const source = urlLower.includes('wikimedia') ? 'wikimedia' : 
-                          urlLower.includes('placeholder') || urlLower.startsWith('data:image/svg') ? 'skeleton' : 'ai'
-            
-            heroResult = {
-              url: heroRecord.imageUrl,
-              source: source as 'ai' | 'wikimedia' | 'skeleton',
-              width: 1280,
-              height: 720
-            }
+          if (!testResponse.ok) {
+            localBaseUrl = baseUrl
+            console.log(`   [Local] Localhost:3005 not available, using production API`)
           } else {
-            heroResult = null
+            console.log(`   [Local] Using localhost:3005 API`)
           }
-        } else {
-          heroResult = null
+        } catch {
+          localBaseUrl = baseUrl
+          console.log(`   [Local] Localhost:3005 not available, using production API`)
         }
+        
+        const { HeroImagePipeline } = await import('../src/lib/discovery/hero-pipeline')
+        const localHeroPipeline = new HeroImagePipeline(localBaseUrl)
+        heroResult = await localHeroPipeline.assignHero({
+          title: item.title,
+          summary: item.summary || '',
+          topic: patchHandle
+        })
       } else {
         // Use HTTP API when running on server
         heroResult = await heroPipeline!.assignHero({
