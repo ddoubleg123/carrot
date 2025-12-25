@@ -151,36 +151,48 @@ When answering questions:
           { role: 'user', content: message }
         ]
 
-    // Call the AI chat API with streaming (internal server-to-server call)
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3005'
+    // Stream response directly using chatStream
+    const agentName = agent?.name || `${patch.title} Specialist`
     
-    const response = await fetch(`${baseUrl}/api/ai/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider: 'deepseek',
-        model: 'deepseek-chat',
-        messages: chatMessages,
-        temperature: 0.7,
-        max_tokens: 2048
-      })
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const enc = new TextEncoder()
+        const send = (event: string) => controller.enqueue(enc.encode(`data: ${event}\n\n`))
+        
+        try {
+          for await (const chunk of chatStream({ 
+            model: 'deepseek-chat', 
+            messages: chatMessages as any, 
+            temperature: 0.7, 
+            max_tokens: 2048 
+          })) {
+            if (chunk.type === 'token' && chunk.token) {
+              send(JSON.stringify({ type: 'token', token: chunk.token }))
+            } else if (chunk.type === 'error') {
+              send(JSON.stringify({ type: 'error', error: chunk.error }))
+              break
+            } else if (chunk.type === 'done') {
+              send(JSON.stringify({ type: 'done', usage: chunk.usage }))
+              break
+            }
+          }
+        } catch (e: any) {
+          send(JSON.stringify({ type: 'error', error: String(e?.message || e) }))
+        } finally {
+          controller.enqueue(enc.encode('data: [DONE]\n\n'))
+          controller.close()
+        }
+      }
     })
 
-    if (!response.ok) {
-      throw new Error(`AI API failed: ${response.status}`)
-    }
-
-    // Return the streaming response
-    return new Response(response.body, {
+    // Return the streaming response with agent name in headers
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no',
+        'X-Agent-Name': agentName
       }
     })
 
