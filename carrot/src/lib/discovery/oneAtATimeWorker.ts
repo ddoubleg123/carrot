@@ -331,6 +331,28 @@ export class OneAtATimeWorker {
         // Ignore import errors - cleanup can happen later
       })
 
+      // Enqueue for agent feeding (background, non-blocking)
+      try {
+        const { enqueueDiscoveredContent, calculateContentHash } = await import('@/lib/agent/feedWorker')
+        const contentHash = savedItem.contentHash || calculateContentHash(
+          savedItem.title,
+          savedItem.summary,
+          content
+        )
+        await enqueueDiscoveredContent(
+          savedItem.id,
+          patchId,
+          contentHash,
+          0 // Default priority
+        ).catch(err => {
+          // Non-fatal - log but don't fail
+          console.warn(`[OneAtATimeWorker] Failed to enqueue content for agent feeding:`, err)
+        })
+      } catch (enqueueError) {
+        // Non-fatal - log but don't fail
+        console.warn(`[OneAtATimeWorker] Error importing enqueue function:`, enqueueError)
+      }
+
       return { id: savedItem.id }
       
     } catch (error: any) {
