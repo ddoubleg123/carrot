@@ -61,20 +61,98 @@ export default function PatchChat({ patchId, patchHandle }: PatchChatProps) {
     }
 
     setMessages(prev => [...prev, userMessage])
+    const messageToSend = inputValue.trim()
     setInputValue('')
     setIsTyping(true)
 
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
-      const aiMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: `I understand you're asking about "${userMessage.content}". Let me help you with that. This is a mock response - in production, this would connect to the AI agent system.`,
-        timestamp: new Date()
+    // Create AI message placeholder
+    const aiMessageId = (Date.now() + 1).toString()
+    const aiMessage: ChatMessage = {
+      id: aiMessageId,
+      type: 'ai',
+      content: '',
+      timestamp: new Date()
+    }
+    setMessages(prev => [...prev, aiMessage])
+
+    try {
+      // Call production AI chat API (streaming)
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an AI assistant helping users in the ${patchHandle} patch. Provide helpful, accurate, and concise responses about this topic. Be friendly and engaging.`
+            },
+            {
+              role: 'user',
+              content: messageToSend
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1024
+        })
+      })
+
+      if (!response.ok || !response.body) {
+        throw new Error('API request failed')
       }
-      setMessages(prev => [...prev, aiMessage])
+
+      // Handle streaming response
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.type === 'token' && parsed.token) {
+                fullContent += parsed.token
+                // Update message incrementally
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMessageId 
+                    ? { ...msg, content: fullContent }
+                    : msg
+                ))
+              } else if (parsed.type === 'error') {
+                throw new Error(parsed.error || 'API error')
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Chat API error:', error)
+      // Update message with error
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: 'Sorry, I encountered an error. Please try again.' }
+          : msg
+      ))
+    } finally {
       setIsTyping(false)
-    }, 1000)
+    }
   }
 
   const formatTime = (date: Date) => {
