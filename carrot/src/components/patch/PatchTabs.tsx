@@ -19,7 +19,7 @@ interface PatchTabsProps {
 }
 
 const tabs = [
-  { id: 'overview', label: 'Overview' },
+  { id: 'chat', label: 'Chat' },
   { id: 'documents', label: 'Documents' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'discussions', label: 'Discussions' }
@@ -36,19 +36,22 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
 
   const handleTabClick = (tabId: string) => {
     const params = new URLSearchParams(searchParams?.toString() || '');
-    if (tabId === 'overview') {
+    if (tabId === 'chat') {
       params.delete('tab');
     } else {
       params.set('tab', tabId);
     }
     const newUrl = params.toString() ? `?${params.toString()}` : '';
-    router.push(`/patch/${patch.handle}${newUrl}`);
+    // Use current pathname to support both /patch/[handle] and /test-patch
+    const currentPath = window.location.pathname.split('?')[0];
+    router.push(`${currentPath}${newUrl ? `?${newUrl}` : ''}`);
   };
 
   const handleDiscoveryClick = () => {
     const params = new URLSearchParams(searchParams?.toString() || '');
     params.set('tab', 'discovery');
-    router.push(`/patch/${patch.handle}?${params.toString()}`);
+    const currentPath = window.location.pathname.split('?')[0];
+    router.push(`${currentPath}?${params.toString()}`);
   };
 
   return (
@@ -74,7 +77,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                   </button>
                 ))}
                 
-                {/* Discovery Button - styled like Refresh button */}
+                {/* Learn Button - styled like Refresh button */}
                 <Button
                   onClick={handleDiscoveryClick}
                   variant="outline"
@@ -86,7 +89,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
                   }`}
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Discovery
+                  Learn
                 </Button>
                 
                 {/* Create Post Button - now in the same row as tabs */}

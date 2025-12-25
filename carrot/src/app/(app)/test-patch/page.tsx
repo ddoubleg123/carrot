@@ -9,6 +9,7 @@ import Overview from '@/components/patch/Overview'
 import DocumentsView from '@/components/patch/DocumentsView'
 import DiscoveryView from '@/components/patch/DiscoveryView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
+import PatchChat from '@/components/patch/PatchChat'
 
 // Mock patch data matching the Israel patch structure
 const mockPatch = {
@@ -73,7 +74,7 @@ const mockEvents = [
 
 export default function TestPatchPage() {
   const searchParams = useSearchParams()
-  const activeTab = (searchParams?.get('tab') as string) || 'overview'
+  const activeTab = (searchParams?.get('tab') as string) || 'chat'
 
   return (
     <div className="min-h-screen bg-white">
@@ -92,23 +93,29 @@ export default function TestPatchPage() {
               activeTab={activeTab} 
               patch={mockPatch as any}
             >
-              {activeTab === 'overview' && <Overview patch={mockPatch as any} />}
-              {activeTab === 'documents' && <DocumentsView patch={mockPatch as any} />}
+              {activeTab === 'chat' && (
+                <div className="px-6 md:px-10 py-6">
+                  <PatchChat patchId={mockPatch.id} patchHandle={mockPatch.handle} />
+                </div>
+              )}
+              {activeTab === 'documents' && <Overview patch={mockPatch as any} />}
               {activeTab === 'timeline' && <TimelineView events={mockEvents as any} patchId={mockPatch.id} />}
               {activeTab === 'discovery' && <DiscoveryView patch={mockPatch as any} />}
               {activeTab === 'discussions' && <DiscussionsView patch={mockPatch as any} />}
             </PatchTabs>
           </div>
 
-          {/* Right Rail */}
-          <div className="w-[320px] shrink-0 min-w-0">
-            <RightRail
-              patch={mockPatch as any}
-              followers={mockFollowers}
-              botSubscriptions={mockBotSubscriptions}
-              followerCount={mockFollowers.length}
-            />
-          </div>
+          {/* Right Rail - Side Menu */}
+          <aside className="w-[320px] shrink-0 min-w-0 hidden lg:block">
+            <div className="sticky top-24">
+              <RightRail
+                patch={mockPatch as any}
+                followers={mockFollowers}
+                botSubscriptions={mockBotSubscriptions}
+                followerCount={mockFollowers.length}
+              />
+            </div>
+          </aside>
         </div>
       </div>
     </div>
