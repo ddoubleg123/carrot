@@ -14,6 +14,7 @@ interface UseDiscoveryRunnerReturn {
   state: DiscoveryState
   count: number
   totalProcessed: number
+  error: string | null
   start: () => void
   pause: () => void
   resume: () => void
@@ -36,6 +37,7 @@ export function useDiscoveryRunner(
   const [count, setCount] = useState(0)
   const [totalProcessed, setTotalProcessed] = useState(0)
   const [autoLoopEnabled, setAutoLoopEnabled] = useState(autoLoop)
+  const [error, setError] = useState<string | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -52,6 +54,7 @@ export function useDiscoveryRunner(
     abortControllerRef.current = new AbortController()
 
     try {
+      setError(null)
       console.log('[DiscoveryRunner] Starting discovery for patch:', patchHandle)
       
       const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
@@ -66,7 +69,9 @@ export function useDiscoveryRunner(
       })
 
       if (!response.ok) {
-        throw new Error(`Discovery failed: ${response.status}`)
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }))
+        const errorMessage = errorData.error || `Discovery failed: ${response.status}`
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
@@ -81,7 +86,9 @@ export function useDiscoveryRunner(
         return
       }
       
-      console.error('[DiscoveryRunner] Discovery failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start discovery'
+      console.error('[DiscoveryRunner] Discovery failed:', errorMessage, error)
+      setError(errorMessage)
       setState('idle')
     }
   }, [patchHandle, state])
@@ -202,6 +209,7 @@ export function useDiscoveryRunner(
     state,
     count,
     totalProcessed,
+    error,
     start: startDiscovery,
     pause,
     resume,

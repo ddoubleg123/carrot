@@ -71,11 +71,15 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
   const startSSEConnection = useCallback((runId: string) => {
     closeEventSource()
 
-    const eventSource = new EventSource(`/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(runId)}`)
+    const streamUrl = `/api/patches/${patchHandle}/discovery/stream?runId=${encodeURIComponent(runId)}`
+    console.log('[DiscoveryStream] Creating EventSource for:', streamUrl)
+    
+    const eventSource = new EventSource(streamUrl)
     eventSourceRef.current = eventSource
     activeRunIdRef.current = runId
 
     eventSource.onopen = () => {
+      console.log('[DiscoveryStream] SSE connection opened')
       setState(prev => ({
         ...prev,
         isActive: true,
@@ -183,6 +187,13 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
 
   const start = useCallback(async () => {
     try {
+      console.log('[DiscoveryStream] Starting discovery for patch:', patchHandle)
+      setState(prev => ({
+        ...prev,
+        currentStatus: 'Initializing…',
+        error: undefined
+      }))
+
       const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -191,17 +202,23 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         })
       })
 
+      console.log('[DiscoveryStream] Start discovery response:', response.status, response.statusText)
+
       if (!response.ok) {
         const message = await response.json().catch(() => null)
         const errorText = message?.error || `Failed to start discovery: ${response.status}`
+        console.error('[DiscoveryStream] Start discovery failed:', errorText)
         throw new Error(errorText)
       }
 
       const data = await response.json()
+      console.log('[DiscoveryStream] Start discovery data:', data)
       const runId = data?.runId
       if (!runId) {
-        throw new Error('Discovery run failed to initialize')
+        throw new Error('Discovery run failed to initialize - no runId returned')
       }
+
+      console.log('[DiscoveryStream] Got runId:', runId, '- updating state and starting SSE connection')
 
       setState(prev => ({
         ...prev,
@@ -221,11 +238,14 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
         runState: 'live'
       }))
 
+      console.log('[DiscoveryStream] Starting SSE connection with runId:', runId)
       startSSEConnection(runId)
+      console.log('[DiscoveryStream] SSE connection initiated')
     } catch (error) {
       console.error('[DiscoveryStream] Failed to start:', error)
       setState(prev => ({
         ...prev,
+        isActive: false,
         error: error instanceof Error ? error.message : 'Failed to start discovery'
       }))
     }

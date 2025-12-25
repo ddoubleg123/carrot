@@ -15,6 +15,7 @@ export default function DiscoveryHeader({ patchHandle, onRefresh }: DiscoveryHea
     state,
     count,
     totalProcessed,
+    error,
     start,
     pause,
     resume,
@@ -112,6 +113,14 @@ export default function DiscoveryHeader({ patchHandle, onRefresh }: DiscoveryHea
           </Button>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mt-2 mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-800 font-medium">Error starting discovery:</p>
+          <p className="text-sm text-red-700 mt-1">{error}</p>
+        </div>
+      )}
 
       {/* Helper Text */}
       <p className="mt-1 mb-3 text-sm text-slate-600">
