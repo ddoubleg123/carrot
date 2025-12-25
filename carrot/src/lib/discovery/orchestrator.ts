@@ -1549,6 +1549,28 @@ export class DiscoveryOrchestrator {
         })
       }
 
+      // Enqueue for agent feeding (background, non-blocking)
+      try {
+        const { enqueueDiscoveredContent, calculateContentHash } = await import('@/lib/agent/feedWorker')
+        const contentHash = savedItem.contentHash || calculateContentHash(
+          savedItem.title,
+          savedItem.summary,
+          item.content || savedItem.textContent
+        )
+        await enqueueDiscoveredContent(
+          savedItem.id,
+          this.groupId,
+          contentHash,
+          0 // Default priority
+        ).catch(err => {
+          // Non-fatal - log but don't fail
+          console.warn(`[Orchestrator] Failed to enqueue content for agent feeding:`, err)
+        })
+      } catch (enqueueError) {
+        // Non-fatal - log but don't fail
+        console.warn(`[Orchestrator] Error importing enqueue function:`, enqueueError)
+      }
+
       // Return properly formatted DiscoveredItem
       return {
         id: savedItem.id,
