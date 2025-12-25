@@ -129,7 +129,7 @@ Check logs for these messages:
 
 The scripts now automatically detect if running locally or on server:
 
-- **Local:** Tries `http://localhost:3000` first, falls back to production
+- **Local:** Tries `http://localhost:3005` first, falls back to production
 - **Server:** Uses `NEXTAUTH_URL` environment variable or production URL
 
 This means the scripts will work both:

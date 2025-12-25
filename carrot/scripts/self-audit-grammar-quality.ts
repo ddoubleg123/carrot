@@ -159,7 +159,7 @@ export async function auditAndFixGrammarQuality(
       let apiUrl = baseUrl
       if (isLocal) {
         // When running locally, try to use localhost API first
-        const localUrl = 'http://localhost:3000'
+        const localUrl = 'http://localhost:3005'
         try {
           // Try localhost first
           const testResponse = await fetch(`${localUrl}/api/healthz`, { 
@@ -167,11 +167,11 @@ export async function auditAndFixGrammarQuality(
           })
           if (testResponse.ok) {
             apiUrl = localUrl
-            console.log(`   [Local] Using localhost API`)
+            console.log(`   [Local] Using localhost:3005 API`)
           }
         } catch {
           // Localhost not available, use production URL
-          console.log(`   [Local] Localhost not available, using production API`)
+          console.log(`   [Local] Localhost:3005 not available, using production API`)
         }
       }
       

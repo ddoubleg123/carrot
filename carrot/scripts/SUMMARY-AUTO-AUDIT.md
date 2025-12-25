@@ -3,10 +3,10 @@
 ## ✅ Fixed: API Connection Issue
 
 The scripts now automatically detect the environment:
-- **Local:** Tries `http://localhost:3000` first, falls back to production
+- **Local:** Tries `http://localhost:3005` first, falls back to production
 - **Server:** Uses `NEXTAUTH_URL` or production URL
 
-This means scripts work both locally (if dev server running) and on production.
+This means scripts work both locally (if dev server running on port 3005) and on production.
 
 ## 🔄 When Automatic Self-Auditing Runs
 
