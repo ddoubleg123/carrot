@@ -40,10 +40,10 @@ export async function POST(
 
     // Get patch-specific agent
     const agents = await AgentRegistry.getAgentsByPatches([handle])
-    const agent = agents.find(a => 
-      a.metadata?.patchId === patch.id || 
-      a.associatedPatches.includes(handle)
-    ) || agents[0]
+    const agent = agents.find(a => {
+      const metadata = a.metadata as any
+      return (metadata?.patchId === patch.id) || a.associatedPatches.includes(handle)
+    }) || agents[0]
 
     if (!agent) {
       return NextResponse.json({ 
