@@ -1,7 +1,6 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import dynamic from 'next/dynamic'
 import PatchHeader from '@/components/patch/PatchHeader'
 import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
@@ -11,11 +10,6 @@ import DocumentsView from '@/components/patch/DocumentsView'
 import DiscoveryView from '@/components/patch/DiscoveryView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import PatchChat from '@/components/patch/PatchChat'
-
-// Dynamically import Sidebar to avoid SSR issues
-const Sidebar = dynamic(() => import('@/components/Sidebar/Sidebar'), {
-  ssr: false,
-})
 
 // Mock patch data matching the Israel patch structure
 const mockPatch = {
@@ -83,23 +77,16 @@ export default function TestPatchPage() {
   const activeTab = (searchParams?.get('tab') as string) || 'chat'
 
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* Left Sidebar */}
-      <aside className="hidden sm:flex w-[220px] max-lg:w-[80px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
-        <Sidebar />
-      </aside>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <PatchHeader
+        patch={mockPatch as any}
+        userTheme={null}
+      />
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-w-0">
-        {/* Header */}
-        <PatchHeader
-          patch={mockPatch as any}
-          userTheme={null}
-        />
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-6 md:px-10">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
           {/* Main Content Area */}
           <div className="max-w-[880px] min-w-0">
             <PatchTabs 
@@ -129,7 +116,6 @@ export default function TestPatchPage() {
               />
             </div>
           </aside>
-          </div>
         </div>
       </div>
     </div>
