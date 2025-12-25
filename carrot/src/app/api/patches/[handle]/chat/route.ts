@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
 import { FeedService } from '@/lib/ai-agents/feedService'
+import { chatStream } from '@/lib/llm/providers/DeepSeekClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,8 +151,12 @@ When answering questions:
           { role: 'user', content: message }
         ]
 
-    // Call the AI chat API with streaming
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3005'}/api/ai/chat`, {
+    // Call the AI chat API with streaming (internal server-to-server call)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3005'
+    
+    const response = await fetch(`${baseUrl}/api/ai/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
