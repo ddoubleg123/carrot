@@ -3,6 +3,8 @@
  * Provides real-time feedback during content discovery
  */
 
+import { publishDiscoveryEvent } from './eventBus'
+
 export type DiscoveryEventType =
   | 'start'
   | 'searching'
@@ -42,6 +44,7 @@ export class DiscoveryEventStream {
   private isActive = true
   private eventCount = 0
   private listener?: (event: DiscoveryEvent) => void
+  private runId?: string
   
   constructor(
     controller?: ReadableStreamDefaultController<Uint8Array>,
@@ -49,6 +52,13 @@ export class DiscoveryEventStream {
   ) {
     this.controller = controller
     this.listener = listener
+  }
+  
+  /**
+   * Set runId for event bus publishing
+   */
+  setRunId(runId: string): void {
+    this.runId = runId
   }
   
   /**
@@ -69,6 +79,11 @@ export class DiscoveryEventStream {
       this.controller.enqueue(new TextEncoder().encode(eventData))
     }
 
+    // Also publish to event bus for SSE streaming
+    if (this.runId) {
+      publishDiscoveryEvent(this.runId, event)
+    }
+
     this.eventCount++
     this.listener?.(event)
   }
@@ -77,6 +92,9 @@ export class DiscoveryEventStream {
    * Send start event
    */
   start(groupId: string, runId?: string): void {
+    if (runId) {
+      this.setRunId(runId)
+    }
     this.sendEvent('start', { groupId, runId })
   }
   

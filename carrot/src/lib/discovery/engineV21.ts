@@ -272,6 +272,8 @@ export class DiscoveryEngineV21 {
 
   constructor(private options: EngineOptions, eventStream?: DiscoveryEventStream) {
     this.eventStream = eventStream ?? new DiscoveryEventStream()
+    // Set runId so events are published to event bus for SSE
+    this.eventStream.setRunId(this.options.runId)
     this.heroPipeline = new HeroImagePipeline(process.env.NEXTAUTH_URL || 'https://carrot-app.onrender.com')
     this.metricsTracker = new MetricsTracker(`${options.patchHandle}:${options.runId}`)
     this.shadowMode = isDiscoveryV2ShadowModeEnabled() && !isDiscoveryV2WriteModeEnabled()

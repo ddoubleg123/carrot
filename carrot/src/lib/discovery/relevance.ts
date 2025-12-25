@@ -120,14 +120,26 @@ export class RelevanceEngine {
       score -= 0.3
     }
     
-    // CRITICAL: Must have Bulls-specific entity (not just "Chicago" or "basketball")
-    const hasBullsEntity = profile.primaryEntities.some(entity => 
+    // Check if content has group-specific entity mentions
+    // For Bulls, require specific entity mentions. For other groups, be more lenient.
+    const hasGroupEntity = profile.primaryEntities.some(entity => 
       text.includes(entity.toLowerCase())
     ) || profile.people.some(person => 
       text.includes(person.toLowerCase())
+    ) || profile.places.some(place => 
+      text.includes(place.toLowerCase())
+    ) || profile.keywords.some(keyword => 
+      text.includes(keyword.toLowerCase())
     )
     
-    const isRelevant = score >= 0.7 && hasBullsEntity
+    // For Bulls, require both score and entity. For other groups, be much more lenient
+    const isBullsGroup = profile.groupName === 'Chicago Bulls'
+    
+    // For non-Bulls groups: if title/content mentions the group name or any entity, it's relevant
+    // OR if score is decent (>= 0.3)
+    const isRelevant = isBullsGroup 
+      ? (score >= 0.7 && hasGroupEntity)  // Bulls: strict
+      : (hasGroupEntity || score >= 0.3)  // Others: very lenient - entity match OR decent score
     
     return {
       isRelevant,
@@ -267,16 +279,94 @@ export class RelevanceEngine {
           ]
         }
         
-      default:
-        // Generic profile for unknown groups
+      case 'israel':
         return {
-          groupId: groupName.toLowerCase().replace(/\s+/g, '-'),
+          groupId: 'israel',
+          groupName: 'Israel',
+          primaryEntities: [
+            'Israel',
+            'Israeli',
+            'Israelis',
+            'State of Israel',
+            'Palestine',
+            'Palestinian',
+            'Palestinians',
+            'Gaza',
+            'West Bank',
+            'Jerusalem',
+            'Tel Aviv',
+            'Haifa'
+          ],
+          people: [
+            'Benjamin Netanyahu',
+            'Yitzhak Rabin',
+            'Golda Meir',
+            'David Ben-Gurion',
+            'Yasser Arafat',
+            'Mahmoud Abbas'
+          ],
+          places: [
+            'Israel',
+            'Palestine',
+            'Gaza',
+            'West Bank',
+            'Jerusalem',
+            'Tel Aviv',
+            'Haifa',
+            'Beersheba',
+            'Eilat',
+            'Hebron',
+            'Ramallah',
+            'Nablus'
+          ],
+          rivals: [],
+          keywords: [
+            'Zionism',
+            'Zionist',
+            'Nakba',
+            'Settlement',
+            'Occupation',
+            'Intifada',
+            'Hamas',
+            'Fatah',
+            'PLO',
+            'IDF',
+            'Knesset',
+            'Hebrew',
+            'Arabic',
+            'Judaism',
+            'Islam',
+            'Middle East',
+            'conflict',
+            'peace',
+            'two-state solution'
+          ],
+          domains: [
+            'timesofisrael.com',
+            'haaretz.com',
+            'ynetnews.com',
+            'jpost.com',
+            'aljazeera.com',
+            'bbc.com',
+            'reuters.com',
+            'ap.org'
+          ]
+        }
+        
+      default:
+        // Generic profile for unknown groups - be more inclusive
+        const groupNameLower = groupName.toLowerCase()
+        return {
+          groupId: groupNameLower.replace(/\s+/g, '-'),
           groupName,
-          primaryEntities: [groupName],
+          primaryEntities: [
+            groupName,
+            ...groupName.split(/\s+/).filter(w => w.length > 2) // Add individual words
+          ],
           people: [],
           places: [],
           rivals: [],
-          keywords: [],
+          keywords: groupName.split(/\s+/).filter(w => w.length > 2), // Use group name words as keywords
           domains: []
         }
     }
