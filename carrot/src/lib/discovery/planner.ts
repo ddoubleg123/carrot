@@ -5,7 +5,6 @@ import { DISCOVERY_CONFIG, getMinUniqueDomains } from '@/lib/discovery/config'
 import { createHash } from 'node:crypto'
 import { URL } from 'node:url'
 // Removed Bulls-specific static seeds - discovery is now generic
-import { getStaticSeedDomains } from './staticSeeds'
 import { getPatchFeatures } from '@/lib/config/features'
 
 const DATA_HOST_PATH_EXCEPTIONS = new Set([
@@ -1374,40 +1373,9 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
     })
     
     if (llmDomains.size < 10) {
-      // Removed Bulls-specific static seeds - discovery is now generic
-      const staticSeeds: any[] = []
-      const staticDomains = getStaticSeedDomains()
-      
-      // Add static seeds that aren't already in the list
-      for (const staticSeed of staticSeeds) {
-        if (seedsSorted.length >= MIN_SEEDS * 2) break // Don't add too many
-        
-        const alreadyIncluded = seedsSorted.some(s => {
-          try {
-            const sDomain = new URL(s.url).hostname.toLowerCase().replace(/^www\./, '')
-            return sDomain === staticSeed.domain
-          } catch {
-            return false
-          }
-        })
-        
-        if (!alreadyIncluded) {
-          const seedCandidate: PlannerSeedCandidate = {
-            url: staticSeed.url,
-            titleGuess: staticSeed.title,
-            category: staticSeed.category as any,
-            angle: `Static seed from ${staticSeed.category} source`,
-            sourceType: staticSeed.category === 'official' ? 'official' : 
-                       staticSeed.category === 'data' ? 'data' : 'media',
-            priority: 2,
-            credibilityTier: staticSeed.category === 'official' ? 1 : 2
-          }
-          seedsSorted.push(seedCandidate)
-          llmDomains.add(staticSeed.domain)
-        }
-      }
-      
-      console.log(`[Seed Planner] seed_fallback_applied: true, unique_domains: ${llmDomains.size}, static_seeds_added: ${staticSeeds.length}`)
+      // Static seeds removed - discovery is now generic
+      // Fallback seeds from generateFallbackDomainPack should handle this case
+      console.log(`[Seed Planner] Low domain diversity (${llmDomains.size} unique domains), but static seeds disabled for generic discovery`)
     }
   }
 

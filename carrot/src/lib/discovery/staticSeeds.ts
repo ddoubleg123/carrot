@@ -111,6 +111,8 @@ export function getStaticBullsSeeds(): StaticSeed[] {
  * Get unique domains from static seeds
  */
 export function getStaticSeedDomains(): Set<string> {
-  return new Set(getStaticBullsSeeds().map(s => s.domain))
+  // Static seeds removed - discovery is now generic
+  // Return empty set as we no longer use static seed domains
+  return new Set<string>()
 }
 
