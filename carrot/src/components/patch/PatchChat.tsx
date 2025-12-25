@@ -23,6 +23,7 @@ interface PatchChatProps {
 
 export default function PatchChat({ patchId, patchHandle }: PatchChatProps) {
   const { data: session } = useSession()
+  const [agentName, setAgentName] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -76,32 +77,29 @@ export default function PatchChat({ patchId, patchHandle }: PatchChatProps) {
     setMessages(prev => [...prev, aiMessage])
 
     try {
-      // Call production AI chat API (streaming)
-      const response = await fetch('/api/ai/chat', {
+      // Call patch-specific chat API that uses agent + discovered content
+      const response = await fetch(`/api/patches/${patchHandle}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: 'deepseek',
-          model: 'deepseek-chat',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an AI assistant helping users in the ${patchHandle} patch. Provide helpful, accurate, and concise responses about this topic. Be friendly and engaging.`
-            },
-            {
-              role: 'user',
-              content: messageToSend
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 1024
+          message: messageToSend,
+          messages: messages.slice(0, -1).map(msg => ({
+            role: msg.type === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          }))
         })
       })
 
       if (!response.ok || !response.body) {
         throw new Error('API request failed')
+      }
+
+      // Get agent name from response headers
+      const agentNameFromHeader = response.headers.get('X-Agent-Name')
+      if (agentNameFromHeader && !agentName) {
+        setAgentName(agentNameFromHeader)
       }
 
       // Handle streaming response
@@ -207,7 +205,7 @@ export default function PatchChat({ patchId, patchHandle }: PatchChatProps) {
                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               </div>
               <span className="text-xs text-gray-500 mt-1">
-                {message.sender?.name || (message.type === 'ai' ? 'AI Assistant' : 'User')} · {formatTime(message.timestamp)}
+                {message.sender?.name || (message.type === 'ai' ? (agentName || 'AI Assistant') : 'User')} · {formatTime(message.timestamp)}
               </span>
             </div>
           </div>
