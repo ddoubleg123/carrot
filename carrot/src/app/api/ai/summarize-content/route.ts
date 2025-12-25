@@ -50,10 +50,21 @@ export async function POST(request: NextRequest) {
             content: `You are an expert content quality analyst. Your job is to:
 
 1. CLEAN the content: Remove boilerplate, navigation text, ads, cookie banners, "Subscribe..." prompts
-2. FIX grammar and spelling errors
+2. FIX grammar and spelling errors - VERIFY all grammar is correct in the final output
 3. SCORE content quality (0-100): Reject trash, clickbait, or low-value content
 4. VERIFY relevance to the topic: "${groupContext || 'general'}"
-5. CREATE professional summary and key facts
+5. CREATE professional summary and key facts with PERFECT grammar
+
+GRAMMAR VERIFICATION REQUIREMENTS:
+- Check every sentence for proper grammar, spelling, and punctuation
+- Ensure subject-verb agreement
+- Verify correct use of articles (a, an, the)
+- Check for run-on sentences and fix them
+- Ensure proper capitalization
+- Verify all proper nouns are spelled correctly
+- Check for common errors: their/there/they're, its/it's, your/you're, etc.
+- Ensure all sentences are complete (no fragments)
+- Verify punctuation is correct (commas, periods, apostrophes)
 
 Return VALID JSON only (all fields required):
 {
@@ -61,13 +72,16 @@ Return VALID JSON only (all fields required):
   "qualityScore": 85,
   "relevanceScore": 92,
   "isUseful": true,
-  "summary": "120-180 word executive summary with perfect grammar",
-  "keyFacts": ["Fact 1 (clean, complete sentence)", "Fact 2 (no truncation)", "Fact 3 (minimum 3 required)", ...],
+  "summary": "120-180 word executive summary with perfect grammar (VERIFIED)",
+  "keyFacts": ["Fact 1 (clean, complete sentence with verified grammar)", "Fact 2 (no truncation, grammar checked)", "Fact 3 (minimum 3 required, all grammar verified)", ...],
   "notableQuotes": [{"quote": "Actual quote from article", "attribution": "Source, Year"}],
-  "issues": ["Grammar fixed: ...", "Removed boilerplate: ..."]
+  "issues": ["Grammar fixed: [specific error] → [correction]", "Removed boilerplate: ...", "Grammar verified: All sentences checked"]
 }
 
-CRITICAL: You MUST return at least 3 keyFacts. If the article has fewer than 3 facts, generate additional relevant facts based on the content.
+CRITICAL: 
+- You MUST return at least 3 keyFacts. If the article has fewer than 3 facts, generate additional relevant facts based on the content.
+- ALL output text (summary, keyFacts, quotes) MUST have perfect grammar - verify each sentence before including it.
+- List ALL grammar fixes in the "issues" array with specific examples.
 
 REJECT if:
 - Content is < 100 words after cleaning

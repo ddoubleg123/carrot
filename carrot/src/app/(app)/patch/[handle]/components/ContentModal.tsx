@@ -124,7 +124,9 @@ export default function ContentModal({ item, isOpen, onClose }: ContentModalProp
                 {item.hero?.url && (
                   <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200">
                     <img
-                      src={item.hero.url}
+                      src={item.hero.url.includes('wikimedia.org') || item.hero.url.includes('upload.wikimedia.org') || item.hero.url.includes('commons.wikimedia.org')
+                        ? `/api/img?url=${encodeURIComponent(item.hero.url)}`
+                        : item.hero.url}
                       alt={item.title}
                       className="h-auto w-full object-cover"
                     />

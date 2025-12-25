@@ -200,7 +200,9 @@ export default function ContentModalV3({ item, isOpen, onClose }: ContentModalV3
             <div 
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{ 
-                backgroundImage: `url(${hero})`,
+                backgroundImage: `url(${hero.includes('wikimedia.org') || hero.includes('upload.wikimedia.org') || hero.includes('commons.wikimedia.org')
+                  ? `/api/img?url=${encodeURIComponent(hero)}`
+                  : hero})`,
                 filter: 'brightness(0.4)'
               }}
             />

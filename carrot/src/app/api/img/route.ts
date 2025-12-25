@@ -42,6 +42,8 @@ const ALLOW_HOSTS = new Set([
   'lh4.googleusercontent.com',
   'lh5.googleusercontent.com',
   'lh6.googleusercontent.com',
+  'upload.wikimedia.org',
+  'commons.wikimedia.org',
   'localhost',
   '127.0.0.1'
 ])
@@ -49,6 +51,8 @@ const ALLOW_HOSTS = new Set([
 function hostAllowed(u: URL) {
   if (ALLOW_HOSTS.has(u.hostname)) return true
   if (u.hostname.endsWith('.appspot.com')) return true
+  // Allow Wikimedia Commons subdomains
+  if (u.hostname.endsWith('.wikimedia.org')) return true
   // Allow localhost in development
   if (process.env.NODE_ENV === 'development' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true
   return false

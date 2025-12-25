@@ -330,7 +330,9 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
                   style={{ backgroundColor: dominantColor }}
                 >
                   <img 
-                    src={hero} 
+                    src={hero.includes('wikimedia.org') || hero.includes('upload.wikimedia.org') || hero.includes('commons.wikimedia.org')
+                      ? `/api/img?url=${encodeURIComponent(hero)}`
+                      : hero} 
                     alt="" 
                     className="w-full h-full object-cover transition-opacity duration-200"
                     style={{ opacity: imageLoaded ? 1 : 0 }}

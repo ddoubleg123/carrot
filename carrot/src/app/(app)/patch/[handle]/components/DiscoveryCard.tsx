@@ -100,7 +100,9 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
       <div className="relative aspect-[16/9] w-full overflow-hidden">
         {heroUrl && !heroImageError ? (
           <img
-            src={heroUrl}
+            src={heroUrl.includes('wikimedia.org') || heroUrl.includes('upload.wikimedia.org') || heroUrl.includes('commons.wikimedia.org') 
+              ? `/api/img?url=${encodeURIComponent(heroUrl)}`
+              : heroUrl}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
