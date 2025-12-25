@@ -1,7 +1,115 @@
 services:
+  - type: web
+    name: carrot-app
+    env: node
+    plan: free
+    buildCommand: npm ci && (npx playwright install --with-deps chromium 2>&1 || npx playwright install chromium 2>&1 || echo "WARNING: Playwright install failed - will retry at startup") && npm run lint:v2 && npm run test:v2 && node ./scripts/prisma-guard.cjs check-scripts && node ./scripts/prisma-guard.cjs lint-migrations && if [ "$RENDER_GIT_BRANCH" = "main" ] && [ "$ENABLE_MIGRATIONS" = "true" ]; then npx prisma migrate deploy && node ./scripts/health-check.mjs; fi && npm run build
+    startCommand: NODE_ENV=production node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: NEXTAUTH_URL
+        value: https://carrot-app.onrender.com
+      - key: NEXTAUTH_SECRET
+        fromDatabase:
+          name: carrot-db
+          property: nextauth_secret
+      - key: DATABASE_URL
+        fromDatabase:
+          name: carrot-db
+          property: connectionString
+      - key: FIREBASE_PROJECT_ID
+        value: involuted-river-466315
+      - key: FIREBASE_PRIVATE_KEY
+        fromDatabase:
+          name: carrot-db
+          property: firebase_private_key
+      - key: FIREBASE_CLIENT_EMAIL
+        fromDatabase:
+          name: carrot-db
+          property: firebase_client_email
+      - key: OPENAI_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: openai_api_key
+      - key: SENDGRID_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: sendgrid_api_key
+      - key: RESEND_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: resend_api_key
+      - key: DEEPSEEK_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: deepseek_api_key
+      - key: INGEST_WORKER_SECRET
+        value: dev_ingest_secret
+      - key: INGEST_CALLBACK_URL
+        value: https://carrot-app.onrender.com/api/ingest/callback
+      - key: INGEST_CALLBACK_SECRET
+        value: dev_ingest_secret
+      - key: WORKER_PUBLIC_URL
+        value: https://carrot-worker.onrender.com
+      - key: INTERNAL_ENRICH_TOKEN
+        value: 4bb80990b778a43420a53bdc4d8b0152c40a191e9dc6f4b1fcfaa419983dcdde
+      - key: ENRICH_BASE_URL
+        value: https://carrot-app.onrender.com
+      # Optimize for production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: 1
+      - key: ANALYZE
+        value: false
+      - key: NEXT_BUILD_CACHE
+        value: true
+      # Force HTTP/1.1 to prevent HTTP/2 protocol errors
+      - key: HTTP_VERSION
+        value: "1.1"
+      - key: DISABLE_HTTP2
+        value: "true"
+      - key: FORCE_HTTP1
+        value: "true"
+      - key: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - key: NODE_EXTRA_CA_CERTS
+        value: ""
+      - key: NODE_TLS_LEGACY_SERVER
+        value: "true"
+      - key: NODE_HTTP_PARSER
+        value: "legacy"
+      - key: NODE_NO_WARNINGS
+        value: "1"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=4096 --http-parser=legacy --no-experimental-fetch --no-warnings"
+      # Additional HTTP/1.1 forcing
+      - key: HTTP2_DISABLED
+        value: "true"
+      - key: FORCE_HTTP1_ONLY
+        value: "true"
+      - key: DISABLE_HTTP2_PROTOCOL
+        value: "true"
+      - key: NODE_HTTP2_DISABLED
+        value: "true"
+      - key: TLS_LEGACY_MODE
+        value: "true"
+      - key: HTTP_KEEPALIVE
+        value: "true"
+      - key: HTTP_CONNECTION_POOLING
+        value: "true"
+
   # Cron job to process agent feed queue every 5 minutes
   - type: cron
     name: agent-feed-processor
     schedule: "*/5 * * * *"  # Every 5 minutes
     buildCommand: npm install
     startCommand: curl -X POST https://carrot-app.onrender.com/api/agent-feed/process-all
+
+databases:
+  - name: carrot-db
+    plan: free
+    databaseName: carrot
+    user: carrot_user
