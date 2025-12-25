@@ -1184,6 +1184,13 @@ export class DiscoveryOrchestrator {
         return await this.extractWikipediaContent(url)
       }
       
+      // Check if this is an Anna's Archive book URL
+      const isAnnasArchive = url.includes('annas-archive.org') && (url.includes('/md5/') || url.includes('/book/') || url.includes('/file/'))
+      
+      if (isAnnasArchive) {
+        return await this.extractAnnasArchiveContent(url)
+      }
+      
       // For non-Wikipedia pages, use standard extraction
       const response = await fetch(url, {
         headers: {
@@ -1319,6 +1326,63 @@ export class DiscoveryOrchestrator {
     
     // Deduplicate
     return [...new Set(citations)]
+  }
+  
+  /**
+   * Extract content from Anna's Archive book
+   */
+  private async extractAnnasArchiveContent(url: string): Promise<any> {
+    try {
+      console.log(`[Anna's Archive Extraction] Extracting book content from: ${url}`)
+      
+      // Import the extraction function
+      const { extractBookContent } = await import('../../../scripts/extract-annas-archive-book')
+      
+      // Extract full book content (this includes DRM handling)
+      const fullContent = await extractBookContent(url)
+      
+      if (!fullContent || fullContent.length < 100) {
+        console.warn(`[Anna's Archive Extraction] ❌ Content extraction failed or too short (${fullContent?.length || 0} chars)`)
+        return null
+      }
+      
+      // Extract title from URL or content
+      // Try to get title from the page first
+      let title = 'Untitled Book'
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; CarrotBot/1.0)'
+          }
+        })
+        if (response.ok) {
+          const html = await response.text()
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          if (titleMatch) {
+            title = titleMatch[1].replace(/\s*[-|]\s*Anna's Archive.*$/i, '').trim()
+          }
+        }
+      } catch (error) {
+        // If title extraction fails, use default
+        console.warn(`[Anna's Archive Extraction] Could not extract title from page: ${error}`)
+      }
+      
+      console.log(`[Anna's Archive Extraction] ✅ Extracted ${fullContent.length} chars from: ${title}`)
+      
+      return {
+        title,
+        text: fullContent.substring(0, 20000), // Limit to first 20000 chars for processing
+        url,
+        citations: [],
+        metadata: {
+          source: 'annas-archive',
+          fullContentLength: fullContent.length
+        }
+      }
+    } catch (error: any) {
+      console.error(`[Anna's Archive Extraction] ❌ Error extracting book content:`, error)
+      return null
+    }
   }
   
   /**

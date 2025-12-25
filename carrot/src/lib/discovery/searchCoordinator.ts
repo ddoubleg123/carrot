@@ -62,6 +62,7 @@ Generate a comprehensive search strategy to discover the BEST authoritative cont
 5. **primarySources**: Prioritize which sources to use:
    - Options: "Wikipedia", "NewsAPI", "AnnasArchive", "Books", "arXiv", "PubMed", "StackOverflow", "GitHub"
    - "AnnasArchive" or "Books" for academic books, papers, and documents
+   - **IMPORTANT**: Always include "AnnasArchive" or "Books" in the primarySources list for comprehensive discovery
    - List in priority order (most important first)
 
 6. **searchDepth**: Choose one:
@@ -152,7 +153,11 @@ Generate a comprehensive search strategy to discover the BEST authoritative cont
         strategy.newsKeywords = strategy.newsKeywords || []
         strategy.academicTerms = strategy.academicTerms || []
         strategy.technicalTerms = strategy.technicalTerms || []
-        strategy.primarySources = strategy.primarySources || ['Wikipedia', 'NewsAPI']
+        // Ensure Anna's Archive is always included for comprehensive discovery
+        strategy.primarySources = strategy.primarySources || ['Wikipedia', 'NewsAPI', 'AnnasArchive']
+        if (!strategy.primarySources.includes('AnnasArchive') && !strategy.primarySources.includes('Books')) {
+          strategy.primarySources.push('AnnasArchive')
+        }
         strategy.searchDepth = strategy.searchDepth || 'medium'
         
         console.log('[SearchCoordinator] ✅ Strategy generated:', {
@@ -180,7 +185,7 @@ Generate a comprehensive search strategy to discover the BEST authoritative cont
           news: 'last 30 days',
           reference: 'all-time'
         },
-        primarySources: ['Wikipedia', 'NewsAPI'],
+        primarySources: ['Wikipedia', 'NewsAPI', 'AnnasArchive'],
         searchDepth: 'medium'
       }
     }

@@ -1265,6 +1265,85 @@ function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSe
 }
 
 export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan): Promise<void> {
+  // Integrate MultiSourceOrchestrator to add Anna's Archive and other sources
+  try {
+    const { MultiSourceOrchestrator } = await import('./multiSourceOrchestrator')
+    const orchestrator = new MultiSourceOrchestrator()
+    
+    // Get patch info for orchestrator
+    const { prisma } = await import('@/lib/prisma')
+    const patch = await prisma.patch.findUnique({
+      where: { id: patchId },
+      select: { title: true, description: true, tags: true }
+    })
+    
+    if (patch) {
+      console.log('[Seed Planner] Running MultiSourceOrchestrator to discover additional sources...')
+      const discoveryResult = await orchestrator.discover(
+        patch.title,
+        patch.description || '',
+        patch.tags.filter((t): t is string => typeof t === 'string')
+      )
+      
+      console.log('[Seed Planner] MultiSourceOrchestrator results:', {
+        total: discoveryResult.sources.length,
+        wikipedia: discoveryResult.stats.wikipediaPages,
+        citations: discoveryResult.stats.wikipediaCitations,
+        news: discoveryResult.stats.newsArticles,
+        annasArchive: discoveryResult.stats.annasArchiveBooks
+      })
+      
+      // Convert Anna's Archive results to seed candidates
+      const annasArchiveSeeds: PlannerSeedCandidate[] = discoveryResult.sources
+        .filter(s => s.type === 'book' && s.source === "Anna's Archive")
+        .map(source => ({
+          url: source.url,
+          titleGuess: source.title,
+          category: 'academic' as PlannerSeedCategory,
+          angle: source.description.substring(0, 200) || 'Book from Anna\'s Archive',
+          expectedInsights: [source.description.substring(0, 100)],
+          credibilityTier: 2 as const,
+          sourceType: 'academic' as const,
+          priority: 2 as const,
+          notes: `Anna's Archive: ${source.metadata.author ? `by ${source.metadata.author}` : ''} ${source.metadata.year ? `(${source.metadata.year})` : ''}`.trim()
+        }))
+      
+      // Add Anna's Archive seeds to plan's seedCandidates
+      if (annasArchiveSeeds.length > 0) {
+        if (!plan.seedCandidates) {
+          plan.seedCandidates = []
+        }
+        plan.seedCandidates.push(...annasArchiveSeeds)
+        console.log(`[Seed Planner] Added ${annasArchiveSeeds.length} Anna's Archive books to seed candidates`)
+      }
+      
+      // Also add Wikipedia citations as seeds (they're high quality)
+      const citationSeeds: PlannerSeedCandidate[] = discoveryResult.sources
+        .filter(s => s.type === 'citation')
+        .map(source => ({
+          url: source.url,
+          titleGuess: source.title,
+          category: 'wikipedia' as PlannerSeedCategory,
+          angle: source.description.substring(0, 200) || 'Citation from Wikipedia',
+          expectedInsights: [source.description.substring(0, 100)],
+          credibilityTier: 2 as const,
+          sourceType: 'academic' as const,
+          priority: 2 as const,
+          notes: `Wikipedia citation from: ${source.metadata.parentWikipediaPage || 'unknown'}`
+        }))
+      
+      if (citationSeeds.length > 0) {
+        if (!plan.seedCandidates) {
+          plan.seedCandidates = []
+        }
+        plan.seedCandidates.push(...citationSeeds)
+        console.log(`[Seed Planner] Added ${citationSeeds.length} Wikipedia citations to seed candidates`)
+      }
+    }
+  } catch (error) {
+    console.error('[Seed Planner] Error running MultiSourceOrchestrator:', error)
+    // Don't fail the whole process if MultiSourceOrchestrator fails
+  }
   const MIN_SEEDS = 10
   const TARGET_UNIQUE_DOMAINS = 10
   const MIN_UNIQUE_DOMAINS_ABSOLUTE = 5 // Never abort below this
