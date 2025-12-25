@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import PatchComposer from './PatchComposer';
 
 interface Patch {
@@ -29,6 +29,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   const handleCreatePost = () => {
     setIsComposerOpen(true);
@@ -43,15 +44,13 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     }
     const newUrl = params.toString() ? `?${params.toString()}` : '';
     // Use current pathname to support both /patch/[handle] and /test-patch
-    const currentPath = window.location.pathname.split('?')[0];
-    router.push(`${currentPath}${newUrl ? `?${newUrl}` : ''}`);
+    router.push(`${pathname}${newUrl ? `?${newUrl}` : ''}`);
   };
 
   const handleDiscoveryClick = () => {
     const params = new URLSearchParams(searchParams?.toString() || '');
     params.set('tab', 'discovery');
-    const currentPath = window.location.pathname.split('?')[0];
-    router.push(`${currentPath}?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`);
   };
 
   return (
