@@ -1429,6 +1429,19 @@ export class DiscoveryOrchestrator {
       console.log(`[Enrich Content]    Key facts: ${deepSeekResult.keyFacts?.length || 0}`)
       console.log(`[Enrich Content]    Notable quotes: ${deepSeekResult.notableQuotes?.length || 0}`)
       
+      // Self-audit: Log grammar/quality issues for monitoring
+      const qualityScore = deepSeekResult.qualityScore || 0
+      const hasGrammarIssues = deepSeekResult.issues?.some((issue: string) => 
+        issue.toLowerCase().includes('grammar') || 
+        issue.toLowerCase().includes('spelling') ||
+        issue.toLowerCase().includes('fixed')
+      ) || false
+      
+      if (qualityScore < 70 || hasGrammarIssues) {
+        console.log(`[Enrich Content] ⚠️  Quality/grammar issues detected (score: ${qualityScore})`)
+        console.log(`[Enrich Content]    Issues: ${deepSeekResult.issues?.join(', ') || 'None listed'}`)
+      }
+      
       // Reject low-quality or irrelevant content
       if (deepSeekResult.isUseful === false) {
         console.warn(`[Enrich Content] ❌ Content rejected by DeepSeek: Not useful`)
@@ -1552,6 +1565,31 @@ export class DiscoveryOrchestrator {
       }).catch(() => {
         // Ignore import errors - cleanup can happen later
       })
+
+      // Trigger hero image self-audit if missing or placeholder (non-blocking)
+      const heroJson = savedItem.hero as any
+      const heroUrl = heroJson?.url
+      const isPlaceholder = !heroUrl || 
+        heroUrl.includes('via.placeholder.com') || 
+        heroUrl.includes('placeholder') ||
+        heroUrl.startsWith('data:image/svg') ||
+        heroUrl.includes('skeleton')
+      
+      if (isPlaceholder) {
+        console.log(`[Orchestrator] 🎨 Hero image missing/placeholder, triggering self-audit for: ${savedItem.title}`)
+        // Trigger hero generation via enrichment worker (non-blocking)
+        import('@/lib/enrichment/worker').then(({ enrichContentId }) => {
+          enrichContentId(savedItem.id).then(result => {
+            if (result.ok) {
+              console.log(`[Orchestrator] ✅ Self-audit generated hero image for: ${savedItem.title}`)
+            }
+          }).catch(err => {
+            console.warn(`[Orchestrator] Self-audit hero generation failed for ${savedItem.id}:`, err)
+          })
+        }).catch(() => {
+          // Ignore import errors - can be fixed later
+        })
+      }
 
       // Return properly formatted DiscoveredItem
       return {
