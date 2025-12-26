@@ -8,9 +8,9 @@ import PatchTabs from '@/components/patch/PatchTabs'
 import RightRail from '@/components/patch/RightRail'
 import TimelineView from '@/components/patch/TimelineView'
 import Overview from '@/components/patch/Overview'
-import DocumentsView from '@/components/patch/DocumentsView'
 import DiscoveryView from '@/components/patch/DiscoveryView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
+import PatchChat from '@/components/patch/PatchChat'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
 // No need to import PatchPageSkeleton - using inline loading component
@@ -145,8 +145,8 @@ export default async function PatchPage({
       sources: [] // Empty array to prevent undefined errors
     }));
 
-    // Determine active tab from URL search params (default to 'overview')
-    const activeTab = (search.tab as string) || 'overview';
+    // Determine active tab from URL search params (default to 'chat')
+    const activeTab = (search.tab as string) || 'chat';
 
     return (
       <Suspense fallback={
@@ -176,8 +176,12 @@ export default async function PatchPage({
               {/* Main Content Area */}
               <div className="max-w-[880px] min-w-0">
                 <PatchTabs activeTab={activeTab} patch={patchWithName}>
-                  {activeTab === 'overview' && <Overview patch={patchWithName} />}
-                  {activeTab === 'documents' && <DocumentsView patch={patchWithName} />}
+                  {activeTab === 'chat' && (
+                    <div className="px-6 md:px-10 py-6">
+                      <PatchChat patchId={patchWithName.id} patchHandle={patchWithName.handle} />
+                    </div>
+                  )}
+                  {activeTab === 'documents' && <Overview patch={patchWithName} />}
                   {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
                   {activeTab === 'discovery' && <DiscoveryView patch={patchWithName} />}
                   {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
