@@ -231,7 +231,7 @@ export async function GET(
         // Also check if title is too generic (just topic name + generic word)
         const isGenericTitle = /^[A-Z][a-z]+(\s+[A-Z][a-z]+)*\s+(News|Article|Post|Page|Content|Document|File|Update|Report)$/i.test(originalTitle)
         
-        if (isPoorTitle && summary && summary.length > 20) {
+        if ((isPoorTitle || isGenericTitle) && summary && summary.length > 20) {
           // Skip common non-meaningful prefixes
           const skipPrefixes = [
             'book contents', 'frontmatter', 'introduction', 'chapter', 'page',
