@@ -44,13 +44,16 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
     }
     const newUrl = params.toString() ? `?${params.toString()}` : '';
     // Use current pathname to support both /patch/[handle] and /test-patch
-    router.push(`${pathname}${newUrl ? `?${newUrl}` : ''}`);
+    // Ensure we don't double-encode or add multiple ? characters
+    const cleanPathname = pathname.split('?')[0]; // Remove any existing query params from pathname
+    router.push(`${cleanPathname}${newUrl}`);
   };
 
   const handleDiscoveryClick = () => {
     const params = new URLSearchParams(searchParams?.toString() || '');
     params.set('tab', 'discovery');
-    router.push(`${pathname}?${params.toString()}`);
+    const cleanPathname = pathname.split('?')[0]; // Remove any existing query params from pathname
+    router.push(`${cleanPathname}?${params.toString()}`);
   };
 
   return (

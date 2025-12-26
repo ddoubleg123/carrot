@@ -209,7 +209,7 @@ export async function GET(
         const originalTitle = item.title || ''
         const summary = fullSummary
         
-        // Check if title is poor (domain-based, DOI, numbers-only, etc.)
+        // Check if title is poor (domain-based, DOI, numbers-only, generic, etc.)
         const poorTitlePatterns = [
           /^[a-z0-9.-]+\.(org|com|edu|gov|net)\s*-\s*/i,
           /^doi\.org/i,
@@ -221,9 +221,15 @@ export async function GET(
           /^[0-9]+\s+[A-Z]/i, // Starts with number then capital like "235 The"
           /^[A-Z]{1,2}$/i, // Single or double letters like "AE", "JI"
           /^--\s+/i, // Starts with "--"
-          /^It was just that/i // Incomplete sentences
+          /^It was just that/i, // Incomplete sentences
+          /^(news|article|post|page|content|document|file)$/i, // Generic single words
+          /^(news|article|post|page|content|document|file)\s+(news|article|post|page|content|document|file)$/i, // Generic pairs
+          /^[A-Z][a-z]+\s+(News|Article|Post|Page|Content|Document|File)$/i // Pattern like "Israel News", "Topic Article"
         ]
         const isPoorTitle = poorTitlePatterns.some(pattern => pattern.test(originalTitle))
+        
+        // Also check if title is too generic (just topic name + generic word)
+        const isGenericTitle = /^[A-Z][a-z]+(\s+[A-Z][a-z]+)*\s+(News|Article|Post|Page|Content|Document|File|Update|Report)$/i.test(originalTitle)
         
         if (isPoorTitle && summary && summary.length > 20) {
           // Skip common non-meaningful prefixes

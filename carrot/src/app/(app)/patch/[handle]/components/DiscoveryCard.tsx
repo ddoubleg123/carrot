@@ -100,13 +100,28 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
       <div className="relative aspect-[16/9] w-full overflow-hidden">
         {heroUrl && !heroImageError ? (
           <img
-            src={heroUrl.includes('wikimedia.org') || heroUrl.includes('upload.wikimedia.org') || heroUrl.includes('commons.wikimedia.org') 
-              ? `/api/img?url=${encodeURIComponent(heroUrl)}`
-              : heroUrl}
+            src={
+              // Handle data URIs (SVG placeholders) directly
+              heroUrl.startsWith('data:image/') 
+                ? heroUrl
+                // Handle Wikimedia URLs through proxy
+                : (heroUrl.includes('wikimedia.org') || heroUrl.includes('upload.wikimedia.org') || heroUrl.includes('commons.wikimedia.org'))
+                  ? `/api/img?url=${encodeURIComponent(heroUrl)}`
+                  // All other URLs (including external images) go through proxy for CORS
+                  : `/api/img?url=${encodeURIComponent(heroUrl)}`
+            }
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-            onError={() => setHeroImageError(true)}
+            onError={(e) => {
+              console.error('[DiscoveryCard] Hero image failed to load:', {
+                heroUrl,
+                error: e,
+                itemId: item.id,
+                title: item.title
+              })
+              setHeroImageError(true)
+            }}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-orange-500 px-6 text-center text-lg font-semibold text-white">
