@@ -7,12 +7,24 @@
 // pdf-parse requires DOMMatrix to be globally available during module load
 if (typeof global.DOMMatrix === 'undefined' && typeof globalThis.DOMMatrix === 'undefined') {
   try {
-    const dommatrix = require('dommatrix')
-    const DOMMatrixClass = dommatrix.DOMMatrix || dommatrix.default?.DOMMatrix || dommatrix
-    global.DOMMatrix = DOMMatrixClass
-    globalThis.DOMMatrix = DOMMatrixClass
-    // Also set it on the global scope directly (some modules check this)
-    ;(global as any).DOMMatrix = DOMMatrixClass
+    // Try to require dommatrix, but handle it gracefully if not available
+    let dommatrix: any
+    try {
+      dommatrix = require('dommatrix')
+    } catch (requireError) {
+      // dommatrix not installed, use polyfill
+      dommatrix = null
+    }
+    
+    if (dommatrix) {
+      const DOMMatrixClass = dommatrix.DOMMatrix || dommatrix.default?.DOMMatrix || dommatrix
+      global.DOMMatrix = DOMMatrixClass
+      globalThis.DOMMatrix = DOMMatrixClass
+      // Also set it on the global scope directly (some modules check this)
+      ;(global as any).DOMMatrix = DOMMatrixClass
+    } else {
+      throw new Error('dommatrix not available')
+    }
   } catch (e) {
     // Minimal polyfill if dommatrix package is not available
     const DOMMatrixPolyfill = class DOMMatrix {
