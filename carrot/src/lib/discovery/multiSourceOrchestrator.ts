@@ -340,7 +340,7 @@ export class MultiSourceOrchestrator {
       // Use Wikipedia queries as search terms (they're usually good keywords)
       const searchQueries = strategy.wikipediaQueries.slice(0, 3) // Use top 3 queries
 
-      console.log(`[MultiSourceOrchestrator] Searching Anna's Archive with ${searchQueries.length} queries:`, searchQueries)
+      console.log(`[MultiSourceOrchestrator] Searching Anna's Archive with ${searchQueries.length} queries (limit: ${limit}):`, searchQueries)
 
       for (const query of searchQueries) {
         try {
@@ -349,15 +349,16 @@ export class MultiSourceOrchestrator {
             await new Promise(resolve => setTimeout(resolve, 3000)) // 3 second delay between queries
           }
           
-          console.log(`[MultiSourceOrchestrator] Searching Anna's Archive for: "${query}"`)
+          const perQueryLimit = Math.ceil(limit / searchQueries.length)
+          console.log(`[MultiSourceOrchestrator] Searching Anna's Archive for: "${query}" (limit: ${perQueryLimit})`)
           const results = await searchAnnasArchive({
             query,
             language: 'en',
             fileType: 'all',
-            limit: Math.ceil(limit / searchQueries.length) // Distribute limit across queries
+            limit: perQueryLimit
           })
           
-          console.log(`[MultiSourceOrchestrator] Anna's Archive search for "${query}" returned ${results.length} results`)
+          console.log(`[MultiSourceOrchestrator] ✅ Anna's Archive search for "${query}" returned ${results.length} results (requested: ${perQueryLimit})`)
 
           for (const result of results) {
             // Canonicalize URL

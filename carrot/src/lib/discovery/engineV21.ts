@@ -1063,6 +1063,24 @@ export class DiscoveryEngineV21 {
 
   private async ensureLiveState(context: string): Promise<boolean> {
     const state = await this.getCurrentRunState()
+    
+    // Log state changes for health monitoring
+    const now = Date.now()
+    if (this.lastRunState !== state || now - this.lastRunStateCheck > 60000) {
+      this.lastRunStateCheck = now
+      if (this.lastRunState !== state) {
+        this.structuredLog('run_state_change', {
+          from: this.lastRunState,
+          to: state,
+          context,
+          candidatesProcessed: this.metrics.candidatesProcessed,
+          itemsSaved: this.metrics.itemsSaved
+        })
+        console.log(`[EngineV21] Run state changed: ${this.lastRunState} -> ${state} at ${context}`)
+        this.lastRunState = state
+      }
+    }
+    
     if (state === 'suspended') {
       // Suspended means stopped - exit immediately
       this.structuredLog('run_state_exit', { 

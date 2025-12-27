@@ -108,6 +108,13 @@ services:
     buildCommand: npm install
     startCommand: curl -X POST https://carrot-app.onrender.com/api/agent-feed/process-all
 
+  # Cron job to clean up stuck discovery runs every hour
+  - type: cron
+    name: discovery-run-cleanup
+    schedule: "0 * * * *"  # Every hour
+    buildCommand: npm install
+    startCommand: curl -X POST https://carrot-app.onrender.com/api/discovery/cleanup-stuck-runs
+
 databases:
   - name: carrot-db
     plan: free
