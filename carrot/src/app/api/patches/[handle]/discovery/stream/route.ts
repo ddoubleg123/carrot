@@ -67,6 +67,19 @@ export async function GET(
             }
           }, 10000) // Every 10 seconds
           
+          // Send initial connection event to indicate stream is active
+          try {
+            const initialEvent = {
+              type: 'connected',
+              timestamp: Date.now(),
+              message: 'SSE stream connected',
+              data: { runId }
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialEvent)}\n\n`))
+          } catch (error) {
+            // Stream may be closed, ignore
+          }
+          
           const unsubscribe = subscribeDiscoveryEvents(runId, (event) => {
             if (isClosed) return
             const payload = `data: ${JSON.stringify(event)}\n\n`
@@ -151,6 +164,19 @@ export async function GET(
               clearInterval(heartbeatInterval)
             }
           }, 10000)
+          
+          // Send initial connection event to indicate stream is active
+          try {
+            const initialEvent = {
+              type: 'connected',
+              timestamp: Date.now(),
+              message: 'SSE stream connected',
+              data: { runId }
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialEvent)}\n\n`))
+          } catch (error) {
+            // Stream may be closed, ignore
+          }
           
           const unsubscribe = subscribeDiscoveryEvents(runId, (event) => {
             if (isClosed) return
