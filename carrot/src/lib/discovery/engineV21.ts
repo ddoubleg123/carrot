@@ -808,6 +808,14 @@ export class DiscoveryEngineV21 {
         }
         
         // Only expand if frontier is actually empty
+        // First try to add pending citations to frontier
+        const citationsAdded = await this.addPendingCitationsToFrontier(redisPatchId)
+        if (citationsAdded > 0) {
+          console.log(`[EngineV21] Added ${citationsAdded} pending citations to frontier`)
+          continue
+        }
+        
+        // Then try to expand frontier with plan seeds
         const expanded = await this.expandFrontierIfNeeded(redisPatchId, coveredAngles)
         if (!expanded) {
           // Double-check frontier size before declaring empty
