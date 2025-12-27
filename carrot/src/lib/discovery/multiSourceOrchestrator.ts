@@ -102,8 +102,18 @@ export class MultiSourceOrchestrator {
     // Step 5: TODO: Add other sources (arXiv, PubMed, etc.)
 
     // Step 6: Apply relevance filtering
+    // Limit total sources to prevent memory issues (cap at 200 sources)
+    const MAX_SOURCES = 200
+    const sourcesToFilter = allSources.length > MAX_SOURCES 
+      ? allSources.slice(0, MAX_SOURCES)
+      : allSources
+    
+    if (allSources.length > MAX_SOURCES) {
+      console.log(`[MultiSourceOrchestrator] ⚠️  Limiting sources from ${allSources.length} to ${MAX_SOURCES} to prevent memory issues`)
+    }
+    
     console.log('[MultiSourceOrchestrator] Applying relevance filtering...')
-    const relevantSources = await this.filterRelevantSources(allSources, topicName)
+    const relevantSources = await this.filterRelevantSources(sourcesToFilter, topicName)
     
     console.log('[MultiSourceOrchestrator] ✅ Discovery complete:', {
       totalSources: allSources.length,
@@ -131,6 +141,7 @@ export class MultiSourceOrchestrator {
 
   /**
    * Filter sources by relevance to the topic
+   * Processes in batches to reduce memory usage
    */
   private async filterRelevantSources(sources: DiscoveredSource[], topicName: string): Promise<DiscoveredSource[]> {
     console.log(`[MultiSourceOrchestrator] Filtering ${sources.length} sources for relevance to: ${topicName}`)
@@ -139,28 +150,44 @@ export class MultiSourceOrchestrator {
     await this.relevanceEngine.buildEntityProfile('current-topic', topicName)
     
     const relevantSources: DiscoveredSource[] = []
+    const BATCH_SIZE = 20 // Process in batches to reduce memory pressure
     
-    for (const source of sources) {
-      try {
-        const relevanceResult = await this.relevanceEngine.checkRelevance(
-          'current-topic',
-          source.title,
-          source.content || source.description,
-          source.metadata.sourceDomain || 'unknown'
-        )
-        
-        if (relevanceResult.isRelevant) {
-          // Update relevance score based on actual relevance check
-          source.relevanceScore = Math.round(relevanceResult.score * 100)
+    // Process sources in batches
+    for (let i = 0; i < sources.length; i += BATCH_SIZE) {
+      const batch = sources.slice(i, i + BATCH_SIZE)
+      
+      for (const source of batch) {
+        try {
+          // Limit content length for relevance check to reduce memory usage
+          const contentForCheck = source.content 
+            ? source.content.substring(0, 2000) // Limit to first 2000 chars
+            : source.description.substring(0, 500) // Limit description if no content
+          
+          const relevanceResult = await this.relevanceEngine.checkRelevance(
+            'current-topic',
+            source.title,
+            contentForCheck,
+            source.metadata.sourceDomain || 'unknown'
+          )
+          
+          if (relevanceResult.isRelevant) {
+            // Update relevance score based on actual relevance check
+            source.relevanceScore = Math.round(relevanceResult.score * 100)
+            relevantSources.push(source)
+            console.log(`[MultiSourceOrchestrator] ✅ Relevant: ${source.title} (score: ${source.relevanceScore})`)
+          } else {
+            console.log(`[MultiSourceOrchestrator] ❌ Filtered out: ${source.title} (${relevanceResult.reason})`)
+          }
+        } catch (error) {
+          console.error(`[MultiSourceOrchestrator] Error checking relevance for ${source.title}:`, error)
+          // Include source if relevance check fails (fail open)
           relevantSources.push(source)
-          console.log(`[MultiSourceOrchestrator] ✅ Relevant: ${source.title} (score: ${source.relevanceScore})`)
-        } else {
-          console.log(`[MultiSourceOrchestrator] ❌ Filtered out: ${source.title} (${relevanceResult.reason})`)
         }
-      } catch (error) {
-        console.error(`[MultiSourceOrchestrator] Error checking relevance for ${source.title}:`, error)
-        // Include source if relevance check fails (fail open)
-        relevantSources.push(source)
+      }
+      
+      // Allow garbage collection between batches
+      if (i + BATCH_SIZE < sources.length) {
+        await new Promise(resolve => setTimeout(resolve, 0))
       }
     }
     
@@ -207,12 +234,18 @@ export class MultiSourceOrchestrator {
         this.seenUrls.add(canonicalResult.canonicalUrl)
 
         // Add the Wikipedia page itself as a source
+        // Limit content length to reduce memory usage (keep summary for description, truncate content)
+        const maxContentLength = 5000 // Limit content to 5KB to prevent memory issues
+        const truncatedContent = page.content 
+          ? (page.content.length > maxContentLength ? page.content.substring(0, maxContentLength) + '...' : page.content)
+          : undefined
+        
         sources.push({
           title: page.title,
           url: page.url,
           type: 'wikipedia',
-          description: page.summary,
-          content: page.content,
+          description: page.summary || page.content?.substring(0, 200) || '',
+          content: truncatedContent,
           source: 'Wikipedia',
           metadata: {
             sourceDomain: 'wikipedia.org'
@@ -233,8 +266,15 @@ export class MultiSourceOrchestrator {
             continue
           }
 
-          // Canonicalize citation URL
-          const citationCanonical = await canonicalize(citation.url)
+          // Canonicalize citation URL (with error handling)
+          let citationCanonical
+          try {
+            citationCanonical = await canonicalize(citation.url)
+          } catch (error) {
+            console.warn(`[MultiSourceOrchestrator] Failed to canonicalize citation URL: ${citation.url}`, error)
+            // Skip this citation if canonicalization fails
+            continue
+          }
           
           if (this.seenUrls.has(citationCanonical.canonicalUrl)) {
             this.duplicateCount++
@@ -299,12 +339,18 @@ export class MultiSourceOrchestrator {
         }
         this.seenUrls.add(canonicalResult.canonicalUrl)
 
+        // Limit content length to reduce memory usage
+        const maxContentLength = 5000 // Limit content to 5KB
+        const truncatedContent = article.content 
+          ? (article.content.length > maxContentLength ? article.content.substring(0, maxContentLength) + '...' : article.content)
+          : undefined
+        
         sources.push({
           title: article.title,
           url: article.url,
           type: 'news',
-          description: article.description || '',
-          content: article.content,
+          description: article.description || article.content?.substring(0, 200) || '',
+          content: truncatedContent,
           source: 'NewsAPI',
           metadata: {
             author: article.author,
@@ -370,21 +416,16 @@ export class MultiSourceOrchestrator {
             }
             this.seenUrls.add(canonicalResult.canonicalUrl)
 
-            // Get preview if available
-            let preview: string | null = null
-            try {
-              const { getAnnasArchivePreview } = await import('./annasArchiveSource')
-              preview = await getAnnasArchivePreview(result)
-            } catch (previewError) {
-              // Preview is optional, continue without it
-            }
+            // Skip preview fetching to save memory - use metadata-based description instead
+            // Preview fetching downloads full HTML pages which can consume significant memory
+            const description = `${result.author ? `By ${result.author}. ` : ''}${result.year ? `Published ${result.year}. ` : ''}Available on Anna's Archive.`
 
             sources.push({
               title: result.title,
               url: result.url,
               type: 'book',
-              description: preview || `${result.author ? `By ${result.author}. ` : ''}${result.year ? `Published ${result.year}. ` : ''}Available on Anna's Archive.`,
-              content: preview || undefined,
+              description,
+              // Don't store content for books to save memory - description is sufficient
               source: "Anna's Archive",
               metadata: {
                 author: result.author,

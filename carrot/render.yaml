@@ -47,6 +47,12 @@ services:
         fromDatabase:
           name: carrot-db
           property: deepseek_api_key
+      - key: NEWS_API_KEY
+        fromDatabase:
+          name: carrot-db
+          property: news_api_key
+      - key: REDIS_URL
+        value: rediss://red-d48gppur433s73a2mjlg:mc6N6wp4hW7rHSdNStw054K7EdI6Kes9@singapore-keyvalue.render.com:6379
       - key: INGEST_WORKER_SECRET
         value: dev_ingest_secret
       - key: INGEST_CALLBACK_URL
@@ -106,7 +112,7 @@ services:
     name: agent-feed-processor
     schedule: "*/5 * * * *"  # Every 5 minutes
     buildCommand: npm install
-    startCommand: curl -X POST https://carrot-app.onrender.com/api/agent-feed/process-all
+    startCommand: node -e "fetch('https://carrot-app.onrender.com/api/agent-feed/process-all', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}).then(r=>r.json()).then(console.log).catch(console.error)"
 
   # Cron job to clean up stuck discovery runs every hour
   - type: cron

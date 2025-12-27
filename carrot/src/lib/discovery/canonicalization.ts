@@ -14,6 +14,8 @@ export interface CanonicalizationResult {
   originalUrl: string;
   redirectChain: string[];
   finalDomain: string;
+  canonicalHost?: string; // Alias for finalDomain (for compatibility)
+  canonicalPathHash?: string; // Path hash for deduplication
 }
 
 /**
@@ -29,8 +31,12 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     redirectChain.push(currentUrl);
     
     // Handle relative URLs by resolving them against Wikipedia base
-    if (currentUrl.startsWith('./') || currentUrl.startsWith('../') || (!currentUrl.startsWith('http'))) {
-      // This is likely a Wikipedia relative URL, resolve it against Wikipedia base
+    // Check for relative URLs: starting with / or ./, or not starting with http/https
+    if (currentUrl.startsWith('./') || currentUrl.startsWith('../') || 
+        (currentUrl.startsWith('/') && !currentUrl.startsWith('//')) || 
+        (!currentUrl.startsWith('http://') && !currentUrl.startsWith('https://') && !currentUrl.startsWith('//'))) {
+      // This is likely a relative URL, resolve it against Wikipedia base
+      // If it already starts with /, use it directly, otherwise add /
       currentUrl = `https://en.wikipedia.org${currentUrl.startsWith('/') ? '' : '/'}${currentUrl}`;
       redirectChain.push(currentUrl);
     }
@@ -43,7 +49,21 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     }
     
     // Parse and normalize the URL
-    const url = new URL(currentUrl);
+    // Handle relative URLs that might have been missed
+    let url: URL;
+    try {
+      url = new URL(currentUrl);
+    } catch (urlError) {
+      // If URL is still relative or invalid, try to resolve it
+      if (!currentUrl.startsWith('http')) {
+        // Assume Wikipedia if no protocol
+        currentUrl = `https://en.wikipedia.org${currentUrl.startsWith('/') ? '' : '/'}${currentUrl}`;
+        redirectChain.push(currentUrl);
+        url = new URL(currentUrl);
+      } else {
+        throw urlError; // Re-throw if it's a different error
+      }
+    }
     
     // Normalize hostname: lowercase and remove www
     url.hostname = url.hostname.replace(/^www\./, '').toLowerCase();
@@ -70,7 +90,9 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
       canonicalUrl,
       originalUrl,
       redirectChain,
-      finalDomain
+      finalDomain,
+      canonicalHost: finalDomain, // Alias for compatibility
+      canonicalPathHash: '' // Path hash for deduplication (can be added later if needed)
     };
     
   } catch (error) {
@@ -83,11 +105,14 @@ export async function canonicalize(rawUrl: string): Promise<CanonicalizationResu
     }
     
     // Return original URL as fallback
+    const fallbackDomain = fallbackUrl.startsWith('http') ? new URL(fallbackUrl).hostname : 'unknown'
     return {
       canonicalUrl: fallbackUrl,
       originalUrl,
       redirectChain,
-      finalDomain: fallbackUrl.startsWith('http') ? new URL(fallbackUrl).hostname : 'unknown'
+      finalDomain: fallbackDomain,
+      canonicalHost: fallbackDomain, // Alias for compatibility
+      canonicalPathHash: '' // Path hash for deduplication
     };
   }
 }

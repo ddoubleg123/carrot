@@ -259,8 +259,26 @@ export async function processFeedQueueItem(queueItemId: string): Promise<{ succe
       return { success: false, error: gateResult.reason }
     }
 
+    // Get patch to find handle
+    const patch = await prisma.patch.findUnique({
+      where: { id: queueItem.patchId },
+      select: { handle: true }
+    })
+    
+    if (!patch) {
+      await (prisma as any).agentMemoryFeedQueue.update({
+        where: { id: queueItemId },
+        data: {
+          status: 'FAILED',
+          lastError: 'Patch not found'
+        }
+      })
+      return { success: false, error: 'Patch not found' }
+    }
+
     // Get patch agent (needed for idempotency check)
-    const agents = await AgentRegistry.getAgentsByPatches([queueItem.patchId])
+    // Agents store patch handles, not IDs
+    const agents = await AgentRegistry.getAgentsByPatches([patch.handle])
     if (agents.length === 0) {
       await (prisma as any).agentMemoryFeedQueue.update({
         where: { id: queueItemId },

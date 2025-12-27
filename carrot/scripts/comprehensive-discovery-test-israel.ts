@@ -230,9 +230,14 @@ async function runComprehensiveTest(): Promise<TestReport> {
       console.log(`   ✅ Generated plan with ${guide.seedCandidates?.length || 0} seed candidates`)
     }
 
-    // Clear frontier and seed
-    await clearFrontier(patch.id).catch(() => undefined)
-    await storeDiscoveryPlan(run.id, guide)
+    // Clear frontier and seed (skip if Redis not available)
+    if (process.env.REDIS_URL) {
+      await clearFrontier(patch.id).catch(() => undefined)
+      await storeDiscoveryPlan(run.id, guide).catch(() => undefined)
+    } else {
+      console.log('   ⚠️  REDIS_URL not set - skipping frontier operations')
+      kpis.warnings.push('REDIS_URL not set - frontier operations skipped')
+    }
     await seedFrontierFromPlan(patch.id, guide)
 
     // Mark run as live
@@ -280,25 +285,27 @@ async function runComprehensiveTest(): Promise<TestReport> {
   kpis.wikipediaPages = wikipediaPages.length
   kpis.citationsExtracted = wikipediaPages.reduce((sum, page) => sum + (page.citationCount || 0), 0)
 
-  const wikipediaCitations = await prisma.wikipediaCitation.findMany({
+  // Get citations from monitored pages
+  const monitoredPageIds = wikipediaPages.map(p => p.id)
+  const allCitations = await prisma.wikipediaCitation.findMany({
     where: {
-      wikipediaPage: {
-        patchId: patch.id
-      },
-      url: { not: null }
+      monitoringId: { in: monitoredPageIds }
     },
     select: {
       id: true,
-      url: true,
-      title: true,
-      processed: true,
-      savedAsContent: true
+      citationUrl: true,
+      citationTitle: true,
+      verificationStatus: true,
+      savedContentId: true
     },
-    take: 100
+    take: 1000 // Get more and filter manually
   })
 
+  // Filter out null URLs
+  const wikipediaCitations = allCitations.filter(c => c.citationUrl !== null)
+  
   kpis.deepLinksFound = wikipediaCitations.length
-  kpis.deepLinksProcessed = wikipediaCitations.filter(c => c.processed).length
+  kpis.deepLinksProcessed = wikipediaCitations.filter(c => c.verificationStatus === 'verified' || c.savedContentId).length
   kpis.deepLinkProcessingRate = kpis.deepLinksFound > 0 
     ? (kpis.deepLinksProcessed / kpis.deepLinksFound) * 100 
     : 0
@@ -317,9 +324,9 @@ async function runComprehensiveTest(): Promise<TestReport> {
       title: true,
       canonicalUrl: true,
       sourceDomain: true,
+      sourceUrl: true,
       textContent: true,
-      summary: true,
-      source: true
+      summary: true
     },
     orderBy: { createdAt: 'desc' },
     take: 100
@@ -368,10 +375,17 @@ async function runComprehensiveTest(): Promise<TestReport> {
     }
   })
 
+  // Check for Anna's Archive sources - may be in sourceDomain, sourceUrl, or metadata
   sourceBreakdown.annasArchive.saved = await prisma.discoveredContent.count({
     where: {
       patchId: patch.id,
-      sourceDomain: { contains: 'annas-archive.org' }
+      OR: [
+        { sourceDomain: { contains: 'annas-archive.org' } },
+        { sourceUrl: { contains: 'annas-archive.org' } },
+        { canonicalUrl: { contains: 'annas-archive.org' } },
+        { category: { equals: 'book' } },
+        { metadata: { path: ['source'], equals: 'annas-archive' } }
+      ]
     }
   })
 
@@ -382,22 +396,29 @@ async function runComprehensiveTest(): Promise<TestReport> {
   // Step 8: Analyze Images
   console.log('🖼️  Step 8: Analyzing Wikimedia images...')
   const heroes = await prisma.hero.findMany({
-    where: { patchId: patch.id },
+    where: { 
+      content: {
+        patchId: patch.id
+      }
+    },
     select: {
       id: true,
       imageUrl: true,
-      imageSource: true,
       status: true
     },
     take: 50
   })
 
   kpis.heroesCreated = await prisma.hero.count({
-    where: { patchId: patch.id }
+    where: { 
+      content: {
+        patchId: patch.id
+      }
+    }
   })
 
   const wikimediaImages = heroes.filter(h => 
-    h.imageUrl?.includes('wikimedia.org') || h.imageUrl?.includes('wikipedia.org')
+    h.imageUrl && (h.imageUrl.includes('wikimedia.org') || h.imageUrl.includes('wikipedia.org'))
   )
   kpis.wikimediaImagesFound = wikimediaImages.length
 
@@ -438,7 +459,7 @@ async function runComprehensiveTest(): Promise<TestReport> {
 
     const feedQueue = await (prisma as any).agentMemoryFeedQueue.findMany({
       where: { patchId: patch.id },
-      select: { id: true, status: true, createdAt: true },
+      select: { id: true, status: true, enqueuedAt: true },
       take: 20
     })
 
@@ -457,7 +478,7 @@ async function runComprehensiveTest(): Promise<TestReport> {
       pagesMonitored: kpis.wikipediaPages,
       citationsExtracted: kpis.citationsExtracted,
       deepLinksProcessed: kpis.deepLinksProcessed,
-      sampleDeepLinks: wikipediaCitations.slice(0, 5).map(c => c.url || '').filter(Boolean)
+      sampleDeepLinks: wikipediaCitations.slice(0, 5).map(c => c.citationUrl || '').filter(Boolean)
     },
     sourceAnalysis: sourceBreakdown,
     storageAnalysis: {

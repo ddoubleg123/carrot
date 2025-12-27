@@ -1,0 +1,185 @@
+{
+  "kpis": {
+    "discoveryStartTime": "2025-12-27T21:00:13.634Z",
+    "wikipediaPages": 30,
+    "wikipediaCitations": 101,
+    "newsArticles": 0,
+    "annasArchiveBooks": 14,
+    "totalSources": 28,
+    "citationsExtracted": 1347,
+    "citationsWithContent": 100,
+    "contentExtractionRate": 100,
+    "discoveredContentSaved": 174,
+    "agentMemoriesCreated": 0,
+    "heroesCreated": 172,
+    "deepLinksFound": 1000,
+    "deepLinksProcessed": 475,
+    "deepLinkProcessingRate": 47.5,
+    "wikimediaImagesFound": 40,
+    "wikimediaImagesWorking": 7,
+    "imageSuccessRate": 70,
+    "agentExists": true,
+    "agentMemoriesBefore": 102,
+    "agentMemoriesAfter": 102,
+    "memoriesAdded": 0,
+    "errors": [
+      "Discovery start: REDIS_URL must be set for discovery redis utilities"
+    ],
+    "warnings": [
+      "REDIS_URL not set - frontier operations skipped"
+    ],
+    "discoveryEndTime": "2025-12-27T21:03:51.615Z",
+    "discoveryDuration": 217981
+  },
+  "wikipediaAnalysis": {
+    "pagesMonitored": 30,
+    "citationsExtracted": 1347,
+    "deepLinksProcessed": 475,
+    "sampleDeepLinks": [
+      "https://www.gov.il/en/departments/prime_ministers_office/govil-landing-page",
+      "https://www.cbs.gov.il/en/Pages/default.aspx",
+      "https://www.nli.org.il/en/discover/israel",
+      "https://www.bbc.com/news/world-middle-east-14628835",
+      "https://www.oecd.org/israel/"
+    ]
+  },
+  "sourceAnalysis": {
+    "wikipedia": {
+      "found": 0,
+      "saved": 0
+    },
+    "news": {
+      "found": 0,
+      "saved": 11
+    },
+    "annasArchive": {
+      "found": 0,
+      "saved": 0
+    }
+  },
+  "storageAnalysis": {
+    "discoveredContentCount": 174,
+    "agentMemoryCount": 102,
+    "heroCount": 172,
+    "sampleContent": [
+      {
+        "id": "cmjnu9s0m00abq129hr697s2d",
+        "title": "0,7340,L 3696887,00.html",
+        "source": "ynet.co.il"
+      },
+      {
+        "id": "cmjnu9gje00a3q129xg3wjipx",
+        "title": "Israel and US launch joint military drill",
+        "source": "aljazeera.com"
+      },
+      {
+        "id": "cmjnu8t03009rq129mpvkqm0p",
+        "title": "Israel Navy To Upgrade Combat Surface Fleet",
+        "source": "defensenews.com"
+      },
+      {
+        "id": "cmjnu8ioc009lq1290ol8dtl4",
+        "title": "name of newest israeli submarine changed amid criticism",
+        "source": "bairdmaritime.com"
+      },
+      {
+        "id": "cmjnu8cmu009fq129ns5ibe3n",
+        "title": "Panetta’s Visit Sealed F",
+        "source": "israelnationalnews.com"
+      },
+      {
+        "id": "cmjnu85nd0099q129l9npfi2x",
+        "title": "Lockheed awarded $207 million contract to incorporate Israeli-specific F-35 systems",
+        "source": "flightglobal.com"
+      },
+      {
+        "id": "cmjnu795p0085q129txa9i9i2",
+        "title": "Analysis The Israeli Army&#x27;s New Target: Itself",
+        "source": "haaretz.com"
+      },
+      {
+        "id": "cmjnu73y2007zq129zzqxg4qy",
+        "title": "Kosher Spam: a Breef history",
+        "source": "jta.org"
+      },
+      {
+        "id": "cmjnu61fr007nq129x25pj6nb",
+        "title": "16 Warplanes Likely to Carry Nuclear Weapons: Report",
+        "source": "english.peopledaily.com.cn"
+      },
+      {
+        "id": "cmjnu5j30007hq1297e3erf82",
+        "title": "Israel News",
+        "source": "jpost.com"
+      }
+    ]
+  },
+  "imageAnalysis": {
+    "totalImages": 172,
+    "wikimediaImages": 40,
+    "workingImages": 7,
+    "brokenImages": 33,
+    "sampleImages": [
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Zeekr007.jpg/960px-Zeekr007.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/8/83/Quotation_J%C3%B3zef_Kupny.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Palestine_-_20190204-DSC_0007.jpg/960px-Palestine_-_20190204-DSC_0007.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/5/53/Madde.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Covenant_of_prophet_muhammad%28charter_of_privileges_translation%29.png/960px-Covenant_of_prophet_muhammad%28charter_of_privileges_translation%29.png"
+    ]
+  },
+  "agentAnalysis": {
+    "agentExists": true,
+    "memoriesBefore": 102,
+    "memoriesAfter": 102,
+    "feedQueueStatus": [
+      {
+        "_count": 122,
+        "status": "PENDING"
+      },
+      {
+        "_count": 51,
+        "status": "DONE"
+      }
+    ],
+    "recentMemories": [
+      {
+        "id": "cmjc0erms005f4s08slmcanw7",
+        "sourceTitle": "The Social Roots of Biblical Yahwism",
+        "createdAt": "2025-12-18T22:25:57.604Z"
+      },
+      {
+        "id": "cmjc0erms005h4s08rn9l13fp",
+        "sourceTitle": "In Search of Pre-Exilic Israel",
+        "createdAt": "2025-12-18T22:25:57.604Z"
+      },
+      {
+        "id": "cmjc0erd900594s08p12zq5r4",
+        "sourceTitle": "Ancient Israel's History: An Introduction to Issues and Sources",
+        "createdAt": "2025-12-18T22:25:57.261Z"
+      },
+      {
+        "id": "cmjc0erd500574s08rcap7siy",
+        "sourceTitle": "History of Ancient Israel",
+        "createdAt": "2025-12-18T22:25:57.258Z"
+      },
+      {
+        "id": "cmjc0era400554s08ekhln2bx",
+        "sourceTitle": "Untitled",
+        "createdAt": "2025-12-18T22:25:57.148Z"
+      }
+    ]
+  },
+  "issues": {
+    "critical": [
+      "Discovery start: REDIS_URL must be set for discovery redis utilities"
+    ],
+    "warnings": [
+      "REDIS_URL not set - frontier operations skipped"
+    ],
+    "recommendations": [
+      "Deep link processing rate is low - investigate processing pipeline",
+      "Image success rate is low - check Wikimedia image URLs",
+      "Agent not learning from discovered content - check feed pipeline"
+    ]
+  }
+}
