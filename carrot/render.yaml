@@ -47,10 +47,10 @@ services:
         fromDatabase:
           name: carrot-db
           property: deepseek_api_key
-      - key: NEWS_API_KEY
-        fromDatabase:
-          name: carrot-db
-          property: news_api_key
+      # NEWS_API_KEY - Add this in Render Dashboard > carrot-app > Environment
+      # Get your key from https://newsapi.org (free tier available)
+      # - key: NEWS_API_KEY
+      #   value: your-newsapi-key-here
       - key: REDIS_URL
         value: rediss://red-d48gppur433s73a2mjlg:mc6N6wp4hW7rHSdNStw054K7EdI6Kes9@singapore-keyvalue.render.com:6379
       - key: INGEST_WORKER_SECRET
