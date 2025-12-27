@@ -4241,6 +4241,76 @@ Return ONLY valid JSON array, no other text.`
     return Boolean(host && host.endsWith('wikipedia.org'))
   }
 
+  /**
+   * Add pending citations from database to frontier
+   * Returns number of citations added
+   */
+  private async addPendingCitationsToFrontier(patchId: string): Promise<number> {
+    try {
+      const { getNextCitationToProcess } = await import('./wikipediaCitation')
+      
+      // Get up to 50 pending citations
+      const citations: Array<{ citationUrl: string; aiPriorityScore: number | null }> = []
+      for (let i = 0; i < 50; i++) {
+        const citation = await getNextCitationToProcess(patchId)
+        if (!citation) break
+        
+        // Check if already in frontier or seen
+        const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
+        const seen = await isSeenWithTimestamp(patchId, citation.citationUrl).catch(() => false)
+        if (seen) continue
+        
+        citations.push({
+          citationUrl: citation.citationUrl,
+          aiPriorityScore: citation.aiPriorityScore
+        })
+      }
+      
+      if (citations.length === 0) {
+        return 0
+      }
+      
+      console.log(`[EngineV21] Adding ${citations.length} pending citations to frontier`)
+      
+      // Add citations to frontier with priority based on AI score
+      let added = 0
+      for (const citation of citations) {
+        try {
+          const priority = citation.aiPriorityScore ? Math.max(150, Math.min(300, citation.aiPriorityScore)) : 200
+          
+          const item: FrontierItem = {
+            id: `citation:${Date.now()}:${Math.random()}`,
+            provider: 'direct',
+            cursor: citation.citationUrl,
+            priority,
+            meta: {
+              reason: 'pending_citation',
+              sourceType: 'citation'
+            }
+          }
+          
+          await addToFrontier(patchId, item)
+          added++
+        } catch (error) {
+          console.error(`[EngineV21] Failed to add citation to frontier: ${citation.citationUrl}`, error)
+        }
+      }
+      
+      if (added > 0) {
+        this.structuredLog('citations_added_to_frontier', {
+          count: added,
+          totalPending: citations.length
+        })
+        console.log(`[EngineV21] ✅ Added ${added} citations to frontier`)
+      }
+      
+      return added
+    } catch (error) {
+      console.error('[EngineV21] Error adding pending citations to frontier:', error)
+      return 0
+    }
+  }
+
   private async expandFrontierIfNeeded(patchId: string, coveredAngles: Set<string>): Promise<boolean> {
     if (!this.plan) {
       return false
