@@ -335,7 +335,12 @@ export class SchedulerGuards {
 
   needsReseed(): boolean {
     const wikiState = this.getWikiGuardState()
-    if (wikiState.active) return true
+    // Don't trigger reseed immediately when wiki guard activates on first few items
+    // Allow at least 5 items to be processed before triggering reseed due to wiki guard
+    // This prevents premature suspension when Wikipedia share is high at the start
+    if (wikiState.active && this.attempts.length >= 5) {
+      return true
+    }
     if (this.getHostDiversityCount() < 3 && this.hostHistory.length >= 6) {
       return true
     }

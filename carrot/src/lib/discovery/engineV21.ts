@@ -923,7 +923,12 @@ export class DiscoveryEngineV21 {
     this.emitMetricsSnapshot(frontierDepth)
     await this.handleZeroSaveSlo()
     // Circuit breaker: prevent infinite reseed loops
-    if (this.scheduler.needsReseed() && this.reseedAttempts < this.MAX_RESEED_ATTEMPTS) {
+    // Only trigger reseed if we've processed at least 3 items to avoid premature suspension
+    // This ensures frontier items get a chance to be processed before reseed triggers
+    const minItemsBeforeReseed = 3
+    if (this.scheduler.needsReseed() && 
+        this.reseedAttempts < this.MAX_RESEED_ATTEMPTS &&
+        this.metrics.candidatesProcessed >= minItemsBeforeReseed) {
       const now = Date.now()
       const timeSinceLastReseed = now - this.lastReseedTime
       const backoffWithJitter = this.reseedBackoffMs + Math.random() * 250
@@ -943,6 +948,13 @@ export class DiscoveryEngineV21 {
       // Don't stop the run on reseed circuit breaker - just log and continue
       // The zero-save SLO will handle stopping if needed
       console.warn(`[EngineV21] Reseed circuit breaker reached (${this.reseedAttempts}/${this.MAX_RESEED_ATTEMPTS}), but continuing discovery`)
+    } else if (this.scheduler.needsReseed() && this.metrics.candidatesProcessed < minItemsBeforeReseed) {
+      // Log that reseed is needed but deferred until minimum items processed
+      this.structuredLog('reseed_deferred', {
+        reason: 'min_items_not_met',
+        candidatesProcessed: this.metrics.candidatesProcessed,
+        minRequired: minItemsBeforeReseed
+      })
     }
   }
 
