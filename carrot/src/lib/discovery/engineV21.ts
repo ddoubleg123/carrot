@@ -1146,7 +1146,11 @@ export class DiscoveryEngineV21 {
     // Extract citations with context (title, text) for prioritization
     const { extractWikipediaCitationsWithContext } = await import('./wikiUtils')
     const citations = extractWikipediaCitationsWithContext(rawHtml, sourceUrl, 50)
-    if (!citations.length) return
+    console.log(`[EngineV21] enqueueWikipediaReferences: Extracted ${citations.length} citations from ${sourceUrl.substring(0, 80)}`)
+    if (!citations.length) {
+      console.log(`[EngineV21] enqueueWikipediaReferences: No citations found, skipping`)
+      return
+    }
 
     // Prioritize citations using AI based on titles/context
     const prioritized = await this.prioritizeCitations(citations, sourceUrl)
@@ -1154,6 +1158,7 @@ export class DiscoveryEngineV21 {
     // Take top 25 prioritized citations
     const topCitations = prioritized.slice(0, 25)
     const citationUrls = topCitations.map(c => c.url)
+    console.log(`[EngineV21] enqueueWikipediaReferences: Prioritized to ${topCitations.length} citations, enqueueing ${citationUrls.length} URLs`)
 
     await this.enqueueRefOutLinks(citationUrls, parent, sourceUrl, 'wikipedia')
     
@@ -1177,8 +1182,12 @@ export class DiscoveryEngineV21 {
     parent: FrontierItem
   ): Promise<void> {
     if (!rawHtml || !this.isWikipediaUrl(sourceUrl)) {
+      if (!rawHtml) console.log(`[EngineV21] enqueueInternalWikipediaLinks: No HTML for ${sourceUrl.substring(0, 80)}`)
+      if (!this.isWikipediaUrl(sourceUrl)) console.log(`[EngineV21] enqueueInternalWikipediaLinks: Not Wikipedia URL: ${sourceUrl.substring(0, 80)}`)
       return
     }
+
+    console.log(`[EngineV21] enqueueInternalWikipediaLinks: Processing internal links from ${sourceUrl.substring(0, 80)}`)
 
     // Determine parent level from parent's metadata or priority
     // Seed pages (priority 1-10) = Level 1
@@ -1190,13 +1199,15 @@ export class DiscoveryEngineV21 {
     // Limit depth to prevent infinite crawling
     const MAX_WIKIPEDIA_LEVEL = 3
     if (childLevel > MAX_WIKIPEDIA_LEVEL) {
-      console.log(`[EngineV21] Skipping Wikipedia links from Level ${parentLevel} (max level: ${MAX_WIKIPEDIA_LEVEL})`)
+      console.log(`[EngineV21] enqueueInternalWikipediaLinks: Skipping Wikipedia links from Level ${parentLevel} (max level: ${MAX_WIKIPEDIA_LEVEL})`)
       return
     }
 
     // Extract internal Wikipedia links
     const internalLinks = extractInternalWikipediaLinks(rawHtml, sourceUrl, 30) // Limit to 30 links per page
+    console.log(`[EngineV21] enqueueInternalWikipediaLinks: Extracted ${internalLinks.length} internal Wikipedia links from ${sourceUrl.substring(0, 80)}`)
     if (internalLinks.length === 0) {
+      console.log(`[EngineV21] enqueueInternalWikipediaLinks: No internal links found, skipping`)
       return
     }
 
@@ -1204,11 +1215,13 @@ export class DiscoveryEngineV21 {
 
     // Enqueue each internal Wikipedia link with appropriate priority
     let enqueued = 0
+    let skippedSeen = 0
     for (const wikiUrl of internalLinks) {
       // Check if already seen
       const { isSeenWithTimestamp } = await import('@/lib/redis/discovery')
       const seen = await isSeenWithTimestamp(this.redisPatchId, wikiUrl).catch(() => false)
       if (seen) {
+        skippedSeen++
         continue
       }
 
@@ -1239,15 +1252,18 @@ export class DiscoveryEngineV21 {
       enqueued++
     }
 
-    if (enqueued > 0) {
+    if (enqueued > 0 || skippedSeen > 0) {
       this.structuredLog('wiki_internal_links_enqueued', {
         source: sourceUrl,
         parentLevel,
         childLevel,
         total: internalLinks.length,
-        enqueued
+        enqueued,
+        skippedSeen
       })
-      console.log(`[EngineV21] Enqueued ${enqueued} internal Wikipedia links (Level ${childLevel}) from ${sourceUrl.substring(0, 80)}`)
+      console.log(`[EngineV21] Enqueued ${enqueued} internal Wikipedia links (Level ${childLevel}) from ${sourceUrl.substring(0, 80)} (skipped ${skippedSeen} already seen)`)
+    } else {
+      console.log(`[EngineV21] enqueueInternalWikipediaLinks: No links enqueued (all seen or filtered)`)
     }
   }
 
@@ -1388,12 +1404,21 @@ Return ONLY valid JSON array, no other text.`
     sourceUrl: string,
     parent: FrontierItem
   ): Promise<void> {
-    if (!rawHtml) return
+    if (!rawHtml) {
+      console.log(`[EngineV21] enqueueHtmlOutgoingReferences: No HTML for ${sourceUrl.substring(0, 80)}`)
+      return
+    }
 
+    console.log(`[EngineV21] enqueueHtmlOutgoingReferences: Processing outgoing links from ${sourceUrl.substring(0, 80)}`)
     const { offHost, sameHost } = extractOutgoingLinks(rawHtml, sourceUrl, 40)
+    console.log(`[EngineV21] enqueueHtmlOutgoingReferences: Extracted ${offHost.length} off-host and ${sameHost.length} same-host links`)
     const ordered = [...offHost, ...sameHost].slice(0, 20)
-    if (!ordered.length) return
+    if (!ordered.length) {
+      console.log(`[EngineV21] enqueueHtmlOutgoingReferences: No outgoing links found after filtering`)
+      return
+    }
 
+    console.log(`[EngineV21] enqueueHtmlOutgoingReferences: Enqueueing ${ordered.length} outgoing links`)
     await this.enqueueRefOutLinks(ordered, parent, sourceUrl, 'html')
   }
 
@@ -2118,27 +2143,39 @@ Return ONLY valid JSON array, no other text.`
       // This ensures we mine Wikipedia as a launchpad for deep links
       const isWiki = this.isWikipediaUrl(canonicalUrl)
       if (isWiki && DEEP_LINK_SCRAPER) {
-        console.log(`[EngineV21] Processing Wikipedia page for deep link extraction: ${canonicalUrl.substring(0, 100)}`)
+        console.log(`[EngineV21] DEEP_LINK_SCRAPER: Processing Wikipedia page for deep link extraction: ${canonicalUrl.substring(0, 100)}`)
         // Fetch content first to extract outlinks and citations
         const fetchResult = await this.fetchAndExtractContent({
           canonicalUrl,
           candidate,
           host
-        }).catch(() => null)
+        }).catch((err) => {
+          console.error(`[EngineV21] DEEP_LINK_SCRAPER: Failed to fetch Wikipedia page: ${err}`)
+          return null
+        })
         
         if (fetchResult?.extracted?.rawHtml) {
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Fetched Wikipedia page, HTML length: ${fetchResult.extracted.rawHtml.length} characters`)
           // Extract citations (prioritized)
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Extracting citations...`)
           await this.enqueueWikipediaReferences(fetchResult.extracted.rawHtml, canonicalUrl, candidate)
           
           // Extract and enqueue internal Wikipedia links (for Wikipedia-to-Wikipedia crawling)
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Extracting internal Wikipedia links...`)
           await this.enqueueInternalWikipediaLinks(fetchResult.extracted.rawHtml, canonicalUrl, candidate)
           
           // Also extract general outlinks
           const WIKI_OUTLINK_LIMIT = Number(process.env.CRAWL_WIKI_OUTLINK_LIMIT || 25)
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Extracting off-host links (limit: ${WIKI_OUTLINK_LIMIT})...`)
           const refs = await extractOffHostLinks(fetchResult.extracted.rawHtml, canonicalUrl, { maxLinks: WIKI_OUTLINK_LIMIT })
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Extracted ${refs.length} off-host links`)
           let enqueued = 0
+          let filtered = 0
           for (const ref of refs) {
-            if (!passesDeepLinkFilters(ref.url, ref.sourceHost)) continue
+            if (!passesDeepLinkFilters(ref.url, ref.sourceHost)) {
+              filtered++
+              continue
+            }
             const item: FrontierItem = {
               id: `wiki_out:${Date.now()}:${Math.random()}`,
               provider: 'direct',
@@ -2160,13 +2197,19 @@ Return ONLY valid JSON array, no other text.`
             await addToFrontier(this.redisPatchId, item)
             enqueued++
           }
+          
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Enqueued ${enqueued} off-host links (filtered ${filtered} links)`)
           if (enqueued > 0) {
-            this.structuredLog('wiki_outlinks_enqueued', { 
-              source: canonicalUrl, 
-              count: enqueued,
-              limit: WIKI_OUTLINK_LIMIT
+            this.structuredLog('wiki_outlinks_enqueued', {
+              source: canonicalUrl,
+              total: refs.length,
+              enqueued,
+              filtered
             })
           }
+        } else {
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: No HTML extracted from Wikipedia page`)
+        }
           // Now mark as seen AFTER extracting outlinks and citations
           await markAsSeen(redisPatchId, canonicalUrl).catch(() => undefined)
           await this.emitAudit('wiki_processed', 'ok', { 
@@ -2550,6 +2593,8 @@ Return ONLY valid JSON array, no other text.`
       // For Wikipedia pages: Always extract citations (even if already seen)
       // This ensures we mine Wikipedia as a launchpad for deep links
       if (this.isWikipediaUrl(canonicalUrl)) {
+        console.log(`[EngineV21] processCandidate: Processing Wikipedia page for deep link extraction: ${canonicalUrl.substring(0, 100)}`)
+        console.log(`[EngineV21] processCandidate: HTML length: ${extracted.rawHtml?.length || 0} characters`)
         await this.enqueueWikipediaReferences(extracted.rawHtml, canonicalUrl, candidate)
         // Extract and enqueue internal Wikipedia links (for Wikipedia-to-Wikipedia crawling)
         await this.enqueueInternalWikipediaLinks(extracted.rawHtml, canonicalUrl, candidate)
