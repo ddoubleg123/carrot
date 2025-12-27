@@ -90,9 +90,13 @@ export class MultiSourceOrchestrator {
 
     // Step 4: Search Anna's Archive (books, papers, documents)
     if (strategy.primarySources.includes('AnnasArchive') || strategy.primarySources.includes('Books')) {
+      console.log('[MultiSourceOrchestrator] 🔍 Starting Anna\'s Archive search...')
       const annasArchiveSources = await this.searchAnnasArchive(strategy)
       annasArchiveBookCount = annasArchiveSources.length
+      console.log(`[MultiSourceOrchestrator] ✅ Anna's Archive search complete: ${annasArchiveBookCount} sources found`)
       allSources.push(...annasArchiveSources)
+    } else {
+      console.log('[MultiSourceOrchestrator] ⚠️  Anna\'s Archive not in primarySources, skipping search')
     }
 
     // Step 5: TODO: Add other sources (arXiv, PubMed, etc.)

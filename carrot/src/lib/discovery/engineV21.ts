@@ -3466,8 +3466,19 @@ Return ONLY valid JSON array, no other text.`
       const urlObj = new URL(url)
       const hostname = urlObj.hostname.toLowerCase()
       const pathname = urlObj.pathname.toLowerCase()
-      return hostname.includes('annas-archive.org') && 
+      const isAnnasArchive = hostname.includes('annas-archive.org') && 
              (pathname.includes('/md5/') || pathname.includes('/book/') || pathname.includes('/file/'))
+      
+      if (isAnnasArchive) {
+        this.structuredLog('annas_archive_detected', {
+          url: url.substring(0, 100),
+          hostname,
+          pathname
+        })
+        console.log(`[EngineV21] ✅ Detected Anna's Archive URL: ${url.substring(0, 100)}`)
+      }
+      
+      return isAnnasArchive
     } catch {
       return false
     }
@@ -3503,15 +3514,30 @@ Return ONLY valid JSON array, no other text.`
       // Check if this is an Anna's Archive URL - use special extraction
       if (this.isAnnasArchiveUrl(branch.url)) {
         try {
-          console.log(`[EngineV21] Detected Anna's Archive URL, using book extraction: ${branch.url.substring(0, 100)}`)
+          console.log(`[EngineV21] 🔍 Processing Anna's Archive URL: ${branch.url.substring(0, 100)}`)
+          this.structuredLog('annas_archive_extraction_start', {
+            url: branch.url.substring(0, 100),
+            branch: branch.branch
+          })
+          
           const { extractBookContent } = await import('../../../scripts/extract-annas-archive-book')
           const fullContent = await extractBookContent(branch.url)
           
           if (!fullContent || fullContent.length < 100) {
-            console.warn(`[EngineV21] Anna's Archive extraction failed or too short (${fullContent?.length || 0} chars)`)
+            console.warn(`[EngineV21] ❌ Anna's Archive extraction failed or too short (${fullContent?.length || 0} chars)`)
+            this.structuredLog('annas_archive_extraction_failed', {
+              url: branch.url.substring(0, 100),
+              reason: 'content_too_short',
+              length: fullContent?.length || 0
+            })
             lastError = new Error('annas_archive_extraction_failed')
             continue
           }
+          
+          this.structuredLog('annas_archive_extraction_success', {
+            url: branch.url.substring(0, 100),
+            contentLength: fullContent.length
+          })
           
           // Extract title from URL or content
           let title = 'Untitled Book'
@@ -3530,7 +3556,12 @@ Return ONLY valid JSON array, no other text.`
             // Use default title
           }
           
-          console.log(`[EngineV21] ✅ Extracted ${fullContent.length} chars from Anna's Archive: ${title}`)
+          console.log(`[EngineV21] ✅ Successfully extracted ${fullContent.length} chars from Anna's Archive: ${title}`)
+          this.structuredLog('annas_archive_extracted', {
+            url: branch.url.substring(0, 100),
+            title: title.substring(0, 100),
+            contentLength: fullContent.length
+          })
           
           // Create ExtractedContent from book content
           const bookExtracted: ExtractedContent = {
@@ -3546,7 +3577,11 @@ Return ONLY valid JSON array, no other text.`
             renderUsed: false
           }
         } catch (error: any) {
-          console.error(`[EngineV21] Anna's Archive extraction error:`, error)
+          console.error(`[EngineV21] ❌ Anna's Archive extraction error:`, error)
+          this.structuredLog('annas_archive_extraction_error', {
+            url: branch.url.substring(0, 100),
+            error: error instanceof Error ? error.message : String(error)
+          })
           lastError = error
           continue
         }

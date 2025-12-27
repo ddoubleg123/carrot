@@ -1278,11 +1278,16 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
       // Log Anna's Archive sources specifically
       const annasArchiveSources = discoveryResult.sources.filter(s => s.source === "Anna's Archive")
       if (annasArchiveSources.length > 0) {
-        console.log(`[Seed Planner] Found ${annasArchiveSources.length} Anna's Archive sources:`, 
-          annasArchiveSources.map(s => ({ title: s.title, url: s.url }))
-        )
+        console.log(`[Seed Planner] ✅ Found ${annasArchiveSources.length} Anna's Archive sources:`)
+        annasArchiveSources.slice(0, 5).forEach((s, i) => {
+          console.log(`[Seed Planner]   ${i + 1}. ${s.title} - ${s.url.substring(0, 80)}`)
+        })
+        if (annasArchiveSources.length > 5) {
+          console.log(`[Seed Planner]   ... and ${annasArchiveSources.length - 5} more`)
+        }
       } else {
-        console.warn('[Seed Planner] No Anna\'s Archive sources found')
+        console.warn('[Seed Planner] ⚠️  No Anna\'s Archive sources found in discovery results')
+        console.warn('[Seed Planner]   This may indicate Anna\'s Archive search returned no results or was filtered out')
       }
       
       // Convert Anna's Archive results to seed candidates
