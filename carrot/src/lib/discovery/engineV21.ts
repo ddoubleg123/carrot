@@ -788,8 +788,35 @@ export class DiscoveryEngineV21 {
       const candidate = await this.pullCandidateWithBias(redisPatchId)
 
       if (!candidate) {
+        // Check frontier size before attempting expansion
+        const { frontierSize } = await import('@/lib/redis/discovery')
+        const currentFrontierSize = await frontierSize(redisPatchId).catch(() => 0)
+        
+        // Log frontier state for debugging
+        this.structuredLog('frontier_check', {
+          frontierSize: currentFrontierSize,
+          candidatesProcessed: this.metrics.candidatesProcessed,
+          stopRequested: this.stopRequested
+        })
+        
+        // If frontier has items but pullCandidateWithBias returned null, it might be due to scheduler guards
+        // Wait a bit and try again instead of immediately expanding
+        if (currentFrontierSize > 0) {
+          console.log(`[EngineV21] Frontier has ${currentFrontierSize} items but pullCandidateWithBias returned null - waiting 1s and retrying`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          continue
+        }
+        
+        // Only expand if frontier is actually empty
         const expanded = await this.expandFrontierIfNeeded(redisPatchId, coveredAngles)
         if (!expanded) {
+          // Double-check frontier size before declaring empty
+          const finalFrontierSize = await frontierSize(redisPatchId).catch(() => 0)
+          if (finalFrontierSize > 0) {
+            console.log(`[EngineV21] Frontier expansion returned false but frontier has ${finalFrontierSize} items - continuing`)
+            continue
+          }
+          
           await this.persistMetricsSnapshot('running', this.lastCounters, { reason: 'frontier_empty' })
           this.eventStream.idle('Frontier empty')
           
@@ -797,14 +824,12 @@ export class DiscoveryEngineV21 {
           try {
             const { slog } = await import('@/lib/log')
             const { pushEvent } = await import('./eventRing')
-            const { frontierSize } = await import('@/lib/redis/discovery')
-            const queueLen = await frontierSize(redisPatchId).catch(() => 0)
             const logObj = {
               step: 'discovery',
               msg: 'idle',
               job_id: this.options.patchId,
               run_id: this.options.runId,
-              queue_len: queueLen,
+              queue_len: finalFrontierSize,
               reason: 'frontier_empty',
             }
             slog('info', logObj)
@@ -980,9 +1005,17 @@ export class DiscoveryEngineV21 {
 
   private async pullCandidateWithBias(patchId: string): Promise<FrontierItem | null> {
     let attempts = 0
+    let requeuedCount = 0
     while (attempts < 12) {
       const candidate = await popFromFrontier(patchId)
       if (!candidate) {
+        if (attempts === 0) {
+          // Log when frontier is empty on first attempt
+          this.structuredLog('frontier_pull_empty', {
+            attempts,
+            requeuedCount
+          })
+        }
         return null
       }
       const host = this.resolveHost(candidate)
@@ -993,11 +1026,30 @@ export class DiscoveryEngineV21 {
         isContested
       })
       if (evaluation.action === 'accept') {
+        if (requeuedCount > 0) {
+          this.structuredLog('frontier_pull_accepted_after_requeue', {
+            attempts,
+            requeuedCount,
+            reason: evaluation.reason
+          })
+        }
         return evaluation.candidate
       }
+      // Candidate was requeued due to scheduler guard
+      requeuedCount++
       await addToFrontier(patchId, evaluation.candidate)
       attempts += 1
     }
+    
+    // Log when all candidates were requeued
+    if (requeuedCount > 0) {
+      this.structuredLog('frontier_pull_all_requeued', {
+        attempts,
+        requeuedCount,
+        reason: 'scheduler_guards'
+      })
+    }
+    
     return null
   }
 
