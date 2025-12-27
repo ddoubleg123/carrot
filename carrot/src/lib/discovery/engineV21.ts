@@ -3616,16 +3616,35 @@ Return ONLY valid JSON array, no other text.`
           })
           
           const { extractBookContent } = await import('../../../scripts/extract-annas-archive-book')
+          console.log(`[EngineV21] Calling extractBookContent for: ${branch.url.substring(0, 100)}`)
           const fullContent = await extractBookContent(branch.url)
           
-          if (!fullContent || fullContent.length < 100) {
-            console.warn(`[EngineV21] ❌ Anna's Archive extraction failed or too short (${fullContent?.length || 0} chars)`)
+          console.log(`[EngineV21] extractBookContent returned ${fullContent?.length || 0} characters`)
+          
+          // Check if content is too short or appears to be just a preview/message
+          const MIN_CONTENT_LENGTH = 500 // Require at least 500 chars for meaningful content
+          const isPreviewOrMessage = fullContent && (
+            fullContent.includes('[PDF file downloaded') ||
+            fullContent.includes('[PDF file successfully downloaded') ||
+            fullContent.includes('Text extraction yielded') ||
+            fullContent.length < MIN_CONTENT_LENGTH
+          )
+          
+          if (!fullContent || fullContent.length < MIN_CONTENT_LENGTH || isPreviewOrMessage) {
+            const reason = !fullContent ? 'no_content' 
+                          : isPreviewOrMessage ? 'preview_or_message_only'
+                          : 'content_too_short'
+            console.warn(`[EngineV21] ❌ Anna's Archive extraction failed or insufficient (${fullContent?.length || 0} chars, reason: ${reason})`)
+            if (fullContent && fullContent.length > 0) {
+              console.warn(`[EngineV21] Content preview: ${fullContent.substring(0, 200)}`)
+            }
             this.structuredLog('annas_archive_extraction_failed', {
               url: branch.url.substring(0, 100),
-              reason: 'content_too_short',
-              length: fullContent?.length || 0
+              reason,
+              length: fullContent?.length || 0,
+              isPreviewOrMessage
             })
-            lastError = new Error('annas_archive_extraction_failed')
+            lastError = new Error(`annas_archive_extraction_failed: ${reason}`)
             continue
           }
           
