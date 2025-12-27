@@ -2233,9 +2233,7 @@ Return ONLY valid JSON array, no other text.`
               filtered
             })
           }
-        } else {
-          console.log(`[EngineV21] DEEP_LINK_SCRAPER: No HTML extracted from Wikipedia page`)
-        }
+          
           // Now mark as seen AFTER extracting outlinks and citations
           await markAsSeen(redisPatchId, canonicalUrl).catch(() => undefined)
           await this.emitAudit('wiki_processed', 'ok', { 
@@ -2244,8 +2242,17 @@ Return ONLY valid JSON array, no other text.`
           })
           await this.persistMetricsSnapshot('running', countersBefore)
           return { saved: false, reason: 'wiki_launchpad_processed', angle, host }
+        } else if (fetchResult) {
+          // fetchResult exists but no HTML
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: No HTML extracted from Wikipedia page`)
+          // Even if no HTML, mark as seen and return
+          await markAsSeen(redisPatchId, canonicalUrl).catch(() => undefined)
+          await this.persistMetricsSnapshot('running', countersBefore)
+          return { saved: false, reason: 'wiki_no_html', angle, host }
         } else {
-          console.log(`[EngineV21] Wikipedia page fetch failed or no HTML: ${canonicalUrl.substring(0, 100)}`)
+          // fetchResult is null - fetch failed, continue to normal processing
+          console.log(`[EngineV21] DEEP_LINK_SCRAPER: Wikipedia page fetch failed: ${canonicalUrl.substring(0, 100)}`)
+          // Continue to normal processing if fetch failed
         }
       }
 

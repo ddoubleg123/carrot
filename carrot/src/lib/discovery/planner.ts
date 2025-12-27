@@ -1359,11 +1359,11 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
         .map(source => ({
           url: source.url,
           titleGuess: source.title,
-          category: 'news' as PlannerSeedCategory,
+          category: 'media' as PlannerSeedCategory,
           angle: source.description.substring(0, 200) || 'News article',
           expectedInsights: [source.description.substring(0, 100)],
           credibilityTier: 3 as const, // News is less authoritative than academic sources
-          sourceType: 'news' as const,
+          sourceType: 'media' as const,
           priority: 3 as const,
           notes: `NewsAPI: ${source.metadata.author ? `by ${source.metadata.author}` : ''} ${source.metadata.publishedAt ? `(${source.metadata.publishedAt})` : ''}`.trim()
         }))

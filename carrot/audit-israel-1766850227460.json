@@ -1,0 +1,285 @@
+{
+  "timestamp": "2025-12-27T15:43:38.361Z",
+  "patchHandle": "israel",
+  "patchId": "cmip4pwb40001rt1t7a13p27g",
+  "activeRuns": [
+    {
+      "id": "cmjntr5610007q129vdjjwb09",
+      "status": "live",
+      "startedAt": "2025-12-27T04:57:34.122Z",
+      "metrics": null
+    },
+    {
+      "id": "cmjlv7vrq0005l42avnkpq8q6",
+      "status": "live",
+      "startedAt": "2025-12-25T20:03:34.486Z",
+      "metrics": null
+    },
+    {
+      "id": "cmjlv7g550001l42ardgpj50x",
+      "status": "live",
+      "startedAt": "2025-12-25T20:03:06.392Z",
+      "metrics": null
+    },
+    {
+      "id": "cmjlv7hpy0003l42aqpk2b8h9",
+      "status": "live",
+      "startedAt": "2025-12-25T20:02:41.599Z",
+      "metrics": null
+    },
+    {
+      "id": "cmjlv7wwn0007l42axnz3qq11",
+      "status": "live",
+      "startedAt": "2025-12-25T20:02:40.643Z",
+      "metrics": null
+    }
+  ],
+  "citations": {
+    "total": 2985,
+    "processed": 886,
+    "saved": 165,
+    "denied": 721,
+    "pending": 1720,
+    "duplicateCheck": {
+      "total": 886,
+      "uniqueUrls": 870,
+      "duplicateRate": 0.011286681715575621,
+      "recentDuplicates": [
+        {
+          "url": "https://search.worldcat.org/issn/0362-4331",
+          "count": 2
+        },
+        {
+          "url": "https://api.semanticscholar.org/CorpusID:24341643",
+          "count": 2
+        },
+        {
+          "url": "https://search.worldcat.org/issn/0003-097X",
+          "count": 2
+        },
+        {
+          "url": "https://doi.org/10.1163%2F9789004314634",
+          "count": 2
+        },
+        {
+          "url": "https://api.semanticscholar.org/CorpusID:245512193",
+          "count": 2
+        },
+        {
+          "url": "https://search.worldcat.org/issn/1047-7594",
+          "count": 2
+        },
+        {
+          "url": "https://doi.org/10.1017%2FS1047759421000271",
+          "count": 2
+        },
+        {
+          "url": "https://search.worldcat.org/issn/0334-4355",
+          "count": 2
+        },
+        {
+          "url": "https://books.google.com/books?amp;pg=PA229&id=tu02muKUVJ0C",
+          "count": 2
+        },
+        {
+          "url": "https://books.google.com/books?amp;pg=PA33&id=wH3-DwAAQBAJ",
+          "count": 2
+        }
+      ]
+    },
+    "processingPattern": {
+      "lastProcessedAt": "2025-12-27T05:07:21.581Z",
+      "averageProcessingTime": 16481.841491333336,
+      "itemsProcessedToday": 127,
+      "itemsProcessedThisHour": 0
+    }
+  },
+  "wikipedia": {
+    "pagesMonitored": 30,
+    "citationsExtracted": 2985,
+    "deepLinksExtracted": 0,
+    "outlinksExtracted": 0,
+    "internalLinksExtracted": 0,
+    "extractionSuccessRate": 5.527638190954774,
+    "recentExtractions": []
+  },
+  "annasArchive": {
+    "totalSeeds": 1,
+    "processed": 1,
+    "extracted": 1,
+    "failed": 0,
+    "successRate": 100,
+    "recentExtractions": [
+      {
+        "url": "https://annas-archive.org/md5/dbe898e329267de1a5530f26de6c784a",
+        "title": "Israel Rising: The Land of Israel Reawakens",
+        "extractedAt": "2025-12-23T23:16:47.652Z",
+        "contentLength": 152
+      }
+    ]
+  },
+  "news": {
+    "totalProcessed": 0,
+    "saved": 0,
+    "failed": 0,
+    "successRate": 100,
+    "sources": []
+  },
+  "discovery": {
+    "totalDiscovered": 174,
+    "itemsSaved": 174,
+    "itemsProcessed": 886,
+    "saveRate": 19.63882618510158,
+    "frontierSize": 0,
+    "recentItems": [
+      {
+        "id": "cmjnu9s0m00abq129hr697s2d",
+        "title": "0,7340,L 3696887,00.html",
+        "url": "http://ynet.co.il/english/articles/0,7340,L-3696887,00.html",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:07:21.239Z"
+      },
+      {
+        "id": "cmjnu9gje00a3q129xg3wjipx",
+        "title": "Israel and US launch joint military drill",
+        "url": "http://aljazeera.com/news/middleeast/2012/10/2012102195738284839.html",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:07:06.362Z"
+      },
+      {
+        "id": "cmjnu8t03009rq129mpvkqm0p",
+        "title": "Israel Navy To Upgrade Combat Surface Fleet",
+        "url": "http://defensenews.com/story/defense/naval/ships/2015/06/28/israel-navy-to-upgrade-combat-surface-fleet-saar/29277241/",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:06:35.859Z"
+      },
+      {
+        "id": "cmjnu8ioc009lq1290ol8dtl4",
+        "title": "name of newest israeli submarine changed amid criticism",
+        "url": "https://bairdmaritime.com/work-boat-world/maritime-security-world/naval/submersibles-naval/name-of-newest-israeli-submarine-changed-amid-criticism/",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:06:22.477Z"
+      },
+      {
+        "id": "cmjnu8cmu009fq129ns5ibe3n",
+        "title": "Panetta’s Visit Sealed F",
+        "url": "http://israelnationalnews.com/News/News.aspx/158594",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:06:14.646Z"
+      },
+      {
+        "id": "cmjnu85nd0099q129l9npfi2x",
+        "title": "Lockheed awarded $207 million contract to incorporate Israeli-specific F-35 systems",
+        "url": "http://flightglobal.com/news/articles/lockheed-awarded-207-million-contract-to-incorporate-israeli-specific-f-35-systems-375899/",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:06:05.593Z"
+      },
+      {
+        "id": "cmjnu795p0085q129txa9i9i2",
+        "title": "Analysis The Israeli Army&#x27;s New Target: Itself",
+        "url": "https://haaretz.com/israel-news/.premium-1.659849",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:05:23.485Z"
+      },
+      {
+        "id": "cmjnu73y2007zq129zzqxg4qy",
+        "title": "Kosher Spam: a Breef history",
+        "url": "https://jta.org/2011/11/20/the-archive-blog/kosher-spam-a-breef-history",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:05:16.731Z"
+      },
+      {
+        "id": "cmjnu61fr007nq129x25pj6nb",
+        "title": "16 Warplanes Likely to Carry Nuclear Weapons: Report",
+        "url": "http://english.peopledaily.com.cn/200208/20/eng20020820_101736.shtml",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:04:26.823Z"
+      },
+      {
+        "id": "cmjnu5j30007hq1297e3erf82",
+        "title": "Israel News",
+        "url": "https://jpost.com/Israel/Article.aspx?id=64499",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:04:03.037Z"
+      },
+      {
+        "id": "cmjnu5afg0077q129hlwbfhs2",
+        "title": "How Israel Developed the Iron Dome",
+        "url": "http://businessinsider.com/how-israel-developed-the-iron-dome-2012-11?op=1",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:03:51.820Z"
+      },
+      {
+        "id": "cmjnu4myk006xq129yzi37ibm",
+        "title": "Spike Anti-Tank Guided Missiles, Israel",
+        "url": "https://army-technology.com/projects/gill",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:03:21.404Z"
+      },
+      {
+        "id": "cmjnu4inc006rq1293hwwly70",
+        "title": "Israel Is World&#x27;s Largest Exporter of Drones, Study Finds",
+        "url": "https://haaretz.com/news/diplomacy-defense/israel-is-world-s-largest-exporter-of-drones-study-finds.premium-1.524771",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:03:15.817Z"
+      },
+      {
+        "id": "cmjnu45gq006hq129lhxv5gws",
+        "title": "The Tavor rifle was made for the Israeli military&#039;s unique situation - Service rifles from around the world | Sandboxx",
+        "url": "https://sandboxx.us/news/the-tavor-rifle-was-made-for-the-israeli-militarys-unique-situation-service-rifles-from-around-the-world/",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:58.730Z"
+      },
+      {
+        "id": "cmjnu3yi10069q129mbl3lhpn",
+        "title": "Navy Considers Israeli",
+        "url": "http://israelnationalnews.com/News/News.aspx/132104",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:49.706Z"
+      },
+      {
+        "id": "cmjnu3ofe005xq1293pqe8cz1",
+        "title": "IDF Battle Readiness to Suffer if Budget Cut, Senior Officers Warn",
+        "url": "https://haaretz.com/print-edition/news/idf-battle-readiness-to-suffer-if-budget-cut-senior-officers-warn-1.389238?localLinksEnabled=false",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:36.651Z"
+      },
+      {
+        "id": "cmjnu3jep005pq129kvk4fszd",
+        "title": "Israel: Generals say defense cuts perilous",
+        "url": "http://upi.com/Business_News/Security-Industry/2011/10/10/Israel-Generals-say-defense-cuts-perilous/UPI-60991318262603/",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:30.146Z"
+      },
+      {
+        "id": "cmjnu3e58005hq129p636wo2q",
+        "title": "Defense Budget to Grow, Education Spending to Shrink",
+        "url": "https://haaretz.com/print-edition/business/defense-budget-to-grow-education-spending-to-shrink-1.6974",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:23.324Z"
+      },
+      {
+        "id": "cmjnu30j30055q129jpcpys95",
+        "title": "0,7340,L 3605863,00.html",
+        "url": "http://ynet.co.il/english/articles/0,7340,L-3605863,00.html",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:02:05.680Z"
+      },
+      {
+        "id": "cmjnu2siz004zq1298ixywmam",
+        "title": "A high price : the triumphs and failures of Israeli counterterrorism",
+        "url": "https://archive.org/details/highpricetriumph0000byma/page/364",
+        "source": "wikipedia_citation",
+        "createdAt": "2025-12-27T05:01:55.308Z"
+      }
+    ]
+  },
+  "kpis": {
+    "citationProcessingRate": 0,
+    "extractionSuccessRate": 18.714768883878243,
+    "duplicatePreventionRate": 1.1286681715575622,
+    "sourceDiversity": 0,
+    "timeToFirstSave": -26555.689583333333,
+    "averageProcessingTime": 16481.841491333336
+  }
+}

@@ -6,34 +6,36 @@
 // Polyfill DOMMatrix for pdf-parse BEFORE importing it
 // pdf-parse requires DOMMatrix to be globally available during module load
 if (typeof global.DOMMatrix === 'undefined' && typeof globalThis.DOMMatrix === 'undefined') {
-  try {
-    // Try to require dommatrix, but handle it gracefully if not available
-    let dommatrix: any
+  // Minimal polyfill - don't require dommatrix at build time to avoid Next.js build errors
+  // The polyfill will be sufficient for pdf-parse
+  const DOMMatrixPolyfill = class DOMMatrix {
+    constructor(init?: any) {}
+    static fromMatrix(other?: any) { return new DOMMatrix() }
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0
+    multiply(other?: any) { return new DOMMatrix() }
+    translate(x?: number, y?: number) { return new DOMMatrix() }
+    scale(x?: number, y?: number) { return new DOMMatrix() }
+    rotate(angle?: number) { return new DOMMatrix() }
+  } as any
+  global.DOMMatrix = DOMMatrixPolyfill
+  globalThis.DOMMatrix = DOMMatrixPolyfill
+  ;(global as any).DOMMatrix = DOMMatrixPolyfill
+  
+  // Try to load dommatrix at runtime if available (but don't fail if it's not)
+  if (typeof require !== 'undefined') {
     try {
-      dommatrix = require('dommatrix')
-    } catch (requireError) {
-      // dommatrix not installed, use polyfill
-      dommatrix = null
+      const dommatrix = require('dommatrix')
+      if (dommatrix?.DOMMatrix) {
+        const DOMMatrixClass = dommatrix.DOMMatrix || dommatrix.default?.DOMMatrix
+        if (DOMMatrixClass) {
+          global.DOMMatrix = DOMMatrixClass
+          globalThis.DOMMatrix = DOMMatrixClass
+          ;(global as any).DOMMatrix = DOMMatrixClass
+        }
+      }
+    } catch (e) {
+      // dommatrix not available, use polyfill above
     }
-    
-    if (dommatrix) {
-      const DOMMatrixClass = dommatrix.DOMMatrix || dommatrix.default?.DOMMatrix || dommatrix
-      global.DOMMatrix = DOMMatrixClass
-      globalThis.DOMMatrix = DOMMatrixClass
-      // Also set it on the global scope directly (some modules check this)
-      ;(global as any).DOMMatrix = DOMMatrixClass
-    } else {
-      throw new Error('dommatrix not available')
-    }
-  } catch (e) {
-    // Minimal polyfill if dommatrix package is not available
-    const DOMMatrixPolyfill = class DOMMatrix {
-      constructor(init?: any) {}
-      static fromMatrix(other?: any) { return new DOMMatrix() }
-    } as any
-    global.DOMMatrix = DOMMatrixPolyfill
-    globalThis.DOMMatrix = DOMMatrixPolyfill
-    ;(global as any).DOMMatrix = DOMMatrixPolyfill
   }
 }
 
