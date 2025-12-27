@@ -67,18 +67,50 @@ export async function GET(
             }
           }, 10000) // Every 10 seconds
           
-          // Send initial connection event to indicate stream is active
-          try {
-            const initialEvent = {
-              type: 'connected',
-              timestamp: Date.now(),
-              message: 'SSE stream connected',
-              data: { runId }
+          // Send initial connection event and current run state
+          ;(async () => {
+            try {
+              // Fetch current run state
+              const currentRun = await (prisma as any).discoveryRun.findUnique({
+                where: { id: runId },
+                select: { 
+                  id: true, 
+                  status: true, 
+                  startedAt: true,
+                  metrics: true
+                }
+              })
+              
+              const initialEvent = {
+                type: 'connected',
+                timestamp: Date.now(),
+                message: 'SSE stream connected',
+                data: { 
+                  runId,
+                  runStatus: currentRun?.status || 'unknown',
+                  startedAt: currentRun?.startedAt?.toISOString() || null,
+                  metrics: currentRun?.metrics || {}
+                }
+              }
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialEvent)}\n\n`))
+              
+              // If run is already live, send a start event to sync frontend state
+              if (currentRun?.status === 'live') {
+                const startEvent = {
+                  type: 'start',
+                  timestamp: Date.now(),
+                  data: { 
+                    groupId: patch.id,
+                    runId 
+                  }
+                }
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(startEvent)}\n\n`))
+              }
+            } catch (error) {
+              // Stream may be closed, ignore
+              console.warn('[Discovery Stream] Failed to send initial state:', error)
             }
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialEvent)}\n\n`))
-          } catch (error) {
-            // Stream may be closed, ignore
-          }
+          })()
           
           const unsubscribe = subscribeDiscoveryEvents(runId, (event) => {
             if (isClosed) return
