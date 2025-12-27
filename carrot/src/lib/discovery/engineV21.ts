@@ -1057,12 +1057,36 @@ export class DiscoveryEngineV21 {
     const state = await this.getCurrentRunState()
     if (state === 'suspended') {
       // Suspended means stopped - exit immediately
-      this.structuredLog('run_state_exit', { state, context })
+      this.structuredLog('run_state_exit', { 
+        state, 
+        context,
+        candidatesProcessed: this.metrics.candidatesProcessed,
+        itemsSaved: this.metrics.itemsSaved
+      })
+      console.log(`[EngineV21] Run suspended at ${context} (processed: ${this.metrics.candidatesProcessed}, saved: ${this.metrics.itemsSaved})`)
       this.stopRequested = true
       return false
     }
     if (state === 'paused') {
       // Paused means wait - don't process but don't exit
+      // Check frontier size - if there are items, we should continue processing
+      const { frontierSize } = await import('@/lib/redis/discovery')
+      const currentFrontierSize = await frontierSize(this.redisPatchId).catch(() => 0)
+      
+      if (currentFrontierSize > 0 && this.metrics.candidatesProcessed < 10) {
+        // If frontier has items and we haven't processed much, log and continue
+        // This prevents premature pause when items are enqueued
+        this.structuredLog('run_paused_with_items', {
+          context,
+          frontierSize: currentFrontierSize,
+          candidatesProcessed: this.metrics.candidatesProcessed,
+          itemsSaved: this.metrics.itemsSaved
+        })
+        console.log(`[EngineV21] Run paused but frontier has ${currentFrontierSize} items - continuing processing`)
+        // Don't wait - continue processing items even if paused
+        return true
+      }
+      
       // Wait a bit before checking again
       await new Promise(resolve => setTimeout(resolve, 2000))
       return true // Continue loop to check again
