@@ -334,29 +334,73 @@ async function auditDiscoveryRun(patchHandle: string): Promise<AuditResult> {
     take: 100
   })
   
+  // Calculate processing times, filtering out invalid data
   const processingTimes = citationsWithTiming
     .filter(c => c.lastScannedAt && c.createdAt)
     .map(c => {
       const scanned = new Date(c.lastScannedAt!)
       const created = new Date(c.createdAt)
-      return (scanned.getTime() - created.getTime()) / 1000 / 60 // minutes
+      const timeDiff = (scanned.getTime() - created.getTime()) / 1000 / 60 // minutes
+      return timeDiff
+    })
+    .filter(time => {
+      // Filter out invalid times:
+      // - Negative times (scanned before created - data error)
+      // - Times > 7 days (likely old data or data errors)
+      // - Times that are clearly wrong (> 1000 hours)
+      return time >= 0 && time < (7 * 24 * 60) && time < (1000 * 60)
     })
   
-  const averageProcessingTime = processingTimes.length > 0
-    ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
-    : null
-  
-  // Get first save time
-  const firstSave = await prisma.discoveredContent.findFirst({
-    where: { patchId },
-    orderBy: { createdAt: 'asc' },
-    select: { createdAt: true }
+  // Only use recent citations (last 30 days) for average to avoid old data skewing results
+  const recentProcessingTimes = processingTimes.filter((time, index) => {
+    const citation = citationsWithTiming[index]
+    if (!citation || !citation.lastScannedAt) return false
+    const scanned = new Date(citation.lastScannedAt)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    return scanned >= thirtyDaysAgo
   })
   
+  const averageProcessingTime = recentProcessingTimes.length > 0
+    ? recentProcessingTimes.reduce((a, b) => a + b, 0) / recentProcessingTimes.length
+    : (processingTimes.length > 0
+      ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
+      : null)
+  
+  // Get first save time (only for items created after the run started)
   const firstRun = activeRuns[0]
-  const timeToFirstSave = firstRun && firstSave
-    ? (firstSave.createdAt.getTime() - new Date(firstRun.startedAt).getTime()) / 1000 / 60
-    : null
+  const firstSave = firstRun
+    ? await prisma.discoveredContent.findFirst({
+        where: {
+          patchId,
+          createdAt: {
+            gte: new Date(firstRun.startedAt) // Only items created after run started
+          }
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true }
+      })
+    : await prisma.discoveredContent.findFirst({
+        where: { patchId },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true }
+      })
+  
+  // Calculate time to first save, handling edge cases
+  let timeToFirstSave: number | null = null
+  if (firstRun && firstSave) {
+    const runStartTime = new Date(firstRun.startedAt).getTime()
+    const firstSaveTime = firstSave.createdAt.getTime()
+    
+    // Only calculate if firstSave is after run start (should always be true, but defensive check)
+    if (firstSaveTime >= runStartTime) {
+      timeToFirstSave = (firstSaveTime - runStartTime) / 1000 / 60 // minutes
+      
+      // Filter out clearly wrong values (negative or > 7 days)
+      if (timeToFirstSave < 0 || timeToFirstSave > (7 * 24 * 60)) {
+        timeToFirstSave = null
+      }
+    }
+  }
   
   // Build audit result
   const result: AuditResult = {
