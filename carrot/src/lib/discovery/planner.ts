@@ -1339,6 +1339,45 @@ export async function seedFrontierFromPlan(patchId: string, plan: DiscoveryPlan)
         plan.seedCandidates.push(...citationSeeds)
         console.log(`[Seed Planner] Added ${citationSeeds.length} Wikipedia citations to seed candidates`)
       }
+      
+      // Add news sources as seeds
+      const newsSources = discoveryResult.sources.filter(s => s.type === 'news' && s.source === 'NewsAPI')
+      if (newsSources.length > 0) {
+        console.log(`[Seed Planner] ✅ Found ${newsSources.length} news sources from NewsAPI`)
+        newsSources.slice(0, 5).forEach((s, i) => {
+          console.log(`[Seed Planner]   ${i + 1}. ${s.title} - ${s.url.substring(0, 80)}`)
+        })
+        if (newsSources.length > 5) {
+          console.log(`[Seed Planner]   ... and ${newsSources.length - 5} more`)
+        }
+      } else {
+        console.warn('[Seed Planner] ⚠️  No news sources found in discovery results')
+        console.warn('[Seed Planner]   This may indicate NewsAPI search returned no results or was filtered out')
+      }
+      
+      const newsSeeds: PlannerSeedCandidate[] = newsSources
+        .map(source => ({
+          url: source.url,
+          titleGuess: source.title,
+          category: 'news' as PlannerSeedCategory,
+          angle: source.description.substring(0, 200) || 'News article',
+          expectedInsights: [source.description.substring(0, 100)],
+          credibilityTier: 3 as const, // News is less authoritative than academic sources
+          sourceType: 'news' as const,
+          priority: 3 as const,
+          notes: `NewsAPI: ${source.metadata.author ? `by ${source.metadata.author}` : ''} ${source.metadata.publishedAt ? `(${source.metadata.publishedAt})` : ''}`.trim()
+        }))
+      
+      if (newsSeeds.length > 0) {
+        if (!plan.seedCandidates) {
+          plan.seedCandidates = []
+        }
+        plan.seedCandidates.push(...newsSeeds)
+        console.log(`[Seed Planner] ✅ Added ${newsSeeds.length} news articles to seed candidates`)
+        console.log(`[Seed Planner] Sample news seeds:`, newsSeeds.slice(0, 3).map(s => ({ title: s.titleGuess, url: s.url })))
+      } else {
+        console.warn(`[Seed Planner] ⚠️  No news seeds to add (filtered ${newsSources.length} sources)`)
+      }
     }
   } catch (error) {
     console.error('[Seed Planner] Error running MultiSourceOrchestrator:', error)

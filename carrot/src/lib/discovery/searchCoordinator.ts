@@ -153,10 +153,14 @@ Generate a comprehensive search strategy to discover the BEST authoritative cont
         strategy.newsKeywords = strategy.newsKeywords || []
         strategy.academicTerms = strategy.academicTerms || []
         strategy.technicalTerms = strategy.technicalTerms || []
-        // Ensure Anna's Archive is always included for comprehensive discovery
+        // Ensure Anna's Archive and NewsAPI are always included for comprehensive discovery
         strategy.primarySources = strategy.primarySources || ['Wikipedia', 'NewsAPI', 'AnnasArchive']
         if (!strategy.primarySources.includes('AnnasArchive') && !strategy.primarySources.includes('Books')) {
           strategy.primarySources.push('AnnasArchive')
+        }
+        // Ensure NewsAPI is always included
+        if (!strategy.primarySources.includes('NewsAPI')) {
+          strategy.primarySources.push('NewsAPI')
         }
         strategy.searchDepth = strategy.searchDepth || 'medium'
         

@@ -274,14 +274,20 @@ export class MultiSourceOrchestrator {
     const sources: DiscoveredSource[] = []
 
     try {
+      console.log(`[MultiSourceOrchestrator] Searching NewsAPI with ${strategy.newsKeywords.length} keywords:`, strategy.newsKeywords)
+      
       // Determine max articles per keyword based on depth
       const maxPerKeyword = strategy.searchDepth === 'shallow' ? 5 
                            : strategy.searchDepth === 'medium' ? 10 
                            : 20
 
+      console.log(`[MultiSourceOrchestrator] NewsAPI search depth: ${strategy.searchDepth}, max per keyword: ${maxPerKeyword}`)
+      
       const articles = await NewsSource.searchMultiple(strategy.newsKeywords, {
         maxPerKeyword
       })
+
+      console.log(`[MultiSourceOrchestrator] NewsAPI returned ${articles.length} articles`)
 
       for (const article of articles) {
         // Canonicalize URL
@@ -309,8 +315,11 @@ export class MultiSourceOrchestrator {
         })
       }
 
+      console.log(`[MultiSourceOrchestrator] NewsAPI: Added ${sources.length} unique news sources (${this.duplicateCount} duplicates filtered)`)
+
     } catch (error: any) {
-      console.error('[NewsAPI] Error:', error)
+      console.error('[MultiSourceOrchestrator] NewsAPI Error:', error)
+      console.error('[MultiSourceOrchestrator] NewsAPI Error details:', error?.message, error?.stack)
     }
 
     return sources
