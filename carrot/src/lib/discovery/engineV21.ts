@@ -851,8 +851,27 @@ export class DiscoveryEngineV21 {
         continue
       }
 
-      await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
-      candidateCount++
+      // Wrap in try-catch to prevent single item failure from stopping entire loop
+      try {
+        await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
+        candidateCount++
+      } catch (error: any) {
+        // Log error but continue processing
+        console.error(`[EngineV21] Error processing candidate ${candidate.cursor?.substring(0, 100)}:`, error)
+        this.structuredLog('candidate_processing_error', {
+          url: candidate.cursor?.substring(0, 100),
+          provider: candidate.provider,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        await this.emitAudit('processing_error', 'fail', {
+          candidateUrl: candidate.cursor,
+          provider: candidate.provider,
+          error: this.formatError(error)
+        })
+        this.metrics.failures++
+        // Continue to next candidate instead of stopping
+        candidateCount++
+      }
 
       if (this.stopRequested) {
         break
@@ -892,7 +911,13 @@ export class DiscoveryEngineV21 {
     await Promise.all(
       burst.map(async (candidate) => {
         if (this.stopRequested) return
-        await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
+        try {
+          await this.processCandidateWithBookkeeping(candidate, coveredAngles, startTime)
+        } catch (error: any) {
+          // Log error but don't stop processing other candidates
+          console.error(`[EngineV21] Error processing priority burst candidate:`, error)
+          this.metrics.failures++
+        }
       })
     )
 
@@ -3015,6 +3040,7 @@ Return ONLY valid JSON array, no other text.`
                     domain,
                     sourceDomain: canonicalHost,
                     publishDate: candidate.meta?.publishDate ?? null,
+                    type: this.isAnnasArchiveUrl(canonicalUrl) ? 'book' : (candidate.meta?.type as string | undefined) || 'article', // Set type: 'book' for Anna's Archive, default to 'article'
                     category: (candidate.meta?.category as string | undefined) || null,
                     isControversy,
                     isHistory,
@@ -3066,6 +3092,7 @@ Return ONLY valid JSON array, no other text.`
                     domain,
                     sourceDomain: canonicalHost,
                     publishDate: candidate.meta?.publishDate ?? null,
+                    type: this.isAnnasArchiveUrl(canonicalUrl) ? 'book' : (candidate.meta?.type as string | undefined) || 'article', // Set type: 'book' for Anna's Archive, default to 'article'
                     category: (candidate.meta?.category as string | undefined) || null,
                     isControversy,
                     isHistory,
