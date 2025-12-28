@@ -70,7 +70,7 @@ interface AuditData {
 
 export default function CitationsAuditPage() {
   const params = useParams()
-  const handle = params.handle as string
+  const handle = params?.handle as string | undefined
   const [data, setData] = useState<AuditData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +78,12 @@ export default function CitationsAuditPage() {
   const [sortBy, setSortBy] = useState<'score' | 'created' | 'scanned'>('score')
 
   useEffect(() => {
+    if (!handle) {
+      setError('Missing patch handle')
+      setLoading(false)
+      return
+    }
+
     async function fetchData() {
       try {
         const response = await fetch(`/api/patches/${handle}/citations-audit`)
