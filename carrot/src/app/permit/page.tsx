@@ -213,7 +213,7 @@ export default function PermitPage() {
           <div>
             <p className="text-xs text-gray-500 tracking-widest uppercase mb-1">Cherokee County, GA · New SFR Construction</p>
             <h1 className="text-2xl font-bold text-white">Permit Tracker</h1>
-            <p className="text-sm text-gray-400 mt-1">146 & 148 Sherwood Ln, Canton GA 30115 · 4.22 acres · DES Project #26-306</p>
+            <p className="text-sm text-gray-400 mt-1" suppressHydrationWarning>146 & 148 Sherwood Ln, Canton GA 30115 · 4.22 acres · DES Project #26-306</p>
           </div>
           <div className="text-right">
             <div className="text-4xl font-extrabold text-green-400">{pct}%</div>
