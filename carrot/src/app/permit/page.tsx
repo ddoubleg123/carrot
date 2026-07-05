@@ -103,10 +103,12 @@ const INITIAL_STATE: State = {
   status: {
     'p1-1': 'done',
     'p1-3': 'done',
+    'p3-1': 'progress', // Septic permit — email sent 7/5/2026
   },
   notes: {
     'p1-1': 'COMPLETE — DES Report #26.306.1, dated 6/9/2026. Study date 6/1/2026. Rep: Ben Moers. Soils: Cecil (A), Pacolet (A), Hard Labor II (P). All suitable for conventional septic. Parcels 03N18 168 & 03N18 169, 4.21 acres, 3.54 acres evaluated.',
     'p1-3': 'COMPLETE — Combination plat (Lots 5, 6 & portion of 7) drafted by DES, Project #26-306. Signed Change Order #1 on 6/12/2026. Plat in DRAFT, submitted for Cherokee County review. 4.22 acres total. Recording fee $35 included in CO#1.',
+    'p3-1': 'IN PROGRESS — Email sent 7/5/2026 with DES soil report attached. Awaiting response. Call: 770-479-0444. Buffer constraint: septic cannot be placed within 75-ft impervious setback from eastern stream per Cherokee County Stormwater (Andrea Yager, 7/5/2026).',
   },
   dates: {
     'p1-1': '2026-06-09',
@@ -115,6 +117,7 @@ const INITIAL_STATE: State = {
   assignee: {
     'p1-1': 'DES / Ben Moers',
     'p1-3': 'DES / Rebecca Martin',
+    'p3-1': 'NGHD Environmental Health',
   },
 };
 
