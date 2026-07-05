@@ -95,6 +95,30 @@ type State = {
   assignee: Record<string, string>;
 };
 
+// Seed state for completed items — only applied on first load (no existing localStorage)
+const INITIAL_STATE: State = {
+  checked: {
+    'p1-1': true,  // Level 3 Soil Survey — complete
+    'p1-3': true,  // Boundary Survey — covered by combination plat
+  },
+  status: {
+    'p1-1': 'done',
+    'p1-3': 'done',
+  },
+  notes: {
+    'p1-1': 'COMPLETE — DES Report #26.306.1, dated 6/9/2026. Study date 6/1/2026. Rep: Ben Moers. Soils: Cecil (A), Pacolet (A), Hard Labor II (P). All suitable for conventional septic. Parcels 03N18 168 & 03N18 169, 4.21 acres, 3.54 acres evaluated.',
+    'p1-3': 'COMPLETE — Combination plat (Lots 5, 6 & portion of 7) drafted by DES, Project #26-306. Signed Change Order #1 on 6/12/2026. Plat in DRAFT, submitted for Cherokee County review. 4.22 acres total. Recording fee $35 included in CO#1.',
+  },
+  dates: {
+    'p1-1': '2026-06-09',
+    'p1-3': '2026-06-12',
+  },
+  assignee: {
+    'p1-1': 'DES / Ben Moers',
+    'p1-3': 'DES / Rebecca Martin',
+  },
+};
+
 const STATUS_CYCLE = ['todo', 'progress', 'blocked'];
 const STATUS_LABELS: Record<string, string> = { todo: 'To Do', progress: 'In Progress', blocked: 'Blocked', done: 'Done' };
 const STATUS_COLORS: Record<string, string> = {
@@ -105,7 +129,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function PermitPage() {
-  const [state, setState] = useState<State>({ checked: {}, notes: {}, status: {}, dates: {}, assignee: {} });
+  const [state, setState] = useState<State>(INITIAL_STATE);
   const [openPhases, setOpenPhases] = useState<Record<string, boolean>>({});
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState('all');
@@ -116,6 +140,7 @@ export default function PermitPage() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setState(JSON.parse(raw));
+      else localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_STATE));
     } catch {}
   }, []);
 
