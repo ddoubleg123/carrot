@@ -8,9 +8,8 @@ const PHASES = [
     subtitle: 'Do these first — they govern everything else', color: '#0ea5e9',
     items: [
       { id: 'p1-1', text: 'Level 3 Soil Survey', agency: 'Environmental Health / DES', note: 'Georgia DPH certified Soil Classifier. Required before septic permit. Determines septic field location across both lots. Borings to 6 ft, USDA Soil Series classification, suitability codes, and soil map.' },
-      { id: 'p1-2', text: 'Wetlands Delineation', agency: 'USACE / DES', note: 'USACE jurisdictional determination. Controls buildable area, septic placement, and 25-ft undisturbed / 75-ft impervious setbacks. Do before any design work.' },
-      { id: 'p1-3', text: 'Boundary Survey', agency: 'Licensed Surveyor', note: 'Must be less than 2 years old for building permit submittal. Covers combined footprint of both lots.' },
-      { id: 'p1-4', text: 'Topographic Survey', agency: 'Licensed Surveyor', note: '2-foot contour intervals, NAVD 88 datum. Required on all grading and drainage submittals. Must show offsite drainage areas and flow arrows.' },
+      { id: 'p1-3', text: 'Combination Plat / Boundary Survey', agency: 'Licensed Surveyor / DES', note: 'Must be less than 2 years old for building permit submittal. Covers combined footprint of both lots.' },
+      { id: 'p1-4', text: 'Topographic Survey', agency: 'Licensed Surveyor / DES', note: '2-foot contour intervals, NAVD 88 datum. Required on all grading and drainage submittals. Must show offsite drainage areas and flow arrows. Not included in soil report or combination plat — separate deliverable needed from DES.' },
       { id: 'p1-5', text: 'Floodplain Analysis / Flood Study', agency: 'PE / DES', note: 'Confirm eastern drainage feature classification. Min finished floor = 3.0 ft above 100-yr FEMA BFE or 1.0 ft above Cherokee County Future Conditions BFE, whichever is higher.' },
     ]
   },
