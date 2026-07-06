@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v2';
+const STORAGE_KEY = 'permit-tracker-v3';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -109,34 +109,35 @@ type State = {
 const INITIAL_STATE: State = {
   checked: {
     'p1-1': true,
-    'p1-3': false, // drafted, not yet recorded
-    'p1-4': true,  // topo collected per DES 7/6/2026
+    'p1-3': false,
+    'p1-4': true,
   },
   status: {
     'p1-1': 'done',
-    'p1-3': 'progress', // pending recording
+    'p1-3': 'progress',
     'p1-4': 'done',
     'p3-0a': 'todo',
     'p3-0b': 'progress',
     'p3-0c': 'todo',
     'p3-0d': 'todo',
-    'p3-1': 'blocked', // blocked on 0a/0b/0c/0d
+    'p3-1': 'progress',
   },
   notes: {
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
-    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED before septic app accepted.',
+    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted. Plat book reference: Lots 5, 6 & portion of 7, Sherwood Forest.',
     'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end.',
-    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording.',
-    'p3-1': 'County responded 7/6/2026 (CherokeeEH@dph.ga.gov). Blocked on: recorded plat, signed soil report, address, property marking.',
+    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording. Lot numbers are 5 & 6 (not 8).',
+    'p3-1': 'IN PROGRESS — Application sent 7/6/2026 to CherokeeEH@dph.ga.gov. County responded same day with requirements checklist. No lot disturbance permitted until septic permit issued (DPH Rule 511-3-1). Blocked on: recorded plat, hand-signed soil report, property address confirmed, property staked.',
   },
   dates: {
     'p1-1': '2026-06-09',
     'p1-3': '2026-06-12',
+    'p3-1': '2026-07-06',
   },
   assignee: {
     'p1-1': 'DES / Ben Moers',
     'p1-3': 'DES / Rebecca Martin',
-    'p3-1': 'NGHD',
+    'p3-1': 'CherokeeEH@dph.ga.gov',
   },
 };
 
