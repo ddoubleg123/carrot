@@ -16,8 +16,8 @@ const PHASES = [
     subtitle: 'Do these first — they govern everything else', color: '#0ea5e9',
     items: [
       { id: 'p1-1', text: 'Level 3 Soil Survey', agency: 'DES / Ben Moers', note: 'COMPLETE — Report #26.306.1, 6/9/2026. Soils: Cecil (A), Pacolet (A), Hard Labor II (P). All suitable for conventional septic. 4.21 acres, 3.54 evaluated.' },
-      { id: 'p1-3', text: 'Combination Plat / Boundary Survey', agency: 'DES / Rebecca Martin', note: 'COMPLETE — Lots 5, 6 & portion of 7 combined. Change Order #1 signed 6/12/2026. Draft submitted for Cherokee County review. 4.22 acres.' },
-      { id: 'p1-4', text: 'Topographic Survey', agency: 'DES', note: '2-ft contour intervals, NAVD 88 datum. Required for all grading/drainage submittals. Not in current DES scope — pending scope reply from Austin.', actionNow: 'Awaiting DES reply on scope. If not included, request quote to add.' },
+      { id: 'p1-3', text: 'Combination Plat / Boundary Survey', agency: 'DES / Rebecca Martin', note: 'DRAFTED — CO#1 signed 6/12/2026. Submitted for Cherokee County review. Must be RECORDED before septic permit application can be processed.' },
+      { id: 'p1-4', text: 'Topographic Survey', agency: 'DES', note: 'COMPLETE — Topo data collected as part of original contract scope. CAD file to be delivered at project end. Can be used by any engineer for plan production.' },
     ]
   },
   {
@@ -36,7 +36,11 @@ const PHASES = [
     id: 'phase3', label: 'Phase 3', title: 'Pre-Permit Applications',
     subtitle: 'Must be approved before building permit is issued', color: '#f59e0b',
     items: [
-      { id: 'p3-1', text: 'Septic Permit — Environmental Health', agency: 'NGHD', note: 'Email sent 7/5/2026 with soil report. Septic cannot be placed within 75-ft impervious setback from eastern stream (confirmed Cherokee County). Awaiting NGHD response.', actionNow: 'Call 770-479-0444 Monday to follow up if no email response received.' },
+      { id: 'p3-0a', text: 'Get Property Address', agency: 'Cherokee County GIS', note: 'Required before septic permit application. If no address assigned yet, contact GIS.', actionNow: 'Call GIS 678-493-6050 to confirm or obtain address for 146 & 148 Sherwood Ln.' },
+      { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'Cherokee County / DES', note: 'County EH requires a RECORDED plat showing lots combined before septic application will be processed. Currently in DRAFT/review status.', actionNow: 'Follow up with DES on recording status. No septic app until this is done.' },
+      { id: 'p3-0c', text: 'Hand-Signed Original Soil Report', agency: 'DES / Ben Moers', note: 'Cherokee County EH requires original wet-signature copy from soil scientist. Email copy is not sufficient. Can be submitted directly by DES to EH electronically.', actionNow: 'Contact Ben Moers at DES to request hand-signed original or direct electronic submission to CherokeeEH@dph.ga.gov.' },
+      { id: 'p3-0d', text: 'Mark / Flag Property', agency: 'Owner', note: 'Property must be marked/staked before county EH site visit. Required before permit is issued.', actionNow: 'Flag lot corners and proposed house location before county site visit.' },
+      { id: 'p3-1', text: 'Septic Permit Application — Submit', agency: 'NGHD / CherokeeEH@dph.ga.gov', note: 'Email sent 7/5/2026. County responded 7/6/2026 with requirements. Cannot submit until: recorded plat, hand-signed soil report, property address, and property marking are all complete. No lot disturbance before permit issued.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
       { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Sherwood Ln has no curb & gutter. Apply through DSC before building permit.' },
       { id: 'p3-4', text: 'NOI — Georgia EPD (if tertiary permittee)', agency: 'Georgia EPD', note: 'Required if lot was purchased from a larger previously permitted development.' },
@@ -105,21 +109,25 @@ type State = {
 const INITIAL_STATE: State = {
   checked: {
     'p1-1': true,
-    'p1-3': true,
+    'p1-3': false, // drafted, not yet recorded
+    'p1-4': true,  // topo collected per DES 7/6/2026
   },
   status: {
     'p1-1': 'done',
-    'p1-3': 'done',
-    'p1-4': 'progress',
-    'p3-1': 'progress',
-    'u1': 'todo',
-    'u2': 'todo',
+    'p1-3': 'progress', // pending recording
+    'p1-4': 'done',
+    'p3-0a': 'todo',
+    'p3-0b': 'progress',
+    'p3-0c': 'todo',
+    'p3-0d': 'todo',
+    'p3-1': 'blocked', // blocked on 0a/0b/0c/0d
   },
   notes: {
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
-    'p1-3': 'COMPLETE — CO#1 signed 6/12/2026. Draft submitted Cherokee County. 4.22 acres.',
-    'p1-4': 'Awaiting scope reply from Austin at DES.',
-    'p3-1': 'Email sent 7/5/2026 with soil report. Septic outside 75-ft stream setback. Call 770-479-0444 Monday.',
+    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED before septic app accepted.',
+    'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end.',
+    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording.',
+    'p3-1': 'County responded 7/6/2026 (CherokeeEH@dph.ga.gov). Blocked on: recorded plat, signed soil report, address, property marking.',
   },
   dates: {
     'p1-1': '2026-06-09',
