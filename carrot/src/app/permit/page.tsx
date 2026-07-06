@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v3';
+const STORAGE_KEY = 'permit-tracker-v4';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -116,6 +116,12 @@ const INITIAL_STATE: State = {
     'p1-1': 'done',
     'p1-3': 'progress',
     'p1-4': 'done',
+    'p2-1': 'todo',
+    'p2-2': 'todo',
+    'p2-3': 'todo',
+    'p2-4': 'todo',
+    'p2-5': 'progress',
+    'p2-6': 'todo',
     'p3-0a': 'todo',
     'p3-0b': 'progress',
     'p3-0c': 'todo',
@@ -124,10 +130,12 @@ const INITIAL_STATE: State = {
   },
   notes: {
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
-    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted. Plat book reference: Lots 5, 6 & portion of 7, Sherwood Forest.',
-    'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end.',
-    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording. Lot numbers are 5 & 6 (not 8).',
-    'p3-1': 'IN PROGRESS — Application sent 7/6/2026 to CherokeeEH@dph.ga.gov. County responded same day with requirements checklist. No lot disturbance permitted until septic permit issued (DPH Rule 511-3-1). Blocked on: recorded plat, hand-signed soil report, property address confirmed, property staked.',
+    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
+    'p1-4': 'COMPLETE — Topo data collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end. Other engineers can use the CAD file.',
+    'p2-5': 'IN PROGRESS — Austin (DES) reached out to Rashid (architect) 7/6/2026 requesting PDF or CAD of architectural drawings to produce site plan. Rashid confirmed delivery once plans are stable. Priority: first floor + ADU per Daniel 7/6/2026.',
+    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording. Lot numbers are 5 & 6.',
+    'p3-0c': 'Ben Moers (DES) to handle — can submit electronically directly to CherokeeEH@dph.ga.gov.',
+    'p3-1': 'IN PROGRESS — Application sent 7/6/2026. County responded same day with requirements. No lot disturbance until permit issued (DPH Rule 511-3-1). Blocked on: recorded plat, hand-signed soil report, address confirmed, property staked.',
   },
   dates: {
     'p1-1': '2026-06-09',
@@ -137,6 +145,8 @@ const INITIAL_STATE: State = {
   assignee: {
     'p1-1': 'DES / Ben Moers',
     'p1-3': 'DES / Rebecca Martin',
+    'p2-5': 'DES (Austin) + Rashid Garuba',
+    'p3-0c': 'DES / Ben Moers',
     'p3-1': 'CherokeeEH@dph.ga.gov',
   },
 };
@@ -375,7 +385,7 @@ export default function PermitPage() {
 
         <div className="mt-6 rounded-xl border border-gray-800 bg-gray-900 px-5 py-4 text-xs text-gray-500 leading-7">
           <span className="text-gray-400 font-medium">Contacts: </span>
-          DSC (770) 721-7810 · Becky Kerstetter bkerstetter@cherokeecountyga.gov · Stormwater stormwater@cherokeecountyga.gov · Andrea Yager adyager@cherokeecountyga.gov · NGHD Env. Health 770-479-0444 · DES (706) 265-1234 · CCWSA 770-479-1813 · CityView cityview.cherokeega.com
+          DSC (770) 721-7810 · Becky Kerstetter bkerstetter@cherokeecountyga.gov · Stormwater stormwater@cherokeecountyga.gov · Andrea Yager adyager@cherokeecountyga.gov · NGHD Env. Health 770-479-0444 · DES Austin McKinney amckinney@davisengineers.com (706) 265-1234 · Ben Moers bmoers@davisengineers.com · Rashid Garuba (architect) rashidgaruba@gmail.com 770-242-7809 · CCWSA 770-479-1813 · CityView cityview.cherokeega.com
           <br/>
           <span className="text-gray-400 font-medium">Notes: </span>
           50-ft undisturbed buffer + 75-ft impervious setback from eastern stream · No floodplain on parcels (confirmed 7/5/2026) · Lot combination must precede all other activities · 2024 I-Codes in effect Jan 1 2026 · No cash at DSC
