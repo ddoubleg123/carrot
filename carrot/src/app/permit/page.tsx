@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v4';
+const STORAGE_KEY = 'permit-tracker-v5';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -111,8 +111,12 @@ const INITIAL_STATE: State = {
     'p1-1': true,
     'p1-3': false,
     'p1-4': true,
+    'u1': true,
+    'p3-0a': true,
   },
   status: {
+    'u1': 'done',
+    'u2': 'todo',
     'p1-1': 'done',
     'p1-3': 'progress',
     'p1-4': 'done',
@@ -122,20 +126,22 @@ const INITIAL_STATE: State = {
     'p2-4': 'todo',
     'p2-5': 'progress',
     'p2-6': 'todo',
-    'p3-0a': 'todo',
+    'p3-0a': 'done',
     'p3-0b': 'progress',
     'p3-0c': 'todo',
     'p3-0d': 'todo',
     'p3-1': 'progress',
   },
   notes: {
+    'u1': 'COMPLETE — Brad Payne (CCWSA) confirmed 7/13/2026. Public water on Sherwood Ln. Single 1" domestic meter approved for main house + ADU + pool. ADU does NOT require separate meter. Static pressure 90–110 PSI — no booster pump needed. Meter application submitted: 1" domestic + ¾" irrigation. Contact: bradp@cherokeewaterga.gov',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
     'p1-4': 'COMPLETE — Topo data collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end. Other engineers can use the CAD file.',
     'p2-5': 'IN PROGRESS — Austin (DES) reached out to Rashid (architect) 7/6/2026 requesting PDF or CAD of architectural drawings to produce site plan. Rashid confirmed delivery once plans are stable. Priority: first floor + ADU per Daniel 7/6/2026.',
+    'p3-0a': 'COMPLETE — Address confirmed: 146 Sherwood Lane, Canton GA 30115. Used on septic and water meter applications.',
     'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording. Lot numbers are 5 & 6.',
     'p3-0c': 'Ben Moers (DES) to handle — can submit electronically directly to CherokeeEH@dph.ga.gov.',
-    'p3-1': 'IN PROGRESS — Application sent 7/6/2026. County responded same day with requirements. No lot disturbance until permit issued (DPH Rule 511-3-1). Blocked on: recorded plat, hand-signed soil report, address confirmed, property staked.',
+    'p3-1': 'IN PROGRESS — Application sent 7/6/2026. County responded same day. Blocked on: recorded plat, hand-signed soil report, property staked.',
   },
   dates: {
     'p1-1': '2026-06-09',
