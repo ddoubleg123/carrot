@@ -7,7 +7,7 @@ const PHASES = [
     id: 'phase0', label: 'Utilities', title: 'Utilities & Infrastructure',
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
-      { id: 'u1', text: 'CCWSA — Water Service', agency: 'CCWSA / Brad Payne', note: 'COMPLETE — Brad Payne confirmed 7/13/2026. Public water available on Sherwood Ln. Single 1" domestic meter approved for main house + ADU + pool off one tap and internal manifold. ADU does NOT require a separate meter. Static pressure 90–110 PSI — no booster pump needed. Meter application submitted: 1" domestic + ¾" irrigation. Contact: bradp@cherokeewaterga.gov' },
+      { id: 'u1', text: 'CCWSA — Water Service', agency: 'CCWSA / Brad Payne', note: 'COMPLETE — No sewer on Sherwood Ln, septic confirmed as only path. Water meter application submitted 7/11/2026: 1" domestic + ¾" irrigation. Brad Payne confirmed 7/13/2026: single 1" meter approved for main house + ADU + pool. Static pressure 90–110 PSI, no booster pump needed. Contact: bradp@cherokeewaterga.gov' },
       { id: 'u2', text: 'Georgia Power — New Service Connection', agency: 'Georgia Power', note: 'Request new service connection. Lead times run 3–6 months — get in line now. No architectural plans needed to start the process.', actionNow: 'Call Georgia Power residential new service line. Request connection for 146 Sherwood Ln. Ask for cost estimate and timeline.' },
     ]
   },
@@ -36,11 +36,11 @@ const PHASES = [
     id: 'phase3', label: 'Phase 3', title: 'Pre-Permit Applications',
     subtitle: 'Must be approved before building permit is issued', color: '#f59e0b',
     items: [
-      { id: 'p3-0a', text: 'Get Property Address', agency: 'Cherokee County GIS', note: 'Required before septic permit application. If no address assigned yet, contact GIS.', actionNow: 'Call GIS 678-493-6050 to confirm or obtain address for 146 & 148 Sherwood Ln.' },
-      { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'Cherokee County / DES', note: 'County EH requires a RECORDED plat showing lots combined before septic application will be processed. Currently in DRAFT/review status.', actionNow: 'Follow up with DES on recording status. No septic app until this is done.' },
-      { id: 'p3-0c', text: 'Hand-Signed Original Soil Report', agency: 'DES / Ben Moers', note: 'Cherokee County EH requires original wet-signature copy from soil scientist. Email copy is not sufficient. Can be submitted directly by DES to EH electronically.', actionNow: 'Contact Ben Moers at DES to request hand-signed original or direct electronic submission to CherokeeEH@dph.ga.gov.' },
-      { id: 'p3-0d', text: 'Mark / Flag Property', agency: 'Owner', note: 'Property must be marked/staked before county EH site visit. Required before permit is issued.', actionNow: 'Flag lot corners and proposed house location before county site visit.' },
-      { id: 'p3-1', text: 'Septic Permit Application — Submit', agency: 'NGHD / CherokeeEH@dph.ga.gov', note: 'Email sent 7/5/2026. County responded 7/6/2026 with requirements. Cannot submit until: recorded plat, hand-signed soil report, property address, and property marking are all complete. No lot disturbance before permit issued.' },
+      { id: 'p3-0a', text: 'Property Address Confirmed', agency: 'Owner', note: 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed and used on all applications.' },
+      { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'DES / Rebecca Martin', note: 'DES draft submitted. Awaiting Cherokee County approval and recording. Lots 5 & 6. Daniel assigned this to DES (Item 7 in county checklist). Required before septic app can be processed.', actionNow: 'Follow up with DES on recording status — this is the critical blocker.' },
+      { id: 'p3-0c', text: 'Hand-Signed Soil Report + House Location on Map', agency: 'DES / Ben Moers + Rashid', note: 'Ben Moers to provide original signed soil report with insurance page to CherokeeEH@dph.ga.gov (Item 2). Rashid to draw house location + driveway on copy of soil map (Item 4). Will not hold up site visit but required before permit is issued.', actionNow: 'Follow up with Ben and Rashid — both need to deliver their part of this.' },
+      { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES (coord. with Rashid)', note: 'DES to stake house/building size and property perimeter lines (every 50 ft) per county requirement (Item 6). Must coordinate with Rashid on house footprint location before DES can stake. No action until plans are stable enough to confirm house location.', actionNow: 'Waiting on Rashid stable plans before DES can stake house location.' },
+      { id: 'p3-1', text: 'Septic Permit Application — Submitted', agency: 'CherokeeEH@dph.ga.gov', note: 'Application submitted 7/6/2026 by Daniel. County responded same day with 8-item checklist. Assignments made to Ben, Rashid, and DES. No lot disturbance until permit issued (DPH Rule 511-3-1). Outstanding: recorded plat, signed soil report + house location, property staking.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
       { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Sherwood Ln has no curb & gutter. Apply through DSC before building permit.' },
       { id: 'p3-4', text: 'NOI — Georgia EPD (if tertiary permittee)', agency: 'Georgia EPD', note: 'Required if lot was purchased from a larger previously permitted development.' },
@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v5';
+const STORAGE_KEY = 'permit-tracker-v6';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -128,20 +128,21 @@ const INITIAL_STATE: State = {
     'p2-6': 'todo',
     'p3-0a': 'done',
     'p3-0b': 'progress',
-    'p3-0c': 'todo',
-    'p3-0d': 'todo',
+    'p3-0c': 'progress',
+    'p3-0d': 'blocked',
     'p3-1': 'progress',
   },
   notes: {
-    'u1': 'COMPLETE — Brad Payne (CCWSA) confirmed 7/13/2026. Public water on Sherwood Ln. Single 1" domestic meter approved for main house + ADU + pool. ADU does NOT require separate meter. Static pressure 90–110 PSI — no booster pump needed. Meter application submitted: 1" domestic + ¾" irrigation. Contact: bradp@cherokeewaterga.gov',
+    'u1': 'COMPLETE — No sewer on Sherwood Ln, septic is the only path. Water meter application submitted 7/11/2026: 1" domestic + ¾" irrigation. Brad Payne confirmed 7/13/2026: single meter approved for main house + ADU + pool. Pressure 90–110 PSI.',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
-    'p1-4': 'COMPLETE — Topo data collected in original scope per Austin McKinney 7/6/2026. CAD file delivered at project end. Other engineers can use the CAD file.',
-    'p2-5': 'IN PROGRESS — Austin (DES) reached out to Rashid (architect) 7/6/2026 requesting PDF or CAD of architectural drawings to produce site plan. Rashid confirmed delivery once plans are stable. Priority: first floor + ADU per Daniel 7/6/2026.',
-    'p3-0a': 'COMPLETE — Address confirmed: 146 Sherwood Lane, Canton GA 30115. Used on septic and water meter applications.',
-    'p3-0b': 'DES draft submitted. Awaiting Cherokee County approval and recording. Lot numbers are 5 & 6.',
-    'p3-0c': 'Ben Moers (DES) to handle — can submit electronically directly to CherokeeEH@dph.ga.gov.',
-    'p3-1': 'IN PROGRESS — Application sent 7/6/2026. County responded same day. Blocked on: recorded plat, hand-signed soil report, property staked.',
+    'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file at project end.',
+    'p2-5': 'IN PROGRESS — Austin (DES) reached out to Rashid 7/6/2026 for drawings. Rashid confirmed delivery once plans stable. Priority: first floor + ADU.',
+    'p3-0a': 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed on all applications.',
+    'p3-0b': 'DES responsible (Daniel Item 7). Draft submitted, awaiting county recording. Critical blocker for septic permit.',
+    'p3-0c': 'Ben Moers: signed soil report + insurance page → CherokeeEH@dph.ga.gov (Item 2). Rashid: draw house location + driveway on soil map copy (Item 4). Both in progress.',
+    'p3-0d': 'DES to stake house + property perimeter every 50 ft (Item 6). Blocked until Rashid delivers stable plans so house footprint can be confirmed.',
+    'p3-1': 'Application submitted 7/6/2026. County 8-item checklist assigned to Daniel (1,3 ✅), Ben (2), Rashid (4), DES+Rashid (5,6), DES (7). No lot disturbance until permit issued.',
   },
   dates: {
     'p1-1': '2026-06-09',
@@ -152,7 +153,9 @@ const INITIAL_STATE: State = {
     'p1-1': 'DES / Ben Moers',
     'p1-3': 'DES / Rebecca Martin',
     'p2-5': 'DES (Austin) + Rashid Garuba',
-    'p3-0c': 'DES / Ben Moers',
+    'p3-0b': 'DES / Rebecca Martin',
+    'p3-0c': 'Ben Moers + Rashid Garuba',
+    'p3-0d': 'DES + Rashid Garuba',
     'p3-1': 'CherokeeEH@dph.ga.gov',
   },
 };
