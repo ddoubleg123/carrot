@@ -7,7 +7,7 @@ const PHASES = [
     id: 'phase0', label: 'Utilities', title: 'Utilities & Infrastructure',
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
-      { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Application submitted + payment made 7/13/2026. Updated to 1" domestic meter only (¾" irrigation removed). CCWSA will send a confirmation document — print it, place in waterproof sleeve, stake at desired underground meter location on lot. No sewer on Sherwood Ln — septic is confirmed only path. Pressure 90–110 PSI. Contact: bradp@cherokeewaterga.gov', actionNow: 'Awaiting CCWSA confirmation document. When received: print → waterproof sleeve → stake at meter location on lot.' },
+      { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Payment made 7/13/2026. Service Request #425859. 1" meter. $4,675 paid by credit card ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. Location of Water Service card received — must be posted at right-of-way on Sherwood Ln, visible from road, within 24 hours of purchase. CCWSA installs 2–4 weeks after card is posted. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com. No sewer on Sherwood Ln — septic is only path.', actionNow: '⚠️ URGENT — Post Location of Water Service card (#425859) on the right-of-way at Sherwood Ln NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. Meter installed 2–4 weeks after posting.' },
       { id: 'u2', text: 'Georgia Power — New Service Connection', agency: 'Georgia Power', note: 'Request new service connection. Lead times run 3–6 months — get in line now. No architectural plans needed to start the process.', actionNow: 'Call Georgia Power residential new service line. Request connection for 146 Sherwood Ln. Ask for cost estimate and timeline.' },
     ]
   },
@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v7';
+const STORAGE_KEY = 'permit-tracker-v8';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -132,7 +132,7 @@ const INITIAL_STATE: State = {
     'p3-1': 'progress',
   },
   notes: {
-    'u1': 'COMPLETE — No sewer on Sherwood Ln, septic only path. Application submitted + payment made 7/13/2026. 1" domestic meter only (¾" irrigation removed). Awaiting CCWSA confirmation document — print, waterproof sleeve, stake at meter location on lot.',
+    'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way within 24hrs of purchase (7/13/2026). $4,675 paid. 1" meter. SR#425859. CCWSA installs 2–4 weeks after card posted.',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
     'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file at project end.',
