@@ -7,7 +7,7 @@ const PHASES = [
     id: 'phase0', label: 'Utilities', title: 'Utilities & Infrastructure',
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
-      { id: 'u1', text: 'CCWSA — Water & Sewer Availability Check', agency: 'CCWSA', note: 'Confirm if public water/sewer runs on Sherwood Ln. Determines whether well + septic are required or if public tap-in is possible.', actionNow: 'Call 770-479-1813. Ask: "Do you have water/sewer service on Sherwood Lane, Canton 30115?"' },
+      { id: 'u1', text: 'CCWSA — Water Service', agency: 'CCWSA / Brad Payne', note: 'COMPLETE — Brad Payne confirmed 7/13/2026. Public water available on Sherwood Ln. Single 1" domestic meter approved for main house + ADU + pool off one tap and internal manifold. ADU does NOT require a separate meter. Static pressure 90–110 PSI — no booster pump needed. Meter application submitted: 1" domestic + ¾" irrigation. Contact: bradp@cherokeewaterga.gov' },
       { id: 'u2', text: 'Georgia Power — New Service Connection', agency: 'Georgia Power', note: 'Request new service connection. Lead times run 3–6 months — get in line now. No architectural plans needed to start the process.', actionNow: 'Call Georgia Power residential new service line. Request connection for 146 Sherwood Ln. Ask for cost estimate and timeline.' },
     ]
   },
