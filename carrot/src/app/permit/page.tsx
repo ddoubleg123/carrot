@@ -8,7 +8,7 @@ const PHASES = [
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
       { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Payment made 7/13/2026. Service Request #425859. 1" meter. $4,675 paid by credit card ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. Location of Water Service card received — must be posted at right-of-way on Sherwood Ln, visible from road, within 24 hours of purchase. CCWSA installs 2–4 weeks after card is posted. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com. No sewer on Sherwood Ln — septic is only path.', actionNow: '⚠️ URGENT — Post Location of Water Service card (#425859) on the right-of-way at Sherwood Ln NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. Meter installed 2–4 weeks after posting.' },
-      { id: 'u2', text: 'Georgia Power — New Service Connection', agency: 'Georgia Power', note: 'Request new service connection. Lead times run 3–6 months — get in line now. No architectural plans needed to start the process.', actionNow: 'Call Georgia Power residential new service line. Request connection for 146 Sherwood Ln. Ask for cost estimate and timeline.' },
+      { id: 'u2', text: 'Sawnee EMC — Temporary & Permanent Power', agency: 'Sawnee EMC', note: 'Called Sawnee EMC 7/14/2026. (770) 887-2363. Two steps required before temporary meter can be ordered: (1) Install temporary pole and meter base on site. (2) Must have Cherokee County building permit in hand first — cannot start anything until permit is issued. Awaiting email from Sawnee EMC confirming whether 200-Amp Meter Socket is required.', actionNow: 'Awaiting Sawnee EMC email on 200-Amp socket confirmation. Both steps blocked until building permit is issued.' },
     ]
   },
   {
@@ -95,7 +95,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v8';
+const STORAGE_KEY = 'permit-tracker-v9';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -115,7 +115,7 @@ const INITIAL_STATE: State = {
   },
   status: {
     'u1': 'progress',
-    'u2': 'todo',
+    'u2': 'progress',
     'p1-1': 'done',
     'p1-3': 'progress',
     'p1-4': 'done',
@@ -132,7 +132,8 @@ const INITIAL_STATE: State = {
     'p3-1': 'progress',
   },
   notes: {
-    'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way within 24hrs of purchase (7/13/2026). $4,675 paid. 1" meter. SR#425859. CCWSA installs 2–4 weeks after card posted.',
+    'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. $4,675 paid. SR#425859. CCWSA installs 2–4 weeks after posting.',
+    'u2': 'Called 7/14/2026. Blocked on building permit. Need to: (1) install temp pole + meter base, (2) get building permit. Awaiting Sawnee EMC email on 200-Amp socket requirement.',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
     'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file at project end.',
