@@ -22,14 +22,13 @@ const PHASES = [
   },
   {
     id: 'phase2', label: 'Phase 2', title: 'Engineering & Design',
-    subtitle: 'Blocked until architect delivers site plan', color: '#8b5cf6',
+    subtitle: 'All civil engineering items done by DES as part of LGP package', color: '#8b5cf6',
     items: [
-      { id: 'p2-1', text: 'Stream / Drainage Crossing Design', agency: 'PE / DES', note: 'Required only if driveway crosses eastern stream. 50-ft undisturbed buffer + 75-ft impervious setback confirmed by Cherokee County (Andrea Yager, 7/5/2026).' },
-      { id: 'p2-2', text: 'Lot Grading Plan (LGP) or Land Disturbance Permit (LDP)', agency: 'PE / DES', note: 'LGP if disturbance < 1 acre. LDP if ≥ 1 acre. DES to assess once footprint is set.' },
-      { id: 'p2-3', text: 'Stormwater Management Design', agency: 'PE / DES', note: 'Designed for 25-year storm. Pre vs. post-development runoff analysis required.' },
-      { id: 'p2-4', text: 'Erosion & Sedimentation Control Plan', agency: 'NPDES Certified / DES', note: 'Required before any ground disturbance. First inspection is erosion control.' },
-      { id: 'p2-5', text: 'House Location Plan (HLP)', agency: 'PE / Surveyor', note: 'Requires finalized footprint from architect. Shows property lines, setbacks, structure, driveway, septic.' },
-      { id: 'p2-6', text: 'GDOT / County Driveway Entrance Plan', agency: 'PE / DES', note: 'Sherwood Ln has no curb & gutter — driveway permit required separately.' },
+      { id: 'p2-sw', text: 'Cherokee County Stormwater — LGP Confirmation', agency: 'stormwater@cherokeecountyga.gov', note: 'Email sent 7/5/2026 to confirm: (1) Is LGP required given our scope — two structures, limited clearing, preserved wooded lot? (2) Does eastern drainage feature trigger any additional stormwater review beyond standard residential permit? Cherokee County has NOT responded. Follow-up sent 7/17/2026.', actionNow: 'Awaiting Cherokee County Stormwater response. Follow-up sent 7/17/2026. Chase if no reply by end of week.' },
+      { id: 'p2-2', text: 'Lot Grading Plan (LGP) — DES', agency: 'PE / DES', note: 'DES produces as one package covering: grading, drainage, erosion & sedimentation control, and driveway entrance plan. LGP if disturbance < 1 acre. LDP if ≥ 1 acre. Stormwater management design may or may not be required — pending Cherokee County response (see above). Blocked until Rashid delivers stable plans + Cherokee County confirms stormwater requirement.' },
+      { id: 'p2-1', text: 'Stream / Drainage Crossing Design', agency: 'PE / DES', note: 'Likely already resolved by previous owner — culvert or crossing may already exist. DES to verify during site visit (7/22/2026 staking date). Only scoped if crossing does not exist and driveway requires one.' },
+      { id: 'p2-5', text: 'House Location Plan (HLP)', agency: 'DES (Austin) + Rashid', note: 'Rashid has provided draft drawings. Austin to confirm if sufficient to proceed. PE stamped. Required for building permit submittal. In progress — email sent 7/17/2026 to Austin asking for confirmation.' },
+      { id: 'p2-6', text: 'GDOT / County Driveway Entrance Plan', agency: 'PE / DES', note: 'Part of LGP package. Sherwood Ln has no curb & gutter — driveway permit required separately through DSC.' },
     ]
   },
   {
@@ -95,7 +94,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v9';
+const STORAGE_KEY = 'permit-tracker-v10';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -119,10 +118,9 @@ const INITIAL_STATE: State = {
     'p1-1': 'done',
     'p1-3': 'progress',
     'p1-4': 'done',
-    'p2-1': 'todo',
-    'p2-2': 'todo',
-    'p2-3': 'todo',
-    'p2-4': 'todo',
+    'p2-sw': 'progress',
+    'p2-2': 'blocked',
+    'p2-1': 'progress',
     'p2-5': 'progress',
     'p2-6': 'todo',
     'p3-0a': 'done',
@@ -141,17 +139,25 @@ const INITIAL_STATE: State = {
     'p3-0a': 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed on all applications.',
     'p3-0b': 'DES responsible (Daniel Item 7). Draft submitted, awaiting county recording. Critical blocker for septic permit.',
     'p3-0c': 'Ben Moers: signed soil report + insurance page → CherokeeEH@dph.ga.gov (Item 2). Rashid: draw house location + driveway on soil map copy (Item 4). Both in progress.',
-    'p3-0d': 'DES to stake house + property perimeter every 50 ft (Item 6). Blocked until Rashid delivers stable plans so house footprint can be confirmed.',
+    'p3-0d': 'DES to stake house + property perimeter every 50 ft (Item 6). Staking date confirmed 7/22/2026.',
     'p3-1': 'Application submitted 7/6/2026. County 8-item checklist assigned to Daniel (1,3 ✅), Ben (2), Rashid (4), DES+Rashid (5,6), DES (7). No lot disturbance until permit issued.',
+    'p2-sw': 'Email sent 7/5/2026 to stormwater@cherokeecountyga.gov. Follow-up sent 7/17/2026. No response yet. Awaiting confirmation on whether LGP is required and if eastern drainage feature triggers additional stormwater review.',
+    'p2-2': 'Blocked on: (1) Cherokee County stormwater response, (2) Austin confirming Rashid drawings are sufficient. DES does as one package: grading, drainage, erosion control, driveway plan.',
+    'p2-1': 'DES to verify on 7/22/2026 site visit whether culvert/crossing already exists from previous owner. Only scoped if crossing does not exist.',
+    'p2-5': 'Rashid drawings sent to Austin 7/17/2026. Awaiting Austin confirmation drawings are sufficient to proceed.',
   },
   dates: {
     'p1-1': '2026-06-09',
     'p1-3': '2026-06-12',
     'p3-1': '2026-07-06',
+    'p2-sw': '2026-07-05',
   },
   assignee: {
     'p1-1': 'DES / Ben Moers',
     'p1-3': 'DES / Rebecca Martin',
+    'p2-sw': 'stormwater@cherokeecountyga.gov',
+    'p2-2': 'DES (Austin)',
+    'p2-1': 'DES (Austin) — verify 7/22',
     'p2-5': 'DES (Austin) + Rashid Garuba',
     'p3-0b': 'DES / Rebecca Martin',
     'p3-0c': 'Ben Moers + Rashid Garuba',
