@@ -22,13 +22,13 @@ const PHASES = [
   },
   {
     id: 'phase2', label: 'Phase 2', title: 'Engineering & Design',
-    subtitle: 'All civil engineering items done by DES as part of LGP package', color: '#8b5cf6',
+    subtitle: 'All items are one LGP package — DES (Payton Anderson)', color: '#8b5cf6',
     items: [
-      { id: 'p2-sw', text: 'Cherokee County Stormwater — LGP Confirmation', agency: 'stormwater@cherokeecountyga.gov', note: 'Email sent 7/5/2026 to confirm: (1) Is LGP required given our scope — two structures, limited clearing, preserved wooded lot? (2) Does eastern drainage feature trigger any additional stormwater review beyond standard residential permit? Cherokee County has NOT responded. Follow-up sent 7/17/2026.', actionNow: 'Awaiting Cherokee County Stormwater response. Follow-up sent 7/17/2026. Chase if no reply by end of week.' },
-      { id: 'p2-2', text: 'Lot Grading Plan (LGP) — DES', agency: 'PE / DES', note: 'DES produces as one package covering: grading, drainage, erosion & sedimentation control, and driveway entrance plan. LGP if disturbance < 1 acre. LDP if ≥ 1 acre. Stormwater management design may or may not be required — pending Cherokee County response (see above). Blocked until Rashid delivers stable plans + Cherokee County confirms stormwater requirement.' },
-      { id: 'p2-1', text: 'Stream / Drainage Crossing Design', agency: 'PE / DES', note: 'Likely already resolved by previous owner — culvert or crossing may already exist. DES to verify during site visit (7/22/2026 staking date). Only scoped if crossing does not exist and driveway requires one.' },
-      { id: 'p2-5', text: 'House Location Plan (HLP)', agency: 'DES (Austin) + Rashid', note: 'Rashid has provided draft drawings. Austin to confirm if sufficient to proceed. PE stamped. Required for building permit submittal. In progress — email sent 7/17/2026 to Austin asking for confirmation.' },
-      { id: 'p2-6', text: 'GDOT / County Driveway Entrance Plan', agency: 'PE / DES', note: 'Part of LGP package. Sherwood Ln has no curb & gutter — driveway permit required separately through DSC.' },
+      { id: 'p2-sw', text: 'Cherokee County Stormwater — LGP Confirmation', agency: 'stormwater@cherokeecountyga.gov', note: 'Email sent 7/5/2026. Follow-up sent 7/17/2026. No response. Payton Anderson (DES) said he will get this confirmation once LGP is under contract. Still need official county response.', actionNow: 'Awaiting Cherokee County Stormwater response. DES will also chase once LGP contracted.' },
+      { id: 'p2-2', text: 'Lot Grading Plan (LGP) — Full Package', agency: 'DES / Payton Anderson', note: 'Confirmed by Payton Anderson 7/18/2026: LGP is one document covering HLP, grading, drainage, stormwater, erosion control, driveway plan, and stream crossing. Blocked on: (1) Rashid exterior dimensions, (2) stormwater confirmation. Payton needs exterior shape/size only — interior doesn\'t matter. SEQUENCE: LGP first draft submitted → house staked → septic inspection → septic permit.', actionNow: 'Get Rashid exterior dimensions to Payton so DES can start LGP. This unlocks staking and septic.' },
+      { id: 'p2-1', text: 'Stream / Drainage Crossing Design', agency: 'DES / Payton Anderson', note: 'LIKELY NOT NEEDED — 30" culvert already installed by prior owner. Prior owner is under stop work order from Cherokee County (not Daniel). County has not required culvert removal. If county allows it to stay in place, no new crossing design required. Payton confirmed: "the creek crossing is already in." Monitor stop work resolution with prior owner.', },
+      { id: 'p2-5', text: 'House Location Plan (HLP)', agency: 'DES (Payton) + Rashid', note: 'Part of LGP package. Payton needs exterior dimensions/shape only — does not need interior plans. Rashid\'s current draft sufficient if exterior shape is relatively final. Rashid drawings sent to Austin 7/17/2026. Cannot stake house until LGP first draft submitted.' },
+      { id: 'p2-6', text: 'GDOT / County Driveway Entrance Plan', agency: 'PE / DES', note: 'Part of LGP package. Driveway route discussed with Payton: cross existing culvert, turn left across cleared orchard area (A5/A6/A8/A9) to manage grade — avoids steep existing path. Sherwood Ln has no curb & gutter — separate driveway permit required.' },
     ]
   },
   {
@@ -38,8 +38,8 @@ const PHASES = [
       { id: 'p3-0a', text: 'Property Address Confirmed', agency: 'Owner', note: 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed and used on all applications.' },
       { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'DES / Rebecca Martin', note: 'DES draft submitted. Awaiting Cherokee County approval and recording. Lots 5 & 6. Daniel assigned this to DES (Item 7 in county checklist). Required before septic app can be processed.', actionNow: 'Follow up with DES on recording status — this is the critical blocker.' },
       { id: 'p3-0c', text: 'Hand-Signed Soil Report + House Location on Map', agency: 'DES / Ben Moers + Rashid', note: 'Ben Moers to provide original signed soil report with insurance page to CherokeeEH@dph.ga.gov (Item 2). Rashid to draw house location + driveway on copy of soil map (Item 4). Will not hold up site visit but required before permit is issued.', actionNow: 'Follow up with Ben and Rashid — both need to deliver their part of this.' },
-      { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES (coord. with Rashid)', note: 'DES to stake house/building size and property perimeter lines (every 50 ft) per county requirement (Item 6). Must coordinate with Rashid on house footprint location before DES can stake. No action until plans are stable enough to confirm house location.', actionNow: 'Waiting on Rashid stable plans before DES can stake house location.' },
-      { id: 'p3-1', text: 'Septic Permit Application — Submitted', agency: 'CherokeeEH@dph.ga.gov', note: 'Application submitted 7/6/2026 by Daniel. County responded same day with 8-item checklist. Assignments made to Ben, Rashid, and DES. No lot disturbance until permit issued (DPH Rule 511-3-1). Outstanding: recorded plat, signed soil report + house location, property staking.' },
+      { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES / Payton Anderson', note: 'SEQUENCE confirmed by Payton Anderson 7/18/2026: DES cannot stake house until LGP first draft is submitted. Correct order: (1) Rashid exterior dimensions → (2) DES submits LGP first draft → (3) DES stakes house → (4) Septic inspector walks site → (5) Septic permit issued. Property perimeter lines can be staked independently.', actionNow: 'Get Rashid exterior dimensions to Payton — house staking cannot happen until LGP first draft is submitted.' },
+      { id: 'p3-1', text: 'Septic Permit Application — In Process', agency: 'CherokeeEH@dph.ga.gov', note: 'Application submitted 7/6/2026. Payton confirmed 7/18/2026: cannot get septic permit until land disturbance permit (LGP) is obtained first. Septic field location: area A4, behind house between the two flow arrows — out of sight, no front clearing needed. 8 bedrooms total (main + ADU). Inspector walks site after house is staked.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
       { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Sherwood Ln has no curb & gutter. Apply through DSC before building permit.' },
       { id: 'p3-4', text: 'NOI — Georgia EPD (if tertiary permittee)', agency: 'Georgia EPD', note: 'Required if lot was purchased from a larger previously permitted development.' },
@@ -94,7 +94,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v10';
+const STORAGE_KEY = 'permit-tracker-v11';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -141,10 +141,10 @@ const INITIAL_STATE: State = {
     'p3-0c': 'Ben Moers: signed soil report + insurance page → CherokeeEH@dph.ga.gov (Item 2). Rashid: draw house location + driveway on soil map copy (Item 4). Both in progress.',
     'p3-0d': 'DES to stake house + property perimeter every 50 ft (Item 6). Staking date confirmed 7/22/2026.',
     'p3-1': 'Application submitted 7/6/2026. County 8-item checklist assigned to Daniel (1,3 ✅), Ben (2), Rashid (4), DES+Rashid (5,6), DES (7). No lot disturbance until permit issued.',
-    'p2-sw': 'Email sent 7/5/2026 to stormwater@cherokeecountyga.gov. Follow-up sent 7/17/2026. No response yet. Awaiting confirmation on whether LGP is required and if eastern drainage feature triggers additional stormwater review.',
-    'p2-2': 'Blocked on: (1) Cherokee County stormwater response, (2) Austin confirming Rashid drawings are sufficient. DES does as one package: grading, drainage, erosion control, driveway plan.',
-    'p2-1': 'DES to verify on 7/22/2026 site visit whether culvert/crossing already exists from previous owner. Only scoped if crossing does not exist.',
-    'p2-5': 'Rashid drawings sent to Austin 7/17/2026. Awaiting Austin confirmation drawings are sufficient to proceed.',
+    'p2-sw': 'Email sent 7/5/2026. Follow-up sent 7/17/2026. No response. Payton Anderson said DES will chase confirmation once LGP is under contract.',
+    'p2-2': 'Payton confirmed 7/18/2026: LGP is one document. Blocked on Rashid exterior dimensions. Payton only needs exterior shape/size — not interior.',
+    'p2-1': 'LIKELY NOT NEEDED — 30" culvert already in place by prior owner. Prior owner under stop work order, county not requiring removal. Payton confirmed: no new design needed if county allows culvert to stay.',
+    'p2-5': 'Part of LGP. Payton needs exterior dimensions from Rashid. Interior changes irrelevant.',
   },
   dates: {
     'p1-1': '2026-06-09',
@@ -400,7 +400,7 @@ export default function PermitPage() {
 
         <div className="mt-6 rounded-xl border border-gray-800 bg-gray-900 px-5 py-4 text-xs text-gray-500 leading-7">
           <span className="text-gray-400 font-medium">Contacts: </span>
-          DSC (770) 721-7810 · Becky Kerstetter bkerstetter@cherokeecountyga.gov · Stormwater stormwater@cherokeecountyga.gov · Andrea Yager adyager@cherokeecountyga.gov · NGHD Env. Health 770-479-0444 · DES Austin McKinney amckinney@davisengineers.com (706) 265-1234 · Ben Moers bmoers@davisengineers.com · Rashid Garuba (architect) rashidgaruba@gmail.com 770-242-7809 · CCWSA 770-479-1813 · CityView cityview.cherokeega.com
+          DSC (770) 721-7810 · Becky Kerstetter bkerstetter@cherokeecountyga.gov · Stormwater stormwater@cherokeecountyga.gov · Andrea Yager adyager@cherokeecountyga.gov · NGHD Env. Health 770-479-0444 · DES Austin McKinney amckinney@davisengineers.com · DES Payton Anderson (engineer) · Ben Moers bmoers@davisengineers.com · (706) 265-1234 · Rashid Garuba (architect) rashidgaruba@gmail.com 770-242-7809 · CCWSA Brad Payne 770-479-1813 Ext.1265 bradp@ccwsa.com · Sawnee EMC Morgan Bennett morgan.bennett@sawnee.coop 770-887-2363 · CityView cityview.cherokeega.com
           <br/>
           <span className="text-gray-400 font-medium">Notes: </span>
           50-ft undisturbed buffer + 75-ft impervious setback from eastern stream · No floodplain on parcels (confirmed 7/5/2026) · Lot combination must precede all other activities · 2024 I-Codes in effect Jan 1 2026 · No cash at DSC
