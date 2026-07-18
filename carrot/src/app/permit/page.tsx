@@ -136,7 +136,6 @@ const INITIAL_STATE: State = {
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
     'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file at project end.',
-    'p2-5': 'IN PROGRESS — Austin (DES) reached out to Rashid 7/6/2026 for drawings. Rashid confirmed delivery once plans stable. Priority: first floor + ADU.',
     'p3-0a': 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed on all applications.',
     'p3-0b': 'DES responsible (Daniel Item 7). Draft submitted, awaiting county recording. Critical blocker for septic permit.',
     'p3-0c': 'Ben Moers: signed soil report + insurance page → CherokeeEH@dph.ga.gov (Item 2). Rashid: draw house location + driveway on soil map copy (Item 4). Both in progress.',
@@ -145,7 +144,7 @@ const INITIAL_STATE: State = {
     'p2-sw': 'Email sent 7/5/2026. Follow-up sent 7/17/2026. No response. Payton Anderson said DES will chase confirmation once LGP is under contract.',
     'p2-2': 'Rashid exterior dimensions delivered to DES. Only blocker: Cherokee County stormwater confirmation. Payton ready to proceed.',
     'p2-1': 'LIKELY NOT NEEDED — 30" culvert already in place by prior owner. Prior owner under stop work order, county not requiring removal. Payton confirmed: no new design needed if county allows culvert to stay.',
-    'p2-5': 'Part of LGP. Payton needs exterior dimensions from Rashid. Interior changes irrelevant.',
+    'p2-5': 'Part of LGP. Rashid exterior dimensions delivered to DES. Staking complete.',
   },
   dates: {
     'p1-1': '2026-06-09',
