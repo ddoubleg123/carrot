@@ -148,6 +148,7 @@ async function getCitationStats(): Promise<CitationStats> {
     total,
     scanned,
     notScanned,
+    scanning,
     scannedPercentage,
     withRelevanceScore,
     withoutRelevanceScore,
@@ -290,10 +291,15 @@ async function main() {
   console.log('QUESTION 1: Are we done finding all citations?\n')
   console.log(`Total Citations: ${stats.total.toLocaleString()}`)
   console.log(`Scanned: ${stats.scanned.toLocaleString()} (${stats.scannedPercentage.toFixed(1)}%)`)
-  console.log(`Not Scanned: ${stats.notScanned.toLocaleString()} (${(100 - stats.scannedPercentage).toFixed(1)}%)`)
+  console.log(`Not Scanned: ${stats.notScanned.toLocaleString()}`)
+  console.log(`Scanning: ${stats.scanning.toLocaleString()}`)
   
-  if (stats.notScanned > 0) {
-    console.log(`\n❌ NO - We have ${stats.notScanned.toLocaleString()} citations that haven't been scanned yet.`)
+  if (stats.notScanned > 0 || stats.scanning > 0) {
+    console.log(
+      `\n❌ NO - We have ${stats.notScanned.toLocaleString()} not scanned` +
+        (stats.scanning > 0 ? ` and ${stats.scanning.toLocaleString()} still scanning` : '') +
+        `.`
+    )
     console.log(`   This means the discovery engine hasn't processed all citations yet.`)
   } else {
     console.log(`\n✅ YES - All citations have been scanned.`)
@@ -326,7 +332,7 @@ async function main() {
   if (highRelevanceUnsaved.length > 0) {
     console.log(`\n⚠️  Found ${highRelevanceUnsaved.length} citations with score ≥50 that weren't saved:`)
     highRelevanceUnsaved.slice(0, 10).forEach((c, i) => {
-      console.log(`  ${i + 1}. Score: ${c.relevanceScore?.toFixed(1)}, Decision: ${c.relevanceDecision || 'null'}, URL: ${c.citationUrl?.substring(0, 60)}...`)
+      console.log(`  ${i + 1}. Score: ${c.aiPriorityScore?.toFixed(1)}, Decision: ${c.relevanceDecision || 'null'}, URL: ${c.citationUrl?.substring(0, 60)}...`)
     })
   }
 
