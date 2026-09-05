@@ -94,7 +94,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v11';
+const STORAGE_KEY = 'permit-tracker-v12';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -108,16 +108,17 @@ type State = {
 const INITIAL_STATE: State = {
   checked: {
     'p1-1': true,
-    'p1-3': false,
+    'p1-3': true,
     'p1-4': true,
     'p3-0a': true,
+    'p3-0b': true,
     'p3-0d': true,
   },
   status: {
     'u1': 'progress',
     'u2': 'progress',
     'p1-1': 'done',
-    'p1-3': 'progress',
+    'p1-3': 'done',
     'p1-4': 'done',
     'p2-sw': 'done',
     'p2-2': 'blocked',
@@ -125,7 +126,7 @@ const INITIAL_STATE: State = {
     'p2-5': 'progress',
     'p2-6': 'todo',
     'p3-0a': 'done',
-    'p3-0b': 'progress',
+    'p3-0b': 'done',
     'p3-0c': 'progress',
     'p3-0d': 'done',
     'p3-1': 'progress',
@@ -134,11 +135,11 @@ const INITIAL_STATE: State = {
     'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. $4,675 paid. SR#425859. CCWSA installs 2–4 weeks after posting.',
     'u2': 'Called 7/14/2026. Blocked on building permit. Need to: (1) install temp pole + meter base, (2) get building permit. Awaiting Sawnee EMC email on 200-Amp socket requirement.',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
-    'p1-3': 'DRAFT submitted Cherokee County. Must be RECORDED (Lots 5 & 6) before septic app accepted.',
+    'p1-3': 'RECORDED 9/3/2026 — Plat Book 121, Page 973. Received from Madison Curtis at DES. Major blocker cleared.',
     'p1-4': 'COMPLETE — Topo collected in original scope per Austin McKinney 7/6/2026. CAD file at project end.',
     'p3-0a': 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed on all applications.',
-    'p3-0b': 'DES responsible (Daniel Item 7). Draft submitted, awaiting county recording. Critical blocker for septic permit.',
-    'p3-0c': 'Ben Moers: signed soil report + insurance page → CherokeeEH@dph.ga.gov (Item 2). Rashid: draw house location + driveway on soil map copy (Item 4). Both in progress.',
+    'p3-0b': 'COMPLETE — Recorded 9/3/2026. Plat Book 121, Page 973.',
+    'p3-0c': 'Email sent to Ben Moers 9/4/2026 — plat recorded, requested confirmation signed soil report submitted to CherokeeEH@dph.ga.gov. Rashid still needs to draw house location on soil map copy (Item 4). Awaiting responses.',
     'p3-0d': 'COMPLETE — Property lines and house staked. Rashid shared staking information with DES.',
     'p3-1': 'Application submitted 7/6/2026. County 8-item checklist assigned to Daniel (1,3 ✅), Ben (2), Rashid (4), DES+Rashid (5,6), DES (7). No lot disturbance until permit issued.',
     'p2-sw': 'RESOLVED 7/20/2026 — Andrea Yager confirmed: no stormwater plan required if disturbance < 1 acre. Keep under 1 acre and LGP has no stormwater component.',
