@@ -94,7 +94,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v12';
+const STORAGE_KEY = 'permit-tracker-v13';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -121,7 +121,7 @@ const INITIAL_STATE: State = {
     'p1-3': 'done',
     'p1-4': 'done',
     'p2-sw': 'done',
-    'p2-2': 'blocked',
+    'p2-2': 'progress',
     'p2-1': 'progress',
     'p2-5': 'progress',
     'p2-6': 'todo',
