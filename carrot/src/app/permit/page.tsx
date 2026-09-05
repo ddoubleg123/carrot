@@ -183,6 +183,7 @@ export default function PermitPage() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [saved, setSaved] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     try {
@@ -190,7 +191,10 @@ export default function PermitPage() {
       if (raw) setState(JSON.parse(raw));
       else localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_STATE));
     } catch {}
+    setMounted(true);
   }, []);
+
+  if (!mounted) return null;
 
   const save = (next: State) => {
     setState(next);
