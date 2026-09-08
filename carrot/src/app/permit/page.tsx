@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+
+const PermitTracker = dynamic(() => import('./PermitTracker'), { ssr: false });
+
+export default function PermitPage() {
+  return <PermitTracker />;
+}
 
 const PHASES = [
   {
@@ -38,7 +44,7 @@ const PHASES = [
       { id: 'p3-0a', text: 'Property Address Confirmed', agency: 'Owner', note: 'COMPLETE — 146 Sherwood Lane, Canton GA 30115 confirmed and used on all applications.' },
       { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'DES / Rebecca Martin', note: 'DES draft submitted. Awaiting Cherokee County approval and recording. Lots 5 & 6. Daniel assigned this to DES (Item 7 in county checklist). Required before septic app can be processed.', actionNow: 'Follow up with DES on recording status — this is the critical blocker.' },
       { id: 'p3-0c', text: 'Hand-Signed Soil Report + House Location on Map', agency: 'DES / Ben Moers + Rashid', note: 'Ben Moers to provide original signed soil report with insurance page to CherokeeEH@dph.ga.gov (Item 2). Rashid to draw house location + driveway on copy of soil map (Item 4). Will not hold up site visit but required before permit is issued.', actionNow: 'Follow up with Ben and Rashid — both need to deliver their part of this.' },
-      { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES / Payton Anderson', note: 'COMPLETE — Property lines and house staked. Rashid shared dimensions with DES.' },
+      { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES / Payton Anderson', note: 'Property lines staked. HOUSE staking pending LGP approval — Payton confirmed 9/8/2026: will schedule house staking as soon as LGP is approved by Cherokee County.' },
       { id: 'p3-1', text: 'Septic Permit Application — In Process', agency: 'CherokeeEH@dph.ga.gov', note: 'Application submitted 7/6/2026. Payton confirmed 7/18/2026: cannot get septic permit until land disturbance permit (LGP) is obtained first. Septic field location: area A4, behind house between the two flow arrows — out of sight, no front clearing needed. 8 bedrooms total (main + ADU). Inspector walks site after house is staked.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
       { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Sherwood Ln has no curb & gutter. Apply through DSC before building permit.' },
@@ -94,7 +100,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v13';
+const STORAGE_KEY = 'permit-tracker-v14';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -112,7 +118,7 @@ const INITIAL_STATE: State = {
     'p1-4': true,
     'p3-0a': true,
     'p3-0b': true,
-    'p3-0d': true,
+    'p3-0d': false,
   },
   status: {
     'u1': 'progress',
@@ -128,7 +134,7 @@ const INITIAL_STATE: State = {
     'p3-0a': 'done',
     'p3-0b': 'done',
     'p3-0c': 'progress',
-    'p3-0d': 'done',
+    'p3-0d': 'progress',
     'p3-1': 'progress',
   },
   notes: {
@@ -143,7 +149,7 @@ const INITIAL_STATE: State = {
     'p3-0d': 'COMPLETE — Property lines and house staked. Rashid shared staking information with DES.',
     'p3-1': 'Application submitted 7/6/2026. County 8-item checklist assigned to Daniel (1,3 ✅), Ben (2), Rashid (4), DES+Rashid (5,6), DES (7). No lot disturbance until permit issued.',
     'p2-sw': 'RESOLVED 7/20/2026 — Andrea Yager confirmed: no stormwater plan required if disturbance < 1 acre. Keep under 1 acre and LGP has no stormwater component.',
-    'p2-2': 'All blockers cleared. Rashid dimensions delivered. Stormwater confirmed not required < 1 acre disturbance. DES ready to proceed with LGP.',
+    'p2-2': 'SUBMITTED to Cherokee County for review 9/8/2026 — Payton Anderson. Includes soils and septic. Awaiting county approval.',
     'p2-1': 'LIKELY NOT NEEDED — 30" culvert already in place by prior owner. Prior owner under stop work order, county not requiring removal. Payton confirmed: no new design needed if county allows culvert to stay.',
     'p2-5': 'Part of LGP. Rashid exterior dimensions delivered to DES. Staking complete.',
   },
