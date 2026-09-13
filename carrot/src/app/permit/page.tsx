@@ -14,6 +14,7 @@ const PHASES = [
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
       { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Payment made 7/13/2026. Service Request #425859. 1" meter. $4,675 paid by credit card ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. Location of Water Service card received — must be posted at right-of-way on Sherwood Ln, visible from road, within 24 hours of purchase. CCWSA installs 2–4 weeks after card is posted. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com. No sewer on Sherwood Ln — septic is only path.', actionNow: '⚠️ URGENT — Post Location of Water Service card (#425859) on the right-of-way at Sherwood Ln NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. Meter installed 2–4 weeks after posting.' },
+      { id: 'u3', text: 'AGL — Natural Gas Service', agency: 'AGL Energy Connection Center', note: 'Call AGL Energy Connection Center at 800-599-3770 or submit the Builders New Service Line form. Do NOT use the ZIP-code availability tool on their site — it says yes for all of 30115 and tells you nothing. Ask specifically: (1) Is gas available on Sherwood Lane? (2) If not, what is the cost to extend a line to the lot? (3) What is the process and timeline for new construction service?', actionNow: 'Call 800-599-3770 — AGL Energy Connection Center. Ask if gas runs on Sherwood Ln specifically.' },
       { id: 'u2', text: 'Sawnee EMC — Temporary & Permanent Power', agency: 'Sawnee EMC', note: 'Called Sawnee EMC 7/14/2026. (770) 887-2363. Two steps required before temporary meter can be ordered: (1) Install temporary pole and meter base on site. (2) Must have Cherokee County building permit in hand first — cannot start anything until permit is issued. Awaiting email from Sawnee EMC confirming whether 200-Amp Meter Socket is required.', actionNow: 'Awaiting Sawnee EMC email on 200-Amp socket confirmation. Both steps blocked until building permit is issued.' },
     ]
   },
@@ -100,7 +101,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v14';
+const STORAGE_KEY = 'permit-tracker-v15';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -123,6 +124,7 @@ const INITIAL_STATE: State = {
   status: {
     'u1': 'progress',
     'u2': 'progress',
+    'u3': 'todo',
     'p1-1': 'done',
     'p1-3': 'done',
     'p1-4': 'done',
