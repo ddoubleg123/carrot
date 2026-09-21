@@ -14,7 +14,7 @@ const PHASES = [
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
       { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Payment made 7/13/2026. Service Request #425859. 1" meter. $4,675 paid by credit card ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. Location of Water Service card received — must be posted at right-of-way on Sherwood Ln, visible from road, within 24 hours of purchase. CCWSA installs 2–4 weeks after card is posted. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com. No sewer on Sherwood Ln — septic is only path.', actionNow: '⚠️ URGENT — Post Location of Water Service card (#425859) on the right-of-way at Sherwood Ln NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. Meter installed 2–4 weeks after posting.' },
-      { id: 'u3', text: 'AGL — Natural Gas Service', agency: 'AGL Energy Connection Center', note: 'Call AGL Energy Connection Center at 800-599-3770 or submit the Builders New Service Line form. Do NOT use the ZIP-code availability tool on their site — it says yes for all of 30115 and tells you nothing. Ask specifically: (1) Is gas available on Sherwood Lane? (2) If not, what is the cost to extend a line to the lot? (3) What is the process and timeline for new construction service?', actionNow: 'Call 800-599-3770 — AGL Energy Connection Center. Ask if gas runs on Sherwood Ln specifically.' },
+      { id: 'u3', text: 'AGL — Natural Gas Service', agency: 'AGL Energy Connection Center', note: 'Application submitted 9/20/2026. Primary Work Request #3023473. Awaiting AGL response on service availability to Sherwood Ln, line extension cost (if any), and installation timeline. Contact: AGL Energy Connection Center 800-599-3770 — reference WR #3023473.' },
       { id: 'u2', text: 'Sawnee EMC — Temporary & Permanent Power', agency: 'Sawnee EMC', note: 'Called Sawnee EMC 7/14/2026. (770) 887-2363. Two steps required before temporary meter can be ordered: (1) Install temporary pole and meter base on site. (2) Must have Cherokee County building permit in hand first — cannot start anything until permit is issued. Awaiting email from Sawnee EMC confirming whether 200-Amp Meter Socket is required.', actionNow: 'Awaiting Sawnee EMC email on 200-Amp socket confirmation. Both steps blocked until building permit is issued.' },
     ]
   },
@@ -46,9 +46,9 @@ const PHASES = [
       { id: 'p3-0b', text: 'Combination Plat — Recorded', agency: 'DES / Rebecca Martin', note: 'DES draft submitted. Awaiting Cherokee County approval and recording. Lots 5 & 6. Daniel assigned this to DES (Item 7 in county checklist). Required before septic app can be processed.', actionNow: 'Follow up with DES on recording status — this is the critical blocker.' },
       { id: 'p3-0c', text: 'Hand-Signed Soil Report + House Location on Map', agency: 'DES / Ben Moers + Rashid', note: 'Ben Moers to provide original signed soil report with insurance page to CherokeeEH@dph.ga.gov (Item 2). Rashid to draw house location + driveway on copy of soil map (Item 4). Will not hold up site visit but required before permit is issued.', actionNow: 'Follow up with Ben and Rashid — both need to deliver their part of this.' },
       { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES / Payton Anderson', note: 'Property lines staked. HOUSE staking pending LGP approval — Payton confirmed 9/8/2026: will schedule house staking as soon as LGP is approved by Cherokee County.' },
-      { id: 'p3-1', text: 'Septic Permit Application — In Process', agency: 'CherokeeEH@dph.ga.gov', note: 'Application submitted 7/6/2026. Payton confirmed 7/18/2026: cannot get septic permit until land disturbance permit (LGP) is obtained first. Septic field location: area A4, behind house between the two flow arrows — out of sight, no front clearing needed. 8 bedrooms total (main + ADU). Inspector walks site after house is staked.' },
+      { id: 'p3-1', text: 'Septic Permit Application', agency: 'CherokeeEH@dph.ga.gov', note: 'Application completed 9/20/2026, HELD pending DES confirmation. 7 bedrooms total (5-bedroom main house + 2-bedroom ADU). The 8/26 site plan was sized for 6 bedrooms: 390 LF required, 400 LF primary provided, 1,500 gal tank. At 7 bedrooms the formula requires 455 LF. Verification email sent to Payton. Environmental Health requires application + site plan + Level 3 soil report submitted together. Septic field: area A4 behind house.', actionNow: 'Waiting on Payton to confirm revised plan carries 455+ LF primary. Then send application + site plan + soil report to CherokeeEH@dph.ga.gov.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
-      { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Sherwood Ln has no curb & gutter. Apply through DSC before building permit.' },
+      { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Residential Driveway Application submitted 9/20/2026 to dsc@cherokeecountyga.gov. Lots 5 & 6, parcels 03N18 168 & 03N18 169, zoned AG. Construction direction marked West — asked DSC to confirm. Driveway location and profile shown on DES LGP. Note: county engineer specifies pipe size/type/grade; turn-around pad required off ROW.' },
       { id: 'p3-4', text: 'NOI — Georgia EPD (if tertiary permittee)', agency: 'Georgia EPD', note: 'Required if lot was purchased from a larger previously permitted development.' },
     ]
   },
@@ -101,7 +101,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v15';
+const STORAGE_KEY = 'permit-tracker-v16';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -124,7 +124,7 @@ const INITIAL_STATE: State = {
   status: {
     'u1': 'progress',
     'u2': 'progress',
-    'u3': 'todo',
+    'u3': 'progress',
     'p1-1': 'done',
     'p1-3': 'done',
     'p1-4': 'done',
@@ -138,6 +138,7 @@ const INITIAL_STATE: State = {
     'p3-0c': 'progress',
     'p3-0d': 'progress',
     'p3-1': 'progress',
+    'p3-3': 'progress',
   },
   notes: {
     'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. $4,675 paid. SR#425859. CCWSA installs 2–4 weeks after posting.',
