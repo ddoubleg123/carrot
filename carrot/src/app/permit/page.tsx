@@ -7,9 +7,10 @@ const PHASES = [
     id: 'phase0', label: 'Utilities', title: 'Utilities & Infrastructure',
     subtitle: 'Independent of architect — start now', color: '#f97316',
     items: [
-      { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'Payment made 7/13/2026. Service Request #425859. 1" meter. $4,675 paid by credit card ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. Location of Water Service card received — must be posted at right-of-way on Sherwood Ln, visible from road, within 24 hours of purchase. CCWSA installs 2–4 weeks after card is posted. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com. No sewer on Sherwood Ln — septic is only path.', actionNow: '⚠️ URGENT — Post Location of Water Service card (#425859) on the right-of-way at Sherwood Ln NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. Meter installed 2–4 weeks after posting.' },
+      { id: 'u1', text: 'CCWSA — Water Service Connection', agency: 'CCWSA / Brad Payne', note: 'COMPLETE — Water service connection done. Service Request #425859, 1" meter, $4,675 paid 7/13/2026 ($100 deposit + $4,500 installation + $75 stand pipe). Account # assigned on first bill. 1.5" supply line from meter to house to be run by plumber. Pressure 90–110 PSI. No sewer on Sherwood Ln — septic is the only path. Contact Brad Payne (770) 479-1813 Ext. 1265 / bradp@ccwsa.com.' },
       { id: 'u3', text: 'AGL — Natural Gas Service', agency: 'AGL Energy Connection Center', note: 'Application submitted 9/20/2026. Primary Work Request #3023473. Awaiting AGL response on service availability to Sherwood Ln, line extension cost (if any), and installation timeline. Contact: AGL Energy Connection Center 800-599-3770 — reference WR #3023473.' },
       { id: 'u2', text: 'Sawnee EMC — Temporary & Permanent Power', agency: 'Sawnee EMC', note: 'Called Sawnee EMC 7/14/2026. (770) 887-2363. Two steps required before temporary meter can be ordered: (1) Install temporary pole and meter base on site. (2) Must have Cherokee County building permit in hand first — cannot start anything until permit is issued. Awaiting email from Sawnee EMC confirming whether 200-Amp Meter Socket is required.', actionNow: 'Awaiting Sawnee EMC email on 200-Amp socket confirmation. Both steps blocked until building permit is issued.' },
+      { id: 'u4', text: 'Xfinity — Internet Service Extension', agency: 'Xfinity', note: 'Property is not currently served by Xfinity. Ticket #HS5112735 opened to determine whether they will extend a line to the property. Awaiting response on feasibility, cost of line extension, and timeline. Reference ticket HS5112735 on any follow-up.', actionNow: 'Awaiting Xfinity response on ticket #HS5112735. If they decline or the extension cost is high, price alternatives (fixed wireless, satellite, or other local providers).' },
     ]
   },
   {
@@ -95,7 +96,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v19';
+const STORAGE_KEY = 'permit-tracker-v20';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -108,6 +109,7 @@ type State = {
 
 const INITIAL_STATE: State = {
   checked: {
+    'u1': true,
     'p1-1': true,
     'p1-3': true,
     'p1-4': true,
@@ -116,9 +118,10 @@ const INITIAL_STATE: State = {
     'p3-0d': false,
   },
   status: {
-    'u1': 'progress',
+    'u1': 'done',
     'u2': 'progress',
     'u3': 'progress',
+    'u4': 'progress',
     'p1-1': 'done',
     'p1-3': 'done',
     'p1-4': 'done',
@@ -135,7 +138,8 @@ const INITIAL_STATE: State = {
     'p3-3': 'progress',
   },
   notes: {
-    'u1': '⚠️ URGENT — Post Location of Water Service card (#425859) on Sherwood Ln right-of-way NOW. Must be visible from road. 24-hour deadline from purchase 7/13/2026. $4,675 paid. SR#425859. CCWSA installs 2–4 weeks after posting.',
+    'u1': 'COMPLETE — water service connection done. SR#425859, 1" meter, $4,675 paid. 1.5" supply line from meter to house to be run by plumber.',
+    'u4': 'Not currently serviced by Xfinity. Ticket #HS5112735 open to see if they will run a line to the property.',
     'u2': 'Called 7/14/2026. Blocked on building permit. Need to: (1) install temp pole + meter base, (2) get building permit. Awaiting Sawnee EMC email on 200-Amp socket requirement.',
     'p1-1': 'COMPLETE — DES Report #26.306.1, 6/9/2026. Ben Moers. Cecil (A), Pacolet (A), Hard Labor II (P).',
     'p1-3': 'RECORDED 9/3/2026 — Plat Book 121, Page 973. Received from Madison Curtis at DES. Major blocker cleared.',
