@@ -1,12 +1,6 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const PermitTracker = dynamic(() => import('./PermitTracker'), { ssr: false });
-
-export default function PermitPage() {
-  return <PermitTracker />;
-}
+import { useState, useEffect } from 'react';
 
 const PHASES = [
   {
