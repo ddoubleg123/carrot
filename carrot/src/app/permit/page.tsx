@@ -43,7 +43,7 @@ const PHASES = [
       { id: 'p3-0d', text: 'Stake House + Property Lines', agency: 'DES / Payton Anderson', note: 'Property lines staked. HOUSE staking pending LGP approval — Payton confirmed 9/8/2026: will schedule house staking as soon as LGP is approved by Cherokee County.' },
       { id: 'p3-1', text: 'Septic Permit Applications (2)', agency: 'Cherokee EH — Martin Little / Alexandria Walker', note: 'SCOPE CHANGED 9/24/2026. EH Manager Martin Little now requires: (1) TWO separate applications — one main house, one guest house, since each has its own tank; (2) bedroom count on each application must MATCH what EH counts on the floor plan; (3) gazebo and greenhouse plans need room-use detail — label open-air lounging, or if enclosed label each room and note kitchens/baths/storage. BEDROOM CONFLICT: Rashid plans label 4 in main house (Master, Guest Bedroom, Bedroom 2, Bedroom 3) + 2 ADU = 6. DES septic designed and calc note says 7. Either Rashid labels a 5th bedroom (needs compliant egress window) = 7 and DES unchanged, OR go to 6 and Payton updates calc note 7→6 (system as drawn covers 6, no redesign). CLOSED: Alexandria 4 items — floor plans sent 9/22, plat sent, GIS address confirmed 146 Sherwood Lane, two tanks on 9/23 revision. Soil report — Ben submitted signed copy direct to EH, DONE.', actionNow: 'Awaiting Rashid: can he label a 5th bedroom w/ egress, and add gazebo/greenhouse room detail. Then build both applications.' },
       { id: 'p3-2', text: 'Erosion & Sedimentation Control Permit', agency: 'Cherokee County Engineering', note: 'Required before any ground disturbance. Blocked until grading plan is ready.' },
-      { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'Residential Driveway Application submitted 9/20/2026 to dsc@cherokeecountyga.gov. Lots 5 & 6, parcels 03N18 168 & 03N18 169, zoned AG. Construction direction marked West — asked DSC to confirm. Driveway location and profile shown on DES LGP. Note: county engineer specifies pipe size/type/grade; turn-around pad required off ROW.' },
+      { id: 'p3-3', text: 'Driveway Permit', agency: 'Cherokee County DSC', note: 'APPROVED 9/29/2026 — Permit #2026-4124, approved by Keith Satterfield. County note: "Location of driveway OK per attached plans. No pipe required in R/W. Rollback curb is existing on Sherwood Ln." Pipe length/diameter marked N/A — no culvert required in the right-of-way. DES site plan attached as approved exhibit. REMAINING OBLIGATION: Special Requirement 5 — driveway must have a turn-around pad off the ROW to prevent backing into the road. Make sure this is on the plan the grading contractor builds from.' },
       { id: 'p3-4', text: 'NOI — Georgia EPD (if tertiary permittee)', agency: 'Georgia EPD', note: 'Required if lot was purchased from a larger previously permitted development.' },
     ]
   },
@@ -96,7 +96,7 @@ const PHASES = [
   },
 ];
 
-const STORAGE_KEY = 'permit-tracker-v23';
+const STORAGE_KEY = 'permit-tracker-v24';
 
 type Item = { id: string; text: string; agency: string; note: string; actionNow?: string };
 type State = {
@@ -109,6 +109,7 @@ type State = {
 
 const INITIAL_STATE: State = {
   checked: {
+    'p3-3': true,
     'u1': true,
     'p1-1': true,
     'p1-3': true,
@@ -135,7 +136,7 @@ const INITIAL_STATE: State = {
     'p3-0c': 'progress',
     'p3-0d': 'progress',
     'p3-1': 'progress',
-    'p3-3': 'progress',
+    'p3-3': 'done',
   },
   notes: {
     'u1': 'COMPLETE — water service connection done. SR#425859, 1" meter, $4,675 paid. 1.5" supply line from meter to house to be run by plumber.',
