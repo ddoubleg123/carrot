@@ -211,7 +211,8 @@ export default function MinimalNav() {
       {/* Menu Items */}
       <div className="flex flex-col gap-4">
         {MENU_ITEMS.map((item, index) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const path = pathname || ''
+          const isActive = path === item.href || path.startsWith(`${item.href}/`)
           const IconComponent = item.icon;
           
           return (
