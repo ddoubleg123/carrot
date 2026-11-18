@@ -1231,7 +1231,7 @@ export const __plannerPrompts = {
 /**
  * Generate fallback domain pack for sports/basketball topics
  */
-function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSeedCandidate[] {
+export function generateFallbackDomainPack(topic: string, aliases: string[]): PlannerSeedCandidate[] {
   // Generic fallback seeds for all topics
   return [
     { url: `https://en.wikipedia.org/wiki/${encodeURIComponent(topic)}`, category: 'wikipedia', angle: 'Overview', priority: 1, sourceType: 'wikipedia' },

@@ -64,6 +64,10 @@ export interface TopicSpoken {
   at: string
 }
 
+function memberSource(source: TopicSource): TopicSource {
+  return source
+}
+
 export interface TopicCard {
   id: string
   question: string
@@ -853,7 +857,7 @@ export async function addTopicVideo(
 async function pictureFor(topicId: string, title: string, pageUrl: string, remoteImage?: string): Promise<string | undefined> {
   const wiki = pageUrl.includes('wikipedia.org') || pageUrl.includes('wikimedia.org')
   if (wiki) {
-    const photos = await pageThumbnails([title]).catch(() => ({}))
+    const photos: Record<string, string> = await pageThumbnails([title]).catch(() => ({}))
     const match = photos[title] || Object.entries(photos).find(([name]) => name.toLowerCase() === title.toLowerCase())?.[1]
     if (match) return match
   }
@@ -887,21 +891,23 @@ export async function askTopic(patchId: string, id: string, groupTitle: string, 
   const found = [...remembered, ...await withPictures(await gatherTopicSources(query, groupTitle, skip))]
   const now = new Date().toISOString()
   meta.pending = [...(meta.pending || []), ...found].slice(-12)
-  meta.messages = [...(meta.messages || []), {
+  const userMessage: TopicMessage = {
     id: idFor(),
     role: 'user',
     name,
     text: follow,
     sourceIds: [],
     createdAt: now
-  }, {
+  }
+  const assistantMessage: TopicMessage = {
     id: idFor(),
     role: 'assistant',
     name: 'Search',
     text: found.length ? 'These passages match what you asked. Add the ones that belong on this question.' : 'Nothing new matched that. Ask more specifically, or add a page, a photo, or what you know.',
     sourceIds: found.map((item) => item.id),
     createdAt: now
-  }].slice(-40)
+  }
+  meta.messages = [...(meta.messages || []), userMessage, assistantMessage].slice(-40)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -915,7 +921,7 @@ export async function addTopicClip(patchId: string, id: string, userId: string, 
   const url = input.url.trim().slice(0, 500)
   const title = (input.title || domainOf(url) || 'Source').slice(0, 180)
   if (meta.sources.some((item) => item.url === url && item.quote === quote)) return toCard({ ...row, metadata: meta }, userId)
-  meta.sources = [...meta.sources, {
+  meta.sources = [...meta.sources, memberSource({
     id: idFor(),
     title,
     url,
@@ -924,7 +930,7 @@ export async function addTopicClip(patchId: string, id: string, userId: string, 
     origin: 'member',
     addedBy: userId,
     addedByName: name
-  }].slice(0, 24)
+  })].slice(0, 24)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -936,7 +942,7 @@ export async function addTopicText(patchId: string, id: string, userId: string, 
   const quote = text.trim().slice(0, 4000)
   if (!quote) return null
   const placed = await placeOnQuestion(row.title, quote, 'Note')
-  meta.sources = [...meta.sources, {
+  meta.sources = [...meta.sources, memberSource({
     id: idFor(),
     title: placed.title,
     url: '',
@@ -946,7 +952,7 @@ export async function addTopicText(patchId: string, id: string, userId: string, 
     origin: 'member',
     addedBy: userId,
     addedByName: name
-  }].slice(0, 24)
+  })].slice(0, 24)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -964,7 +970,7 @@ export async function addTopicImageSource(patchId: string, id: string, userId: s
   const reading = await explainPhotograph({ question: row.title, caption, bytes, mime }).catch(() => '')
   const parts = reading ? splitReading(reading) : { title: '', quote: '', summary: '' }
   const quote = parts.quote || caption.trim().slice(0, 4000) || 'Photo added to this question.'
-  meta.sources = [...meta.sources, {
+  meta.sources = [...meta.sources, memberSource({
     id: idFor(),
     title: parts.title || contentTitle(quote, 'Photograph'),
     url: '',
@@ -975,7 +981,7 @@ export async function addTopicImageSource(patchId: string, id: string, userId: s
     origin: 'member',
     addedBy: userId,
     addedByName: name
-  }].slice(0, 24)
+  })].slice(0, 24)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -1022,7 +1028,7 @@ export async function addTopicUploadedPdf(patchId: string, id: string, userId: s
   const fallback = pdfFileName(fileName)
   const quote = quoteFromMemberPage(text, row.title, patch?.title || '', lookFor) || 'The PDF is the source. Open the file to read it.'
   const placed = await placeOnQuestion(row.title, quote, fallback, { name: fallback, url, lookFor })
-  meta.sources = [{
+  meta.sources = [memberSource({
     id: idFor(),
     title: placed.title || fallback,
     url,
@@ -1032,7 +1038,7 @@ export async function addTopicUploadedPdf(patchId: string, id: string, userId: s
     origin: 'member',
     addedBy: userId,
     addedByName: name
-  }, ...meta.sources].slice(0, 24)
+  }), ...meta.sources].slice(0, 24)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -1043,7 +1049,7 @@ export async function addTopicUploadedVideo(patchId: string, id: string, userId:
   if (!row || !meta) return null
   const video = await saveVideoFile(id, bytes, mime)
   const title = fileName.replace(/\.[a-z0-9]+$/i, '').slice(0, 180) || 'Video'
-  meta.sources = [...meta.sources, {
+  meta.sources = [...meta.sources, memberSource({
     id: idFor(),
     title,
     url: video,
@@ -1053,7 +1059,7 @@ export async function addTopicUploadedVideo(patchId: string, id: string, userId:
     origin: 'member',
     addedBy: userId,
     addedByName: name
-  }].slice(0, 24)
+  })].slice(0, 24)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }

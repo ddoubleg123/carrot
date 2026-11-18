@@ -13,8 +13,12 @@ const MODEL = path.join(process.cwd(), '.cache', 'vosk', 'vosk-model-small-en-us
 
 function runScript(inputPath: string, options?: { keep?: boolean; timeoutMs?: number }) {
   return new Promise<LocalTranscript>((resolve, reject) => {
-    const env = { ...process.env, VOSK_MODEL_PATH: MODEL, VOSK_LOG_LEVEL: '-1' };
-    if (options?.keep) env.VOSK_KEEP = '1';
+    const env = {
+      ...process.env,
+      VOSK_MODEL_PATH: MODEL,
+      VOSK_LOG_LEVEL: '-1',
+      ...(options?.keep ? { VOSK_KEEP: '1' } : {})
+    } as NodeJS.ProcessEnv;
     const child = spawn('python', [SCRIPT, inputPath], {
       env,
       windowsHide: true,

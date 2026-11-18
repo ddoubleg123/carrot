@@ -359,7 +359,7 @@ function PdfView({ url, title }: { url: string; title: string }) {
       list = Array.isArray(data?.pages) ? data.pages.filter((item: unknown): item is string => typeof item === 'string') : []
       setPages(list)
     }
-    const found = list.flatMap((text, index) => text.toLowerCase().includes(needle) ? [index + 1] : [])
+    const found = (list ?? []).flatMap((text, index) => text.toLowerCase().includes(needle) ? [index + 1] : [])
     setHits(found)
     setAt(0)
     setStatus(found.length ? '' : 'No matches in this PDF.')

@@ -44,6 +44,7 @@ describe('audit analytics helpers', () => {
     const logs = buildRobotsDecisions([
       {
         step: 'fetch',
+        status: 'rejected',
         decisions: { reason: 'robots_forbidden', rule: 'no-archive' },
         candidateUrl: 'https://robots.example.com'
       }

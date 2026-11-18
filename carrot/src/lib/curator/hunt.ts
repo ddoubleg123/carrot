@@ -351,7 +351,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
       const video = host.includes('youtube.com') || host === 'youtu.be'
       console.log(`[curator] x lead ${host}`)
       const page = video ? null : await readPublicUrl(url).catch(() => null)
-      const body = video ? await readCaptions(url) : page?.text || ''
+      const body = (video ? await readCaptions(url) : page?.text) || ''
       const reading = judgeReading(body, post.title, video ? 'video' : 'page')
       if (!reading.keep) {
         pass.dropped.push({ title: post.title, from: account.name, reason: `The link was read. ${reading.reason}` })

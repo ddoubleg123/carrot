@@ -1,11 +1,6 @@
 import { expandPlannerQuery, filterQuerySuggestions, QueryExpanderConstants } from '../discovery/queryExpander'
 import type { FrontierItem } from '@/lib/redis/discovery'
 
-declare global {
-  // eslint-disable-next-line no-var
-  var fetch: typeof fetch | undefined
-}
-
 const patchId = 'patch-1'
 
 const buildCandidate = (overrides: Partial<FrontierItem> = {}): FrontierItem => ({

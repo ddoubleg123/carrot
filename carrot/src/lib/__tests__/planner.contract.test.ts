@@ -4,6 +4,7 @@ import type { DiscoveryPlan, PlannerSeedCandidate } from '../discovery/planner'
 const buildSeed = (host: string, path: string, overrides: Partial<PlannerSeedCandidate> = {}): PlannerSeedCandidate => ({
   url: `https://${host}/${path}`,
   titleGuess: `${host} article`,
+  category: 'media',
   sourceType: 'media',
   angle: 'coverage',
   stance: 'establishment',
@@ -31,7 +32,7 @@ const buildValidPlan = (): DiscoveryPlan => {
 
   const seeds: PlannerSeedCandidate[] = [
     buildSeed('en.wikipedia.org', 'wiki/Sample_Topic', {
-      sourceType: 'wikipedia',
+      sourceType: 'official',
       priority: 1
     }),
     ...nonWikiHosts.slice(0, 9).map((host, index) =>

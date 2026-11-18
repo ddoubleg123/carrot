@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState } from 'react';
+import { EmojiStyle } from 'emoji-picker-react';
 import { Image as ImageIcon, Mic, Smile, Square, X } from 'lucide-react';
 import GifPicker from '@/app/(app)/dashboard/components/GifPicker';
 import type { MediaKind } from './commentCodec';
@@ -262,7 +263,7 @@ export default function RichComposer({
             </button>
           </div>
           <EmojiPicker
-            emojiStyle="native"
+            emojiStyle={EmojiStyle.NATIVE}
             width="100%"
             height={280}
             lazyLoadEmojis={false}
