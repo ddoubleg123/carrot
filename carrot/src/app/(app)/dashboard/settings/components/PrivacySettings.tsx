@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LockClosedIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 export default function PrivacySettings() {
@@ -10,13 +10,19 @@ export default function PrivacySettings() {
     showLocation: false,
   });
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('carrot-privacy-prefs');
+      if (raw) setPrivacySettings((prev) => ({ ...prev, ...JSON.parse(raw) }));
+    } catch {}
+  }, []);
+
   const handleSettingChange = (setting: keyof typeof privacySettings, value: any) => {
-    setPrivacySettings(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-    // TODO: Implement privacy setting update
-    console.log(`Privacy setting ${setting} set to ${value}`);
+    setPrivacySettings(prev => {
+      const next = { ...prev, [setting]: value };
+      try { localStorage.setItem('carrot-privacy-prefs', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   return (

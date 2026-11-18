@@ -60,7 +60,7 @@ const MENU = [
     label: 'Carrot Patch',
   },
   {
-    href: '/dashboard/messages',
+    href: '/messages',
     icon: <SidebarIcons.Messages />,
     label: 'Messages',
   },

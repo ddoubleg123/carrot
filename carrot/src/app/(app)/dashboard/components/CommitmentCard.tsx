@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState, forwardRef, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import ImageWithFallback from "../../../../components/ImageWithFallback";
 import { ChatBubbleOvalLeftIcon as ChatBubbleLeftIcon, ShareIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
@@ -13,9 +15,12 @@ import EditPostModal from "../../../../components/EditPostModal";
 import VideoPlayerManager from "../../../../lib/VideoPlayerManager";
 import FlagChip from "../../../../components/flags/FlagChip";
 import { useModalRoute } from "../../../../hooks/useModalRoute";
+import { rememberPost } from "../../../../components/post-modal/postModalStore";
 import PostActionBar from "../../../../components/post/PostActionBar";
 import ShareSheet from "../../../../components/share/ShareSheet";
 import VideoErrorBoundary from "../../../../components/VideoErrorBoundary";
+import { youtubeEmbedSrc, youtubeIdFromText } from "../../../../lib/youtube";
+import { parseFeedPost, patchConversation } from "../../../../lib/feedPost";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -60,6 +65,8 @@ type CustomProps = {
   // Upload state
   uploadStatus?: "uploading" | "uploaded" | "processing" | "ready" | null;
   uploadProgress?: number | null;
+  autoPlay?: boolean;
+  feedIndex?: number;
   // Ownership
   currentUserId?: string;
   // Edit metadata (optional if fetched from server)
@@ -127,7 +134,9 @@ const MemoizedVideoPlayer = React.memo(VideoPlayer, (prevProps, nextProps) => {
   return (
     prevProps.videoUrl === nextProps.videoUrl &&
     prevProps.postId === nextProps.postId &&
-    prevProps.uploadStatus === nextProps.uploadStatus
+    prevProps.uploadStatus === nextProps.uploadStatus &&
+    prevProps.autoPlay === nextProps.autoPlay &&
+    prevProps.feedIndex === nextProps.feedIndex
   );
 });
 
@@ -139,8 +148,151 @@ function isAriaOrData(k: string) {
   return k.startsWith('aria-') || k.startsWith('data-');
 }
 
+const youtubeRatios = new Map<string, number>()
+let youtubeLeader: string | null = null
+const youtubeListeners = new Set<() => void>()
+
+function rankYoutube(id: string, ratio: number) {
+  if (ratio < 0.6) youtubeRatios.delete(id)
+  else youtubeRatios.set(id, ratio)
+  let next: string | null = null
+  let best = 0.6
+  youtubeRatios.forEach((value, key) => {
+    if (value >= best) {
+      best = value
+      next = key
+    }
+  })
+  if (next === youtubeLeader) return
+  youtubeLeader = next
+  youtubeListeners.forEach((listener) => listener())
+}
+
+function FeedYoutube({ videoId, poster, postId }: { videoId: string; poster?: string | null; postId: string }) {
+  const wrap = useRef<HTMLDivElement>(null)
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => {
+    const sync = () => setPlaying(youtubeLeader === postId)
+    youtubeListeners.add(sync)
+    sync()
+    return () => {
+      youtubeListeners.delete(sync)
+      rankYoutube(postId, 0)
+    }
+  }, [postId])
+  useEffect(() => {
+    const node = wrap.current
+    if (!node) return
+    const measure = () => {
+      const rect = node.getBoundingClientRect()
+      const height = window.innerHeight || 1
+      const visible = Math.max(0, Math.min(rect.bottom, height) - Math.max(rect.top, 0))
+      rankYoutube(postId, rect.height > 0 ? visible / rect.height : 0)
+    }
+    measure()
+    const observer = new IntersectionObserver(([entry]) => {
+      rankYoutube(postId, entry.isIntersecting ? entry.intersectionRatio : 0)
+    }, { threshold: [0, 0.6, 0.85] })
+    observer.observe(node)
+    window.addEventListener('scroll', measure, { passive: true })
+    window.addEventListener('resize', measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', measure)
+      window.removeEventListener('resize', measure)
+    }
+  }, [postId])
+  return (
+    <div ref={wrap} className="relative w-full overflow-hidden rounded-lg bg-black" style={{ aspectRatio: '16 / 9' }}>
+      {playing ? (
+        <iframe
+          src={youtubeEmbedSrc(videoId, true)}
+          title="Video"
+          className="absolute inset-0 h-full w-full"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      ) : poster ? (
+        <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      ) : null}
+    </div>
+  )
+}
+
+function ArticlePreview({ url, title, published, site, image, embedded }: { url: string; title: string; published: string; site: string; image?: string; embedded?: boolean }) {
+  let host = site
+  if (!host) {
+    try { host = new URL(url).hostname.replace(/^www\./, '') } catch {}
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={embedded
+        ? 'mt-3 block overflow-hidden whitespace-normal rounded-lg'
+        : 'mt-3 block overflow-hidden rounded-xl border border-gray-200 bg-white'}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {image ? (
+        <div className="relative h-[150px] w-full overflow-hidden rounded-lg bg-gray-100">
+          <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+        </div>
+      ) : null}
+      <div className={embedded ? 'px-0.5 pt-3' : 'px-3 py-3'}>
+        <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          {host}{published ? ` · ${published}` : ''}
+        </div>
+        {title ? <div className="mt-1 text-[15px] font-semibold leading-5 text-gray-900">{title}</div> : null}
+      </div>
+    </a>
+  )
+}
+
+function ProfileLink({ username, className, children }: { username?: string | null; className: string; children: React.ReactNode }) {
+  const handle = String(username || '').replace(/^@/, '').trim()
+  if (!handle || handle === 'user') return <span className={className}>{children}</span>
+  return (
+    <Link
+      href={`/people/${encodeURIComponent(handle)}`}
+      className={className}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function PostCopy({ content }: { content: string }) {
+  return (
+    <>
+      {content.split('\n').map((line, index) => {
+        const trimmed = line.trim()
+        if (!trimmed) return <span key={index}>{'\n'}</span>
+        if (/^https?:\/\/\S+$/.test(trimmed)) {
+          let host = trimmed
+          try { host = new URL(trimmed).hostname.replace(/^www\./, '') } catch {}
+          return (
+            <a
+              key={index}
+              href={trimmed}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block text-sm font-medium text-[#C2410C] underline decoration-[#C2410C]/40"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {host}
+            </a>
+          )
+        }
+        return <span key={index}>{line}{'\n'}</span>
+      })}
+    </>
+  )
+}
+
 const CUSTOM_PROP_KEYS = new Set<keyof CustomProps>([
-  'id','content','author','location','stats','userVote','onVote','onDelete','onBlock','timestamp','imageUrls','gifUrl','videoUrl','thumbnailUrl','cfUid','cfPlaybackUrlHls','captionVttUrl','audioUrl','audioTranscription','transcriptionStatus','uploadStatus','uploadProgress','currentUserId','editedAt','editCount','carrotText','stickText','videoThumbnail','videoTranscriptionStatus','audioDurationSeconds','emoji','gradientFromColor','gradientToColor','gradientViaColor','gradientDirection','innerBoxColor','asChild','debugUnknownPropsToConsole','debugDataPrefix','enableDataAttributes'
+  'id','content','author','location','stats','userVote','onVote','onDelete','onBlock','timestamp','imageUrls','gifUrl','videoUrl','thumbnailUrl','cfUid','cfPlaybackUrlHls','captionVttUrl','audioUrl','audioTranscription','transcriptionStatus','uploadStatus','uploadProgress','autoPlay','feedIndex','currentUserId','editedAt','editCount','carrotText','stickText','videoThumbnail','videoTranscriptionStatus','audioDurationSeconds','emoji','gradientFromColor','gradientToColor','gradientViaColor','gradientDirection','innerBoxColor','asChild','debugUnknownPropsToConsole','debugDataPrefix','enableDataAttributes'
 ]);
 
 // Conservative whitelist of DOM event props we allow through to the root element
@@ -181,6 +333,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     transcriptionStatus,
     uploadStatus,
     uploadProgress,
+    autoPlay = false,
+    feedIndex,
     currentUserId,
     onDelete,
     // new props
@@ -213,6 +367,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const analyserRef = useRef<ReturnType<typeof createAnalyserFromMedia> | null>(null);
   const { openPostModal } = useModalRoute();
+  const router = useRouter();
+  const talk = patchConversation(content);
+  const openCard = (panel?: 'transcript' | 'translate' | 'comments') => {
+    if (talk) {
+      router.push(talk);
+      return;
+    }
+    openPostModal(id, panel);
+  };
   // Hover UI state and video element handle
   const [hovering, setHovering] = useState(false);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
@@ -220,6 +383,28 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const lightboxMountRef = useRef<HTMLDivElement | null>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const hasVideo = Boolean(videoUrl || cfUid || cfPlaybackUrlHls);
+  const imageUrl = gifUrl || imageUrls[0] || undefined;
+  rememberPost({
+    id,
+    content,
+    author: {
+      id: author.id || 'temp',
+      name: author.name || author.username || 'Someone',
+      username: String(author.username || '').replace(/^@/, '') || undefined,
+      avatar: author.avatar || undefined,
+    },
+    mediaUrl: hasVideo ? (videoUrl || props.thumbnailUrl || undefined) : imageUrl,
+    thumbnailUrl: props.thumbnailUrl || imageUrl || undefined,
+    videoUrl: videoUrl || undefined,
+    mediaType: hasVideo ? 'video' : imageUrl ? 'image' : undefined,
+    likes: stats?.likes ?? 0,
+    comments: stats?.comments ?? 0,
+    shares: stats?.reposts ?? 0,
+    isLiked: false,
+    isBookmarked: false,
+    createdAt: timestamp || new Date().toISOString(),
+  });
   const attachVideoRef = (el: HTMLVideoElement | null) => {
     videoElRef.current = el;
     try { VideoPlayerManager.inst.adopt(el); } catch {}
@@ -417,6 +602,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
   // Detect presence of any video media to avoid rendering images/GIF alongside video
   const hasVideoMedia = Boolean(cfUid || cfPlaybackUrlHls || videoUrl);
+  const youtubeId = youtubeIdFromText(content);
+  const parts = parseFeedPost(content);
+  const article = !youtubeId && parts.url ? parts : null;
+  const textOnGradient = Boolean(
+    hasGradient && !gifUrl && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl
+    && (article || !imageUrls || imageUrls.length === 0)
+  );
 
   return (
     <div
@@ -449,8 +641,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             {audioUrl ? (
               <AudioHero avatarSrc={author?.avatar || null} size={40} analyser={analyserRef.current as any} state={isAudioPlaying ? 'playing' : 'paused'} />
             ) : (
-              <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative">
-                {author?.avatar ? (
+              <ProfileLink username={author?.username} className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 relative block">
+                {author?.avatar?.endsWith('.svg') ? (
+                  <img src={author.avatar} alt="" className="h-full w-full object-cover" />
+                ) : author?.avatar ? (
                   <Image
                     src={author.avatar}
                     alt={author?.username && String(author.username).trim() ? `${String(author.username)}'s avatar` : 'User avatar'}
@@ -460,23 +654,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     loading="lazy"
                     unoptimized
                     style={{ objectFit: 'cover' }}
-                    onLoad={() => {
-                      console.log('[CommitmentCard] ✓ Avatar loaded successfully:', {
-                        postId: id,
-                        avatarUrl: author.avatar?.substring(0, 100),
-                        isDataUri: author.avatar?.startsWith('data:'),
-                        isFirebase: author.avatar?.includes('firebasestorage')
-                      });
-                    }}
                     onError={(e) => {
-                      console.error('[CommitmentCard] ✗ Avatar load ERROR:', {
-                        postId: id,
-                        avatarUrl: author.avatar?.substring(0, 100),
-                        isDataUri: author.avatar?.startsWith('data:'),
-                        isProxied: author.avatar?.startsWith('/api/img'),
-                        error: e.type
-                      });
-                      // Fallback to placeholder on error
                       e.currentTarget.src = '/avatar-placeholder.svg';
                     }}
                   />
@@ -487,35 +665,25 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                     </span>
                   </div>
                 )}
-              </div>
+              </ProfileLink>
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="font-semibold text-gray-900 truncate">
-                  {author && author.username && String(author.username).trim() ? (String(author.username).startsWith("@") ? String(author.username) : `@${String(author.username)}`) : "@user"}
-                </span>
+                <ProfileLink username={author?.username} className="font-semibold text-gray-900 truncate hover:underline">
+                  {author?.name && String(author.name).trim()
+                    ? String(author.name).trim()
+                    : (author && author.username && String(author.username).trim() ? (String(author.username).startsWith("@") ? String(author.username) : `@${String(author.username)}`) : "@user")}
+                </ProfileLink>
                 {(() => {
                   const cc = props.homeCountry || (author as any)?.flag || (author as any)?.country || null;
-                  // Debug logging for flag data
-                  if (process.env.NODE_ENV !== 'production') {
-                    console.log('[CommitmentCard] Flag debug:', {
-                      postId: id,
-                      homeCountry: props.homeCountry,
-                      authorFlag: (author as any)?.flag,
-                      authorCountry: (author as any)?.country,
-                      finalCountryCode: cc,
-                      authorData: author
-                    });
-                  }
-                  // Only show flag chip if we have a valid country code (size defaults to 36px)
                   return cc ? <FlagChip countryCode={cc} /> : null;
                 })()}
                 <button
                   type="button"
                   className="text-xs text-gray-500 underline-offset-2 hover:underline"
-                  onClick={() => openPostModal(id)}
+                  onClick={() => openCard()}
                   aria-label="Open post permalink"
                   title="Open post"
                 >
@@ -605,15 +773,25 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
         {/* Content */}
         {/* Non-media posts: place content inside the gradient visual to mirror composer */}
-        {hasGradient && !gifUrl && (!imageUrls || imageUrls.length === 0) && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl ? (
+        {textOnGradient ? (
           <div className="mt-3 rounded-xl w-full" style={{ background: gradientCss }}>
             <div className="p-4 sm:p-5">
               {content ? (
                 <div
                   className="bg-white/90 border border-white/60 rounded-lg p-3 sm:p-4 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
-                  onClick={() => openPostModal(id)}
+                  onClick={() => openCard()}
                 >
-                  {content}
+                  <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} />
+                  {article ? (
+                    <ArticlePreview
+                      embedded
+                      url={article.url}
+                      title={article.title}
+                      published={article.published}
+                      site={article.site}
+                      image={article.image || imageUrls?.[0]}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {/* Composer parity: place actions over the gradient for non-media posts */}
@@ -622,15 +800,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 stats={stats}
                 canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
                 permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
-                onComment={() => openPostModal(id, 'comments')}
+                onComment={() => openCard('comments')}
                 onLike={(liked) => {
                   try { console.log('[ActionBar] like toggled', { id, liked }); } catch {}
                 }}
                 onSaveToggle={(saved) => { try { console.log('[ActionBar] save toggled', { id, saved }); } catch {} }}
                 onShareInApp={() => setShowShare(true)}
                 onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
-                onTranscribe={() => { try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {} }}
-                onTranslate={() => { try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {} }}
+                onTranscribe={() => { try { console.log('[ActionBar] open transcript/chapters', { id }); openCard('transcript'); } catch {} }}
+                onTranslate={() => { try { console.log('[ActionBar] translate requested', { id }); openCard('translate'); } catch {} }}
               />
             </div>
           </div>
@@ -638,9 +816,9 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           content ? (
             <div
               className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
-              onClick={() => openPostModal(id)}
+              onClick={() => openCard()}
             >
-              {content}
+              <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} />
             </div>
           ) : null
         )}
@@ -651,23 +829,37 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         ) : null}
 
         {/* Images / GIF */}
-        {!hasVideoMedia && gifUrl ? (
-          <div className="mt-3 cursor-pointer" onClick={() => openPostModal(id)}>
+        {!hasVideoMedia && youtubeId ? (
+          <div className="mt-3">
+            <div className="rounded-xl p-2" style={hasGradient ? { background: gradientCss } : undefined}>
+              <FeedYoutube videoId={youtubeId} poster={thumbnailUrl || imageUrls?.[0]} postId={id} />
+            </div>
+          </div>
+        ) : !hasVideoMedia && gifUrl ? (
+          <div className="mt-3 cursor-pointer" onClick={() => openCard()}>
             <div className="w-full rounded-xl overflow-hidden relative" style={{ aspectRatio: '16 / 9' }}>
               <ImageWithFallback
                 src={gifUrl}
                 alt={content ? `${content.slice(0, 60)} (animated gif)` : 'Animated GIF'}
                 fill
                 sizes="(max-width: 768px) 100vw, 700px"
-                priority={false}
-                loading="lazy"
+                priority={feedIndex != null && feedIndex < 3}
+                loading={feedIndex != null && feedIndex < 5 ? 'eager' : 'lazy'}
                 unoptimized
                 style={{ objectFit: 'cover' }}
                 maxRetries={3}
               />
             </div>
           </div>
-        ) : !hasVideoMedia && imageUrls && imageUrls.length > 0 ? (
+        ) : article && !textOnGradient ? (
+          <ArticlePreview
+            url={article.url}
+            title={article.title}
+            published={article.published}
+            site={article.site}
+            image={article.image || imageUrls?.[0]}
+          />
+        ) : !article && !hasVideoMedia && imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
             {/* Wrap media in gradient even when images exist so color passes over */}
             <div
@@ -675,15 +867,15 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               style={hasGradient ? { background: gradientCss } : undefined}
             >
             {imageUrls.length === 1 ? (
-            <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openPostModal(id)}>
+            <div className="cursor-pointer rounded-lg overflow-hidden" onClick={() => openCard()}>
               <div className="w-full relative" style={{ aspectRatio: '16 / 9' }}>
                 <ImageWithFallback
                   src={imageUrls[0]}
                   alt={content ? `${content.slice(0, 60)} (image)` : 'Post image'}
                   fill
                   sizes="(max-width: 768px) 100vw, 700px"
-                  priority={false}
-                  loading="lazy"
+                  priority={feedIndex != null && feedIndex < 3}
+                  loading={feedIndex != null && feedIndex < 5 ? 'eager' : 'lazy'}
                   unoptimized
                   style={{ objectFit: 'cover' }}
                   maxRetries={3}
@@ -691,7 +883,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               </div>
             </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openPostModal(id)}>
+                <div className="grid grid-cols-2 gap-2 cursor-pointer" onClick={() => openCard()}>
                   {imageUrls.slice(0, 4).map((u, i) => (
                     <div key={i} className="relative w-full h-48 rounded-lg overflow-hidden">
                       <ImageWithFallback
@@ -699,8 +891,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                         alt={content ? `${content.slice(0, 40)} (image ${i + 1})` : `Post image ${i + 1}`}
                         fill
                         sizes="(max-width: 768px) 50vw, 33vw"
-                        priority={false}
-                        loading="lazy"
+                        priority={feedIndex != null && feedIndex < 3}
+                        loading={feedIndex != null && feedIndex < 5 ? 'eager' : 'lazy'}
                         unoptimized
                         style={{ objectFit: 'cover' }}
                         maxRetries={3}
@@ -731,7 +923,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  openPostModal(id, 'comments');
+                  openCard('comments');
                 }}
                 title="Open in fullscreen"
               >
@@ -805,6 +997,8 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                       uploadProgress={uploadProgress || 0}
                       onVideoRef={attachVideoRef}
                       disableNativeControls={false}
+                      autoPlay={autoPlay}
+                      feedIndex={feedIndex}
                     />
                   </VideoErrorBoundary>
                 );
@@ -823,6 +1017,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               visualSeedOverride={props.visualSeed ?? null}
               visualStyleOverride={props.visualStyle ?? null}
               promoJingleUrl="/carrotnom.mp3"
+              warm={feedIndex == null || feedIndex < 5}
               onAudioRef={(el) => {
                 try {
                   // Do not create another MediaElementSource here; let child own analyser
@@ -837,13 +1032,13 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         )}
 
         {/* Actions (skip here if non-media gradient already rendered them inside) */}
-        {!(hasGradient && !gifUrl && (!imageUrls || imageUrls.length === 0) && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl) && (
+        {!textOnGradient && (
           <PostActionBar
             postId={id}
             stats={stats}
             canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
             permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
-            onComment={() => openPostModal(id, 'comments')}
+            onComment={() => openCard('comments')}
             onLike={(liked) => {
               try {
                 // Optimistic UI already handled in child; optionally call API here
@@ -856,10 +1051,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
             onShareInApp={() => setShowShare(true)}
             onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
             onTranscribe={() => {
-              try { console.log('[ActionBar] open transcript/chapters', { id }); openPostModal(id, 'transcript'); } catch {}
+              try { console.log('[ActionBar] open transcript/chapters', { id }); openCard('transcript'); } catch {}
             }}
             onTranslate={() => {
-              try { console.log('[ActionBar] translate requested', { id }); openPostModal(id, 'translate'); } catch {}
+              try { console.log('[ActionBar] translate requested', { id }); openCard('translate'); } catch {}
             }}
           />
         )}

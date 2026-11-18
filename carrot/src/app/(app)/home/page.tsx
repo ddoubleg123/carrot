@@ -12,7 +12,6 @@ import NetworkPerformanceMonitor from '../../../components/debug/NetworkPerforma
 import ErrorBoundary from '../../../components/ErrorBoundary';
 import { Inter } from 'next/font/google';
 
-export const dynamic = 'force-dynamic';
 export const revalidate = 60; // Revalidate every minute
 
 const inter = Inter({ subsets: ['latin'] });

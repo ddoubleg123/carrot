@@ -32,14 +32,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       return NextResponse.json({ error: 'Host not allowed' }, { status: 400 });
     }
 
-    // Forward important headers, especially Range for media streaming
-    const fwdHeaders: HeadersInit = {};
+    // Forward a bounded Range so seeking still works. Do not forward
+    // If-None-Match / If-Modified-Since: a 304 has no bytes, and the player
+    // stops after the first buffered slice. bytes=0- means "the whole file".
+    const fwdHeaders: Record<string, string> = {};
     const range = req.headers.get('range');
-    if (range) fwdHeaders['Range'] = range;
-    const ifNoneMatch = req.headers.get('if-none-match');
-    if (ifNoneMatch) fwdHeaders['If-None-Match'] = ifNoneMatch;
-    const ifModifiedSince = req.headers.get('if-modified-since');
-    if (ifModifiedSince) fwdHeaders['If-Modified-Since'] = ifModifiedSince;
+    const wantsWholeFile = !range || /^bytes=0-$/i.test(range.trim());
+    if (range && !wantsWholeFile) fwdHeaders['Range'] = range;
 
     // Force alt=media for Firebase if not present
     if (!target.searchParams.has('alt')) {
@@ -54,7 +53,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       range: fwdHeaders['Range']
     });
     
-    const upstream = await fetch(target.toString(), {
+    const fetchAudio = () => fetch(target.toString(), {
       method: 'GET',
       headers: {
         ...fwdHeaders,
@@ -65,6 +64,13 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       cache: 'no-store',
       signal: AbortSignal.timeout(60000), // 60 second timeout for large audio files
     });
+
+    let upstream = await fetchAudio();
+    // A conditional request can still come back empty. Fetch the bytes again.
+    if (upstream.status === 304) {
+      delete fwdHeaders['Range'];
+      upstream = await fetchAudio();
+    }
     
     console.log('[api/audio] Fetch response', {
       status: upstream.status,
@@ -86,19 +92,17 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
       'content-length',
       'accept-ranges',
       'content-range',
-      'etag',
-      'last-modified',
-      'cache-control',
     ];
     for (const h of copyHeaders) {
       const v = upstream.headers.get(h);
       if (v) headers.set(h, v);
     }
-    // Our CORS + cache headers
+    // A full-file response must not look like a partial one, or the player
+    // treats the first slice as the end of the recording.
+    if (status !== 206) headers.delete('content-range');
+    if (!headers.has('accept-ranges')) headers.set('Accept-Ranges', 'bytes');
     headers.set('Access-Control-Allow-Origin', '*');
-    if (!headers.has('cache-control')) {
-      headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-    }
+    headers.set('Cache-Control', 'no-store');
 
     // Stream body directly
     return new NextResponse(upstream.body, { status, headers });

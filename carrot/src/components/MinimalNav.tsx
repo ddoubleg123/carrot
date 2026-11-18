@@ -1,13 +1,14 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import CarrotLogo from './CarrotLogo';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { signOutAction } from '../actions/auth-actions';
 import { SidebarIcons } from './icons/SidebarIcons';
 import { logoutClient } from '../lib/logoutClient';
+import { prefetchNotifications } from '../lib/notificationFeed';
 
 // Minimalist icon components unified with currentColor
 const NavIcons = {
@@ -85,17 +86,18 @@ const NavIcons = {
       </svg>
     </div>
   ),
-  CodeAnalysis: ({ isActive }: { isActive: boolean }) => (
+  PolWatch: ({ isActive }: { isActive: boolean }) => (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
       isActive
         ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" strokeWidth="2"/>
-        <path d="M9 9h6v6H9z" stroke="currentColor" strokeWidth="2"/>
-        <path d="M9 1v6m6-6v6" stroke="currentColor" strokeWidth="2"/>
-        <path d="M9 17v6m6-6v6" stroke="currentColor" strokeWidth="2"/>
+        <path d="M4 20V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M8 20V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M12 20V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M16 20V4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M20 20V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     </div>
   ),
@@ -130,7 +132,12 @@ const MENU_ITEMS = [
     label: 'Carrot Patch',
   },
   {
-    href: '/dashboard/messages',
+    href: '/pol-watch',
+    icon: NavIcons.PolWatch,
+    label: 'Pol Watch',
+  },
+  {
+    href: '/messages',
     icon: NavIcons.Messages,
     label: 'Messages',
   },
@@ -145,11 +152,6 @@ const MENU_ITEMS = [
     label: 'Funds',
   },
   {
-    href: '/code-analysis',
-    icon: NavIcons.CodeAnalysis,
-    label: 'Code Analysis',
-  },
-  {
     href: '/settings',
     icon: NavIcons.Settings,
     label: 'Settings',
@@ -158,9 +160,32 @@ const MENU_ITEMS = [
 
 export default function MinimalNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Build the menu pages one at a time after the current page is up, so the
+  // first click is not waiting on a cold compile.
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+    const hrefs = MENU_ITEMS.map((item) => item.href).filter((href) => href !== '/rabbit');
+    const warm = (index: number) => {
+      if (cancelled || index >= hrefs.length) return;
+      try { router.prefetch(hrefs[index]); } catch {}
+      timer = window.setTimeout(() => warm(index + 1), 800);
+    };
+    timer = window.setTimeout(() => warm(0), 1200);
+    const prefetchTimer = window.setTimeout(() => {
+      if (!cancelled) prefetchNotifications();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(prefetchTimer);
+    };
+  }, [router]);
 
   const TooltipLayer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (!mounted) return null;
@@ -172,6 +197,7 @@ export default function MinimalNav() {
       {/* Logo/Home */}
       <Link 
         href="/home" 
+        prefetch={true}
         className="mb-8 p-2 rounded-xl hover:bg-orange-50 transition-colors duration-200"
         aria-label="Home"
       >
@@ -184,19 +210,33 @@ export default function MinimalNav() {
 
       {/* Menu Items */}
       <div className="flex flex-col gap-4">
-        {MENU_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+        {MENU_ITEMS.map((item, index) => {
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const IconComponent = item.icon;
           
           return (
             <div key={item.href} className="relative">
               <Link
                 href={item.href}
+                prefetch={item.href !== '/rabbit'}
                 className="block"
-                onMouseEnter={() => setHoveredItem(item.href)}
+                aria-label={item.label}
+                onPointerDown={() => {
+                  if (item.href === '/dashboard/notifications') prefetchNotifications();
+                  if (item.href === '/rabbit') {
+                    try { router.prefetch(item.href); } catch {}
+                  }
+                }}
+                onMouseEnter={() => {
+                  setHoveredItem(item.href);
+                  if (item.href === '/dashboard/notifications') prefetchNotifications();
+                  if (item.href === '/rabbit') {
+                    try { router.prefetch(item.href); } catch {}
+                  }
+                }}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                <IconComponent isActive={isActive} />
+                <MenuIcon icon={IconComponent} active={isActive} />
               </Link>
               
               {/* Tooltip */}
@@ -207,13 +247,7 @@ export default function MinimalNav() {
                     style={{ 
                       zIndex: 2147483647,
                       left: '88px', // Position to the right of the 80px nav
-                      top: `${item.href === MENU_ITEMS[0].href ? '120px' : 
-                            item.href === MENU_ITEMS[1].href ? '172px' :
-                            item.href === MENU_ITEMS[2].href ? '224px' :
-                            item.href === MENU_ITEMS[3].href ? '276px' :
-                            item.href === MENU_ITEMS[4].href ? '328px' :
-                            item.href === MENU_ITEMS[5].href ? '380px' :
-                            item.href === MENU_ITEMS[6].href ? '432px' : '484px'}`
+                      top: `${120 + index * 52}px`
                     }}
                   >
                     {item.label}
@@ -233,6 +267,11 @@ export default function MinimalNav() {
       <LogoutButton />
     </nav>
   );
+}
+
+function MenuIcon({ icon: Icon, active }: { icon: typeof NavIcons.Messages; active: boolean }) {
+  const { pending } = useLinkStatus();
+  return <Icon isActive={active || pending} />;
 }
 
 function LogoutButton() {

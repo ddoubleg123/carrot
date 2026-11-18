@@ -31,6 +31,8 @@ interface UseDiscoveryStreamReturn {
   pause: () => Promise<void>
   stop: () => Promise<void>
   refresh: () => Promise<void>
+  readLink: (url: string) => Promise<string | null>
+  ask: (question: string) => Promise<any>
 }
 
 const stageMessages: Record<DiscoveryStage, string> = {
@@ -60,6 +62,7 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  const learnAbortRef = useRef<AbortController | null>(null)
 
   const closeEventSource = useCallback(() => {
     if (eventSourceRef.current) {
@@ -185,137 +188,116 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     }
   }, [patchHandle])
 
-  const start = useCallback(async () => {
-    try {
-      console.log('[DiscoveryStream] Starting discovery for patch:', patchHandle)
-      setState(prev => ({
-        ...prev,
-        currentStatus: 'Initializing…',
-        error: undefined
-      }))
+  const runLearn = useCallback(async (options?: { url?: string; question?: string }) => {
+    learnAbortRef.current?.abort()
+    const controller = new AbortController()
+    learnAbortRef.current = controller
+    const question = options?.question?.trim()
+    setState(prev => ({
+      ...prev,
+      isActive: true,
+      isPaused: false,
+      currentStage: 'searching',
+      currentStatus: options?.url
+        ? 'Reading that link…'
+        : question
+          ? `Looking up “${question}”…`
+          : 'Reading sources…',
+      error: undefined,
+      runState: 'live'
+    }))
 
-      const response = await fetch(`/api/patches/${patchHandle}/start-discovery`, {
+    try {
+      const response = await fetch(`/api/patches/${patchHandle}/learn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'start_deepseek_search'
-        })
+        body: JSON.stringify(options?.url ? { url: options.url } : { question: question || '' }),
+        signal: controller.signal
       })
-
-      console.log('[DiscoveryStream] Start discovery response:', response.status, response.statusText)
-
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const message = await response.json().catch(() => null)
-        const errorText = message?.error || `Failed to start discovery: ${response.status}`
-        console.error('[DiscoveryStream] Start discovery failed:', errorText)
-        throw new Error(errorText)
+        throw new Error(data?.error || 'Could not save that knowledge')
       }
-
-      const data = await response.json()
-      console.log('[DiscoveryStream] Start discovery data:', data)
-      const runId = data?.runId
-      if (!runId) {
-        throw new Error('Discovery run failed to initialize - no runId returned')
-      }
-
-      console.log('[DiscoveryStream] Got runId:', runId, '- updating state and starting SSE connection')
-
-      setState(prev => ({
-        ...prev,
-        isActive: true,
-        isPaused: false,
-        currentStage: 'searching',
-        currentStatus: 'Starting discovery…',
-        error: undefined,
-        runId,
-        duplicatesSkipped: 0,
-        lowRelevanceSkipped: 0,
-        nearDuplicateSkipped: 0,
-        frontierSize: 0,
-        totalDuplicates: 0,
-        totalSkipped: 0,
-        totalSaved: 0,
-        runState: 'live'
-      }))
-
-      console.log('[DiscoveryStream] Starting SSE connection with runId:', runId)
-      startSSEConnection(runId)
-      console.log('[DiscoveryStream] SSE connection initiated')
-    } catch (error) {
-      console.error('[DiscoveryStream] Failed to start:', error)
+      await refresh()
+      const savedCount = Array.isArray(data.saved) ? data.saved.length : 0
       setState(prev => ({
         ...prev,
         isActive: false,
-        error: error instanceof Error ? error.message : 'Failed to start discovery'
+        currentStage: 'saved',
+        currentStatus: data.message || (savedCount ? `Saved ${savedCount} sources` : 'Nothing new was saved'),
+        lastItemTitle: data.saved?.[0]?.title,
+        totalSaved: savedCount || prev.totalSaved,
+        runState: undefined,
+        error: undefined
       }))
+      return data
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setState(prev => ({
+          ...prev,
+          isActive: false,
+          currentStatus: 'Stopped',
+          runState: undefined
+        }))
+        return null
+      }
+      const message = error instanceof Error ? error.message : 'Could not save that knowledge'
+      setState(prev => ({
+        ...prev,
+        isActive: false,
+        error: message,
+        currentStatus: '',
+        runState: undefined
+      }))
+      return message
     }
-  }, [patchHandle, startSSEConnection])
+  }, [patchHandle, refresh])
+
+  const start = useCallback(async () => {
+    await runLearn()
+  }, [runLearn])
+
+  const readLink = useCallback(async (url: string) => {
+    const data = await runLearn({ url })
+    if (!data || typeof data === 'string') return data
+    return data.message || null
+  }, [runLearn])
+
+  const ask = useCallback(async (question: string) => {
+    return runLearn({ question })
+  }, [runLearn])
 
   const pause = useCallback(async () => {
-    try {
-      console.log('[DiscoveryStream] Toggling pause state...')
-      const response = await fetch(`/api/patches/${patchHandle}/discovery/pause`, {
-        method: 'POST'
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to pause: ${response.status}`)
-      }
-      
-      const result = await response.json()
-      console.log('[DiscoveryStream] Pause response:', result)
-      
-      setState(prev => ({
-        ...prev,
-        isPaused: result.runState === 'paused',
-        runState: result.runState,
-        currentStatus: result.runState === 'paused' ? 'Discovery paused' : 'Discovery resumed'
-      }))
-    } catch (error) {
-      console.error('[DiscoveryStream] Failed to pause:', error)
-      setState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Failed to pause discovery'
-      }))
-    }
-  }, [patchHandle])
+    learnAbortRef.current?.abort()
+    learnAbortRef.current = null
+    setState(prev => ({
+      ...prev,
+      isActive: false,
+      isPaused: false,
+      currentStatus: 'Stopped',
+      runState: undefined
+    }))
+  }, [])
 
   const stop = useCallback(async () => {
-    try {
-      console.log('[DiscoveryStream] Stopping discovery...')
-      const response = await fetch(`/api/patches/${patchHandle}/discovery/stop`, {
-        method: 'POST'
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Failed to stop: ${response.status}`)
-      }
-      
-      const result = await response.json()
-      console.log('[DiscoveryStream] Stop response:', result)
-    } catch (error) {
-      console.error('[DiscoveryStream] Failed to stop:', error)
-      // Still update UI even if API call fails
-    } finally {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
-      }
-      activeRunIdRef.current = null
-      closeEventSource()
-      setState(prev => ({
-        ...prev,
-        isActive: false,
-        isPaused: false,
-        currentStatus: 'Discovery stopped',
-        itemsFound: items.length,
-        runId: undefined,
-        runState: 'suspended'
-      }))
+    learnAbortRef.current?.abort()
+    learnAbortRef.current = null
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
-  }, [closeEventSource, items.length, patchHandle])
+    activeRunIdRef.current = null
+    closeEventSource()
+    setState(prev => ({
+      ...prev,
+      isActive: false,
+      isPaused: false,
+      currentStatus: 'Stopped',
+      itemsFound: items.length,
+      runId: undefined,
+      runState: undefined
+    }))
+  }, [closeEventSource, items.length])
 
   const handleSSEEvent = useCallback((event: any) => {
     switch (event.type) {
@@ -490,6 +472,8 @@ export function useDiscoveryStream(patchHandle: string): UseDiscoveryStreamRetur
     start,
     pause,
     stop,
-    refresh
+    refresh,
+    readLink,
+    ask
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import telemetry from '@/lib/telemetry';
 
@@ -727,6 +728,7 @@ const Step3Review: React.FC<WizardStepProps> = ({ data, onUpdate, onNext, onBack
 
 // Main Wizard Component
 const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, onSuccess }) => {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<GroupFormData>({
     name: '',
@@ -819,6 +821,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
       // Final step - create group
       setIsLoading(true);
       setError(null);
+      let openedGroup = false;
       
       try {
         // Validate form data before sending
@@ -896,22 +899,24 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
         console.log('[CreateGroupWizard] Success response data:', groupData);
         const totalTime = performance.now() - startTime;
         telemetry.trackGroupCreateSuccess(groupData.id, totalTime);
-        
-        // Redirect to the group page using the handle
+
+        // Leave the wizard up and go straight to the new group. Closing first
+        // reveals the explore list while the next page is still loading.
         if (groupData.patch?.handle) {
           console.log('[CreateGroupWizard] Redirecting to group page:', groupData.patch.handle);
-          window.location.href = `/patch/${groupData.patch.handle}`;
-        } else {
-          console.warn('[CreateGroupWizard] No handle found in response, calling onSuccess with ID');
-          onSuccess(groupData.id);
+          openedGroup = true;
+          router.push(`/patch/${groupData.patch.handle}`);
+          return;
         }
+        console.warn('[CreateGroupWizard] No handle found in response, calling onSuccess with ID');
+        onSuccess(groupData.id);
         onClose();
       } catch (error) {
         console.error('Failed to create group:', error);
         telemetry.trackGroupCreateError(error instanceof Error ? error.message : 'Unknown error');
         setError(error instanceof Error ? error.message : 'Unknown error');
       } finally {
-        setIsLoading(false);
+        if (!openedGroup) setIsLoading(false);
       }
     }
   };
@@ -1215,7 +1220,7 @@ const CreateGroupWizard: React.FC<CreateGroupWizardProps> = ({ isOpen, onClose, 
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite'
                 }} />
-                Creating...
+                Opening your group...
               </>
             ) : (
               <>

@@ -1,9 +1,10 @@
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { Plus, Search } from 'lucide-react';
 import PatchPageClient from './PatchPageClient';
+import { ensureGroupCover } from '@/lib/groups/cover';
 
-export default async function PatchPage() {
-  // Fetch recent patches for Explore Groups
+const loadPatches = unstable_cache(async () => {
   const patches = await prisma.patch.findMany({
     include: {
       _count: {
@@ -20,8 +21,15 @@ export default async function PatchPage() {
     },
     take: 60
   });
+  return patches.map((patch) => ({ ...patch, name: patch.title }));
+}, ['explore-patches-photos-2'], { revalidate: 60 });
 
-  const patchesWithName = patches.map((patch) => ({ ...patch, name: patch.title }))
+export default async function PatchPage() {
+  const patchesWithName = await loadPatches();
+  const patches = await Promise.all(patchesWithName.map(async (patch) => ({
+    ...patch,
+    cover: await ensureGroupCover(patch, { remote: false }).catch(() => '')
+  })));
 
-  return <PatchPageClient patches={ patchesWithName } />;
+  return <PatchPageClient patches={patches} />;
 }

@@ -220,48 +220,32 @@ async function processTranscription(postId: string, audioUrl: string, transcript
     const audioSize = audioBuffer.byteLength;
     const audioDuration = Math.max(1, Math.floor(audioSize / 16000)); // Rough estimate
     
-    // Call the Vosk transcription service
-    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-lnkmm5qvx3a-uc.a.run.app';
-    
-    console.log(`🎵 Calling Vosk transcription service: ${transcriptionServiceUrl}`);
-    
-    try {
-      const transcriptionResponse = await fetch(`${transcriptionServiceUrl}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          postId: postId,
-          audioUrl: audioUrl
-        }),
-      });
+    // Recognize speech on this machine. The hosted Vosk service is not called.
+    const { transcribeLocalBytes } = await import('@/lib/asr/localVosk');
+    const local = await transcribeLocalBytes(Buffer.from(audioBuffer), 'media');
+    const heard = local.text || '';
 
-      if (transcriptionResponse.ok) {
-        const transcriptionResult = await transcriptionResponse.json();
-        console.log('✅ Transcription completed:', transcriptionResult);
-        
-        // Update the post with the transcription
-        const improvedTranscription = await improveTranscriptionWithLanguageTool(transcriptionResult.transcription || transcriptionResult.text);
+    try {
+      if (!heard) {
         await prisma.post.update({
           where: { id: postId },
           data: {
             transcriptionStatus: 'completed',
-            audioTranscription: improvedTranscription
-          }
+            audioTranscription: local.silent ? 'No speech detected.' : '',
+          },
         });
-      } else {
-        console.error('❌ Transcription service error:', transcriptionResponse.status, transcriptionResponse.statusText);
-        
-        // Mark as completed with error message
-        await prisma.post.update({
-          where: { id: postId },
-          data: {
-            transcriptionStatus: 'completed',
-            audioTranscription: 'Transcription service temporarily unavailable. Please try again later.'
-          }
-        });
+        return;
       }
+
+      const improvedTranscription = await improveTranscriptionWithLanguageTool(heard);
+      await prisma.post.update({
+        where: { id: postId },
+        data: {
+          transcriptionStatus: 'completed',
+          audioTranscription: improvedTranscription,
+        },
+      });
+      console.log('✅ Local Vosk transcription saved');
     } catch (transcriptionError) {
       console.error('❌ Transcription service error:', transcriptionError);
       

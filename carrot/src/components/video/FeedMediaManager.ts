@@ -158,8 +158,8 @@ class FeedMediaManager {
     console.log(`[FeedMediaManager] Queueing initial posts: ${endIndex} posts`);
     for (let i = 0; i < endIndex; i++) {
       const post = this._posts[i];
-      // First 5 posts get VISIBLE priority for immediate loading, others get NEXT_10
-      const priority = i < 5 ? Priority.VISIBLE : Priority.NEXT_10;
+      // Only the on-screen video is VISIBLE. The rest get posters until they become active.
+      const priority = i === this._currentViewportIndex ? Priority.VISIBLE : Priority.NEXT_10;
       console.log(`[FeedMediaManager] Post ${i}: ${post.type} with priority ${priority}`);
       this.queuePostTasks(post, priority);
     }
@@ -216,8 +216,8 @@ class FeedMediaManager {
           if (post.thumbnailUrl.startsWith('/api/img')) {
             posterUrl = this.validateUrl(post.thumbnailUrl, 'thumbnailUrl (api/img)');
           } else if (post.thumbnailUrl.startsWith('data:')) {
-            // CRITICAL FIX: Use data URIs directly - never proxy them
-            posterUrl = post.thumbnailUrl;
+            // Already on the card. Fetching a data URI is blocked by CSP.
+            posterUrl = null;
           } else {
             // Check if the URL is already heavily encoded (contains %25 which indicates double encoding)
             const isAlreadyEncoded = /%25[0-9A-Fa-f]{2}/.test(post.thumbnailUrl);
@@ -255,14 +255,14 @@ class FeedMediaManager {
         }
         
         if (videoUrl) {
-          // CRITICAL FIX: Optimize video loading - only load visible videos immediately
-          // Only load full video for VISIBLE posts, defer others until they become visible
-          if (priority === Priority.VISIBLE) {
-            console.log(`[FeedMediaManager] Queuing FULL video for VISIBLE post ${post.id} (index ${post.feedIndex})`, {
+          // The player element loads the active video itself. A second full-file
+          // download of the same URL only competes with that request.
+          const isCurrent = post.feedIndex === this._currentViewportIndex;
+          if (priority === Priority.VISIBLE && isCurrent) {
+            console.log(`[FeedMediaManager] Active video loads through its player ${post.id} (index ${post.feedIndex})`, {
               videoUrl: videoUrl.substring(0, 100) + '...',
               posterUrl: posterUrl?.substring(0, 100) + '...'
             });
-            this.preloadQueue.enqueue(post.id, TaskType.VIDEO_FULL, priority, post.feedIndex, videoUrl, post.bucket, post.path);
           } else {
             // CRITICAL FIX: For non-visible posts, only queue poster - defer video until visible
             console.log(`[FeedMediaManager] Deferring video for post ${post.id} (index ${post.feedIndex}) - only loading poster`, {
@@ -332,13 +332,11 @@ class FeedMediaManager {
         break;
 
       case 'text':
-        // Load the full text content (shell + gradients, etc.)
+        // The words are already on the card. Only a stored file needs a preload.
         {
           let textUrl: string | null = null;
           if (post.bucket && post.path) {
             textUrl = this.validateUrl(`/api/text?bucket=${post.bucket}&path=${post.path}/content.json`, 'text bucket/path');
-          } else {
-            textUrl = this.validateUrl(`/api/text?id=${encodeURIComponent(post.id)}`, 'text id');
           }
           
           if (textUrl) {
@@ -609,7 +607,10 @@ class FeedMediaManager {
             console.warn('[FeedMediaManager] Play failed immediately:', e);
           }
         } else {
-          // Wait for video to be ready, then play
+          // preload="none" does not start a request until load() is called.
+          if (video.readyState === 0 && video.networkState === HTMLMediaElement.NETWORK_EMPTY) {
+            video.load();
+          }
           console.log('[FeedMediaManager] Waiting for video ready before play', { 
             id: next.id, 
             readyState: video.readyState 
@@ -700,10 +701,11 @@ class FeedMediaManager {
       : (post.videoUrl ? (post.videoUrl.startsWith('/api/video') ? post.videoUrl : `/api/video?url=${encodeURIComponent(post.videoUrl)}`) : null);
 
     if (videoUrl) {
-      this.preloadQueue.promoteToFullVideo(handle.id, videoUrl, post.bucket, post.path);
-      console.log('[FeedMediaManager] Promoted active video to full download', { 
-        id: handle.id, 
-        videoUrl: videoUrl.substring(0, 100) + '...' 
+      // The active <video> already requests this URL. Downloading it again
+      // through the preload queue does not feed the player.
+      console.log('[FeedMediaManager] Active video streams through its player', {
+        id: handle.id,
+        videoUrl: videoUrl.substring(0, 100) + '...'
       });
     }
   }

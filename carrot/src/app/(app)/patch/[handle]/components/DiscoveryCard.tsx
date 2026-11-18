@@ -113,13 +113,8 @@ export function DiscoveryCard({ item, onSelect }: DiscoveryCardProps) {
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-            onError={(e) => {
-              console.error('[DiscoveryCard] Hero image failed to load:', {
-                heroUrl,
-                error: e,
-                itemId: item.id,
-                title: item.title
-              })
+            onError={() => {
+              console.error('[DiscoveryCard] Hero image failed to load:', item.title)
               setHeroImageError(true)
             }}
           />

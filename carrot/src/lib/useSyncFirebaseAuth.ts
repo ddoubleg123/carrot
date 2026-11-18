@@ -11,6 +11,7 @@ export function useSyncFirebaseAuth() {
     if (auth.currentUser) return;
     // Fetch and sign in with custom token using resilient fetch
     const resilientFetch = createResilientFetch();
+    const timer = window.setTimeout(() => {
     resilientFetch('/api/firebase-custom-token')
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch Firebase custom token');
@@ -29,5 +30,7 @@ export function useSyncFirebaseAuth() {
           console.error('[useSyncFirebaseAuth] Failed to sync Firebase Auth:', err);
         }
       });
+    }, 3000);
+    return () => window.clearTimeout(timer);
   }, []);
 }

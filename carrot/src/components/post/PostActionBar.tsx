@@ -46,7 +46,11 @@ function PostActionBar(props: PostActionBarProps) {
 
   const [liked, setLiked] = useState<boolean>(!!initiallyLiked);
   const [saved, setSaved] = useState<boolean>(!!initiallySaved);
-  const likeCount = useMemo(() => (stats.likes ?? 0) + (liked && !initiallyLiked ? 1 : (!liked && initiallyLiked ? -1 : 0)), [stats.likes, liked, initiallyLiked]);
+  const [serverLikes, setServerLikes] = useState<number | null>(null);
+  const likeCount = useMemo(() => {
+    if (typeof serverLikes === 'number') return serverLikes;
+    return (stats.likes ?? 0) + (liked && !initiallyLiked ? 1 : (!liked && initiallyLiked ? -1 : 0));
+  }, [serverLikes, stats.likes, liked, initiallyLiked]);
 
   const handleLike = () => {
     const next = !liked;
@@ -55,7 +59,11 @@ function PostActionBar(props: PostActionBarProps) {
     // Fire-and-forget persistence
     try {
       fetch(`/api/posts/${postId}/like`, { method: 'POST' })
-        .then(() => void 0)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json().catch(() => null);
+          if (typeof data?.likes === 'number') setServerLikes(data.likes);
+        })
         .catch(() => void 0);
     } catch {}
   };

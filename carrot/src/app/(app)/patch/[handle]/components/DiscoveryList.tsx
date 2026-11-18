@@ -8,7 +8,6 @@ import { DiscoveryCard } from './DiscoveryCard'
 import { DiscoveryCardPayload } from '@/types/discovery-card'
 import ContentModal from './ContentModal'
 import { useDiscoveryStream } from '@/app/(app)/patch/[handle]/hooks/useDiscoveryStream'
-import LivePanel from './LivePanel'
 import DiscoverySkeleton from './DiscoverySkeleton'
 
 interface DiscoveryListProps {
@@ -22,6 +21,8 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const [visibleItemsCount, setVisibleItemsCount] = useState(INITIAL_BATCH)
   const [selectedItem, setSelectedItem] = useState<DiscoveryCardPayload | null>(null)
   const [healthData, setHealthData] = useState<any>(null)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkMessage, setLinkMessage] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const showDebug = searchParams?.get('debug') === '1'
   
@@ -52,11 +53,21 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   const {
     state,
     items,
-    start,
-    pause,
-    stop,
-    refresh
+    refresh,
+    readLink
   } = useDiscoveryStream(patchHandle)
+
+  const handleReadLink = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const url = linkUrl.trim()
+    if (!url) return
+    setLinkMessage(null)
+    const message = await readLink(url)
+    setLinkMessage(message)
+    if (message?.startsWith('Saved')) {
+      setLinkUrl('')
+    }
+  }
 
   const dedupedItems = useMemo(() => {
     const seen = new Set<string>()
@@ -89,18 +100,11 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
   }
 
   const handleSelect = (item: DiscoveryCardPayload) => {
-    // Try to extract urlSlug from item (may be in metadata or other fields)
-    const itemAny = item as any
-    const urlSlug = itemAny.metadata?.urlSlug || 
-                    itemAny.urlSlug || 
-                    (itemAny.metadata?.contentUrl?.split('/').pop())
-    
-    // If item has urlSlug, navigate to detail page; otherwise open modal
-    if (urlSlug) {
-      router.push(`/patch/${patchHandle}/content/${urlSlug}`)
-    } else {
-      setSelectedItem(item)
+    if (item.id) {
+      router.push(`/patch/${patchHandle}/content/${item.id}`)
+      return
     }
+    setSelectedItem(item)
   }
 
   const handleCloseModal = () => {
@@ -230,30 +234,23 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
           )}
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <LivePanel
-          isActive={state.isActive}
-          isPaused={state.isPaused}
-          stage={state.currentStage}
-          currentStatus={state.currentStatus}
-          itemsFound={state.itemsFound}
-          lastItemTitle={state.lastItemTitle}
-          error={state.error}
-          runId={state.runId}
-          runState={state.runState}
-          frontierSize={state.frontierSize}
-          totalDuplicates={state.totalDuplicates}
-          totalSkipped={state.totalSkipped}
-          totalSaved={state.totalSaved}
-          patchHandle={patchHandle}
-          onStart={start}
-          onPause={pause}
-          onStop={stop}
-          onRefresh={refresh}
-          className="h-full"
-        />
-
-        <div className="space-y-6">
+      <div className="space-y-6">
+          <form onSubmit={handleReadLink} className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+            <label className="sr-only" htmlFor="learn-link">Read a public page or PDF</label>
+            <input
+              id="learn-link"
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              placeholder="Paste a public page or PDF link"
+              className="h-11 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-orange-400"
+            />
+            <Button type="submit" disabled={state.isActive || !linkUrl.trim()} className="h-11 bg-[#FF6A00] text-white hover:bg-[#E55A00]">
+              Read link
+            </Button>
+          </form>
+          {linkMessage && (
+            <p className="text-sm text-slate-600">{linkMessage}</p>
+          )}
           {state.isActive && (
             <DiscoverySkeleton
               id="discovery-skeleton"
@@ -287,10 +284,7 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
               <Search className="h-10 w-10 text-slate-300" />
               <h3 className="mt-4 text-lg font-semibold text-slate-900">No discoveries yet</h3>
               <p className="mt-2 max-w-sm text-sm text-slate-500">
-                Kick off a discovery run to pull in high-signal coverage with minority viewpoints and sourced facts.
-              </p>
-              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">
-                Use the Discovery Live panel to start
+                {state.currentStatus || 'Ask a question on the Ask tab. Saved sources show up here.'}
               </p>
             </div>
           )}
@@ -321,7 +315,6 @@ export default function DiscoveryList({ patchHandle }: DiscoveryListProps) {
             </div>
           )}
         </div>
-      </div>
 
       <ContentModal
         item={selectedItem}

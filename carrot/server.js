@@ -28,10 +28,72 @@ if (process.env.NODE_ENV !== 'test') {
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = parseInt(process.env.PORT || '3000', 10);
+// Must match assetPrefix in next.config.js. A new path misses the immutable
+// cache entry for the old /_next/static URL.
+const DEV_ASSET_PREFIX = '/dev-assets';
+
+function forceDevStaticUncached(res) {
+  const setHeader = res.setHeader.bind(res);
+  const writeHead = res.writeHead.bind(res);
+  res.setHeader = (name, value) => {
+    if (String(name).toLowerCase() === 'cache-control') {
+      return setHeader('Cache-Control', 'no-store');
+    }
+    return setHeader(name, value);
+  };
+  res.writeHead = (status, reason, headers) => {
+    const bag = headers && typeof headers === 'object' ? headers : reason && typeof reason === 'object' ? reason : null;
+    if (bag) {
+      for (const key of Object.keys(bag)) {
+        if (key.toLowerCase() === 'cache-control') bag[key] = 'no-store';
+      }
+    }
+    if (headers !== undefined) return writeHead(status, reason, headers);
+    if (reason !== undefined) return writeHead(status, reason);
+    return writeHead(status);
+  };
+}
 
 // Create Next.js app
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+const MENU_ROUTES = [
+  '/home',
+  '/dashboard/search',
+  '/dashboard/notifications',
+  '/patch',
+  '/messages',
+  '/rabbit',
+  '/dashboard/funds',
+  '/settings',
+  // These compile the first time a page asks for them, and that compile
+  // blocks the next menu click for several seconds. Warm them up front.
+  '/api/auth/session',
+  '/api/user/prefs',
+  '/api/user/stats',
+  '/api/posts',
+  '/api/audio',
+  '/api/text',
+  '/api/img',
+  '/api/firebase-custom-token',
+];
+
+function warmMenuRoutes(listenPort) {
+  setTimeout(async () => {
+    for (const path of MENU_ROUTES) {
+      const started = Date.now();
+      try {
+        const response = await fetch(`http://127.0.0.1:${listenPort}${path}`);
+        await response.arrayBuffer();
+        console.log(`[warmup] ${path} ${response.status} in ${Date.now() - started}ms`);
+      } catch (error) {
+        console.warn(`[warmup] ${path} failed: ${error.message}`);
+      }
+    }
+    console.log('[warmup] menu routes ready');
+  }, 800);
+}
 
 app.prepare().then(async () => {
   // Verify Playwright installation at startup
@@ -76,8 +138,18 @@ app.prepare().then(async () => {
       res.setHeader('Alt-Svc', '');
       res.setHeader('HTTP2-Settings', '');
       
-      // Parse URL
-      const parsedUrl = parse(req.url, true);
+      // Parse URL. Dev assets are served under /dev-assets so Chrome does not
+      // reuse the immutable /_next/static response it already stored.
+      let parsedUrl = parse(req.url, true);
+      if (dev && parsedUrl.pathname && parsedUrl.pathname.startsWith(`${DEV_ASSET_PREFIX}/`)) {
+        req.url = req.url.replace(DEV_ASSET_PREFIX, '') || '/';
+        parsedUrl = parse(req.url, true);
+      }
+      const pathName = parsedUrl.pathname || '';
+
+      if (dev && pathName.startsWith('/_next/static')) {
+        forceDevStaticUncached(res);
+      }
       
       // Handle the request with Next.js
       handle(req, res, parsedUrl);
@@ -101,6 +173,17 @@ app.prepare().then(async () => {
     if (err) throw err;
     console.log(`> Ready on http://${hostname}:${port} (HTTP/1.1 only)`);
     console.log('> HTTP/2 disabled - using HTTP/1.1 for all connections');
+    if (dev) warmMenuRoutes(port);
+    const curatorOn = process.env.CURATOR_ENABLED === '1' || (!dev && process.env.CURATOR_ENABLED !== '0');
+    if (curatorOn) {
+      setTimeout(() => {
+        fetch(`http://127.0.0.1:${port}/api/internal/curator-arm`, { method: 'POST' })
+          .then((response) => console.log(`[curator] desks armed ${response.status}`))
+          .catch((error) => console.warn('[curator] desks were not armed', error.message));
+      }, 4000);
+    } else {
+      console.log('[curator] idle on this machine. The hunt runs on the Render service.');
+    }
   });
 });
 

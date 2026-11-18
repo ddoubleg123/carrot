@@ -23,6 +23,58 @@ const prisma = new PrismaClient(
     : undefined as any
 );
 
+const sessionUserCache = new Map<string, { at: number; user: any }>();
+const sessionUserInflight = new Map<string, Promise<any>>();
+const SESSION_USER_TTL_MS = 5 * 60_000;
+
+if (process.env.NODE_ENV !== 'production') {
+  const globalForPing = global as unknown as { __carrotAuthPing?: ReturnType<typeof setInterval> };
+  if (!globalForPing.__carrotAuthPing) {
+    const warmConnection = () => {
+      prisma.$queryRaw`SELECT 1`.catch(() => {});
+    };
+    warmConnection();
+    globalForPing.__carrotAuthPing = setInterval(warmConnection, 20_000);
+    if (typeof globalForPing.__carrotAuthPing.unref === 'function') {
+      globalForPing.__carrotAuthPing.unref();
+    }
+  }
+}
+
+async function loadSessionUser(email: string, oauthImage?: string) {
+  const cached = sessionUserCache.get(email);
+  if (cached && Date.now() - cached.at < SESSION_USER_TTL_MS) return cached.user;
+  const pending = sessionUserInflight.get(email);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const userData = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        username: true,
+        profilePhoto: true,
+        image: true,
+        isOnboarded: true,
+      },
+    });
+    if (!userData) return null;
+
+    if (!userData.image && oauthImage) {
+      userData.image = oauthImage;
+      prisma.user.update({ where: { email }, data: { image: oauthImage } }).catch(() => {});
+    }
+
+    sessionUserCache.set(email, { at: Date.now(), user: userData });
+    return userData;
+  })().finally(() => {
+    sessionUserInflight.delete(email);
+  });
+
+  sessionUserInflight.set(email, request);
+  return request;
+}
+
 // import { patchAdapter } from "./adapterPatch";
 
 
@@ -226,6 +278,16 @@ export const authOptions = {
         }
       }
 
+      if (token.email) {
+        try {
+          const userData = await loadSessionUser(token.email as string, token.picture || token.image);
+          if (userData?.id) token.id = userData.id;
+          if (userData?.username) token.username = userData.username;
+        } catch (error) {
+          console.log('[NextAuth][jwt] Database user lookup failed:', error);
+        }
+      }
+
       console.log('[NextAuth][jwt] token (after update):', JSON.stringify(token, null, 2));
       console.log('[NextAuth][jwt] === END JWT DEBUG ===');
       const size = JSON.stringify(token).length;
@@ -247,39 +309,13 @@ export const authOptions = {
         return session;
       }
 
-      // Fetch user data from database to get uploaded profile photo
+      // Profile fields stay fresh, but a new database connection on every
+      // session poll was taking 3–8s and holding up the video.
       let userData: any = null;
       const skipDb = process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1' || process.env.SKIP_DB_IN_DEV === '1';
       try {
         if (!skipDb) {
-          const { PrismaClient } = await import('@prisma/client');
-          // Use default env-based datasource (Postgres in production). Do not force SQLite fallback.
-          const prisma = new PrismaClient();
-          userData = await prisma.user.findUnique({
-            where: { email: token.email as string },
-            select: { 
-              id: true, 
-              username: true, 
-              profilePhoto: true, 
-              image: true,
-              isOnboarded: true
-            }
-          });
-          
-          // Sync OAuth image to database if missing
-          if (userData && !userData.image && (token.picture || token.image)) {
-            await prisma.user.update({
-              where: { email: token.email as string },
-              data: { image: token.picture || token.image }
-            });
-            userData.image = token.picture || token.image;
-          }
-          
-          // Always use fresh data from database to ensure profile photo updates are reflected
-          console.log('[NextAuth][session] Using fresh user data from database');
-          
-          await prisma.$disconnect();
-          console.log('[NextAuth][session] Database user found:', userData);
+          userData = await loadSessionUser(token.email as string, token.picture || token.image);
         }
       } catch (error) {
         // Suppress noisy DB errors in dev mock mode

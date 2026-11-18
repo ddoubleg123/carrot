@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { fetchWithRetry, isNetworkProtocolError } from '@/lib/retryUtils';
+import { localVideoJob, startLocalVideo } from '@/lib/learn/localVideo';
 
 const RAILWAY_SERVICE_URL = process.env.INGEST_WORKER_URL || 'http://localhost:8000';
 const INGEST_WORKER_SECRET = process.env.INGEST_WORKER_SECRET || 'dev_ingest_secret';
 
 interface IngestRequest {
   url: string;
+  local?: boolean;
   inMs?: number | null;
   outMs?: number | null;
   aspect?: string | null;
@@ -58,7 +60,7 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     });
 
     const body: IngestRequest = await request.json();
-    const { url, inMs, outMs, aspect, postId } = body;
+    const { url, inMs, outMs, aspect, postId, local } = body;
 
     if (!url) {
       return NextResponse.json(
@@ -75,6 +77,16 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
         { error: 'Invalid URL format' },
         { status: 400 }
       );
+    }
+
+    if (local) {
+      const job = await startLocalVideo(url);
+      if (!job.id) {
+        return NextResponse.json({
+          job: { id: 'local-failed', status: 'failed', progress: 0, error: job.error || 'The video could not be saved.' }
+        });
+      }
+      return NextResponse.json({ job });
     }
 
     // Start ingestion job on worker service (forward trim params if provided)
@@ -222,6 +234,9 @@ export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
       );
     }
 
+    const local = localVideoJob(jobId);
+    if (local) return NextResponse.json({ job: local });
+
     // Get job status from Railway service
     const response = await fetchWithRetry(`${RAILWAY_SERVICE_URL}/jobs/${jobId}`, {
       method: 'GET',
@@ -287,6 +302,7 @@ export async function GET(request: Request, _ctx: { params: Promise<{}> }) {
           thumbnail: result.thumbnail,
           uploader: result.uploader,
           video_id: result.video_id,
+          cfUid: (railwayJob as { cfUid?: string }).cfUid || (result as { cfUid?: string; cf_uid?: string }).cfUid || (result as { cf_uid?: string }).cf_uid || null,
           // Include subtitle information with null safety
           hasSubtitles: result.subtitles ? Object.keys(result.subtitles).length > 0 : false,
           hasAutoSubtitles: result.automatic_captions ? Object.keys(result.automatic_captions).length > 0 : false,

@@ -1,7 +1,5 @@
 import ClientSessionProvider from './dashboard/components/ClientSessionProvider';
 
-export const dynamic = 'force-dynamic';
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Simplified layout to debug 500 error - temporarily bypass all auth logic
   

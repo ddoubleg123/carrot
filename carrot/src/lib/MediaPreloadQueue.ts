@@ -575,11 +575,15 @@ class MediaPreloadQueue {
     // CRITICAL FIX: VISIBLE posts ALWAYS bypass sequential restrictions
     // User experience is paramount - visible content must load immediately
     if (task.priority === Priority.VISIBLE) {
+      if (task.type === TaskType.VIDEO_FULL) {
+        const activeCount = this.activeTasks.get(task.type)?.size || 0;
+        if (activeCount >= this.CONCURRENCY_LIMITS[task.type]) return false;
+      }
       console.log('[MediaPreloadQueue] VISIBLE priority - bypassing sequential restrictions', { 
         taskId: task.id, 
         feedIndex: task.feedIndex 
       });
-      return true; // Skip all sequential checks for visible posts
+      return true;
     }
 
     // For off-screen preloading, apply sequential gap restrictions

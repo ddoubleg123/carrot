@@ -13,6 +13,114 @@ import {
 } from '../dashboard/settings/components';
 import ProfileSettings from '../dashboard/settings/components/ProfileSettings';
 
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+  return (
+    <label className="inline-flex cursor-pointer items-center">
+      <input type="checkbox" className="sr-only" checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+      <span className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-orange-500' : 'bg-gray-200'}`}>
+        <span className={`absolute top-1 left-1 h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} />
+      </span>
+    </label>
+  );
+}
+
+function PlaybackPreferences({
+  reducedMotion,
+  captionsDefaultOn,
+  autoplayOn,
+  storageEstimate,
+  onReducedMotion,
+  onCaptions,
+  onAutoplay,
+}: {
+  reducedMotion: boolean;
+  captionsDefaultOn: boolean;
+  autoplayOn: boolean;
+  storageEstimate: { usage?: number; quota?: number };
+  onReducedMotion: (checked: boolean) => void;
+  onCaptions: (checked: boolean) => void;
+  onAutoplay: (checked: boolean) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Playback</h2>
+        <p className="mt-1 text-sm text-gray-500">Motion, captions, and autoplay for the feed.</p>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Reduced motion</div>
+          <div className="text-xs text-gray-500">Turns off autoplay and heavy animation.</div>
+        </div>
+        <Toggle checked={reducedMotion} onChange={onReducedMotion} label="Reduced motion" />
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Captions on by default</div>
+          <div className="text-xs text-gray-500">Subtitles start on for videos that have them.</div>
+        </div>
+        <Toggle checked={captionsDefaultOn} onChange={onCaptions} label="Captions" />
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Autoplay</div>
+          <div className="text-xs text-gray-500">Play when a post becomes active. Reduced motion turns this off.</div>
+        </div>
+        <Toggle checked={autoplayOn} onChange={onAutoplay} label="Autoplay" />
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t border-gray-100 pt-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Clear cached media</div>
+          <div className="text-xs text-gray-500">Removes preloaded video from this device.</div>
+        </div>
+        <button
+          type="button"
+          className="rounded-full border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+          onClick={async () => {
+            try {
+              if ((navigator as any)?.serviceWorker?.controller) {
+                (navigator as any).serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
+              } else if ('caches' in window) {
+                await (window as any).caches.delete('carrot-media-v1');
+              }
+              alert('Cached media cleared');
+            } catch {
+              alert('Could not clear cache. Try reloading the page.');
+            }
+          }}
+        >
+          Clear
+        </button>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Reset playback profile</div>
+          <div className="text-xs text-gray-500">Clears the network estimate used for startup quality.</div>
+        </div>
+        <button
+          type="button"
+          className="rounded-full border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+          onClick={() => {
+            try {
+              localStorage.removeItem('carrot_net_profile');
+              localStorage.removeItem('carrot_net_profile_ext_v1');
+              localStorage.removeItem('carrot_net_profile_v1');
+              alert('Playback profile reset');
+            } catch {}
+          }}
+        >
+          Reset
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">
+        {typeof storageEstimate.usage === 'number' && typeof storageEstimate.quota === 'number'
+          ? `Storage: ${(storageEstimate.usage / (1024 * 1024)).toFixed(1)} MB used of ${(storageEstimate.quota / (1024 * 1024)).toFixed(0)} MB`
+          : 'Storage estimate unavailable'}
+      </p>
+    </div>
+  );
+}
+
 export default function SettingsPageUnified() {
   const { data: session, update } = useSession();
   const [activeTab, setActiveTab] = useState('account');
@@ -217,7 +325,7 @@ export default function SettingsPageUnified() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-gray-50">
       {/* Left sidebar (same as /home) */}
       <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
         <MinimalNav />
@@ -225,7 +333,12 @@ export default function SettingsPageUnified() {
 
       {/* Main content */}
       <main className="flex-1 min-w-0 flex">
-        <div className="w-full min-w-[320px] max-w-[980px] px-6 py-6">
+        <div className="w-full min-w-[320px] max-w-[880px] px-6 py-8">
+          <header className="mb-6">
+            <p className="text-sm font-medium text-orange-600">Account</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">Settings</h1>
+            <p className="mt-1 text-sm text-gray-500">Your profile, privacy, and how posts play.</p>
+          </header>
           <FirebaseClientInit />
           <ClientSessionProvider>
             <Suspense>
@@ -250,123 +363,30 @@ export default function SettingsPageUnified() {
                   )}
                   {activeTab === 'notifications' && <NotificationPreferences />}
                   {activeTab === 'privacy' && <PrivacySettings />}
+                  {activeTab === 'preferences' && (
+                    <PlaybackPreferences
+                      reducedMotion={reducedMotion}
+                      captionsDefaultOn={captionsDefaultOn}
+                      autoplayOn={autoplayOn}
+                      storageEstimate={storageEstimate}
+                      onReducedMotion={handleReducedMotionToggle}
+                      onCaptions={handleCaptionsDefaultToggle}
+                      onAutoplay={handleAutoplayToggle}
+                    />
+                  )}
 
-                  {activeTab !== 'account' && (
-                    <div className="pt-4 border-t border-gray-200">
+                  {(activeTab === 'account' || activeTab === 'profile') && (
+                    <div className="pt-4 border-t border-gray-100">
                       <button
                         type="submit"
                         disabled={isSaving}
-                        className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+                        className="rounded-full bg-orange-500 px-5 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
                       >
-                        {isSaving ? 'Saving...' : 'Save Changes'}
+                        {isSaving ? 'Saving...' : 'Save changes'}
                       </button>
                     </div>
                   )}
                 </SettingsLayout>
-
-                {/* Playback Preferences */}
-                <div className="mt-8 border rounded-xl bg-white shadow-sm">
-                  <div className="px-5 py-4 border-b">
-                    <h2 className="text-base font-semibold text-gray-900">Playback Preferences</h2>
-                    <p className="text-sm text-gray-500 mt-1">Controls for motion and captions during feed playback.</p>
-                  </div>
-                  <div className="px-5 py-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Reduced motion</div>
-                        <div className="text-xs text-gray-500">Disables autoplay and heavy animations. Honors your system preferences if enabled here.</div>
-                      </div>
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={reducedMotion} onChange={(e) => handleReducedMotionToggle(e.target.checked)} />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-primary-600 relative transition-colors">
-                          <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${reducedMotion ? 'translate-x-5' : ''}`}></div>
-                        </div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Captions default</div>
-                        <div className="text-xs text-gray-500">Turn subtitles on by default for supported videos (you can still toggle in the player).</div>
-                      </div>
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={captionsDefaultOn} onChange={(e) => handleCaptionsDefaultToggle(e.target.checked)} />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-primary-600 relative transition-colors">
-                          <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${captionsDefaultOn ? 'translate-x-5' : ''}`}></div>
-                        </div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Autoplay</div>
-                        <div className="text-xs text-gray-500">Start playback automatically when a tile becomes active (disabled if Reduced Motion is on).</div>
-                      </div>
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={autoplayOn} onChange={(e) => handleAutoplayToggle(e.target.checked)} />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-primary-600 relative transition-colors">
-                          <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${autoplayOn ? 'translate-x-5' : ''}`}></div>
-                        </div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Clear cached media</div>
-                        <div className="text-xs text-gray-500">Removes preloaded HLS playlists and first segments from this device.</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
-                        onClick={async () => {
-                          try {
-                            if ((navigator as any)?.serviceWorker?.controller) {
-                              (navigator as any).serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
-                            } else if ('caches' in window) {
-                              await (window as any).caches.delete('carrot-media-v1');
-                            }
-                            alert('Cached media cleared');
-                          } catch {
-                            alert('Could not clear cache. Try reloading the page.');
-                          }
-                        }}
-                      >
-                        Clear
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Reset playback profile</div>
-                        <div className="text-xs text-gray-500">Clears network heuristics used for startup level and buffering (7-day profile).</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
-                        onClick={() => {
-                          try {
-                            localStorage.removeItem('carrot_net_profile');
-                            localStorage.removeItem('carrot_net_profile_ext_v1');
-                            localStorage.removeItem('carrot_net_profile_v1');
-                            alert('Playback profile reset');
-                          } catch {}
-                        }}
-                      >
-                        Reset
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-gray-500">
-                      {typeof storageEstimate.usage === 'number' && typeof storageEstimate.quota === 'number' ? (
-                        <span>
-                          Storage: {(storageEstimate.usage / (1024*1024)).toFixed(1)} MB used of {(storageEstimate.quota / (1024*1024)).toFixed(0)} MB
-                        </span>
-                      ) : (
-                        <span>Storage estimate unavailable</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
               </form>
             </Suspense>
           </ClientSessionProvider>

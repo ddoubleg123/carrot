@@ -7,6 +7,9 @@ import { fetchWithProxy } from '@/lib/fetchProxy'
 import { canonicalizeUrl } from '@/lib/canonicalize'
 import { ContentPreview } from '@/types/content-preview'
 import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
+import { articleSummary } from '@/lib/learn/articleText'
+import { heroUrlFits } from '@/lib/learn/hero'
+import { decodeEntities, looksLikeChrome, readPublicUrl } from '@/lib/learn/publicUrl'
 
 // Simple in-memory cache (in production, use Redis)
 const previewCache = new Map<string, ContentPreview>()
@@ -234,21 +237,7 @@ export async function GET(
       }
     }
     
-    // FIXED: Don't filter out Wikimedia images - they're fine to display!
-    // Wikimedia Commons images are high-quality and properly licensed
-    // Only filter if the SOURCE URL is Wikipedia (not the hero image)
-    const sourceUrl = content.sourceUrl || ''
-    const isWikipediaSource = sourceUrl.includes('wikipedia.org/wiki/') || 
-                              sourceUrl.includes('wikipedia.org/w/')
-    
-    // Only filter hero if the SOURCE is a Wikipedia article page (not Wikimedia Commons)
-    // Wikimedia Commons images are great and should be shown
-    if (isWikipediaSource && !sourceUrl.includes('commons.wikimedia.org')) {
-      console.log(`[ContentPreview] Filtering out hero for Wikipedia source page ${id}`)
-      heroUrl = null
-    } else if (heroUrl) {
-      console.log(`[ContentPreview] Using hero image for ${id}: ${heroUrl.substring(0, 60)}...`)
-    }
+    if (heroUrl && !heroUrlFits(content.title, heroUrl)) heroUrl = null
 
     // Improve title if it's generic or poor
     function improveTitle(originalTitle: string, summary: string, keyPoints: string[]): string {
@@ -445,6 +434,52 @@ export async function GET(
         url: content.sourceUrl || '',
         canonicalUrl: content.canonicalUrl || content.sourceUrl || ''
       }
+    }
+
+    let storedText = decodeEntities((content.textContent || '').trim())
+    if (storedText !== (content.textContent || '').trim()) {
+      await prisma.discoveredContent.update({
+        where: { id },
+        data: { textContent: storedText, content: storedText, summary: articleSummary(storedText) }
+      }).catch(() => null)
+    }
+    if ((storedText.length < 200 || looksLikeChrome(storedText)) && content.sourceUrl) {
+      const reread = await readPublicUrl(content.sourceUrl).catch(() => null)
+      if (reread && reread.text.length > 200 && !looksLikeChrome(reread.text)) {
+        storedText = reread.text.slice(0, 20000)
+        await prisma.discoveredContent.update({
+          where: { id },
+          data: {
+            textContent: storedText,
+            content: storedText,
+            summary: articleSummary(storedText)
+          }
+        }).catch(() => null)
+      }
+    }
+    if (looksLikeChrome(storedText)) {
+      preview.summary = 'This page did not include a readable article. Use View Source to open it.'
+      preview.keyPoints = []
+      preview.quotes = ''
+      preview.context = ''
+      return NextResponse.json(preview)
+    }
+    if (storedText.length >= 200) {
+      const lead = articleSummary(storedText).replace(/\s*[^.!?]{0,180}:$/, '').trim()
+      if (lead.length >= 80) preview.summary = lead
+      const sentences = storedText
+        .split(/\n+/)
+        .flatMap((paragraph) => paragraph.replace(/={2,}[^=]{0,80}={2,}/g, ' ').replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/))
+        .map((sentence) => sentence.trim())
+        .filter((sentence) => sentence.length > 40 && sentence.length < 220 && !sentence.endsWith(':') && !sentence.includes('===') && !/accessibility|toolbar|consent|cookie/i.test(sentence))
+      if (sentences.length > 0) preview.keyPoints = sentences.slice(0, 5)
+      const quotes = storedText.match(/[“"][^”"]{40,700}[”"]/g) || []
+      if (quotes.length > 0) {
+        preview.quotes = quotes.slice(0, 3).map((quote) => quote.replace(/^[“"]|[”"]$/g, '').trim()).join('\n\n')
+      }
+      preview.context = storedText.slice(0, 12000)
+      previewCache.set(cacheKey, preview)
+      return NextResponse.json(preview)
     }
     
     // If we don't have enriched content, try to extract it

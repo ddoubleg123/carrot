@@ -25,18 +25,9 @@ export default async function ContentPage({ params }: ContentPageProps) {
     notFound();
   }
 
-  // Find content directly by slug using JSON query
-  // Try Prisma JSON path query first
-  let content = await prisma.discoveredContent.findFirst({
-    where: {
-      patchId: patch.id,
-      metadata: {
-        path: ['urlSlug'],
-        equals: slug
-      }
-    },
-    select: {
+  const contentSelect = {
       id: true,
+      patchId: true,
       title: true,
       sourceUrl: true,
       canonicalUrl: true,
@@ -61,8 +52,29 @@ export default async function ContentPage({ params }: ContentPageProps) {
           tags: true
         }
       }
-    }
+    } as const
+
+  // The card links by the row id. Fall back to the older slug for links already opened.
+  let content = await prisma.discoveredContent.findUnique({
+    where: { id: slug },
+    select: contentSelect
+  })
+  if (content && content.patchId !== patch.id) {
+    content = null
+  }
+
+  if (!content) {
+  content = await prisma.discoveredContent.findFirst({
+    where: {
+      patchId: patch.id,
+      metadata: {
+        path: ['urlSlug'],
+        equals: slug
+      }
+    },
+    select: contentSelect
   });
+  }
 
   // Fallback: If JSON query fails, fetch all content and filter in memory
   // This handles cases where Prisma JSON queries don't work or metadata structure differs
@@ -72,33 +84,7 @@ export default async function ContentPage({ params }: ContentPageProps) {
       where: {
         patchId: patch.id
       },
-      select: {
-        id: true,
-        title: true,
-        sourceUrl: true,
-        canonicalUrl: true,
-        relevanceScore: true,
-        qualityScore: true,
-        whyItMatters: true,
-        summary: true,
-        facts: true,
-        quotes: true,
-        provenance: true,
-        hero: true,
-        isControversy: true,
-        isHistory: true,
-        category: true,
-        metadata: true,
-        patch: {
-          select: {
-            id: true,
-            title: true,
-            handle: true,
-            description: true,
-            tags: true
-          }
-        }
-      }
+      select: contentSelect
     })
 
     // Filter in memory to find matching slug
@@ -121,18 +107,6 @@ export default async function ContentPage({ params }: ContentPageProps) {
   if (!content) {
     notFound();
   }
-
-  // Server-side guard: verify source before rendering. If broken, 404 the page.
-  try {
-    const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/internal/links/verify?url=${encodeURIComponent(content.sourceUrl || '')}`
-    const res = await fetch(verifyUrl, { cache: 'no-store' })
-    if (res.ok) {
-      const data = await res.json()
-      if (!data?.ok) {
-        notFound()
-      }
-    }
-  } catch {}
 
   const hero = (content.hero as any) || null
   const facts = Array.isArray(content.facts as any) ? (content.facts as any) : []
@@ -199,42 +173,35 @@ export async function generateMetadata({ params }: ContentPageProps) {
     };
   }
 
-  // Find content directly by slug using JSON query
-  let content = await prisma.discoveredContent.findFirst({
-    where: {
-      patchId: patch.id,
-      metadata: {
-        path: ['urlSlug'],
-        equals: slug
-      }
-    },
+  let content = await prisma.discoveredContent.findUnique({
+    where: { id: slug },
     select: {
+      patchId: true,
       title: true,
       summary: true,
-      whyItMatters: true,
-      metadata: true
+      whyItMatters: true
     }
-  });
+  })
+  if (content && content.patchId !== patch.id) {
+    content = null
+  }
 
-  // Fallback: If JSON query fails, fetch all content and filter in memory
   if (!content) {
-    const allContent = await prisma.discoveredContent.findMany({
+    content = await prisma.discoveredContent.findFirst({
       where: {
-        patchId: patch.id
+        patchId: patch.id,
+        metadata: {
+          path: ['urlSlug'],
+          equals: slug
+        }
       },
       select: {
+        patchId: true,
         title: true,
         summary: true,
-        whyItMatters: true,
-        metadata: true
+        whyItMatters: true
       }
     })
-
-    content = allContent.find(item => {
-      const metadata = item.metadata as any
-      const itemSlug = metadata?.urlSlug
-      return itemSlug === slug
-    }) || null
   }
 
   if (!content) {

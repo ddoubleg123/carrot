@@ -4,11 +4,17 @@ import React, { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ExternalLink, Share2, Clock, Calendar, AlertTriangle, X } from 'lucide-react'
+import { ExternalLink, Share2, Clock, Calendar } from 'lucide-react'
 import { pickHero, getDominantColor } from '@/lib/media/hero'
+import { formatArticle } from '@/lib/learn/articleText'
 import { DiscoveredItem } from '@/types/discovered-content'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import CarrotSpinner from '@/components/ui/CarrotSpinner'
+
+function heroBackground(hero: string): string {
+  if (!hero || hero.startsWith('data:')) return hero
+  return `/api/img?url=${encodeURIComponent(hero)}`
+}
 
 interface ContentModalV2Props {
   contentId: string
@@ -19,14 +25,6 @@ interface ContentModalV2Props {
 export default function ContentModalV2({ contentId, isOpen, onClose }: ContentModalV2Props) {
   const [content, setContent] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [linkStatus, setLinkStatus] = useState<{
-    verified: boolean
-    status: number
-    finalUrl: string
-    archivedUrl?: string
-    checkedAt?: string
-  } | null>(null)
-  const [showArchivePrompt, setShowArchivePrompt] = useState(false)
   const [leftPanelSize, setLeftPanelSize] = useState(70)
   const [rightPanelSize, setRightPanelSize] = useState(30)
 
@@ -88,8 +86,6 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
     if (!isOpen) {
       setContent(null)
       setIsLoading(true)
-      setLinkStatus(null)
-      setShowArchivePrompt(false)
     }
   }, [isOpen])
 
@@ -132,34 +128,6 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
     }
   }
 
-  const verifyAndOpenLink = async (url: string) => {
-    try {
-      const response = await fetch(`/api/internal/links/verify?url=${encodeURIComponent(url)}`)
-      const result = await response.json()
-      
-      setLinkStatus({
-        verified: result.ok,
-        status: result.status,
-        finalUrl: result.finalUrl,
-        archivedUrl: result.archivedUrl,
-        checkedAt: result.checkedAt
-      })
-      
-      if (result.ok) {
-        window.open(result.finalUrl || url, '_blank', 'noopener')
-      } else {
-        if (result.archivedUrl) {
-          setShowArchivePrompt(true)
-        } else {
-          console.warn('Link verification failed:', result.status)
-        }
-      }
-    } catch (error) {
-      console.error('Link verification error:', error)
-      window.open(url, '_blank', 'noopener')
-    }
-  }
-
   const handleShare = async () => {
     if (!content) return
 
@@ -180,16 +148,9 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
     }
   }
 
-  const handleOpenArchive = () => {
-    if (linkStatus?.archivedUrl) {
-      window.open(linkStatus.archivedUrl, '_blank', 'noopener')
-      setShowArchivePrompt(false)
-    }
-  }
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[1400px] w-[92vw] max-h-[90vh] p-0 overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent className="max-w-[1400px] w-[92vw] max-h-[90vh] p-0 overflow-hidden [&>button]:z-[80] [&>button]:right-4 [&>button]:top-4 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:bg-white [&>button]:text-black [&>button]:opacity-100 [&>button]:shadow-md [&>button>svg]:h-5 [&>button>svg]:w-5">
         <DialogTitle className="sr-only">Content Modal</DialogTitle>
         <DialogDescription className="sr-only">
           View and interact with content from the discovery feed
@@ -225,7 +186,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
             <div 
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
               style={{ 
-                backgroundImage: `url(${content?.media?.hero || content?.hero})`,
+                backgroundImage: `url(${heroBackground(content?.media?.hero || content?.hero)})`,
                 backgroundPosition: 'center',
                 backgroundSize: 'cover',
                 filter: 'brightness(0.7) saturate(1.1)'
@@ -237,7 +198,7 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/10" />
           
           {/* Content */}
-          <div className="relative z-10 flex items-center justify-between h-full px-6">
+          <div className="relative z-10 flex items-center justify-between h-full pl-6 pr-20">
             {/* Left: Title & Meta */}
             <div className="flex-1 min-w-0">
               <h1 className="text-lg md:text-2xl font-semibold leading-tight line-clamp-1 mb-2">
@@ -297,16 +258,17 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
 
             {/* Right: Action Buttons - Equal width and properly styled */}
             <div className="flex items-center gap-3 bg-black/70 backdrop-blur rounded-xl px-4 py-2">
-              <Button
-                onClick={() => content?.meta?.url && verifyAndOpenLink(content.meta.url)}
-                className="w-40 justify-start bg-transparent hover:bg-white/20 text-white border-white/30"
+              <a
+                href={content?.meta?.url || undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex h-10 w-40 items-center justify-start rounded-md px-4 text-sm font-medium text-white hover:bg-white/20 ${content?.meta?.url ? '' : 'pointer-events-none opacity-50'}`}
                 data-focusable
                 aria-label="View original source"
-                disabled={!content?.meta?.url}
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View Source
-              </Button>
+              </a>
               
               <Button
                 onClick={handleShare}
@@ -346,16 +308,6 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                   </div>
                 ) : content ? (
                   <div className="space-y-6">
-                    {/* Link Status Warning */}
-                    {linkStatus && !linkStatus.verified && (
-                      <div className="flex items-center gap-2 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span className="text-sm">
-                          Source may be unavailable. Last checked {linkStatus.checkedAt ? new Date(linkStatus.checkedAt).toLocaleString() : 'recently'}.
-                        </span>
-                      </div>
-                    )}
-
                     {/* Executive Summary */}
                     <section>
                       <h2 className="text-lg font-semibold text-slate-900 mb-3">Executive Summary</h2>
@@ -396,13 +348,22 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                       </section>
                     )}
 
-                    {/* Context & Significance */}
                     {content.context && (
-                      <section>
-                        <h2 className="text-lg font-semibold text-slate-900 mb-3">Context & Significance</h2>
-                        <p className="text-slate-700 leading-relaxed">
-                          {content.context}
-                        </p>
+                      <section className="space-y-6">
+                        {formatArticle(content.context).map((block, blockIndex) => (
+                          <div key={blockIndex}>
+                            {block.heading && (
+                              <h2 className="text-lg font-semibold text-slate-900 mb-3">{block.heading}</h2>
+                            )}
+                            <div className="space-y-4">
+                              {block.paragraphs.map((paragraph, paragraphIndex) => (
+                                <p key={paragraphIndex} className="text-slate-700 leading-7">
+                                  {paragraph}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </section>
                     )}
 
@@ -433,14 +394,14 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                         </div>
                         {content.meta?.url && (
                           <div className="mt-4">
-                            <Button
-                              onClick={() => verifyAndOpenLink(content.meta.url)}
-                              variant="outline"
-                              size="sm"
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            <a
+                              href={content.meta.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-8 items-center rounded-md border border-blue-200 px-3 text-sm text-blue-600 hover:bg-blue-50"
                             >
                               Read on {content.meta.domain}
-                            </Button>
+                            </a>
                           </div>
                         )}
                       </section>
@@ -457,12 +418,6 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline font-medium cursor-pointer"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                if (content?.meta?.url) {
-                                  verifyAndOpenLink(content.meta.url)
-                                }
-                              }}
                             >
                               {content.meta.domain || content.meta.url}
                             </a>
@@ -528,66 +483,13 @@ export default function ContentModalV2({ contentId, isOpen, onClose }: ContentMo
                     </div>
                   </div>
 
-                  {/* Comments Thread */}
-                  <div className="space-y-4">
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
-                          U
-                        </div>
-                        <span className="text-sm font-medium text-slate-900">User</span>
-                        <span className="text-xs text-slate-500">2 hours ago</span>
-                      </div>
-                      <p className="text-sm text-slate-700">This is a great article! Thanks for sharing.</p>
-                    </div>
-                    
-                    <div className="bg-white rounded-lg p-4 border border-slate-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-medium">
-                          A
-                        </div>
-                        <span className="text-sm font-medium text-slate-900">Another User</span>
-                        <span className="text-xs text-slate-500">1 hour ago</span>
-                      </div>
-                      <p className="text-sm text-slate-700">I found this really helpful for my research.</p>
-                    </div>
-                  </div>
+                  <p className="text-sm text-slate-500">No comments yet.</p>
                 </div>
               </div>
             </Panel>
           </PanelGroup>
         </div>
 
-        {/* Archive Prompt Modal */}
-        {showArchivePrompt && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Original Link Unavailable</h3>
-              <p className="text-slate-600 mb-4">
-                The original link appears to be down (HTTP {linkStatus?.status}). 
-                Would you like to open the archived copy instead?
-              </p>
-              <div className="flex gap-3">
-                <Button 
-                  onClick={handleOpenArchive} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                  data-focusable
-                  aria-label="Open archived version"
-                >
-                  Open Archive
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowArchivePrompt(false)}
-                  data-focusable
-                  aria-label="Cancel and close dialog"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
           </>
         )}
       </DialogContent>

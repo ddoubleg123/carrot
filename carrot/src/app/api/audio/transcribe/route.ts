@@ -40,29 +40,11 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
       const audioSize = audioBuffer.byteLength;
       const audioDuration = Math.max(1, Math.floor(audioSize / 16000)); // Rough estimate
       
-      // Call Vosk transcription service for real speech-to-text
-      const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-lnkmm5qvx3a-uc.a.run.app';
-      
-      console.log(`🎵 Calling Vosk service: ${transcriptionServiceUrl}`);
-      
-      const voskResponse = await fetch(`${transcriptionServiceUrl}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          postId: postId,
-          audioUrl: audioUrl
-        }),
-      });
-
-      if (voskResponse.ok) {
-        const voskResult = await voskResponse.json();
-        transcription = voskResult.transcription || voskResult.text || '[No speech detected]';
-        console.log(`✅ Vosk transcription successful: ${transcription.substring(0, 50)}...`);
-      } else {
-        throw new Error(`Vosk service returned ${voskResponse.status}`);
-      }
+      // Recognize speech on this machine with the open-source Vosk model.
+      const { transcribeLocalBytes } = await import('@/lib/asr/localVosk');
+      const local = await transcribeLocalBytes(Buffer.from(audioBuffer), 'media');
+      transcription = local.text || (local.silent ? 'No speech detected.' : '');
+      console.log('✅ Local Vosk transcription finished');
       
     } catch (error) {
       console.error('Transcription processing error:', error);

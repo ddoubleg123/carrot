@@ -154,7 +154,9 @@ export default function AudioRecorder({
         }
       };
 
-      mediaRecorder.start(100); // Collect data every 100ms
+      // One cluster for the whole take. A 100ms timeslice writes a file the
+      // player treats as finished after the first slice.
+      mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
 

@@ -51,13 +51,15 @@ interface RightRailProps {
   followers?: Follower[];
   botSubscriptions?: BotSubscription[];
   followerCount?: number;
+  showAgents?: boolean;
 }
 
 export default function RightRail({ 
   patch, 
   followers = [], 
   botSubscriptions = [],
-  followerCount = 0
+  followerCount = 0,
+  showAgents = true
 }: RightRailProps) {
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [connectedAgents, setConnectedAgents] = useState<ConnectedAgent[]>([]);
@@ -174,8 +176,7 @@ export default function RightRail({
             </div>
           </div>
 
-          {/* AI Agents Section */}
-          <div className="border-t border-[#E6E8EC] pt-6">
+          {showAgents && <div className="border-t border-[#E6E8EC] pt-6">
             <div className="grid grid-cols-[24px_1fr] items-start gap-x-3 mb-4">
               <div className="flex items-center justify-center">
                 <Bot className="w-5 h-5 text-slate-600" />
@@ -250,16 +251,17 @@ export default function RightRail({
                 )}
               </div>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
-      {/* Agent Connection Modal */}
+      {showAgents && (
       <AgentConnectionModal
         isOpen={isAgentModalOpen}
         onClose={() => setIsAgentModalOpen(false)}
         onConnect={handleAgentConnect}
       />
+      )}
 
       {/* Update Cadence Info (Optional) */}
       {connectedAgents.length > 0 && (

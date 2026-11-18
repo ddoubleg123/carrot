@@ -38,12 +38,17 @@ const ALLOW_HOSTS = new Set([
   'firebasestorage.googleapis.com',
   'storage.googleapis.com',
   'images.unsplash.com',
+  'images.pexels.com',
+  'cdn.pixabay.com',
+  'pixabay.com',
+  'images-assets.nasa.gov',
   'lh3.googleusercontent.com',
   'lh4.googleusercontent.com',
   'lh5.googleusercontent.com',
   'lh6.googleusercontent.com',
   'upload.wikimedia.org',
   'commons.wikimedia.org',
+  'pbs.twimg.com',
   'localhost',
   '127.0.0.1'
 ])
@@ -197,7 +202,8 @@ async function fetchUpstream(req: Request, target: URL) {
         headers: {
           ...(req.headers.get('if-none-match') ? { 'if-none-match': req.headers.get('if-none-match') as string } : {}),
           ...(req.headers.get('if-modified-since') ? { 'if-modified-since': req.headers.get('if-modified-since') as string } : {}),
-          accept: req.headers.get('accept') || 'image/avif,image/webp,image/*,*/*;q=0.8',
+          accept: 'image/avif,image/webp,image/jpeg,image/png,image/*;q=0.8',
+          'User-Agent': 'CarrotLearn/1.0 (group knowledge)',
           // CRITICAL FIX: Force HTTP/1.1 to avoid HTTP/2 protocol errors
           'Connection': 'close',
         },
@@ -540,6 +546,14 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     upstream = await fetchUpstream(_req as any, target as URL)
   } catch {
     return new NextResponse('Upstream fetch error', { status: 502 })
+  }
+
+  const upstreamType = upstream.headers.get('content-type') || ''
+  if (upstream.ok && !upstreamType.startsWith('image/')) {
+    return new NextResponse('Not an image', {
+      status: 415,
+      headers: { 'cache-control': 'public, max-age=300', 'x-proxy': 'img-not-image' }
+    })
   }
 
   if (!upstream.ok) {

@@ -11,6 +11,7 @@ interface Patch {
   description: string;
   tags: string[];
   theme: any;
+  cover?: string;
   _count: {
     members: number;
     posts: number;
@@ -236,22 +237,14 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
                   onClick={() => window.location.href = `/patch/${patch.handle}`}
                 >
                   {/* Header Image - Fixed height like AI agent tiles */}
-                  <div className="h-[200px] relative overflow-hidden">
-                    <div 
-                      className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center"
-                      style={{
-                        background: patch.theme?.bg || 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)'
-                      }}
-                    >
-                      <div className="text-6xl opacity-20">
-                        {patch.tags[0] === 'clean-energy' ? '🌱' : 
-                         patch.tags[0] === 'ubi' ? '💰' :
-                         patch.tags[0] === 'term-limits' ? '🗳️' :
-                         patch.tags[0] === 'space' ? '🚀' :
-                         patch.tags[0] === 'ai' ? '🤖' :
-                         patch.tags[0] === 'climate' ? '🌍' : '📚'}
+                  <div className="h-[200px] relative overflow-hidden bg-[#141414]">
+                    {patch.cover ? (
+                      <img src={patch.cover} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-end bg-gradient-to-br from-[#1F2937] to-[#7C2D12] p-4">
+                        <span className="text-xl font-semibold text-white">{patch.title}</span>
                       </div>
-                    </div>
+                    )}
                   </div>
                   
                   {/* Group Info - Fixed height like AI agent tiles */}

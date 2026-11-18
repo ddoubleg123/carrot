@@ -59,26 +59,22 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     onSelectFromGallery,
   } = props;
 
-  if (!isOpen) return null;
-
   const [query, setQuery] = React.useState("");
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Signal to the rest of the app that a modal is open (used to pause background autoplay)
   React.useEffect(() => {
-    if (typeof document === 'undefined') return;
-    // Set on mount/open
+    if (!isOpen || typeof document === 'undefined') return;
     document.documentElement.setAttribute('data-modal-open', '1');
     return () => {
-      // Clean up on close/unmount
       document.documentElement.removeAttribute('data-modal-open');
     };
-  }, []);
+  }, [isOpen]);
 
   // Manual refresh nonce (no auto-interval to avoid flicker)
   const [refreshNonce, setRefreshNonce] = React.useState(0);
 
-  const { items: serverItems, loading } = useServerMedia({ q: query || undefined, includeHidden: false, type: 'any', sort: 'newest', limit: 60, t: refreshNonce });
+  const { items: serverItems, loading } = useServerMedia({ q: query || undefined, includeHidden: false, type: 'any', sort: 'newest', limit: 60, t: refreshNonce }, isOpen);
 
   const results = React.useMemo(() => {
     if (activeTab !== 'gallery') return [] as MediaAssetDTO[];
@@ -163,6 +159,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
 
   // Cmd/Ctrl+K to focus search
   React.useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().includes('MAC');
       if ((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -172,7 +169,7 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [isOpen]);
 
   function onRename(item: MediaAssetDTO) {
     const next = window.prompt('Rename item', item.title || '');
@@ -323,6 +320,8 @@ export default function MediaPickerModal(props: MediaPickerModalProps) {
     });
     return list;
   }, [serverItems]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">

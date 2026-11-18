@@ -18,6 +18,7 @@ interface AudioPlayerProps {
   onEnded?: () => void; // fires after main (and jingle if provided) fully ends
   allowBlob?: boolean; // allow playing blob: URLs (safe inside composer session)
   onAudioRef?: (el: HTMLAudioElement | null) => void; // expose underlying audio element
+  warm?: boolean;
 }
 
 // Utility function to check if duration is valid
@@ -37,6 +38,7 @@ export default function AudioPlayer({
   onEnded,
   allowBlob = false,
   onAudioRef,
+  warm = false,
 }: AudioPlayerProps): JSX.Element {
   if (DEBUG_AUDIO) {
     console.log('🎵 AudioPlayer rendered with:', { 
@@ -154,11 +156,8 @@ export default function AudioPlayer({
         return true;
       } else {
         if (DEBUG_AUDIO) console.log('🎵 Audio duration not ready (invalid/Infinity/NaN):', audio.duration);
-        // Reset to 0:00 for invalid durations
-        if (audio.duration === Infinity || isNaN(audio.duration)) {
-          setDuration(0);
-          setDisplayDuration('0:00');
-        }
+        // A just-recorded webm often reports Infinity. Keep the length we
+        // already measured instead of wiping the player back to 0:00.
         return false;
       }
     };
@@ -292,21 +291,18 @@ export default function AudioPlayer({
         setDuration(audio.duration);
         setDisplayDuration(formatTime(audio.duration));
         durationDetected = true;
-      } else {
-        if (DEBUG_AUDIO) console.log('🎵 Duration check failed, retrying...', audio.duration);
-        // Force audio to load more data
-        if (audio.readyState < 2) {
-          audio.load();
-        }
+      } else if (DEBUG_AUDIO) {
+        console.log('🎵 Duration check failed, retrying...', audio.duration);
       }
     };
     
-    // Try multiple times with increasing delays for Firebase Storage URLs
+    // Read the duration as it arrives. Never call audio.load() from here:
+    // that aborts a clip about half a second after play starts.
     const timeoutId1 = setTimeout(checkDuration, 100);
     const timeoutId2 = setTimeout(checkDuration, 500);
     const timeoutId3 = setTimeout(checkDuration, 1000);
     const timeoutId4 = setTimeout(checkDuration, 2000);
-    const timeoutId5 = setTimeout(checkDuration, 5000); // Extra attempt for slow networks
+    const timeoutId5 = setTimeout(checkDuration, 5000);
 
     return () => {
       clearTimeout(timeoutId1);
@@ -453,7 +449,7 @@ return (
     <audio 
       ref={(el) => { (audioRef as any).current = el; try { onAudioRef && onAudioRef(el); } catch {} }} 
       src={isBlobUrl ? undefined : resolvedSrc}
-      preload="metadata"
+      preload={warm ? 'auto' : 'metadata'}
       crossOrigin="anonymous"
       onLoadStart={() => { if (DEBUG_AUDIO) console.log('🎵 Audio load started:', audioUrl); }}
       onCanPlay={() => { if (DEBUG_AUDIO) console.log('🎵 Audio can play:', audioUrl); }}

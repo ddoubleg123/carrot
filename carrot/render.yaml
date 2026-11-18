@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: CURATOR_ENABLED
+        value: "1"
       - key: PORT
         value: 10000
       - key: NEXTAUTH_URL
@@ -104,6 +106,19 @@ services:
         value: "true"
       - key: HTTP_CONNECTION_POOLING
         value: "true"
+
+  # Wakes the web service and arms the hunt. The free instance sleeps after
+  # 15 idle minutes, which stops the in-process timer. This ping keeps one
+  # instance inside the free monthly hours. An always-on Starter plan is what
+  # makes the timer run without relying on the ping.
+  - type: cron
+    name: curator-hunt
+    schedule: "*/10 * * * *"
+    buildCommand: npm install
+    startCommand: node -e "fetch('https://carrot-app.onrender.com/api/internal/curator-arm',{method:'POST',headers:{'x-curator-secret':process.env.INGEST_WORKER_SECRET||''}}).then(r=>r.text()).then(console.log).catch(console.error)"
+    envVars:
+      - key: INGEST_WORKER_SECRET
+        value: dev_ingest_secret
 
   # Cron job to process agent feed queue every 5 minutes
   - type: cron

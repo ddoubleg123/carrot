@@ -6,13 +6,12 @@ import { projectPost } from '../_project';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET /api/posts/[id] - fetch a single post (normalized for modal)
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await ctx.params;
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+const postInflight = new Map<string, Promise<any>>();
 
-    const post = await prisma.post.findUnique({
+function loadOnePost(id: string) {
+  const existing = postInflight.get(id);
+  if (existing) return existing;
+  const pending = prisma.post.findUnique({
       where: { id },
       include: {
         User: {
@@ -25,8 +24,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             country: true, // treat as homeCountry
           },
         },
+        _count: { select: { likes: true, comments: true } },
       },
+    }).finally(() => {
+      postInflight.delete(id);
     });
+  postInflight.set(id, pending);
+  return pending;
+}
+
+// GET /api/posts/[id] - fetch a single post (normalized for modal)
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await ctx.params;
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    const post = await loadOnePost(id);
     if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Parse imageUrls if serialized

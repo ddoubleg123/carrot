@@ -1,7 +1,5 @@
 import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Cog6ToothIcon, BellIcon, ShieldCheckIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import { Cog6ToothIcon, BellIcon, ShieldCheckIcon, UserCircleIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
 type SettingsLayoutProps = {
   children: React.ReactNode;
@@ -11,52 +9,34 @@ type SettingsLayoutProps = {
 
 const navigation = [
   { name: 'Account', href: 'account', icon: UserCircleIcon },
+  { name: 'Profile', href: 'profile', icon: PhotoIcon },
   { name: 'Notifications', href: 'notifications', icon: BellIcon },
   { name: 'Privacy', href: 'privacy', icon: ShieldCheckIcon },
-  { name: 'Preferences', href: 'preferences', icon: Cog6ToothIcon },
+  { name: 'Playback', href: 'preferences', icon: Cog6ToothIcon },
 ];
 
 export default function SettingsLayout({ children, activeTab, onTabChange }: SettingsLayoutProps) {
-  const pathname = usePathname();
-
   return (
-    <div className="flex h-full">
-      {/* Sidebar */}
-      <aside className="w-64 pr-4 border-r border-gray-200">
-        <div className="space-y-1">
-          {navigation.map((item) => {
-            const isActive = activeTab === item.href;
-            return (
-              <button
-                key={item.name}
-                onClick={() => onTabChange(item.href)}
-                className={`w-full flex items-center px-4 py-2 text-sm font-medium rounded-md ${
-                  isActive
-                    ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-500'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-transparent'
-                }`}
-              >
-                <item.icon
-                  className={`mr-3 h-5 w-5 ${
-                    isActive ? 'text-primary-500' : 'text-gray-400'
-                  }`}
-                  aria-hidden="true"
-                />
-                {item.name}
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 px-8 py-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white shadow-sm rounded-lg p-6">
-            {children}
-          </div>
-        </div>
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-100 px-3 py-3">
+        {navigation.map((item) => {
+          const isActive = activeTab === item.href;
+          return (
+            <button
+              key={item.name}
+              type="button"
+              onClick={() => onTabChange(item.href)}
+              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
+                isActive ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-orange-50 hover:text-gray-900'
+              }`}
+            >
+              <item.icon className="h-4 w-4" aria-hidden="true" />
+              {item.name}
+            </button>
+          );
+        })}
       </div>
+      <div className="px-6 py-6">{children}</div>
     </div>
   );
 }

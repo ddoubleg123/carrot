@@ -1,4 +1,6 @@
-// Vosk ASR client wrapper
+// Speech recognition runs on this machine with the open-source Vosk model.
+import { transcribeLocalUrl } from './localVosk';
+
 export type VoskTranscribeRequest = {
   postId?: string;
   audioUrl: string;
@@ -13,22 +15,16 @@ export type VoskTranscribeResponse = {
 };
 
 export async function transcribeWithVosk(req: VoskTranscribeRequest): Promise<VoskTranscribeResponse> {
-  const base = process.env.TRANSCRIPTION_SERVICE_URL;
-  if (!base) return { success: false, error: 'TRANSCRIPTION_SERVICE_URL not set' };
-  const url = base.replace(/\/$/, '') + '/transcribe';
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    return { success: false, error: `Vosk ${res.status}: ${text}` };
+  try {
+    const result = await transcribeLocalUrl(req.audioUrl);
+    const transcription = result.text || (result.silent ? 'No speech detected.' : '');
+    if (!transcription) return { success: false, postId: req.postId, error: 'No speech detected' };
+    return { success: true, postId: req.postId, transcription, status: 'completed' };
+  } catch (error) {
+    return {
+      success: false,
+      postId: req.postId,
+      error: error instanceof Error ? error.message : 'transcription failed',
+    };
   }
-
-  const data = (await res.json()) as VoskTranscribeResponse;
-  return data;
 }

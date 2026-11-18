@@ -228,7 +228,7 @@ export default function GifPicker({ isOpen, onClose, onSelectGif }: GifPickerPro
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
         {/* Branded Header */}
         <div className="px-6 pt-5 pb-4 border-b border-gray-200">

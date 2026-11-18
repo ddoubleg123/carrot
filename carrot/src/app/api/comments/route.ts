@@ -1,7 +1,83 @@
 import { NextResponse } from 'next/server';
-// import { getServerSession } from 'next-auth/next';
-// import { authOptions } from '@/lib/auth';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { invalidateFeedCache } from '@/lib/feedCache';
+import { showFollowers } from '@/lib/activityFeed';
+
+function commentAuthor(user: {
+  id: string;
+  name: string | null;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  image: string | null;
+  profilePhoto: string | null;
+}) {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return {
+    id: user.id,
+    name: user.name || fullName || user.username || 'Someone',
+    avatar: user.profilePhoto || user.image,
+  };
+}
+
+const authorSelect = {
+  id: true,
+  name: true,
+  username: true,
+  firstName: true,
+  lastName: true,
+  image: true,
+  profilePhoto: true,
+} as const;
+
+const commentsInflight = new Map<string, Promise<{
+  comments: Array<{
+    id: string;
+    content: string;
+    author: { id: string; name: string | null; avatar: string | null };
+    createdAt: string;
+    likes: number;
+    isLiked: boolean;
+  }>;
+  total: number;
+}>>();
+
+function loadComments(postId: string) {
+  const existing = commentsInflight.get(postId);
+  if (existing) return existing;
+  const pending = (async () => {
+    const [rows, total] = await Promise.all([
+      prisma.comment.findMany({
+        where: { postId },
+        include: {
+          user: { select: authorSelect },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }).catch((error) => {
+        console.error('Database error fetching comments:', error);
+        return [];
+      }),
+      prisma.comment.count({ where: { postId } }).catch(() => 0),
+    ]);
+    return {
+      comments: rows.map(comment => ({
+        id: comment.id,
+        content: comment.text,
+        author: commentAuthor(comment.user),
+        createdAt: comment.createdAt.toISOString(),
+        likes: 0,
+        isLiked: false,
+      })),
+      total,
+    };
+  })().finally(() => {
+    commentsInflight.delete(postId);
+  });
+  commentsInflight.set(postId, pending);
+  return pending;
+}
 
 // GET /api/comments?postId=xxx
 export async function GET(request: Request, context: { params: Promise<{}> }) {
@@ -16,46 +92,12 @@ export async function GET(request: Request, context: { params: Promise<{}> }) {
       );
     }
 
-    // Fetch comments for the post (optimized query)
-    const comments = await prisma.comment.findMany({
-      where: {
-        postId: postId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 50, // Limit to 50 comments for performance
-    }).catch((error) => {
-      console.error('Database error fetching comments:', error);
-      return [];
-    });
-
-    // Transform comments to match expected format
-    const transformedComments = comments.map(comment => ({
-      id: comment.id,
-      content: comment.text,
-      author: {
-        id: comment.user.id,
-        name: comment.user.name,
-        avatar: comment.user.image,
-      },
-      createdAt: comment.createdAt.toISOString(),
-      likes: 0, // Comments don't have likes in this schema
-      isLiked: false,
-    }));
+    const { comments, total } = await loadComments(postId);
 
     return NextResponse.json({
       success: true,
-      comments: transformedComments,
+      comments,
+      total,
     });
 
   } catch (error) {
@@ -70,14 +112,13 @@ export async function GET(request: Request, context: { params: Promise<{}> }) {
 // POST /api/comments
 export async function POST(request: Request, context: { params: Promise<{}> }) {
   try {
-    // const session = await getServerSession(authOptions);
-    // Temporarily disabled authentication for build
-    // if (!session?.user?.id) {
-    //   return NextResponse.json(
-    //     { error: 'Authentication required' },
-    //     { status: 401 }
-    //   );
-    // }
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
     const body = await request.json();
     const { postId, content } = body;
@@ -106,16 +147,10 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       data: {
         text: content.trim(),
         postId: postId,
-        userId: 'temp-user-id', // TODO: Replace with actual user ID when auth is enabled
+        userId: session.user.id,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
+        user: { select: authorSelect },
       },
     });
 
@@ -123,16 +158,14 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
     const transformedComment = {
       id: comment.id,
       content: comment.text,
-      author: {
-        id: comment.user.id,
-        name: comment.user.name,
-        avatar: comment.user.image,
-      },
+      author: commentAuthor(comment.user),
       createdAt: comment.createdAt.toISOString(),
       likes: 0,
       isLiked: false,
     };
 
+    invalidateFeedCache();
+    await showFollowers(session.user.id, `Commented: ${content.trim().slice(0, 220)}`)
     return NextResponse.json(transformedComment, { status: 201 });
 
   } catch (error) {

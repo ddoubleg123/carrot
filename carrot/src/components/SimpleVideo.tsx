@@ -3,6 +3,58 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useVideoContext } from '@/context/VideoContext';
 
+const visibility = new Map<string, number>();
+const feedOrder = new Map<string, number>();
+let activeVideoId: string | null = null;
+let preparedVideoId: string | null = null;
+const activeListeners = new Set<() => void>();
+const prepareListeners = new Set<() => void>();
+
+function notify(listeners: Set<() => void>) {
+  listeners.forEach((listener) => listener());
+}
+
+function nextFeedVideo(afterId: string | null) {
+  if (!afterId) return null;
+  const current = feedOrder.get(afterId);
+  if (current == null) return null;
+  let nextId: string | null = null;
+  let nextIndex = Infinity;
+  for (const [id, index] of feedOrder) {
+    if (index > current && index < nextIndex) {
+      nextIndex = index;
+      nextId = id;
+    }
+  }
+  return nextId;
+}
+
+function setPreparedVideo(id: string | null) {
+  if (id === preparedVideoId) return;
+  preparedVideoId = id;
+  notify(prepareListeners);
+}
+
+function armLookahead() {
+  setPreparedVideo(nextFeedVideo(activeVideoId));
+}
+
+function reportVisibility(id: string, ratio: number) {
+  visibility.set(id, ratio);
+  let bestId = activeVideoId;
+  let bestRatio = bestId ? visibility.get(bestId) || 0 : 0;
+  for (const [candidate, candidateRatio] of visibility) {
+    if (candidateRatio > bestRatio) {
+      bestId = candidate;
+      bestRatio = candidateRatio;
+    }
+  }
+  if (bestId && bestId !== activeVideoId && bestRatio >= 0.5) {
+    activeVideoId = bestId;
+    notify(activeListeners);
+  }
+}
+
 interface SimpleVideoProps {
   src: string;
   poster?: string;
@@ -12,6 +64,7 @@ interface SimpleVideoProps {
   muted?: boolean;
   playsInline?: boolean;
   postId?: string; // Add postId for FeedMediaManager integration
+  feedIndex?: number;
   onVideoRef?: (el: HTMLVideoElement | null) => void; // Add callback for video ref
 }
 
@@ -24,6 +77,7 @@ export default function SimpleVideo({
   muted = true,
   playsInline = true,
   postId,
+  feedIndex,
   onVideoRef,
 }: SimpleVideoProps) {
   const {
@@ -86,7 +140,8 @@ export default function SimpleVideo({
     );
   }
   
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [compatSupported, setCompatSupported] = useState<boolean | null>(null);
@@ -98,10 +153,12 @@ export default function SimpleVideo({
   const [autoRetryAttempted, setAutoRetryAttempted] = useState(false);
   const [isStuck, setIsStuck] = useState(false);
   const [isMuted, setIsMuted] = useState(muted); // CRITICAL FIX: Track mute state for user interaction
+  const [isActive, setIsActive] = useState(autoPlay);
   const [hasUserInteracted, setHasUserInteracted] = useState(false); // CRITICAL FIX: Track user interaction
   const [errorMessage, setErrorMessage] = useState<string | null>(null); // Track specific error message
   const videoRef = useRef<HTMLVideoElement>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const noDataRetryRef = useRef(0);
   const playTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const blobCleanupRef = useRef<(() => void) | null>(null);
@@ -129,6 +186,45 @@ export default function SimpleVideo({
       });
     };
   }, [postId, src]);
+
+  useEffect(() => {
+    if (!postId || feedIndex == null) return;
+    feedOrder.set(postId, feedIndex);
+    return () => {
+      feedOrder.delete(postId);
+      if (preparedVideoId === postId) setPreparedVideo(nextFeedVideo(activeVideoId));
+    };
+  }, [postId, feedIndex]);
+
+  useEffect(() => {
+    const sync = () => setPreparing(Boolean(postId) && preparedVideoId === postId && activeVideoId !== postId);
+    prepareListeners.add(sync);
+    sync();
+    return () => {
+      prepareListeners.delete(sync);
+    };
+  }, [postId]);
+
+  // One feed video plays at a time. The next one buffers behind it.
+  useEffect(() => {
+    if (!postId) return;
+    const sync = () => setIsActive(activeVideoId === postId);
+    activeListeners.add(sync);
+    if (autoPlay) reportVisibility(postId, 1);
+    const el = containerRef.current;
+    let io: IntersectionObserver | null = null;
+    if (el) {
+      io = new IntersectionObserver((entries) => {
+        reportVisibility(postId, entries[0]?.intersectionRatio || 0);
+      }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+      io.observe(el);
+    }
+    return () => {
+      activeListeners.delete(sync);
+      visibility.delete(postId);
+      io?.disconnect();
+    };
+  }, [autoPlay, postId]);
 
   // FeedMediaManager integration for single-video playback
   useEffect(() => {
@@ -620,6 +716,7 @@ export default function SimpleVideo({
   }, [src, postId, videoSrc]);
 
   useEffect(() => {
+    if (!autoPlay && !isActive && !preparing) return;
     if (!src) {
       console.warn(`[SimpleVideo] ⚠️  No src provided`, { postId, mountId: mountIdRef.current });
       setHasError(true);
@@ -631,7 +728,7 @@ export default function SimpleVideo({
         const now = Date.now();
         const timeSinceLastSet = now - srcSetTimeRef.current;
         
-        if (lastProcessedSrcRef.current === src) {
+        if (lastProcessedSrcRef.current === src && videoSrc) {
           // Check if this is a rapid re-process (< 1 second)
           if (timeSinceLastSet < 1000) {
             console.log(`[SimpleVideo] ⚠️  Blocking rapid src re-process`, {
@@ -661,6 +758,7 @@ export default function SimpleVideo({
         
         lastProcessedSrcRef.current = src;
         srcSetTimeRef.current = now;
+        noDataRetryRef.current = 0;
 
     // Check if we have preloaded data for this video first
     const checkPreloadedData = async () => {
@@ -689,16 +787,6 @@ export default function SimpleVideo({
       return { success: false }; // No preloaded data available
     };
 
-    // Try preloaded data first, then fallback to normal URL processing
-    checkPreloadedData().then((result) => {
-      if (result.success) {
-        return; // Already handled with preloaded data
-      }
-      
-      // Fallback to normal URL processing
-      processNormalUrl();
-    });
-
     const processNormalUrl = () => {
       // Simple URL construction - handle Firebase URLs properly
       let proxyUrl: string;
@@ -707,8 +795,7 @@ export default function SimpleVideo({
       // Already proxied through video-simple
       proxyUrl = src;
     } else if (src.startsWith('/api/video')) {
-      // Already proxied through video endpoint, use it directly
-      // But check if it's double-encoded and fix it
+      let unwrapped: string | null = null;
       if (src.includes('%252F') || src.includes('%2520') || src.includes('%2525')) {
         // This is double-encoded, decode it once
         try {
@@ -723,8 +810,9 @@ export default function SimpleVideo({
         proxyUrl = src;
       }
       
-      // Additional check: if the URL still contains encoded Firebase URLs, try to clean it up
-      if (proxyUrl.includes('firebasestorage.googleapis.com') && proxyUrl.includes('%')) {
+      // Additional check: if the URL still contains encoded Firebase URLs, try to clean it up.
+      // A tokenized download URL is already playable; rebuilding its path decodes %2F and 404s.
+      if (!unwrapped && proxyUrl.includes('firebasestorage.googleapis.com') && proxyUrl.includes('%')) {
         try {
           // Only try to parse as URL if it's an absolute URL
           if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
@@ -763,23 +851,12 @@ export default function SimpleVideo({
       // No need to add range parameters here to avoid duplicate requests
     } else if (src.includes('firebasestorage.googleapis.com')) {
       // Check if this is a properly formatted Firebase URL (has alt=media)
-      if (src.includes('alt=media')) {
-        // This is a properly formatted Firebase URL, proxy it with range parameter
-        let cleanSrc = src;
-        
-        // If the URL is already encoded (contains %2F), decode it first
-        if (src.includes('%2F') || src.includes('%3F') || src.includes('%3D')) {
-          try {
-            cleanSrc = decodeURIComponent(src);
-          } catch (e) {
-            // If decoding fails, use original
-            cleanSrc = src;
-          }
-        }
-        
-        // Encode it properly for the proxy (range requests handled by FeedMediaManager)
-        proxyUrl = `/api/video?url=${encodeURIComponent(cleanSrc)}`;
-        console.log('[SimpleVideo] Proxying Firebase URL (range handled by preload system)');
+      if (src.includes('alt=media') || src.includes('token=')) {
+        // Keep the URL exactly as stored. Decoding %2F turns the object
+        // path into extra slashes and the browser reports media error 4.
+        // The file itself is a normal mp4 and plays from storage.
+        proxyUrl = src;
+        console.log('[SimpleVideo] Playing Firebase URL directly');
       } else {
         // This is an old Firebase URL, proxy it
         let cleanSrc = src;
@@ -846,6 +923,13 @@ export default function SimpleVideo({
       // Show video immediately when source is set - don't wait for events
       setIsLoading(false);
     }; // Close processNormalUrl function
+
+    // Start the player on this turn. Waiting for the preload-module import
+    // held the first request until after the long tasks.
+    processNormalUrl();
+    checkPreloadedData().then((result) => {
+      if (result.success) return;
+    });
     
     // Cleanup timeout and blob URLs on unmount
     return () => {
@@ -859,7 +943,25 @@ export default function SimpleVideo({
         blobCleanupRef.current = null;
       }
     };
-  }, [src]);
+  }, [src, isActive, autoPlay, preparing, videoSrc]);
+
+  useEffect(() => {
+    if ((isActive || autoPlay) && canPlay) armLookahead();
+  }, [isActive, autoPlay, canPlay]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isActive) {
+      const start = () => {
+        void video.play().catch(() => {});
+      };
+      if (video.readyState >= 2) start();
+      else video.addEventListener('canplay', start, { once: true });
+      return () => video.removeEventListener('canplay', start);
+    }
+    video.pause();
+  }, [isActive, videoSrc]);
 
   const handleLoadStart = () => {
     const startTime = Date.now();
@@ -908,71 +1010,62 @@ export default function SimpleVideo({
       }
     }
     
-        // CRITICAL: Set a 15 second timeout to detect stuck videos
+        // A slow proxy is not a stuck file. NETWORK_LOADING (2) means bytes
+        // are still arriving; calling load() aborts them and the next attempt
+        // starts over, which is what kept these videos under readyState 2.
         if (loadingTimeoutRef.current) {
           clearTimeout(loadingTimeoutRef.current);
         }
-        loadingTimeoutRef.current = setTimeout(() => {
-          const duration = Date.now() - startTime;
-          const video = videoRef.current;
-          
-          // Check if video is truly stuck or just slow
-          if (video && video.readyState < 2 && video.networkState !== 3) {
-            console.error(`[SimpleVideo] ⏱️  LOAD TIMEOUT - Video stuck`, { 
+        const armLoadWatch = (waitMs: number, extensionsLeft: number) => {
+          loadingTimeoutRef.current = setTimeout(() => {
+            const duration = Date.now() - startTime;
+            const video = videoRef.current;
+            if (!video || video.readyState >= 2) {
+              setIsLoading(false);
+              return;
+            }
+
+            if (video.networkState === 2 && extensionsLeft > 0) {
+              console.warn('[SimpleVideo] Video still buffering', {
+                postId,
+                duration: `${duration}ms`,
+                readyState: video.readyState,
+                networkState: video.networkState,
+              });
+              armLoadWatch(15000, extensionsLeft - 1);
+              return;
+            }
+
+            if (video.networkState === 2 || video.networkState === 3) {
+              console.warn('[SimpleVideo] Video slow but loading, showing anyway', {
+                postId,
+                duration: `${duration}ms`,
+                readyState: video.readyState,
+                networkState: video.networkState,
+              });
+              setIsLoading(false);
+              return;
+            }
+
+            console.warn('[SimpleVideo] Video produced no data', {
               postId,
               duration: `${duration}ms`,
               readyState: video.readyState,
               networkState: video.networkState,
-              src: videoSrc?.substring(0, 100)
+              src: videoSrc?.substring(0, 100),
             });
-            
             setIsStuck(true);
-            
-            // Auto-retry stuck videos up to 3 times with exponential backoff
-            if (retryCount < 3) {
-              const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 8000); // 1s, 2s, 4s, max 8s
-              console.warn(`[SimpleVideo] 🔄 Auto-retrying stuck video (attempt ${retryCount + 1}/3) in ${retryDelay}ms`);
-              setRetryCount(prev => prev + 1);
-              
-              setTimeout(() => {
-                if (videoRef.current) {
-                  videoRef.current.load(); // Force reload
-                  
-                  // Give it another timeout based on attempt number
-                  const timeoutDelay = Math.min(5000 + (retryCount * 2000), 15000); // 5s, 7s, 9s, max 15s
-                  setTimeout(() => {
-                    if (videoRef.current && videoRef.current.readyState < 2) {
-                      if (retryCount >= 2) {
-                        console.error(`[SimpleVideo] ❌ Video still stuck after ${retryCount + 1} retries`);
-                        setHasError(true);
-                        setIsLoading(false);
-                        setErrorMessage('Video failed to load after multiple attempts');
-                      } else {
-                        // Try one more time
-                        console.warn(`[SimpleVideo] 🔄 Retrying again (attempt ${retryCount + 2}/3)`);
-                        setRetryCount(prev => prev + 1);
-                        videoRef.current.load();
-                      }
-                    }
-                  }, timeoutDelay);
-                }
-              }, retryDelay);
-            } else {
-              // Give up and show error after 3 attempts
-              console.error(`[SimpleVideo] ❌ Video load failed after 3 retry attempts`);
-              setHasError(true);
-              setIsLoading(false);
-              setErrorMessage('Video failed to load after multiple attempts');
+            if (noDataRetryRef.current < 1) {
+              noDataRetryRef.current += 1;
+              video.load();
+              return;
             }
-          } else {
-            // Video is loading, just slow - show it anyway
-            console.warn('[SimpleVideo] Video slow but loading, showing anyway', { 
-              duration: `${duration}ms`,
-              readyState: video?.readyState
-            });
+            setHasError(true);
             setIsLoading(false);
-          }
-        }, 15000); // 15 second timeout to detect stuck videos
+            setErrorMessage('Video failed to load');
+          }, waitMs);
+        };
+        armLoadWatch(15000, 2);
   };
 
   const handleLoadedData = () => {
@@ -987,6 +1080,14 @@ export default function SimpleVideo({
 
       const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
         const video = e.currentTarget;
+        if (video.src.includes('firebasestorage.googleapis.com') && !video.src.includes('/api/video')) {
+          console.warn('[SimpleVideo] Direct Firebase playback failed, using proxy', { postId });
+          setHasError(false);
+          setErrorMessage(null);
+          setIsLoading(true);
+          setVideoSrc(`/api/video?url=${encodeURIComponent(video.src)}`);
+          return;
+        }
         console.error('[SimpleVideo] Video error:', {
           error: video.error,
           code: video.error?.code,
@@ -1077,6 +1178,7 @@ export default function SimpleVideo({
     });
     setCanPlay(true);
     setIsLoading(false);
+    if (isActive || autoPlay) armLookahead();
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = null;
@@ -1114,6 +1216,7 @@ export default function SimpleVideo({
           setErrorMessage(null);
           setRetryCount(0);
           setNetworkRetryCount(0);
+          noDataRetryRef.current = 0;
           playAttemptsRef.current = 0;
           lastPlayTimeRef.current = 0;
           
@@ -1165,24 +1268,29 @@ export default function SimpleVideo({
         );
       }
 
+  const showVideo = Boolean(videoSrc && (isActive || preparing));
+
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
-      {isLoading && (
-        <div className="absolute inset-0 bg-gray-50 flex items-center justify-center z-10">
+    <div ref={containerRef} className={`relative aspect-video w-full overflow-hidden bg-black ${className}`}>
+      {isActive && isLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mx-auto mb-2"></div>
-            <div className="text-sm text-gray-500">Loading...</div>
+            <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-b-2 border-white"></div>
+            <div className="text-sm text-white">Loading...</div>
           </div>
         </div>
       )}
-      
-      {videoSrc && (
+
+      {poster && !showVideo && (
+        <img src={poster} alt="" className="absolute inset-0 h-full w-full object-contain" />
+      )}
+      {showVideo && (
         <video
           ref={videoRef}
-          src={videoSrc}
+          src={videoSrc || undefined}
           poster={poster}
           controls={controls}
-          autoPlay={autoPlay}
+          autoPlay={isActive}
           muted={isMuted}
           playsInline={playsInline}
           onLoadStart={handleLoadStart}
@@ -1193,9 +1301,9 @@ export default function SimpleVideo({
           onCanPlayThrough={handleCanPlayThrough}
           onClick={handleUserInteraction}
           onTouchStart={handleUserInteraction}
-          className="w-full h-full object-contain bg-black cursor-pointer"
-          preload="metadata"
-          crossOrigin="anonymous"
+          className="absolute inset-0 h-full w-full object-contain cursor-pointer"
+          preload="auto"
+          crossOrigin={videoSrc?.includes('firebasestorage.googleapis.com') ? undefined : 'anonymous'}
           data-start-time={Date.now()}
           data-post-id={postId}
         />

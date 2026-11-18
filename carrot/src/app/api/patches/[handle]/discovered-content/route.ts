@@ -3,7 +3,6 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { DiscoveryCardPayload, DiscoveryContested, DiscoveryFact, DiscoveryHero, DiscoveryQuote } from '@/types/discovery-card'
 import { generateSVGPlaceholder } from '@/lib/media/fallbackImages'
-
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -98,7 +97,6 @@ export async function GET(
         provenance: true,
         hero: true, // JSON hero field (for backward compatibility)
         metadata: true,
-        textContent: true,
         isUseful: true, // Whether content is useful/published
         heroRecord: { // Hero relation (preferred over JSON)
           select: {
@@ -131,6 +129,7 @@ export async function GET(
     // The frontend can handle items without heroes/summaries/textContent
     const filteredContent = allContent.filter(item => {
       // Must have at least a title to be displayable
+      if (item.type === 'topic') return false
       if (!item.title || item.title.trim().length === 0) {
         if (debug) {
           console.log('[Discovered Content] Filtered out item (no title):', { id: item.id })
@@ -140,7 +139,7 @@ export async function GET(
       
       // Optional: prefer items with some content, but don't require it
       // This helps prioritize items with more data, but doesn't exclude items without it
-      const textBytes = item.textContent?.length || 0
+      const textBytes = item.summary?.length || 0
       const hasHero = item.heroRecord || (item.hero && typeof item.hero === 'object' && (item.hero as any)?.url)
       const hasSummary = item.summary && item.summary.length > 0
       
@@ -418,7 +417,7 @@ export async function GET(
         summary150,
         keyPoints,
         notableQuote,
-        readingTime: Math.max(1, Math.floor((item.textContent?.length || 1000) / 200))
+        readingTime: Math.max(1, Math.floor((item.summary?.length || 180) / 40))
       }
       
       // Build mediaAssets object for frontend compatibility - always include hero (with fallback)
@@ -461,7 +460,7 @@ export async function GET(
         savedAt: item.createdAt?.toISOString() || new Date().toISOString(),
         // Additional fields for frontend
         hasHero,
-        textLength: (item.textContent?.length || 0),
+        textLength: item.summary?.length || 0,
         createdAt: item.createdAt?.toISOString() || new Date().toISOString(),
         // Frontend compatibility fields
         enrichedContent,

@@ -7,6 +7,15 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const isShadow = process.env.DISCOVERY_V2_SHADOW_MODE === 'true';
 
 const nextConfig = {
+  // Dev-only. The browser cached /_next/static as immutable, which kept the old
+  // Messages href and failed hydration against the new server HTML.
+  assetPrefix: process.env.NODE_ENV === 'production' ? undefined : '/dev-assets',
+  // Keep every menu route compiled. The default buffer drops pages after a few
+  // seconds, so the next click recompiles and sits there for several seconds.
+  onDemandEntries: {
+    maxInactiveAge: 30 * 60 * 1000,
+    pagesBufferLength: 20,
+  },
   outputFileTracingRoot: path.resolve(__dirname, '..'),
   trailingSlash: false,
   eslint: {
@@ -17,13 +26,21 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['localhost:3000', 'carrot-app.onrender.com'],
     },
+    // Middleware buffers the body. The default 10 MB cut off larger pictures and videos.
+    middlewareClientMaxBodySize: '200mb',
     isrFlushToDisk: false, // Disable to avoid Windows permission errors
+    // Keep the last menu/page render so a click paints from cache
+    // instead of waiting on another server render.
+    staleTimes: {
+      dynamic: 60,
+      static: 180,
+    },
   },
   generateBuildId: async () => {
     return 'build-' + Date.now()
   },
   // Move serverComponentsExternalPackages to root level
-  serverExternalPackages: [],
+  serverExternalPackages: ['pdf-parse'],
   // Disable HTTP/2 and force HTTP/1.1
   poweredByHeader: false,
   compress: false, // Disable compression to avoid HTTP/2 issues
@@ -148,19 +165,23 @@ const nextConfig = {
   },
   async headers() {
     return [
-      // Static assets - aggressive caching (Next.js handles Content-Type automatically)
+      // Hashed production files can be cached forever. Dev chunk URLs do not change
+      // when the code does, so an immutable header keeps a stale client bundle and
+      // hydration then disagrees with the fresh server HTML.
       {
         source: '/_next/static/:path*',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable'
+            value: process.env.NODE_ENV === 'production'
+              ? 'public, max-age=31536000, immutable'
+              : 'no-store'
           }
         ]
       },
       // HTML pages and API routes - CSP and security headers  
       {
-        source: '/((?!_next/static|_next/image|favicon.ico|robots.txt).*)',
+        source: '/((?!_next/static|_next/image|favicon.ico|robots.txt|api/learn/pdf).*)',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -169,8 +190,9 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.knightlab.com",
               "style-src 'self' 'unsafe-inline' https://cdn.knightlab.com",
               "font-src 'self' https://cdn.knightlab.com https://fonts.gstatic.com",
-              "img-src 'self' data: blob: https://lh3.googleusercontent.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://images.unsplash.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media1.tenor.com https://media2.tenor.com https://media3.tenor.com https://media4.tenor.com https://media5.tenor.com https://cdnjs.cloudflare.com https://ui-avatars.com https://upload.wikimedia.org https://*.wikimedia.org https://*.wikipedia.org https://www.google.com https://*.google.com https://*.gstatic.com https://carrot-app.onrender.com https://via.placeholder.com",
-              "media-src 'self' blob: data: https://firebasestorage.googleapis.com https://storage.googleapis.com https://*.firebasestorage.app https://commondatastorage.googleapis.com https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media0.giphy.com https://media1.giphy.com https://media2.giphy.com https://media3.giphy.com https://media4.giphy.com https://media5.giphy.com https://www.soundhelix.com",
+              "img-src 'self' data: blob: https://lh3.googleusercontent.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://images.unsplash.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media1.tenor.com https://media2.tenor.com https://media3.tenor.com https://media4.tenor.com https://media5.tenor.com https://cdnjs.cloudflare.com https://ui-avatars.com https://upload.wikimedia.org https://*.wikimedia.org https://*.wikipedia.org https://www.google.com https://*.google.com https://*.gstatic.com https://carrot-app.onrender.com https://via.placeholder.com https://pbs.twimg.com https://*.twimg.com https://unitedstates.github.io",
+              "media-src 'self' blob: data: https://firebasestorage.googleapis.com https://storage.googleapis.com https://*.firebasestorage.app https://commondatastorage.googleapis.com https://www.youtube.com https://youtube.com https://*.youtube.com https://*.googlevideo.com https://media.giphy.com https://*.giphy.com https://media.tenor.com https://*.tenor.com https://c.tenor.com https://media0.giphy.com https://media1.giphy.com https://media2.giphy.com https://media3.giphy.com https://media4.giphy.com https://media5.giphy.com https://www.soundhelix.com https://video.twimg.com https://*.twimg.com",
+              "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com",
               "connect-src 'self' blob: https://*.googleapis.com https://firebasestorage.googleapis.com https://storage.googleapis.com https://api.giphy.com https://tenor.googleapis.com https://huggingface.co https://*.huggingface.co https://cdn-lfs.huggingface.co https://cdn.knightlab.com",
               "frame-ancestors 'self'"
             ].join('; ')

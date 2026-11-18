@@ -8,6 +8,7 @@ import { ExternalLink, Link2, MessageSquare, Share2, Clock, Calendar, Bookmark, 
 import { pickHero, getDominantColor } from '@/lib/media/hero'
 import GeneratedCover from '@/app/(app)/patch/[handle]/components/GeneratedCover'
 import { DiscoveredItem } from '@/types/discovered-content'
+import CommentsPanel from '@/components/post-modal/CommentsPanel'
 
 interface PostItem {
   id: string
@@ -443,7 +444,10 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
           </div>
 
           {/* Right Pane - Comments (1/3 width on desktop) */}
-          <div className="lg:w-1/3 border-l border-slate-200 bg-slate-50 overflow-y-auto overscroll-contain" style={{ maxHeight: '90vh' }}>
+          <div className="lg:w-1/3 border-l border-slate-200 bg-slate-50 flex flex-col min-h-0" style={{ maxHeight: '90vh' }}>
+            {source === 'home' && item ? (
+              <CommentsPanel postId={item.id} onClose={onClose} />
+            ) : (
             <div className="p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Comments</h3>
               
@@ -493,6 +497,7 @@ export default function UnifiedContentModal({ item, isOpen, onClose, source, vid
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
 

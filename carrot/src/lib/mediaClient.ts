@@ -57,13 +57,17 @@ export async function patchMedia(id: string, patch: { title?: string; hidden?: b
   return resp.json()
 }
 
-export function useServerMedia(params: MediaQueryClient) {
+export function useServerMedia(params: MediaQueryClient, enabled = true) {
   const React = require('react') as typeof import('react')
   const [items, setItems] = React.useState<MediaAssetDTO[] | null>(null)
   const [error, setError] = React.useState<Error | null>(null)
   const [loading, setLoading] = React.useState<boolean>(true)
 
   React.useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
     const ac = new AbortController()
     setLoading(true)
     fetchMedia(params, { signal: ac.signal })
@@ -71,7 +75,7 @@ export function useServerMedia(params: MediaQueryClient) {
       .catch((e) => { if (!ac.signal.aborted) setError(e as Error) })
       .finally(() => { if (!ac.signal.aborted) setLoading(false) })
     return () => { ac.abort() }
-  }, [JSON.stringify(params)])
+  }, [JSON.stringify(params), enabled])
 
   return { items: items ?? [], loading, error }
 }

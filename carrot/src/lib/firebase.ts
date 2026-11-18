@@ -26,11 +26,14 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// CRITICAL FIX: Use correct Firebase storage bucket domain (.appspot.com not .firebasestorage.app)
-const resolvedBucket = (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET &&
-  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.includes('.appspot.com'))
-  ? process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!
-  : `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com`;
+// Keep the configured bucket. This project stores files on *.firebasestorage.app.
+// Rewriting that name to *.appspot.com sends uploads to a bucket that does not exist,
+// and the browser reports the 404 preflight as a CORS failure.
+const configuredBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim();
+const resolvedBucket = configuredBucket
+  || (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    ? `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebasestorage.app`
+    : '');
 
 // Ensure the config uses the resolved bucket
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

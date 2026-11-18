@@ -6,10 +6,15 @@ export function projectPost(row: any) {
   if (!row) return null;
 
   const user = row.User || {};
-  // Stats with safe defaults (until DB defaults are enforced)
+  const counted = (key: 'likes' | 'comments') => {
+    const fromRelation = row?._count?.[key];
+    if (typeof fromRelation === 'number') return fromRelation;
+    const direct = row?.[key];
+    return typeof direct === 'number' ? direct : 0;
+  };
   const stats = {
-    likes: typeof row.likes === 'number' ? row.likes : 0,
-    comments: typeof row.comments === 'number' ? row.comments : 0,
+    likes: counted('likes'),
+    comments: counted('comments'),
     reposts: typeof row.reposts === 'number' ? row.reposts : 0,
     views: typeof row.views === 'number' ? row.views : 0,
   };
@@ -54,6 +59,7 @@ export function projectPost(row: any) {
     // User projection
     User: {
       id: user.id,
+      name: user.name || null,
       username: user.username || null,
       profilePhoto: user.profilePhoto || user.image || null,
       profilePhotoPath: (user as any)?.profilePhotoPath || null,

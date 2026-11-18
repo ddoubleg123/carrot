@@ -96,10 +96,6 @@ export default function FeedDebugger() {
   };
 
   useEffect(() => {
-    fetchPosts();
-  }, []);
-
-  useEffect(() => {
     if (posts.length > 0) {
       checkVideoUrls();
     }

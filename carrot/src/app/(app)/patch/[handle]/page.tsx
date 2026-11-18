@@ -11,22 +11,20 @@ import Overview from '@/components/patch/Overview'
 import DiscoveryView from '@/components/patch/DiscoveryView'
 import DiscussionsView from '@/components/patch/DiscussionsView'
 import PatchChat from '@/components/patch/PatchChat'
+import AskView from '@/components/patch/AskView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
+import { ensureGroupCover } from '@/lib/groups/cover'
+import { topicLabel } from '@/lib/learn/topic'
 // No need to import PatchPageSkeleton - using inline loading component
 
 // Helper function to convert preset string to index
 function getPresetIndex(preset: string | null | undefined): number | undefined {
-  if (!preset) return undefined;
-  
-  // Map preset strings to indices
-  const presetMap: { [key: string]: number } = {
-    'following': 0,
-    'for-you': 1,
-    'subjects': 2
-  };
-  
-  return presetMap[preset] ?? undefined;
+  if (!preset) return undefined
+  const asNumber = Number(preset)
+  if (Number.isInteger(asNumber) && asNumber >= 0 && asNumber < COLOR_SCHEMES.length) return asNumber
+  const byName = COLOR_SCHEMES.findIndex((scheme) => scheme.name.toLowerCase() === preset.toLowerCase())
+  return byName >= 0 ? byName : undefined
 }
 
 export default async function PatchPage({ 
@@ -145,8 +143,7 @@ export default async function PatchPage({
       sources: [] // Empty array to prevent undefined errors
     }));
 
-    // Determine active tab from URL search params (default to 'chat')
-    const activeTab = (search.tab as string) || 'chat';
+    const activeTab = (search.tab as string) || 'ask';
 
     return (
       <Suspense fallback={
@@ -163,6 +160,9 @@ export default async function PatchPage({
               ...patchWithName,
               updatedAt: patchWithName.updatedAt.toISOString()
             }}
+            cover={await ensureGroupCover(patch).catch(() => '')}
+            isOwner={Boolean(userId && patch.createdBy === userId)}
+            isMember={Boolean(userId && (patch.createdBy === userId || patch.members.some((member) => member.user.id === userId)))}
             userTheme={actualUserTheme ? {
               mode: actualUserTheme.mode as 'preset' | 'image',
               preset: getPresetIndex(actualUserTheme.preset),
@@ -175,7 +175,8 @@ export default async function PatchPage({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
               {/* Main Content Area */}
               <div className="max-w-[880px] min-w-0">
-                <PatchTabs activeTab={activeTab} patch={patchWithName}>
+                <PatchTabs activeTab={activeTab === 'discovery' ? 'facts' : activeTab} patch={patchWithName}>
+                  {activeTab === 'ask' && <AskView patch={patchWithName} initialTopicId={typeof search.topic === 'string' ? search.topic : ''} />}
                   {activeTab === 'chat' && (
                     <div className="px-6 md:px-10 py-6">
                       <PatchChat patchId={patchWithName.id} patchHandle={patchWithName.handle} />
@@ -183,19 +184,21 @@ export default async function PatchPage({
                   )}
                   {activeTab === 'documents' && <Overview patch={patchWithName} />}
                   {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
-                  {activeTab === 'discovery' && <DiscoveryView patch={patchWithName} />}
+                  {(activeTab === 'facts' || activeTab === 'discovery') && <DiscoveryView patch={patchWithName} />}
                   {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
                 </PatchTabs>
               </div>
 
               {/* Right Rail */}
-              <div className="w-[320px] shrink-0 min-w-0">
+              <div className="w-[320px] shrink-0 min-w-0 lg:sticky lg:top-4 lg:z-10 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
                 <RightRail
                   patch={patchWithName}
                   followers={actualFollowers}
                   botSubscriptions={botSubscriptionsWithBotData as any}
                   followerCount={actualFollowerCount}
+                  showAgents={false}
                 />
+                <div id="topic-add-dock" />
               </div>
             </div>
           </div>
@@ -222,12 +225,20 @@ export default async function PatchPage({
   }
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
-  const { handle } = await params;
+export async function generateMetadata({
+  params,
+  searchParams
+}: {
+  params: Promise<{ handle: string }>
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}): Promise<Metadata> {
+  const { handle } = await params
+  const search = await searchParams
 
   const patch = await prisma.patch.findUnique({
     where: { handle },
     select: {
+      id: true,
       title: true,
       description: true,
       tags: true,
@@ -238,6 +249,20 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
     return {
       title: 'Patch Not Found',
     };
+  }
+
+  const key = typeof search.topic === 'string' ? search.topic : ''
+  if (key) {
+    const topic = await topicLabel(patch.id, key).catch(() => null)
+    if (topic) {
+      const path = `/patch/${handle}?topic=${topic.slug}`
+      return {
+        title: `${topic.question} · ${patch.title}`,
+        description: topic.question,
+        alternates: { canonical: path },
+        openGraph: { title: topic.question, description: `A question on ${patch.title}`, url: path }
+      }
+    }
   }
 
   return {

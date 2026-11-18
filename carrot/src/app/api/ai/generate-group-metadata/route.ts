@@ -4,6 +4,19 @@ import { chatStream, type ChatMessage } from '@/lib/llm/providers/DeepSeekClient
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function localMetadata(groupName: string, description?: string) {
+  const words = `${groupName} ${description || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+  const slug = groupName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
+  return {
+    tags: Array.from(new Set([slug, ...words, 'community', 'discussion', 'knowledge'].filter(Boolean))).slice(0, 12),
+    categories: ['General', 'Community'],
+  };
+}
+
 export async function POST(req: Request, context: { params: Promise<{}> }) {
   try {
     const { groupName, description } = await req.json();
@@ -71,8 +84,9 @@ Please generate relevant tags and categories for this knowledge group.`
       errorMessage = 'Failed to generate metadata';
     }
 
-    if (hasError) {
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
+    if (hasError || !fullResponse.trim()) {
+      console.warn('[generate-group-metadata] Using local tags:', errorMessage || 'empty response');
+      return NextResponse.json({ success: true, metadata: localMetadata(groupName, description) });
     }
 
     // Parse the JSON response from DeepSeek

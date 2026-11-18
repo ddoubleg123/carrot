@@ -39,8 +39,6 @@ try {
     filePath = fs.existsSync(abs) ? abs : (fs.existsSync(alt) ? alt : abs);
   }
   console.log('[Prisma] CWD:', process.cwd());
-  console.log('[Prisma] DATABASE_URL (raw):', raw);
-  console.log('[Prisma] DATABASE_URL (resolved):', resolvedDbUrl);
   if (filePath) {
     console.log('[Prisma] SQLite filePath:', filePath);
     console.log('[Prisma] SQLite dir exists:', fs.existsSync(path.dirname(filePath)));
@@ -96,4 +94,20 @@ export const prisma =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-export default prisma;
+// Singapore closes idle connections. The next menu click then waits several
+// seconds on a new handshake. A lightweight ping keeps the pool open in dev.
+if (process.env.NODE_ENV !== 'production') {
+  const globalForPing = global as unknown as { __carrotPrismaPing?: ReturnType<typeof setInterval> };
+  if (!globalForPing.__carrotPrismaPing) {
+    const warmConnection = () => {
+      prisma.$queryRaw`SELECT 1`.catch(() => {});
+    };
+    warmConnection();
+    globalForPing.__carrotPrismaPing = setInterval(warmConnection, 20_000);
+    if (typeof globalForPing.__carrotPrismaPing.unref === 'function') {
+      globalForPing.__carrotPrismaPing.unref();
+    }
+  }
+}
+
+export default prisma

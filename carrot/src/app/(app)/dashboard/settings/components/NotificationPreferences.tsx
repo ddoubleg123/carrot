@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
+
+const PREFS_KEY = 'carrot-notification-prefs';
 
 export default function NotificationPreferences() {
   const [notifications, setNotifications] = useState({
@@ -10,14 +12,19 @@ export default function NotificationPreferences() {
     weeklyDigest: false,
   });
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      if (raw) setNotifications((prev) => ({ ...prev, ...JSON.parse(raw) }));
+    } catch {}
+  }, []);
+
   const handleToggle = (key: keyof typeof notifications) => {
-    const newValue = !notifications[key];
-    setNotifications(prev => ({
-      ...prev,
-      [key]: newValue
-    }));    
-    // TODO: Implement notification preference update
-    console.log(`Notification ${key} set to ${newValue}`);
+    setNotifications(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   return (
@@ -117,18 +124,7 @@ export default function NotificationPreferences() {
           </div>
         </div>
 
-        <div className="pt-2">
-          <button
-            type="button"
-            className="text-sm font-medium text-primary-600 hover:text-primary-500"
-            onClick={() => {
-              // TODO: Implement notification settings page
-              console.log('View all notification settings');
-            }}
-          >
-            View all notification settings
-          </button>
-        </div>
+        <p className="text-xs text-gray-500">These choices stay on this device. Likes and comments still appear in Notifications.</p>
       </div>
     </div>
   );

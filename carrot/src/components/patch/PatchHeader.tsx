@@ -32,6 +32,8 @@ interface UserPatchTheme {
 interface PatchHeaderProps {
   patch: Patch;
   isMember?: boolean;
+  isOwner?: boolean;
+  cover?: string;
   userTheme?: UserPatchTheme | null;
   onThemeChange?: (theme: UserPatchTheme) => void;
 }
@@ -42,30 +44,84 @@ const DEFAULT_THEME_INDEX = 0;
 export default function PatchHeader({ 
   patch, 
   isMember = false,
+  isOwner = false,
+  cover = '',
   userTheme,
   onThemeChange
 }: PatchHeaderProps) {
   const router = useRouter();
+  const [member, setMember] = useState(isMember || isOwner);
+  const [memberCount, setMemberCount] = useState(patch._count.members);
+  const [membershipError, setMembershipError] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [groupCover, setGroupCover] = useState(cover);
+  const [coverError, setCoverError] = useState('');
+  const [coverBusy, setCoverBusy] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<UserPatchTheme>(
     userTheme || { mode: 'preset', preset: DEFAULT_THEME_INDEX }
   );
 
-  const handleJoin = () => {
-    // Optimistic join with toast
-    console.log('Join clicked');
-    // TODO: Implement optimistic join functionality
+  useEffect(() => {
+    setMember(isMember || isOwner);
+  }, [isMember, isOwner]);
+
+  useEffect(() => {
+    setGroupCover(cover);
+  }, [cover]);
+
+  const handleJoin = async () => {
+    setMembershipError('');
+    const response = await fetch(`/api/patches/${patch.handle}/members`, { method: 'POST' });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      setMembershipError(data?.error || 'Could not join this group.');
+      return;
+    }
+    setMember(true);
+    setMemberCount((count) => count + 1);
   };
 
-  const handleLeave = () => {
-    // Optimistic leave with toast
-    console.log('Leave clicked');
-    // TODO: Implement optimistic leave functionality
+  const handleLeave = async () => {
+    setMembershipError('');
+    if (isOwner) {
+      setMembershipError('You started this group, so you stay in it. Delete it from Settings to close it.');
+      return;
+    }
+    const response = await fetch(`/api/patches/${patch.handle}/members`, { method: 'DELETE' });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      setMembershipError(data?.error || 'Could not leave this group.');
+      return;
+    }
+    setMember(false);
+    setMemberCount((count) => Math.max(0, count - 1));
   };
 
   
 
+  const handleCover = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCoverBusy(true);
+    setCoverError('');
+    const body = new FormData();
+    body.set('image', file);
+    const response = await fetch(`/api/patches/${patch.handle}/cover`, { method: 'POST', body });
+    const data = await response.json().catch(() => null);
+    setCoverBusy(false);
+    if (!response.ok || !data?.cover) {
+      setCoverError(data?.error || 'That photo could not be saved.');
+      return;
+    }
+    setGroupCover(`${data.cover}?v=${Date.now()}`);
+  };
+
   const handleSettings = () => {
-    // Open settings modal with delete option (simple confirm for now)
+    setSettingsOpen(true);
+  };
+
+  const handleDelete = () => {
     if (confirm(`Are you sure you want to delete the "${patch.title}" patch? This action cannot be undone.`)) {
       (async () => {
         try {
@@ -95,7 +151,15 @@ export default function PatchHeader({
   const handleThemeChange = (newTheme: UserPatchTheme) => {
     setCurrentTheme(newTheme);
     onThemeChange?.(newTheme);
-    // TODO: Persist via API if needed
+    fetch(`/api/patch/${patch.handle}/theme`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: newTheme.mode,
+        preset: newTheme.preset !== undefined ? String(newTheme.preset) : undefined,
+        imageUrl: newTheme.imageUrl
+      })
+    }).catch(() => null)
   };
 
   const handleShare = () => {
@@ -195,31 +259,33 @@ export default function PatchHeader({
             {/* Right side: Actions - CONSISTENT WIDTH BUTTONS */}
             <div className="flex flex-col gap-2 flex-shrink-0 items-start">
         <Button
-          onClick={isMember ? handleLeave : handleJoin}
+          onClick={member ? handleLeave : handleJoin}
           variant="ghost"
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-32 !justify-start"
+          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
         >
           <Users className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">{isMember ? 'Leave Group' : 'Join Group'}</span>
+          <span className="text-sm font-medium whitespace-nowrap">{member ? 'Leave Group' : 'Join Group'}</span>
         </Button>
         
         <Button
           variant="ghost"
           onClick={handleShare}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-32 !justify-start"
+          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
         >
           <Share2 className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Share</span>
         </Button>
 
+        {isOwner && (
         <Button
           variant="ghost"
           onClick={handleSettings}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-32 !justify-start"
+          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
         >
           <Settings className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Settings</span>
         </Button>
+        )}
 
         {/* Lightning Theme Button */}
         <Button
@@ -229,12 +295,15 @@ export default function PatchHeader({
             const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
             handleThemeChange({ mode: 'preset', preset: nextIndex });
           }}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-32 !justify-start"
+          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
           title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
         >
           <Zap className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Theme</span>
         </Button>
+        {membershipError && (
+          <p className="max-w-[11rem] text-xs leading-5 text-white">{membershipError}</p>
+        )}
             </div>
           </div>
 
@@ -243,7 +312,7 @@ export default function PatchHeader({
           <div className="mt-3 flex flex-wrap gap-3 text-white/90 text-sm">
             <div className="flex items-center gap-1">
               <Users className="w-4 h-4" />
-              <span>{patch._count.members} members</span>
+              <span>{memberCount} members</span>
             </div>
             
             <div className="flex items-center gap-1">
@@ -261,6 +330,26 @@ export default function PatchHeader({
           </div>
         </div>
       </div>
+      {settingsOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setSettingsOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 text-[#0B0B0F]" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-lg font-semibold">Group settings</h2>
+            <p className="mt-1 text-sm text-[#60646C]">This picture is the main image on the group card.</p>
+            <div className="mt-4 h-40 overflow-hidden rounded-xl bg-[#141414]">
+              {groupCover ? <img src={groupCover} alt="" className="h-full w-full object-cover" /> : null}
+            </div>
+            <label className="mt-4 flex h-11 cursor-pointer items-center justify-center rounded-full bg-[#0B0B0F] text-sm font-semibold text-white">
+              {coverBusy ? 'Saving…' : 'Choose a new photo'}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={handleCover} />
+            </label>
+            {coverError && <p className="mt-2 text-sm text-red-600">{coverError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={handleDelete} className="h-10 rounded-full border border-red-200 px-4 text-sm font-semibold text-red-700">Delete group</button>
+              <button type="button" onClick={() => setSettingsOpen(false)} className="ml-auto h-10 rounded-full border border-[#E6E8EC] px-4 text-sm">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

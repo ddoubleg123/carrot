@@ -121,10 +121,10 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
         state: 'NY',
       },
       stats: {
-        likes: Math.floor(Math.random() * 50), // Random likes for demo
-        comments: Math.floor(Math.random() * 20),
-        reposts: Math.floor(Math.random() * 10),
-        views: Math.floor(Math.random() * 200) + 50,
+        likes: typeof post.likes === 'number' ? post.likes : 0,
+        comments: typeof post.comments === 'number' ? post.comments : 0,
+        reposts: typeof post.reposts === 'number' ? post.reposts : 0,
+        views: typeof post.views === 'number' ? post.views : 0,
       },
       userVote: null,
       timestamp: post.createdAt,

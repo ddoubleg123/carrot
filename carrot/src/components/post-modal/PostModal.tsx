@@ -6,6 +6,9 @@ import { X, MessageCircle, Share2, Heart, Bookmark, MoreHorizontal } from 'lucid
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import RichComposer from '@/components/messaging/RichComposer';
+import CommentBody from '@/components/messaging/CommentBody';
+import { publishComment } from '@/components/messaging/commentCodec';
 
 interface Comment {
   id: string;
@@ -55,8 +58,6 @@ export default function PostModal({
 }: PostModalProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const commentsContainerRef = useRef<HTMLDivElement>(null);
@@ -213,33 +214,9 @@ export default function PostModal({
     }
   };
 
-  const handleSubmitComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim() || isSubmittingComment) return;
-
-    setIsSubmittingComment(true);
-    try {
-      const response = await fetch('/api/comments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          postId: post.id,
-          content: newComment.trim(),
-        }),
-      });
-
-      if (response.ok) {
-        const newCommentData = await response.json();
-        setComments(prev => [newCommentData, ...prev]);
-        setNewComment('');
-      }
-    } catch (error) {
-      console.error('Failed to submit comment:', error);
-    } finally {
-      setIsSubmittingComment(false);
-    }
+  const submitReply = async (text: string, attachment?: Parameters<typeof publishComment>[2]) => {
+    const newCommentData = await publishComment(post.id, text, attachment);
+    setComments(prev => [newCommentData, ...prev]);
   };
 
   const handleLike = async () => {
@@ -468,9 +445,9 @@ export default function PostModal({
                           {formatTimeAgo(comment.createdAt)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {comment.content}
-                      </p>
+                      <div className="text-sm text-gray-700">
+                        <CommentBody content={comment.content} />
+                      </div>
                       <div className="flex items-center gap-3 mt-2">
                         <Button
                           variant="ghost"
@@ -496,24 +473,7 @@ export default function PostModal({
 
             {/* Comment Input */}
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50">
-              <form onSubmit={handleSubmitComment} className="flex gap-3">
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  disabled={isSubmittingComment}
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!newComment.trim() || isSubmittingComment}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl"
-                >
-                  {isSubmittingComment ? 'Posting...' : 'Post'}
-                </Button>
-              </form>
+            <RichComposer variant="reply" placeholder="Write a reply..." submitLabel="Reply" onSend={({ text, attachment }) => submitReply(text, attachment)} />
             </div>
           </div>
         </div>
@@ -550,9 +510,9 @@ export default function PostModal({
                           {formatTimeAgo(comment.createdAt)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {comment.content}
-                      </p>
+                      <div className="text-sm text-gray-700">
+                        <CommentBody content={comment.content} />
+                      </div>
                       <div className="flex items-center gap-3 mt-2">
                         <Button
                           variant="ghost"
@@ -577,24 +537,7 @@ export default function PostModal({
             </div>
 
             {/* Mobile Comment Input */}
-            <form onSubmit={handleSubmitComment} className="flex gap-2">
-              <input
-                type="text"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isSubmittingComment}
-              />
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!newComment.trim() || isSubmittingComment}
-                className="px-4"
-              >
-                {isSubmittingComment ? 'Posting...' : 'Post'}
-              </Button>
-            </form>
+            <RichComposer variant="reply" placeholder="Write a reply..." submitLabel="Reply" onSend={({ text, attachment }) => submitReply(text, attachment)} />
           </div>
         </div>
       </div>

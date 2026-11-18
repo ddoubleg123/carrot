@@ -185,7 +185,7 @@ export class FreeImageAPIs {
         `https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(options.query)}&srnamespace=6&srlimit=${options.perPage || 10}&srprop=size&origin=*`
       );
 
-      if (!response.ok) throw new Error(`Wikimedia API error: ${response.status}`);
+      if (!response.ok) return [];
 
       const data = await response.json();
       
@@ -234,8 +234,7 @@ export class FreeImageAPIs {
       );
 
       return imageDetails.filter(Boolean) as ImageSearchResult[];
-    } catch (error) {
-      console.error('Wikimedia search failed:', error);
+    } catch {
       return [];
     }
   }

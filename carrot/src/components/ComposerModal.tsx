@@ -25,6 +25,8 @@ import VideoTrimControls from './composer/VideoTrimControls';
 import VideoPreview from './composer/VideoPreview';
 import VideoThumbnails from './composer/VideoThumbnails';
 import { ComposerProvider } from './composer/ComposerContext';
+
+const COMPOSER_EMOJIS = ['😀', '😂', '❤️', '👍', '🔥', '🎉', '👏', '🙏', '😍', '😢', '😮', '🤔', '💯', '✨', '🚀', '✅', '👀', '💪', '🎯', '🧡'];
 // Inline trim UX; modal editor removed per request
 
 interface ComposerModalProps {
@@ -37,6 +39,8 @@ interface ComposerModalProps {
 export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }: ComposerModalProps) {
   const { data: session } = useSession();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Set in the Post button click, before the form submit handler runs.
+  const submitRequestedRef = useRef(false);
   const colorWheelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -593,6 +597,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   const [audioUrl, setAudioUrl] = useState('');
   const [audioTranscription, setAudioTranscription] = useState('');
   const [audioDurationSeconds, setAudioDurationSeconds] = useState<number | null>(null);
+  const uploadedAudioUrlRef = useRef<string | null>(null);
   const [currentPostId, setCurrentPostId] = useState<string | null>(null);
   
   // UI state
@@ -604,8 +609,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video'>('all');
   const [mediaTab, setMediaTab] = useState<'gallery' | 'upload' | 'external'>('gallery');
-  // Guard to avoid unintended auto-submit
-  const [submitRequested, setSubmitRequested] = useState(false);
   
   // Toast state
   const [toastMessage, setToastMessage] = useState('');
@@ -766,6 +769,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   // GIF handlers
   const handleGifSelect = (gifUrl: string) => {
     setSelectedGifUrl(gifUrl);
+    setMediaType('gif');
     setShowGifPicker(false);
     // Clear other media
     setMediaPreview(null);
@@ -1055,18 +1059,19 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
 
   // Audio handlers
   const handleAudioRecorded = async (blob: Blob, url: string, durationSeconds: number) => {
+    uploadedAudioUrlRef.current = null;
     setAudioBlob(blob);
-    setAudioUrl(url); // set immediate preview (blob) so user can see a player instantly
+    // Keep the local recording for playback. Swapping in the uploaded URL
+    // reloads the player through the proxy and cuts the sound off.
+    setAudioUrl(url);
     setAudioDurationSeconds(durationSeconds || null);
     setShowAudioRecorder(false);
 
-    // Kick off immediate background upload so preview becomes a permanent HTTPS URL (no stale blob)
     try {
       const file = new File([blob], `recording_${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
       const path = `posts/audio/${Date.now()}_${Math.random().toString(36).slice(2)}.webm`;
       const downloadURL = await uploadFileToFirebase(file, path);
-      // Swap blob URL with permanent Firebase URL so the preview can play reliably
-      setAudioUrl(downloadURL);
+      uploadedAudioUrlRef.current = downloadURL;
       showSuccessToast('Audio uploaded');
     } catch (e) {
       console.warn('[ComposerModal] Background audio upload failed; will upload on Post()', e);
@@ -1122,7 +1127,8 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   // Submit handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!submitRequested) return; // only allow when Post button explicitly clicked
+    if (!submitRequestedRef.current) return;
+    submitRequestedRef.current = false;
     // Treat externally ingested video (no mediaFile but mediaType === 'video' with a base URL) as valid media
     const hasExternalIngestedVideo = !mediaFile && mediaType === 'video' && !!mediaBaseUrlRef.current;
     if ((!content.trim() && !mediaFile && !audioBlob && !selectedGifUrl && !externalUrl.trim() && !hasExternalIngestedVideo) || isPosting) return;
@@ -1179,9 +1185,9 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       }
 
       const derivedVideoUrl = !mediaFile && mediaType === 'video' ? (mediaBaseUrlRef.current || null) : null;
-      const selectedGif = selectedGifUrl || null;
+      const selectedGif = mediaType === 'gif' ? (selectedGifUrl || null) : null;
       // If we have a recorded audio blob, upload it to Firebase so it persists beyond the session
-      let audioClipUrl: string | null = audioUrl || null;
+      let audioClipUrl: string | null = uploadedAudioUrlRef.current || audioUrl || null;
       if (audioBlob && (!audioClipUrl || audioClipUrl.startsWith('blob:') || audioClipUrl.startsWith('data:'))) {
         try {
           const audioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
@@ -1218,9 +1224,9 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       // 3) Create post payload (client-side model; API may vary)
       const tempId = `post-${Date.now()}`;
       const user = (session as any)?.user || {};
-      const mediaUrlToUse = uploadedMediaUrl || derivedVideoUrl || selectedGif || null;
+      const mediaUrlToUse = uploadedMediaUrl || derivedVideoUrl || null;
       try { console.log('[Composer] final mediaUrlToUse:', mediaUrlToUse); } catch {}
-      const mediaKind = mediaUrlToUse ? (mediaType || (selectedGif ? 'gif' : (audioClipUrl ? 'audio' : null))) : null;
+      const mediaKind = selectedGif ? 'gif' : (mediaUrlToUse ? (mediaType || null) : (audioClipUrl ? 'audio' : null));
 
       // Upload edited thumbnail (data URL) to Firebase to ensure persistence
       let thumbnailUrlToSend: string | null = editedThumb || null;
@@ -1288,7 +1294,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
         thumbnailUrl: thumbnailUrlToSend || null,
       };
 
-      // 4) Persist post via API (best-effort; keep optimistic update)
+      // 4) Persist post via API. A failed save stays in the composer.
       try {
         const res = await fetch('/api/posts', {
           method: 'POST',
@@ -1305,15 +1311,24 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             videoUrl: newPost.videoUrl || null,
             gifUrl: newPost.gifUrl || null,
             audioUrl: newPost.audioUrl || null,
+            audioTranscription: audioTranscription || null,
             thumbnailUrl: thumbnailUrlToSend || null,
           }),
         });
-        if (res.ok) {
-          const saved = await res.json().catch(() => null);
-          if (saved?.id) newPost.id = saved.id;
+        if (!res.ok) {
+          let message = 'Could not post';
+          try {
+            const errBody = await res.json();
+            if (typeof errBody?.error === 'string' && errBody.error) message = errBody.error;
+          } catch {}
+          showErrorToast(message);
+          return;
         }
+        const saved = await res.json().catch(() => null);
+        if (saved?.id) newPost.id = saved.id;
       } catch {
-        // Non-fatal; keep optimistic
+        showErrorToast('Could not post');
+        return;
       }
 
       // 5) Surface to feed immediately
@@ -1338,7 +1353,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       // 8) Success UX: flag randomize-on-next-open instead of changing immediately
       try { localStorage.setItem('carrot-color-scheme-next-random', 'true'); } catch {}
       showSuccessToast('Posted!');
-      setSubmitRequested(false);
       setShowMediaPicker(false);
       setMediaFile(null);
       setMediaPreview(null);
@@ -1376,7 +1390,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
           <div
             className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto"
             style={{
-              background: `linear-gradient(135deg, ${colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientViaColor || colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientToColor})`,
+              backgroundImage: `linear-gradient(135deg, ${colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientViaColor || colorSchemes[currentColorScheme]?.gradientFromColor}, ${colorSchemes[currentColorScheme]?.gradientToColor})`,
               backgroundAttachment: 'local',
             }}
           >
@@ -1421,6 +1435,21 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                     type="button"
                     onClick={() => {
                       setCfUidPreview(null);
+                      setMediaType(null);
+                    }}
+                    className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black/70"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              {selectedGifUrl && mediaType === 'gif' && (
+                <div className="mb-4 relative">
+                  <img src={selectedGifUrl} alt="Selected GIF" className="w-full max-h-64 object-contain rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGifUrl(null);
                       setMediaType(null);
                     }}
                     className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black/70"
@@ -1523,6 +1552,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
                   postId={currentPostId || 'temp'}
                   initialDurationSeconds={audioDurationSeconds ?? undefined}
                   onRemove={() => {
+                    uploadedAudioUrlRef.current = null;
                     setAudioBlob(null);
                     setAudioUrl('');
                     setAudioTranscription('');
@@ -1565,7 +1595,7 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
               <FooterActions
                 count={content.length}
                 onCancel={onClose}
-                onSubmitClick={() => setSubmitRequested(true)}
+                onSubmitClick={() => { submitRequestedRef.current = true; }}
                 isPosting={isPosting}
                 disabled={(() => {
                   const hasExt = !mediaFile && mediaType === 'video' && !!mediaBaseUrlRef.current;
@@ -1593,6 +1623,28 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
       <div>
         {renderComposeModal()}
         {/* Color Picker Modal */}
+        <GifPicker
+          isOpen={showGifPicker}
+          onClose={() => setShowGifPicker(false)}
+          onSelectGif={handleGifSelect}
+        />
+        {showEmojiPicker && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowEmojiPicker(false)} />
+            <div className="relative grid grid-cols-5 gap-2 rounded-2xl bg-white p-4 shadow-xl">
+              {COMPOSER_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="h-10 w-10 rounded-lg text-2xl hover:bg-orange-50"
+                  onClick={() => handleEmojiSelect(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <ColorPickerModal
           open={!!showColorPicker}
           schemes={colorSchemes}

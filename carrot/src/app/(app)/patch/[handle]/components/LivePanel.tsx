@@ -200,7 +200,7 @@ export default function LivePanel({
           <div className="flex items-center gap-2">
             {getStatusIcon()}
             <span className="text-sm font-semibold">
-              {error ? 'Error' : isActive ? (isPaused ? 'Paused' : 'Live Discovery') : 'Idle'}
+              {error ? 'Error' : isActive ? 'Learning' : 'Ready'}
             </span>
           </div>
           {runId && (
@@ -256,7 +256,7 @@ export default function LivePanel({
           ) : (
             <>
               <Play className="mr-2 h-4 w-4" />
-              Start Discovery
+              Learn
             </>
           )}
         </Button>

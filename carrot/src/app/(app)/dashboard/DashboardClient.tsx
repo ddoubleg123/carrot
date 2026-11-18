@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
@@ -40,9 +40,56 @@ const ComposerModalDynamic = dynamic(() => import('../../../components/ComposerM
   loading: () => null,
 });
 
+let feedRequest: Promise<any[] | null> | null = null;
+
+const FEED_CACHE_KEY = 'carrot-home-feed-v6';
+
+function readFeedCache(): any[] | null {
+  try {
+    const raw = localStorage.getItem(FEED_CACHE_KEY) || sessionStorage.getItem(FEED_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeFeedCache(posts: any[]) {
+  try {
+    const slim = posts.slice(0, 15).map((post) => ({
+      ...post,
+      thumbnailUrl: typeof post?.thumbnailUrl === 'string' && post.thumbnailUrl.startsWith('data:') && post.thumbnailUrl.length > 200_000 ? null : post?.thumbnailUrl,
+      imageUrls: Array.isArray(post?.imageUrls)
+        ? post.imageUrls.filter((url: string) => typeof url === 'string' && !url.startsWith('data:'))
+        : post?.imageUrls,
+    }));
+    const raw = JSON.stringify(slim);
+    localStorage.setItem(FEED_CACHE_KEY, raw);
+    sessionStorage.setItem(FEED_CACHE_KEY, raw);
+  } catch {
+    // A full cache is optional. The network response still paints the feed.
+  }
+}
+
+function fetchFeedOnce(): Promise<any[] | null> {
+  if (feedRequest) return feedRequest;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 15000);
+  feedRequest = fetch('/api/posts', { cache: 'no-cache', signal: controller.signal, keepalive: false })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)
+    .finally(() => {
+      window.clearTimeout(timer);
+      feedRequest = null;
+    });
+  return feedRequest;
+}
+
 export default function DashboardClient({ initialCommitments, isModalComposer = false, serverPrefs }: DashboardClientProps) {
   useSyncFirebaseAuth();
   const [commitments, setCommitments] = useState<DashboardCommitmentCardProps[]>(initialCommitments);
+  const [freshPosts, setFreshPosts] = useState<DashboardCommitmentCardProps[]>([]);
   const [visiblePostCount, setVisiblePostCount] = useState(5); // CRITICAL FIX: Only render first 5 posts initially
   const [isModalOpen, setIsModalOpen] = useModalState(false);
   const { data: session } = useSession();
@@ -86,7 +133,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           }
         });
       },
-      { threshold: 0.1, rootMargin: '200px' }
+      { threshold: 0.1, rootMargin: '1200px' }
     );
 
     // Observe all posts
@@ -95,6 +142,15 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
     return () => observer.disconnect();
   }, [visiblePostCount, commitments.length]);
+
+  const realCount = (post: any, key: 'likes' | 'comments') => {
+    const fromRelation = post?._count?.[key];
+    if (typeof fromRelation === 'number') return fromRelation;
+    const direct = post?.[key];
+    if (typeof direct === 'number') return direct;
+    const fromStats = post?.stats?.[key];
+    return typeof fromStats === 'number' ? fromStats : 0;
+  };
 
   // Normalize server DB post -> CommitmentCardProps used by the feed
   const mapServerPostToCard = (post: any): DashboardCommitmentCardProps => {
@@ -105,8 +161,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     const prox = (u?: string | null) => {
       if (!u) return null;
       // If already proxied, return as-is
-      if (u.startsWith('/api/img')) {
-        console.log('[prox] URL already proxied, returning as-is:', u.substring(0, 100));
+      if (u.startsWith('/api/img') || u.startsWith('/curator-thumbs/') || u.startsWith('/curator-avatars/')) {
         return u;
       }
       
@@ -257,7 +312,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       carrotText: post.carrotText || '',
       stickText: post.stickText || '',
       author: {
-        name: '',
+        name: String(userObj?.name || '').trim(),
         username: String(finalUsername || 'user'),
         avatar: String(finalAvatar || '/avatar-placeholder.svg'),
         flag: userObj?.country || (session?.user as any)?.country || null,
@@ -266,10 +321,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
       homeCountry: userObj?.country || (session?.user as any)?.country || null,
       location: { zip: '10001', city: 'New York', state: 'NY' },
       stats: {
-        likes: Math.floor(Math.random() * 50),
-        comments: Math.floor(Math.random() * 20),
-        reposts: Math.floor(Math.random() * 10),
-        views: Math.floor(Math.random() * 200) + 50,
+        likes: realCount(post, 'likes'),
+        comments: realCount(post, 'comments'),
+        reposts: typeof post?.reposts === 'number' ? post.reposts : 0,
+        views: typeof post?.views === 'number' ? post.views : 0,
       },
       userVote: null,
       timestamp: post.createdAt,
@@ -719,21 +774,31 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     return () => { cancelled = true; clearTimeout(starter); };
   }, []);
 
-  // On mount, fetch latest posts and reconcile to avoid any SSR/env mismatch issues
+  // Paint the last timeline before the network returns, the same way a reload of X does.
+  useLayoutEffect(() => {
+    const cached = readFeedCache();
+    if (cached) setCommitments(cached);
+  }, []);
+
+  // On mount, fetch latest posts and reconcile to avoid any SSR/env mismatch issues.
+  // One shared request: a second mount while it is in flight reuses the same result.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return; // skip API in mock mode
       try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 15000);
-        const res = await fetch('/api/posts', { cache: 'no-cache', signal: controller.signal, keepalive: false });
-        clearTimeout(t);
-        if (!res.ok) return;
-        const posts = await res.json();
+        const params = new URLSearchParams(window.location.search);
+        const openId = params.get('modal') === '1' ? params.get('post') : null;
+        if (openId) {
+          await fetch(`/api/posts/${encodeURIComponent(openId)}`).catch(() => null);
+        }
+        const posts = await fetchFeedOnce();
+        if (!posts || cancelled) return;
         const mapped = posts.map(mapServerPostToCard).filter((post: any) => post && post.author && post.author.username);
         if (cancelled) return;
         setCommitments(mapped);
+        setFreshPosts([]);
+        writeFeedCache(mapped);
       } catch (e) {
         console.warn('Feed load error', e);
       }
@@ -741,6 +806,55 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     load();
     return () => { cancelled = true; };
   }, []);
+
+  const mapRef = useRef(mapServerPostToCard);
+  mapRef.current = mapServerPostToCard;
+
+  useEffect(() => {
+    let stopped = false;
+    const look = async () => {
+      if (document.visibilityState === 'hidden') return;
+      const current = commitmentsRef.current;
+      const newest = current.reduce<number>((max, post) => {
+        const time = new Date(post.timestamp || 0).getTime();
+        return Number.isFinite(time) && time > max ? time : max;
+      }, 0);
+      if (!newest) return;
+      try {
+        const res = await fetch(`/api/posts?after=${encodeURIComponent(new Date(newest).toISOString())}`, { cache: 'no-store' });
+        if (!res.ok || stopped) return;
+        const rows = await res.json();
+        if (!Array.isArray(rows) || stopped) return;
+        const known = new Set(current.map((post) => post.id));
+        const mapped = rows
+          .map((row) => mapRef.current(row))
+          .filter((post) => post && post.author && post.author.username && !known.has(post.id));
+        if (!stopped) setFreshPosts(mapped);
+      } catch {}
+    };
+    const first = window.setTimeout(look, 4000);
+    const timer = window.setInterval(look, 40000);
+    const onVisible = () => { if (document.visibilityState === 'visible') look(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  const revealFresh = () => {
+    if (freshPosts.length === 0) return;
+    setCommitments((prev) => {
+      const ids = new Set(freshPosts.map((post) => post.id));
+      const next = [...freshPosts, ...prev.filter((post) => !ids.has(post.id))];
+      writeFeedCache(next);
+      return next;
+    });
+    setFreshPosts([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Hydration & spinner diagnostics
   useEffect(() => {
@@ -946,6 +1060,17 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
               <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
             )}
           </div>
+          {freshPosts.length > 0 && (
+            <div className="flex justify-center px-4 pb-3">
+              <button
+                type="button"
+                onClick={revealFresh}
+                className="rounded-full bg-[#1C1917] px-4 py-2 text-sm font-semibold text-white shadow-md"
+              >
+                {freshPosts.length === 1 ? '1 new post' : `${freshPosts.length} new posts`}
+              </button>
+            </div>
+          )}
         </div>
         
         {/* Scrollable Feed Content */}
@@ -959,7 +1084,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
                   currentUserId={(session?.user as any)?.id}
                   onVote={(vote) => handleVote(commitment.id, vote as VoteType)}
                   onDelete={handleDeletePost}
-                onBlock={handleBlockPost}
+                  onBlock={handleBlockPost}
+                  autoPlay={index === 0}
+                  feedIndex={index}
                 />
               </div>
             ))}

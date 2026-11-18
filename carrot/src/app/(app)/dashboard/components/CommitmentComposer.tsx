@@ -199,18 +199,21 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     // Auto-transcribe the audio
     try {
       const formData = new FormData();
-      formData.append('audio', blob, 'recording.webm');
-      formData.append('language', 'auto');
+      formData.append('file', blob, 'recording.webm');
 
-      const response = await fetch('/api/audio/transcribe', {
+      const response = await fetch('/api/transcribe/file', {
         method: 'POST',
         body: formData,
       });
 
       if (response.ok) {
         const result = await response.json();
-        setAudioTranscription(result.transcription);
-        showSuccessToast('Audio transcribed successfully!');
+        if (result.text) {
+          setAudioTranscription(result.text);
+          showSuccessToast('Audio transcribed successfully!');
+        }
+      } else {
+        showErrorToast('Failed to transcribe audio');
       }
     } catch (error) {
       console.error('Transcription error:', error);

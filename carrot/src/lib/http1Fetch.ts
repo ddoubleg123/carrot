@@ -32,22 +32,14 @@ class HTTP1FetchManager {
    */
   private createHTTP1Headers(originalHeaders?: HeadersInit): Record<string, string> {
     const headers: Record<string, string> = {
-      // Force HTTP/1.1 with more aggressive settings
-      'Connection': 'keep-alive',
-      'Keep-Alive': 'timeout=5, max=1000',
       'HTTP-Version': '1.1',
       'X-Forwarded-Proto': 'http',
       'X-Forwarded-For': '127.0.0.1',
       'X-Forwarded-Host': 'carrot-app.onrender.com',
       'X-Real-IP': '127.0.0.1',
       
-      // Disable HTTP/2 features more aggressively
-      'Accept-Encoding': 'gzip, deflate', // No brotli to avoid HTTP/2
-      'TE': '', // Disable transfer encoding
-      'Upgrade': '', // Disable protocol upgrades
-      'HTTP2-Settings': '', // Explicitly disable HTTP/2
-      'Alt-Svc': '', // Disable alternative services
-      
+      'Accept-Encoding': 'gzip, deflate',
+
       // Cache control
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',

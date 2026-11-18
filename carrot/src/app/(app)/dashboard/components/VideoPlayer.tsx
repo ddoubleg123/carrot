@@ -13,6 +13,8 @@ interface VideoPlayerProps {
   uploadProgress?: number;
   onVideoRef?: (el: HTMLVideoElement | null) => void;
   disableNativeControls?: boolean;
+  autoPlay?: boolean;
+  feedIndex?: number;
 }
 
 export default function VideoPlayer({ 
@@ -24,7 +26,9 @@ export default function VideoPlayer({
   uploadStatus, 
   uploadProgress, 
   onVideoRef, 
-  disableNativeControls = true 
+  disableNativeControls = true,
+  autoPlay = false,
+  feedIndex,
 }: VideoPlayerProps) {
   
   // VALIDATION: Check for valid video URL before passing to SimpleVideo
@@ -78,10 +82,11 @@ export default function VideoPlayer({
           src={resolvedSrc}
           poster={resolvedPoster}
           controls={!disableNativeControls}
-          autoPlay={true}
+          autoPlay={autoPlay}
           muted={true}
           playsInline={true}
           postId={postId}
+          feedIndex={feedIndex}
           onVideoRef={onVideoRef}
           className="w-full rounded-xl"
         />

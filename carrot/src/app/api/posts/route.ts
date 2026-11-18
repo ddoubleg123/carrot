@@ -1,9 +1,40 @@
 import { NextResponse } from 'next/server';
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import path from 'path';
 import prisma from '../../../lib/prisma';
 import { auth } from '@/auth';
 import { projectPost } from './_project';
 import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
+import { POSTS_SNAPSHOT, invalidateFeedCache } from '../../../lib/feedCache';
 import { createResilientFetch } from '@/lib/retryUtils';
+import { buildTimeline } from '@/lib/feedTimeline';
+
+let botAuthorCache: { at: number; ids: Set<string> } | null = null
+
+async function botAuthorIds() {
+  if (botAuthorCache && Date.now() - botAuthorCache.at < 5 * 60 * 1000) return botAuthorCache.ids
+  const rows = await prisma.user.findMany({
+    where: { email: { endsWith: '@bots.carrot.invalid' } },
+    select: { id: true }
+  })
+  botAuthorCache = { at: Date.now(), ids: new Set(rows.map((row) => row.id)) }
+  return botAuthorCache.ids
+}
+
+async function homeTimeline(posts: any[]) {
+  const session = await auth()
+  const viewerId = (session as { user?: { id?: string } } | null)?.user?.id || ''
+  let following: string[] = []
+  if (viewerId) {
+    const viewer = await prisma.user.findUnique({ where: { id: viewerId }, select: { metadata: true } })
+    const meta = viewer?.metadata
+    if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+      const list = (meta as { following?: unknown }).following
+      if (Array.isArray(list)) following = list.map(String)
+    }
+  }
+  return buildTimeline(posts, { viewerId, following, botIds: await botAuthorIds() })
+}
 
 // POST /api/posts - create a new post
 export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
@@ -366,7 +397,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     }
     
     // Invalidate posts cache when new post is created
-    cache.delete(cacheKeys.posts());
+    invalidateFeedCache();
     try {
       console.log('[POST /api/posts] persisted media+gradients', {
         postId: post.id,
@@ -514,9 +545,110 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
   }
 }
 
+// One database read for overlapping feed requests. The second caller
+// receives the same posts instead of starting another round trip.
+let postsInflight: Promise<any[]> | null = null;
+
+function readPostsSnapshot(): { savedAt: number; posts: any[] } | null {
+  try {
+    if (!existsSync(POSTS_SNAPSHOT)) return null;
+    const parsed = JSON.parse(readFileSync(POSTS_SNAPSHOT, 'utf8'));
+    if (!Array.isArray(parsed?.posts) || parsed.posts.length === 0) return null;
+    return { savedAt: Number(parsed.savedAt) || 0, posts: parsed.posts };
+  } catch {
+    return null;
+  }
+}
+
+function writePostsSnapshot(posts: any[]) {
+  try {
+    mkdirSync(path.dirname(POSTS_SNAPSHOT), { recursive: true });
+    writeFileSync(POSTS_SNAPSHOT, JSON.stringify({ savedAt: Date.now(), posts }));
+  } catch {
+    // The memory cache still serves this process.
+  }
+}
+
+function loadPosts() {
+  if (!postsInflight) {
+    postsInflight = (async () => {
+      console.log('[GET /api/posts] Cache miss, fetching from database');
+      const posts = await prisma.post.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          User: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+              profilePhoto: true,
+              profilePhotoPath: true,
+              country: true,
+              username: true,
+            }
+          },
+          _count: { select: { likes: true, comments: true } },
+        },
+      });
+      const shaped = shapeRows(posts);
+      try {
+        const total = shaped.length;
+        const missingGrad = shaped.filter((x: any) => !x.gradientFromColor || !x.gradientToColor).length;
+        const signedUrls = shaped.filter((x: any) => typeof x.videoUrl === 'string' && x.videoUrl.includes('GoogleAccessId=')).length;
+        console.log('[GET /api/posts] summary', { total, missingGrad, signedUrls });
+      } catch {}
+      cache.set(cacheKeys.posts(), shaped, cacheTTL.posts);
+      writePostsSnapshot(shaped);
+      return shaped;
+    })().finally(() => { postsInflight = null; });
+  }
+  return postsInflight;
+}
+
+function shapeRows(posts: any[]) {
+  return posts.map((p) => {
+    const r: any = { ...p }
+    if (typeof r.imageUrls === 'string') {
+      try { r.imageUrls = JSON.parse(r.imageUrls) } catch {}
+    }
+    return projectPost(r)
+  })
+}
+
+async function newerPosts(after: string) {
+  const since = new Date(after)
+  if (Number.isNaN(since.getTime())) return NextResponse.json([])
+  const posts = await prisma.post.findMany({
+    where: { createdAt: { gt: since } },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    include: {
+      User: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          profilePhoto: true,
+          profilePhotoPath: true,
+          country: true,
+          username: true,
+        }
+      },
+      _count: { select: { likes: true, comments: true } },
+    },
+  })
+  const response = NextResponse.json(await homeTimeline(shapeRows(posts)))
+  response.headers.set('Cache-Control', 'no-store')
+  return response
+}
+
 // GET /api/posts - get all posts (latest first)
-export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
+export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
   try { {
+    const after = new URL(req.url).searchParams.get('after')
+    if (after) return newerPosts(after)
     // In mock feed mode, avoid touching the database and return an empty list
     if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') {
       if (process.env.NODE_ENV !== 'production') {
@@ -531,51 +663,31 @@ export async function GET(_req: Request, _ctx: { params: Promise<{}> }) {
     
     if (cachedPosts) {
       console.log('[GET /api/posts] Cache hit, returning cached data');
-      const response = NextResponse.json(cachedPosts);
+      if (!existsSync(POSTS_SNAPSHOT)) writePostsSnapshot(cachedPosts as any[]);
+      const response = NextResponse.json(await homeTimeline(cachedPosts as any[]));
       response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
       response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
       response.headers.set('X-Cache', 'HIT');
       return response;
     }
 
-    console.log('[GET /api/posts] Cache miss, fetching from database');
-    // Add caching for frequently accessed posts data
-    const posts = await prisma.post.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { 
-        User: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            profilePhoto: true,
-            profilePhotoPath: true,
-            country: true,
-            username: true,
-          }
-        }
-      },
-    });
-    // Parse imageUrls and project
-    const shaped = posts.map(p => {
-      const r: any = { ...p };
-      if (typeof r.imageUrls === 'string') {
-        try { r.imageUrls = JSON.parse(r.imageUrls); } catch {}
+    const snapshot = readPostsSnapshot();
+    if (snapshot) {
+      cache.set(cacheKey, snapshot.posts, cacheTTL.posts);
+      if (Date.now() - snapshot.savedAt > 60_000) {
+        void loadPosts().catch(() => {});
       }
-      return projectPost(r);
-    });
-    try {
-      const total = shaped.length;
-      const missingGrad = shaped.filter((x: any) => !x.gradientFromColor || !x.gradientToColor).length;
-      const signedUrls = shaped.filter((x: any) => typeof x.videoUrl === 'string' && x.videoUrl.includes('GoogleAccessId=')).length;
-      console.log('[GET /api/posts] summary', { total, missingGrad, signedUrls });
-    } catch {}
-    // Store in cache for future requests
-    cache.set(cacheKey, shaped, cacheTTL.posts);
+      const response = NextResponse.json(await homeTimeline(snapshot.posts));
+      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+      response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      response.headers.set('X-Cache', 'STALE');
+      return response;
+    }
+
+    const shaped = await loadPosts();
     
     // Add caching headers for better performance
-    const response = NextResponse.json(shaped);
+    const response = NextResponse.json(await homeTimeline(shaped));
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
     response.headers.set('X-Cache', 'MISS');

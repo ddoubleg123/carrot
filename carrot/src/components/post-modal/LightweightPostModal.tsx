@@ -1,10 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MessageCircle, Share2, Heart, Bookmark } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Share2, Heart, Bookmark } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import ShareSheet from '@/components/share/ShareSheet';
+import { youtubeEmbedSrc, youtubeIdFromText } from '@/lib/youtube';
+import { parseFeedPost } from '@/lib/feedPost';
 
 interface Comment {
   id: string;
@@ -25,9 +29,12 @@ interface Post {
   author: {
     id: string;
     name: string;
+    username?: string;
     avatar?: string;
   };
   mediaUrl?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string;
   mediaType?: 'video' | 'image';
   likes: number;
   comments: number;
@@ -43,6 +50,7 @@ interface LightweightPostModalProps {
   post: Post;
   videoElement?: HTMLVideoElement | null;
   isVideo?: boolean;
+  initialComments?: boolean;
 }
 
 // Lazy-loaded comments component
@@ -53,96 +61,81 @@ export default function LightweightPostModal({
   onClose, 
   post, 
   videoElement, 
-  isVideo = false 
+  isVideo = false,
+  initialComments = false,
 }: LightweightPostModalProps) {
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(initialComments);
+  const [commentsWide, setCommentsWide] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likes);
+  const [commentCount, setCommentCount] = useState(post.comments);
+  const [liked, setLiked] = useState(post.isLiked);
+  const [showShare, setShowShare] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const ownsPlayer = useRef(false);
 
-  // Store original parent for restoration
-  const originalParentRef = useRef<HTMLElement | null>(null);
-
-  // Optimized video element handling - CRITICAL FIX: Save state before moving
   useEffect(() => {
-    if (isOpen && isVideo && videoElement && videoContainerRef.current) {
-      // Use requestIdleCallback for non-blocking DOM manipulation
-      const handleVideoMove = () => {
-        if (videoContainerRef.current && videoElement) {
-          // CRITICAL FIX: Save original parent before moving
-          if (!originalParentRef.current && videoElement.parentElement) {
-            originalParentRef.current = videoElement.parentElement;
-            console.log('[LightweightPostModal] Saved original parent:', {
-              postId: post.id,
-              parentTag: originalParentRef.current.tagName,
-              parentClass: originalParentRef.current.className
-            });
-          }
-          
-          // CRITICAL FIX: Save video state BEFORE moving the element
-          const currentTime = videoElement.currentTime;
-          const isPaused = videoElement.paused;
-          const volume = videoElement.volume;
-          const playbackRate = videoElement.playbackRate;
-          const wasMuted = videoElement.muted;
-          
-          console.log('[LightweightPostModal] Saving video state before move:', {
-            postId: post.id,
-            currentTime,
-            isPaused,
-            volume,
-            playbackRate,
-            wasMuted
-          });
-          
-          // Store state in dataset for restoration
-          videoElement.dataset.originalTime = String(currentTime);
-          videoElement.dataset.originalPaused = String(isPaused);
-          videoElement.dataset.originalVolume = String(volume);
-          videoElement.dataset.originalPlaybackRate = String(playbackRate);
-          videoElement.dataset.originalMuted = String(wasMuted);
-          
-          // Move the video element to modal
-          videoContainerRef.current.appendChild(videoElement);
-          
-          // Restore video state immediately after move
-          videoElement.currentTime = currentTime;
-          videoElement.volume = volume;
-          videoElement.playbackRate = playbackRate;
-          videoElement.muted = wasMuted;
-          
-          console.log('[LightweightPostModal] Video moved to modal, state restored:', {
-            postId: post.id,
-            currentTime: videoElement.currentTime,
-            isPaused: videoElement.paused
-          });
-          
-          // Resume playback if it wasn't paused
-          if (!isPaused) {
-            // Wait for video to be ready before playing
-            if (videoElement.readyState >= 2) {
-              videoElement.play().catch(e => {
-                console.warn('[LightweightPostModal] Play failed after move:', e);
-              });
-            } else {
-              const playWhenReady = () => {
-                videoElement.play().catch(e => {
-                  console.warn('[LightweightPostModal] Play failed after canplay:', e);
-                });
-                videoElement.removeEventListener('canplay', playWhenReady);
-              };
-              videoElement.addEventListener('canplay', playWhenReady, { once: true });
-            }
-          }
-        }
-      };
+    setMounted(true);
+  }, []);
 
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(handleVideoMove);
-      } else {
-        requestAnimationFrame(handleVideoMove);
-      }
-    }
+  // Move the feed player into the viewer and make it an actual player.
+  // The card size and missing controls made the frame look like a still.
+  useLayoutEffect(() => {
+    if (!isOpen || !isVideo || !videoElement || !videoContainerRef.current || ownsPlayer.current) return;
+
+    const parent = videoElement.parentElement;
+    const previousStyle = videoElement.getAttribute('style');
+    const hadControls = videoElement.controls;
+
+    videoContainerRef.current.appendChild(videoElement);
+    videoElement.controls = true;
+    videoElement.playsInline = true;
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
+    videoElement.style.maxHeight = '100%';
+    videoElement.style.objectFit = 'contain';
+    videoElement.style.background = '#000';
+
+    const startPlayback = () => {
+      videoElement.play().catch(() => {
+        videoElement.muted = true;
+        videoElement.play().catch(() => {});
+      });
+    };
+    if (videoElement.readyState >= 2) startPlayback();
+    else videoElement.addEventListener('loadeddata', startPlayback, { once: true });
+
+    return () => {
+      videoElement.removeEventListener('loadeddata', startPlayback);
+      videoElement.controls = hadControls;
+      if (previousStyle == null) videoElement.removeAttribute('style');
+      else videoElement.setAttribute('style', previousStyle);
+      if (parent && !parent.contains(videoElement)) parent.appendChild(videoElement);
+    };
   }, [isOpen, isVideo, videoElement, post.id]);
+
+  useEffect(() => {
+    setLikeCount(post.likes);
+    setCommentCount(post.comments);
+    setLiked(post.isLiked);
+  }, [post.id, post.likes, post.comments, post.isLiked]);
+
+  const toggleLike = useCallback(async () => {
+    const next = !liked;
+    setLiked(next);
+    setLikeCount((count) => Math.max(0, count + (next ? 1 : -1)));
+    try {
+      const res = await fetch(`/api/posts/${post.id}/like`, { method: 'POST' });
+      if (!res.ok) throw new Error('like failed');
+      const data = await res.json().catch(() => null);
+      if (typeof data?.likes === 'number') setLikeCount(data.likes);
+      if (typeof data?.liked === 'boolean') setLiked(data.liked);
+    } catch {
+      setLiked(!next);
+      setLikeCount((count) => Math.max(0, count + (next ? -1 : 1)));
+    }
+  }, [liked, post.id]);
 
   // Handle ESC key and cleanup
   useEffect(() => {
@@ -160,69 +153,13 @@ export default function LightweightPostModal({
     return () => {
       document.removeEventListener('keydown', handleEscKey);
       document.body.style.overflow = 'unset';
-      
-      // CRITICAL FIX: Restore video element to original parent when closing
-      if (!isOpen && videoElement) {
-        const handleCleanup = () => {
-          // Save current state before restoring
-          const currentTime = videoElement.currentTime;
-          const isPaused = videoElement.paused;
-          const volume = videoElement.volume;
-          const playbackRate = videoElement.playbackRate;
-          const wasMuted = videoElement.muted;
-          
-          console.log('[LightweightPostModal] Restoring video to original parent:', {
-            postId: post.id,
-            currentTime,
-            isPaused,
-            hasOriginalParent: !!originalParentRef.current
-          });
-          
-          // Remove from modal container
-          if (videoContainerRef.current && videoContainerRef.current.contains(videoElement)) {
-            videoContainerRef.current.removeChild(videoElement);
-          }
-          
-          // Restore to original parent if we have it
-          if (originalParentRef.current && !originalParentRef.current.contains(videoElement)) {
-            originalParentRef.current.appendChild(videoElement);
-            
-            // Restore video state after moving back
-            videoElement.currentTime = currentTime;
-            videoElement.volume = volume;
-            videoElement.playbackRate = playbackRate;
-            videoElement.muted = wasMuted;
-            
-            console.log('[LightweightPostModal] Video restored to feed, state preserved:', {
-              postId: post.id,
-              currentTime: videoElement.currentTime,
-              isPaused: videoElement.paused
-            });
-            
-            // Resume playback if it wasn't paused
-            if (!isPaused && videoElement.readyState >= 2) {
-              videoElement.play().catch(e => {
-                console.warn('[LightweightPostModal] Play failed after restore:', e);
-              });
-            }
-          }
-          
-          // Clear the original parent ref for next modal open
-          originalParentRef.current = null;
-        };
-
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(handleCleanup);
-        } else {
-          requestAnimationFrame(handleCleanup);
-        }
-      }
     };
-  }, [isOpen, onClose, videoElement, post.id]);
+  }, [isOpen, onClose]);
 
   // Optimized close handler
   const handleClose = useCallback(() => {
     setShowComments(false);
+    setCommentsWide(false);
     onClose();
   }, [onClose]);
 
@@ -231,139 +168,206 @@ export default function LightweightPostModal({
     setShowComments(prev => !prev);
   }, []);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
+
+  const fallbackVideoSrc = post.videoUrl
+    ? (post.videoUrl.startsWith('/api/video') || post.videoUrl.startsWith('blob:')
+        ? post.videoUrl
+        : `/api/video?url=${encodeURIComponent(post.videoUrl)}`)
+    : undefined;
+  if (isVideo && !videoElement && fallbackVideoSrc) ownsPlayer.current = true;
 
   const modalContent = (
     <div
       ref={modalRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={handleClose}
+      className="fixed bottom-0 right-0 top-0 left-20 z-40 flex bg-white"
     >
-      <div
-        className="relative w-full h-full max-w-7xl mx-auto bg-white rounded-lg shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b bg-white">
-          <div className="flex items-center space-x-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={post.author.avatar} alt={post.author.name} />
-              <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-semibold text-sm">{post.author.name}</p>
-              <p className="text-xs text-gray-500">
-                {new Date(post.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-          
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center gap-3 border-b bg-white px-4 py-3">
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={handleClose}
-            className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
-            aria-label="Close modal"
+            className="gap-1 px-2"
+            aria-label="Back to feed"
           >
-            <X size={16} />
+            <ArrowLeft size={16} />
+            Back
           </Button>
+          {post.author.username ? (
+            <Link href={`/people/${encodeURIComponent(post.author.username)}`} className="flex min-w-0 items-center gap-3 hover:underline">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={post.author.avatar} alt={post.author.name} />
+                <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{post.author.name}</p>
+                <p className="text-xs text-gray-500">
+                  {new Date(post.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+            </Link>
+          ) : (
+            <>
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={post.author.avatar} alt={post.author.name} />
+                <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{post.author.name}</p>
+                <p className="text-xs text-gray-500">
+                  {new Date(post.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Content */}
-        <div className="flex h-[calc(100vh-80px)]">
-          {/* Main Content Area */}
-          <div className="flex-1 flex flex-col">
-            {/* Video/Media Area */}
-            <div 
-              ref={videoContainerRef}
-              className="flex-1 bg-gray-900 flex items-center justify-center relative"
-            >
-              {isVideo && videoElement ? (
-                <div className="w-full h-full">
-                  <style jsx>{`
-                    video {
-                      width: 100% !important;
-                      height: 100% !important;
-                      object-fit: contain !important;
-                      border-radius: 0 !important;
-                    }
-                  `}</style>
-                </div>
-              ) : post.mediaUrl ? (
-                <img
-                  src={post.mediaUrl}
-                  alt="Post content"
-                  className="max-w-full max-h-full object-contain"
-                />
-              ) : (
-                <div className="text-white text-center">
-                  <p className="text-lg mb-2">{post.content}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="p-4 border-t bg-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {}}
-                    className="flex items-center space-x-2"
-                  >
-                    <Heart size={16} />
-                    <span>{post.likes}</span>
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleComments}
-                    className="flex items-center space-x-2"
-                  >
-                    <MessageCircle size={16} />
-                    <span>{post.comments}</span>
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {}}
-                    className="flex items-center space-x-2"
-                  >
-                    <Share2 size={16} />
-                    <span>{post.shares}</span>
-                  </Button>
-                </div>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {}}
-                >
-                  <Bookmark size={16} />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Comments Panel - Lazy Loaded */}
-          {showComments && (
-            <div className="w-80 border-l bg-white">
-              <Suspense fallback={
-                <div className="p-4 text-center text-gray-500">
-                  Loading comments...
-                </div>
-              }>
-                <CommentsPanel postId={post.id} onClose={() => setShowComments(false)} />
-              </Suspense>
+        {isVideo ? (
+        <div
+          ref={videoContainerRef}
+          className="relative flex min-h-0 flex-1 items-center justify-center bg-black"
+        >
+          {videoElement ? null : fallbackVideoSrc ? (
+            <video
+              key={fallbackVideoSrc}
+              src={fallbackVideoSrc}
+              poster={post.thumbnailUrl || undefined}
+              controls
+              autoPlay
+              playsInline
+              className="h-full w-full bg-black object-contain"
+            />
+          ) : post.thumbnailUrl ? (
+            <img src={post.thumbnailUrl} alt="" className="max-h-full max-w-full object-contain" />
+          ) : (
+            <div className="px-8 text-center text-white">
+              <p className="text-lg">{post.content}</p>
             </div>
           )}
         </div>
+        ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#F6F3EE]">
+          {youtubeIdFromText(post.content) ? (
+            <div className="bg-black" style={{ aspectRatio: '16 / 9' }}>
+              <iframe
+                src={youtubeEmbedSrc(youtubeIdFromText(post.content) as string, true)}
+                title="YouTube video"
+                className="h-full w-full"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          ) : null}
+          <div className="px-6 py-6 sm:px-8">
+            {(() => {
+              const parts = parseFeedPost(post.content)
+              const video = youtubeIdFromText(post.content)
+              const article = !video && parts.url
+              const picture = parts.image || post.thumbnailUrl || post.mediaUrl || ''
+              return (
+                <>
+                  {!article && picture ? (
+                    <img
+                      src={picture}
+                      alt=""
+                      className="mb-4 max-h-[58vh] w-full rounded-xl object-contain"
+                    />
+                  ) : null}
+                  {parts.note.split('\n').filter(Boolean).map((line, index) => (
+                    <p key={index} className="text-[17px] leading-8 text-[#1C1917]">{line}</p>
+                  ))}
+                  {article ? (
+                    <a
+                      href={parts.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 block overflow-hidden rounded-xl border border-[#E7E5E4] bg-white"
+                    >
+                      {picture ? (
+                        <div className="h-[150px] overflow-hidden bg-gray-100">
+                          <img src={picture} alt="" className="h-full w-full object-cover object-center" />
+                        </div>
+                      ) : null}
+                      <div className="px-4 py-3">
+                        <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                          {(parts.site || (() => { try { return new URL(parts.url).hostname.replace(/^www\./, '') } catch { return '' } })())}
+                          {parts.published ? ` · ${parts.published}` : ''}
+                        </div>
+                        {parts.title ? <div className="mt-1 text-[15px] font-semibold leading-5">{parts.title}</div> : null}
+                      </div>
+                    </a>
+                  ) : null}
+                </>
+              )
+            })()}
+          </div>
+        </div>
+        )}
+
+        <div className="border-t bg-white p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="gap-2" onClick={toggleLike} aria-label={liked ? 'Unlike' : 'Like'}>
+                <Heart size={16} className={liked ? 'fill-orange-500 text-orange-500' : ''} />
+                <span>{likeCount}</span>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={toggleComments} className="gap-2">
+                <MessageCircle size={16} />
+                <span>{commentCount}</span>
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="gap-2" onClick={() => setShowShare(true)} aria-label="Share">
+                <Share2 size={16} />
+                <span>{post.shares}</span>
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" aria-label="Save">
+              <Bookmark size={16} />
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {showComments && (
+        <div className={commentsWide
+          ? 'absolute inset-y-0 right-0 z-10 flex w-[90%] flex-col border-l bg-white shadow-2xl'
+          : 'flex h-full w-[420px] shrink-0 flex-col border-l bg-white'
+        }>
+          <Suspense fallback={
+            <div className="p-4 text-center text-gray-500">
+              Loading comments...
+            </div>
+          }>
+            <CommentsPanel
+              postId={post.id}
+              caption={post.content}
+              expanded={commentsWide}
+              onToggleExpand={() => setCommentsWide((wide) => !wide)}
+              onClose={() => {
+                setShowComments(false);
+                setCommentsWide(false);
+              }}
+              onCountChange={setCommentCount}
+            />
+          </Suspense>
+        </div>
+      )}
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  const shareUrl = typeof window === 'undefined' ? `/post/${post.id}` : `${window.location.origin}/post/${post.id}`;
+
+  return createPortal(
+    <>
+      {modalContent}
+      <ShareSheet
+        open={showShare}
+        onClose={() => setShowShare(false)}
+        url={shareUrl}
+        title="Check out this post on Carrot"
+      />
+    </>,
+    document.body,
+  );
 }

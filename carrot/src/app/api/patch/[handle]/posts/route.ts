@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { showFollowers } from '@/lib/activityFeed';
 
 export async function POST(
   req: Request,
@@ -45,6 +46,7 @@ export async function POST(
       }
     });
 
+    await showFollowers(session.user.id, `Posted on ${patch.title}: ${title} /patch/${patchHandle}`)
     return NextResponse.json({
       success: true,
       post: patchPost

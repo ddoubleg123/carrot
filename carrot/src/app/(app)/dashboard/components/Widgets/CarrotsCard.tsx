@@ -1,7 +1,7 @@
 "use client";
 
 import { TrophyIcon, BoltIcon, FireIcon } from "@heroicons/react/24/solid";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface UserStats {
   totalCarrots: number;
@@ -21,17 +21,48 @@ interface UserStats {
   };
 }
 
+const STATS_CACHE_KEY = 'carrot-stats-v1';
+
+function readCachedStats(): UserStats | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(STATS_CACHE_KEY);
+    return raw ? JSON.parse(raw) as UserStats : null;
+  } catch {
+    return null;
+  }
+}
+
+// Signed-out visitors get an empty card, not an error overlay.
 export default function CarrotsCard() {
+  // Start empty so the server HTML and the first client render match.
+  // Cached totals are applied after hydration.
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasStats = useRef(false);
 
   useEffect(() => {
+    const cached = readCachedStats();
+    if (cached) {
+      hasStats.current = true;
+      setStats(cached);
+      setLoading(false);
+    }
+
     const fetchStats = async () => {
       try {
-        setLoading(true);
+        if (!hasStats.current) setLoading(true);
         const response = await fetch('/api/user/stats');
-        
+
+        // The home feed renders this card before login. 401 is the signed-out
+        // state, not a broken request, so show zeros instead of an error overlay.
+        if (response.status === 401 || response.status === 404) {
+          setStats(null);
+          setError(null);
+          return;
+        }
+
         if (!response.ok) {
           throw new Error('Failed to fetch user stats');
         }
@@ -39,8 +70,9 @@ export default function CarrotsCard() {
         const data = await response.json();
         setStats(data);
         setError(null);
+        try { sessionStorage.setItem(STATS_CACHE_KEY, JSON.stringify(data)); } catch {}
       } catch (err) {
-        console.error('Error fetching user stats:', err);
+        console.warn('Error fetching user stats:', err);
         setError(err instanceof Error ? err.message : 'Failed to load stats');
         // Fallback to placeholder data
         setStats({
@@ -65,7 +97,9 @@ export default function CarrotsCard() {
       }
     };
 
-    fetchStats();
+    // Stay off the first seconds, while the on-screen video is starting.
+    const timer = window.setTimeout(fetchStats, 8000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Use real data or fallback to defaults

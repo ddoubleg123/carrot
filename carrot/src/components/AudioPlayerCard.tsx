@@ -15,6 +15,7 @@ interface AudioPlayerCardProps {
   // DB overrides (preferred if present)
   visualSeedOverride?: string | null;
   visualStyleOverride?: 'liquid' | 'radial' | 'arc' | null;
+  warm?: boolean;
 }
 
 // Deterministic gradient from seed
@@ -23,7 +24,7 @@ function gradientFromSeed(seed?: string) {
   return { from: pal.from, to: pal.to, css: `linear-gradient(135deg, ${pal.from}, ${pal.to})` };
 }
 
-export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingleUrl, onAudioRef, visualSeedOverride, visualStyleOverride }: AudioPlayerCardProps) {
+export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingleUrl, onAudioRef, visualSeedOverride, visualStyleOverride, warm = false }: AudioPlayerCardProps) {
   const effectiveSeed = visualSeedOverride || seed;
   const g = useMemo(() => gradientFromSeed(effectiveSeed), [effectiveSeed]);
   // Force liquid globally for now; allow env/localStorage override
@@ -114,6 +115,7 @@ export default function AudioPlayerCard({ audioUrl, avatarUrl, seed, promoJingle
           onTimeUpdate={() => {}}
           showWaveform={false}
           promoJingleUrl={promoJingleUrl}
+          warm={warm}
           onAudioRef={(el) => {
             try {
               // create or cleanup local analyser for hero visuals

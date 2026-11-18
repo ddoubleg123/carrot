@@ -77,42 +77,44 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }): Promise<
         }
         const bucket = admin.storage().bucket(bucketName);
         const file = bucket.file(objectPath.replace(/^\/+/, ''));
-        const [meta] = await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
+        const metaKey = `${bucketName}/${objectPath}`;
+        const cachedMeta = videoMetaCache.get(metaKey);
+        const [meta] = cachedMeta && Date.now() - cachedMeta.at < 10 * 60_000
+          ? [cachedMeta.meta]
+          : await file.getMetadata().catch(() => [{ contentType: 'video/mp4', cacheControl: 'public, max-age=604800, immutable' }]);
+        if (!cachedMeta) videoMetaCache.set(metaKey, { at: Date.now(), meta });
 
         const range = req.headers.get('range') || rangeParam;
         const size = Number(meta?.size || 0);
         const contentType = meta?.contentType || 'application/octet-stream';
         const cacheControl = meta?.cacheControl || 'public, max-age=604800, immutable';
+        // The first request often has no Range. Streaming the whole file made
+        // that response finish in ~20s, and the player waited with it. Send the
+        // first megabyte and let the player ask for the rest.
+        const MAX_CHUNK = 1024 * 1024;
+        let start = 0;
+        let end = size > 0 ? Math.min(MAX_CHUNK - 1, size - 1) : MAX_CHUNK - 1;
         if (range && size > 0) {
           const m = /bytes=(\d+)-(\d*)/.exec(range);
-          const start = m ? parseInt(m[1], 10) : 0;
-          const end = m && m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + 1024 * 1024 - 1, size - 1);
-          if (isNaN(start) || isNaN(end) || start > end) return new NextResponse('Malformed Range', { status: 416 });
-          const stream = file.createReadStream({ start, end });
-          return new NextResponse(stream as any, {
-            status: 206,
-            headers: {
-              'content-type': contentType,
-              'cache-control': cacheControl,
-              'content-length': String(end - start + 1),
-              'content-range': `bytes ${start}-${end}/${size}`,
-              'accept-ranges': 'bytes',
-              'Access-Control-Allow-Origin': '*',
-              'x-video-proxy-host': 'admin',
-              'x-video-proxy-mode': 'admin-range',
-            },
-          });
+          if (m) {
+            start = parseInt(m[1], 10);
+            end = m[2] ? Math.min(parseInt(m[2], 10), size - 1) : Math.min(start + MAX_CHUNK - 1, size - 1);
+          }
         }
-        const stream = file.createReadStream();
+        if (size > 0 && end - start + 1 > MAX_CHUNK) end = start + MAX_CHUNK - 1;
+        if (isNaN(start) || isNaN(end) || start > end) return new NextResponse('Malformed Range', { status: 416 });
+        const stream = file.createReadStream({ start, end });
         return new NextResponse(stream as any, {
-          status: 200,
+          status: 206,
           headers: {
             'content-type': contentType,
             'cache-control': cacheControl,
+            'content-length': String(end - start + 1),
+            'content-range': `bytes ${start}-${end}/${size || '*'}`,
             'accept-ranges': 'bytes',
             'Access-Control-Allow-Origin': '*',
             'x-video-proxy-host': 'admin',
-            'x-video-proxy-mode': 'admin-stream',
+            'x-video-proxy-mode': 'admin-range',
           },
         });
       } catch (error) {
@@ -569,21 +571,11 @@ export async function OPTIONS(req: Request, _ctx: { params: Promise<{}> }): Prom
   });
 }
 
-// --- In-flight dedupe helper (simple in-memory short-lived cache) ---
-const inflight = new Map<string, Promise<Response>>();
-function fetchDedupe(key: string, factory: () => Promise<Response>): Promise<Response> {
-  const normalized = key;
-  const existing = inflight.get(normalized);
-  if (existing) {
-    // Important: clone the Response for subsequent consumers to avoid locked body errors
-    return existing.then((res) => res.clone());
-  }
-  const p = factory()
-    .catch((e) => { throw e; })
-    .finally(() => {
-      // Evict after microtask to allow awaiters to read
-      queueMicrotask(() => inflight.delete(normalized));
-    });
-  inflight.set(normalized, p);
-  return p;
+const videoMetaCache = new Map<string, { at: number; meta: { size?: string; contentType?: string; cacheControl?: string } }>();
+
+// --- Each request gets its own stream. A shared body stalls the player. ---
+function fetchDedupe(_key: string, factory: () => Promise<Response>): Promise<Response> {
+  // Each range request needs its own stream. Sharing one body stalls playback
+  // until the other reader catches up.
+  return factory();
 }

@@ -71,38 +71,12 @@ export async function POST(request: Request, _ctx: { params: Promise<{}> }) {
     // Fire-and-forget transcription call (don't wait for completion)
     const mediaUrl = audioUrl || videoUrl;
     const mediaType = audioUrl ? 'audio' : 'video';
-    console.log(`🎵 Sending ${mediaType} file to transcription service: ${mediaUrl.substring(0, 80)}...`);
-    // Call the Vosk transcription service
-    const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'https://vosk-transcription-lnkmm5qvx3a-uc.a.run.app';
-    
+    console.log(`🎵 Transcribing ${mediaType} locally`);
     try {
-      console.log(`🔄 Calling transcription service at ${transcriptionServiceUrl}`);
-      
-      const voskResponse = await fetch(`${transcriptionServiceUrl}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          postId,
-          audioUrl,
-          videoUrl,
-          mediaType
-        }),
-      });
-
-      if (!voskResponse.ok) {
-        throw new Error(`Vosk service responded with status: ${voskResponse.status}`);
-      }
-
-      const voskResult = await voskResponse.json();
-      console.log('✅ Vosk transcription result:', voskResult);
-
-      if (!voskResult.success || !voskResult.transcription) {
-        throw new Error('Vosk service did not return a valid transcription');
-      }
-
-      let transcription = voskResult.transcription;
+      const { transcribeLocalUrl } = await import('@/lib/asr/localVosk');
+      const local = await transcribeLocalUrl(mediaUrl);
+      const transcription = local.text || (local.silent ? 'No speech detected.' : '');
+      if (!transcription) throw new Error('Vosk did not return a transcription');
 
       // Apply additional grammar cleanup
       let cleanedTranscription = transcription;
