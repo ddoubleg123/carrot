@@ -33,6 +33,27 @@ export function buildTimeline<T extends Row>(
   return spreadAuthors(merged)
 }
 
+const HOUR = 60 * 60 * 1000
+
+/**
+ * Same pool, reordered once a person has a few carrot, open, or stick signals.
+ * hoursFor is how many hours that post's subject should be treated as newer.
+ * A negative number sinks it. The post stays in the pool.
+ */
+export function orderByTaste<T extends Row>(
+  posts: T[],
+  opts: { signals: number; learnAfter?: number; hoursFor: (post: T) => number }
+): T[] {
+  const need = opts.learnAfter ?? 3
+  if (opts.signals < need) return posts
+  const ranked = [...posts].sort((a, b) => {
+    const aAt = new Date(a.createdAt || 0).getTime() + opts.hoursFor(a) * HOUR
+    const bAt = new Date(b.createdAt || 0).getTime() + opts.hoursFor(b) * HOUR
+    return bAt - aAt
+  })
+  return spreadAuthors(ranked)
+}
+
 function spreadAuthors<T extends Row>(posts: T[]): T[] {
   const pending = [...posts]
   const out: T[] = []

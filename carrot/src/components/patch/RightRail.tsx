@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,6 +9,7 @@ import AgentConnectionModal from './AgentConnectionModal';
 
 interface Patch {
   id: string;
+  handle?: string;
   title: string;
   _count: {
     members: number;
@@ -63,6 +64,21 @@ export default function RightRail({
 }: RightRailProps) {
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [connectedAgents, setConnectedAgents] = useState<ConnectedAgent[]>([]);
+  const [people, setPeople] = useState<Follower[]>(followers);
+
+  useEffect(() => {
+    if (!patch.handle || followers.length > 0) return
+    let cancelled = false
+    fetch(`/api/patches/${patch.handle}/members`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.followers)) setPeople(data.followers)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [followers.length, patch.handle]);
 
   const handleConnectAgent = () => {
     setIsAgentModalOpen(true);
@@ -140,10 +156,10 @@ export default function RightRail({
             <div className="grid grid-cols-[24px_1fr] items-start gap-x-3">
               <div></div>
               <div>
-                {followers.length > 0 ? (
+                {people.length > 0 ? (
                   <div className="space-y-3">
                     <div className="flex -space-x-2">
-                      {followers.slice(0, 5).map((follower) => {
+                      {people.slice(0, 5).map((follower) => {
                         // Use database profilePhoto first, fallback to Google Auth image
                         const avatarSrc = follower.user.profilePhoto || follower.user.image || '';
                         return (
@@ -155,16 +171,20 @@ export default function RightRail({
                           </Avatar>
                         );
                       })}
-                      {followers.length > 5 && (
+                      {people.length > 5 && (
                         <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
-                          <span className="text-xs text-gray-600">+{followers.length - 5}</span>
+                          <span className="text-xs text-gray-600">+{people.length - 5}</span>
                         </div>
                       )}
                     </div>
                     <p className="text-sm text-slate-600">
-                      {followers.length} people following {patch.title}
+                      {followerCount || people.length} people following {patch.title}
                     </p>
                   </div>
+                ) : followerCount > 0 ? (
+                  <p className="text-sm text-slate-600">
+                    {followerCount} {followerCount === 1 ? 'person' : 'people'} following {patch.title}
+                  </p>
                 ) : (
                   <div className="text-center py-4">
                     <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />

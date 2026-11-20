@@ -6,9 +6,6 @@ import PostModalController from '../../../components/post-modal/PostModalControl
 import ClientSessionProvider from '../dashboard/components/ClientSessionProvider';
 import MinimalNav from '../../../components/MinimalNav';
 import Widgets from '../dashboard/components/Widgets';
-import FeedDebugger from '../../../components/debug/FeedDebugger';
-import VideoLoadingDiagnostics from '../../../components/debug/VideoLoadingDiagnostics';
-import NetworkPerformanceMonitor from '../../../components/debug/NetworkPerformanceMonitor';
 import ErrorBoundary from '../../../components/ErrorBoundary';
 import { Inter } from 'next/font/google';
 
@@ -40,16 +37,16 @@ export default async function HomePage() {
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
           }>
-            <div className={`min-h-screen flex ${inter.className}`}>
+            <div className={`min-h-screen flex bg-[#F6F3EE] ${inter.className}`}>
               {/* Left nav */}
-              <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-gray-50 border-r border-gray-200">
+              <aside className="w-20 shrink-0 sticky top-0 self-start h-screen bg-[#FAFAF8] border-r border-[#E6E8EC]">
                 <MinimalNav />
               </aside>
 
               {/* Main content area */}
               <main className="flex-1 min-w-0 flex">
                 {/* Feed column */}
-                <div className="w-full min-w-[320px] max-w-[720px] px-6" style={{ marginTop: -20, paddingTop: 0 }}>
+                <div className="w-full min-w-[320px] max-w-[680px] px-5 pt-6 pb-16">
                   <FirebaseClientInit />
                   <ClientSessionProvider>
                     <DashboardClient initialCommitments={commitments} isModalComposer={true} serverPrefs={serverPrefs} />
@@ -60,15 +57,7 @@ export default async function HomePage() {
 
                 {/* Right rail (hidden on small screens) */}
                 <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
-                  <div className="space-y-6">
-                    <Widgets />
-                    <FeedDebugger />
-                    <VideoLoadingDiagnostics
-                      videoUrl={commitments.find((p: any) => p.videoUrl)?.videoUrl || ''}
-                      postId={commitments.find((p: any) => p.videoUrl)?.id || ''}
-                    />
-                    <NetworkPerformanceMonitor />
-                  </div>
+                  <Widgets />
                 </aside>
               </main>
             </div>

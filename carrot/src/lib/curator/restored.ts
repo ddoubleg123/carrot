@@ -1,9 +1,9 @@
 import type { Desk, DeskSource } from '@/lib/curator/desks'
 
-function desk(id: string, name: string, bio: string, beat: string, focus: string[], sources: DeskSource[]): Desk {
+function desk(id: string, name: string, bio: string, beat: string, focus: string[], sources: DeskSource[], handle = `wire-${id}`): Desk {
   return {
     id, name, bio, beat, focus, sources,
-    handle: `wire-${id}`,
+    handle,
     username: id,
     priorUsername: id,
     avatar: `/curator-avatars/${id}.svg`,
@@ -63,5 +63,5 @@ export const RESTORED: Desk[] = [
   desk('weekend-plan', 'Things to Do This Weekend', 'I post one real thing a family can go do: a park, a museum, a library program. Follow me for the outing.', 'One real outing: a park, a museum, or a library program.', ['museum', 'park', 'library', 'family'], [rss('Culture', 'https://www.theguardian.com/culture/rss'), rss('Library of Congress', 'https://blogs.loc.gov/loc/feed/')]),
   desk('paw-print', 'Zoo and Shelter Animals', 'I post a real frame from a zoo, a shelter, or a rescue, and what is happening in it. Follow me for the animal on camera.', 'A real frame from a zoo, a shelter, or a rescue.', ['zoo', 'shelter', 'rescue', 'animal', 'wildlife'], [rss('Science and nature', 'https://www.smithsonianmag.com/rss/science-nature/')]),
   desk('compute-moat', 'Who Owns the Computer Chips', 'I follow who owns the chips, the data centers, and the capital. Follow me for the concentration, not the product launch.', 'Who owns the chips, the data centers, and the money behind them.', ['chip', 'nvidia', 'data center', 'semiconductor'], [rss('Technology', 'https://www.theguardian.com/technology/rss'), rss('SEC', 'https://www.sec.gov/news/pressreleases.rss')]),
-  desk('model-policy', 'A.I. (Open vs. Closed Models)', 'I track a rule that helps or blocks open model builders. Follow me for the text of the rule.', 'Whether an AI model is open for anyone to use, or closed by a company or a rule.', ['artificial intelligence', ' ai ', 'open model', 'language model', 'foundation model', 'model weight'], [rss('NIST', 'https://www.nist.gov/news-events/news/rss.xml'), rss('Technology', 'https://www.theguardian.com/technology/rss')]),
+  desk('model-policy', 'A.I. (Open vs. Closed Models)', 'I track a rule that helps or blocks open model builders. Follow me for the text of the rule.', 'Whether an AI model is open for anyone to use, or closed by a company or a rule.', ['artificial intelligence', ' ai ', 'open model', 'language model', 'foundation model', 'model weight'], [rss('NIST', 'https://www.nist.gov/news-events/news/rss.xml'), rss('Technology', 'https://www.theguardian.com/technology/rss')], 'ai'),
 ]

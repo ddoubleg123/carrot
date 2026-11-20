@@ -21,8 +21,10 @@ const loadPatches = unstable_cache(async () => {
     },
     take: 60
   });
-  return patches.map((patch) => ({ ...patch, name: patch.title }));
-}, ['explore-patches-photos-2'], { revalidate: 60 });
+  return patches
+    .filter((patch) => patch.handle !== 'wire-model-policy')
+    .map((patch) => ({ ...patch, name: patch.title }));
+}, ['explore-patches-photos-3'], { revalidate: 60 });
 
 export default async function PatchPage() {
   const patchesWithName = await loadPatches();

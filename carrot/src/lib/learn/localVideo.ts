@@ -1,5 +1,6 @@
-import { execFile, spawn } from 'child_process'
-import { mkdir, readdir, readFile } from 'fs/promises'
+import { spawn } from 'child_process'
+import { ffmpegPath, nodeBin, ytdlpPath } from '@/lib/mediaBins'
+import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import path from 'path'
 
 export interface LocalVideoJob {
@@ -16,20 +17,10 @@ export interface LocalVideoJob {
 const jobs = new Map<string, LocalVideoJob>()
 let ytDlpPath: string | null = null
 let ffmpegDir: string | null = null
+let nodePath: string | null | undefined
 
-function toolPath(command: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile('where.exe', [command], { timeout: 8000, windowsHide: true }, (error, stdout) => {
-      if (error) {
-        resolve(null)
-        return
-      }
-      resolve(stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || null)
-    })
-  })
-}
 
-function captionText(raw: string): string {
+function captionText(raw: string, limit = 6000): string {
   const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/).flatMap((line) => {
     const trimmed = line.trim()
     if (!trimmed || trimmed === 'WEBVTT' || trimmed.startsWith('NOTE') || trimmed.startsWith('Kind:') || trimmed.startsWith('Language:')) return []
@@ -53,7 +44,8 @@ function captionText(raw: string): string {
     }
   }
   if (current) blocks.push(current)
-  return blocks.join('\n\n').slice(0, 6000)
+  const spoken = blocks.join('\n\n')
+  return limit > 0 ? spoken.slice(0, limit) : spoken
 }
 
 function videoHost(url: string): boolean {
@@ -69,71 +61,110 @@ export function localVideoJob(id: string): LocalVideoJob | null {
   return jobs.get(id) || null
 }
 
-export async function startLocalVideo(pageUrl: string): Promise<LocalVideoJob> {
+function reason(errors: string): string {
+  const lines = errors.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const error = [...lines].reverse().find((line) => /^ERROR:/i.test(line)) || lines[lines.length - 1] || ''
+  const text = error.replace(/^ERROR:\s*/i, '').replace(/\s+/g, ' ')
+  if (/429|too many requests/i.test(text)) return 'YouTube is limiting requests right now. Wait a minute and run it again.'
+  if (/sign in|not a bot|login required/i.test(text)) return 'YouTube asked for a sign-in, so the copy was not saved.'
+  if (/ffmpeg/i.test(text)) return 'The copy could not be merged into a playable file.'
+  return text ? `The video could not be saved from that link. ${text.slice(0, 160)}` : 'The video could not be saved from that link.'
+}
+
+function runTool(binary: string, args: string[], env: NodeJS.ProcessEnv, onProgress?: (percent: number) => void, killAfter = 600000): Promise<{ code: number; output: string; errors: string }> {
+  return new Promise((resolve) => {
+    let output = ''
+    let errors = ''
+    const child = spawn(binary, args, { env, windowsHide: true })
+    const timer = setTimeout(() => child.kill(), killAfter)
+    child.stdout.on('data', (chunk) => {
+      output = (output + String(chunk)).slice(-2000)
+    })
+    child.stderr.on('data', (chunk) => {
+      const text = String(chunk)
+      errors = (errors + text).slice(-1200)
+      const match = text.match(/(\d+(?:\.\d+)?)%/)
+      if (match && onProgress) onProgress(Math.min(95, Math.round(Number(match[1]))))
+    })
+    const finish = (code: number) => {
+      clearTimeout(timer)
+      resolve({ code, output, errors })
+    }
+    child.on('error', () => finish(1))
+    child.on('close', (status) => finish(status ?? 1))
+  })
+}
+
+export async function startLocalVideo(pageUrl: string, options?: { maxHeight?: number }): Promise<LocalVideoJob> {
   if (!videoHost(pageUrl)) {
     return { id: '', status: 'failed', progress: 0, error: 'Paste a video link from YouTube, X, Facebook, Reddit, or TikTok.' }
   }
-  if (!ytDlpPath) ytDlpPath = await toolPath('yt-dlp')
+  if (!ytDlpPath) ytDlpPath = await ytdlpPath()
   if (!ytDlpPath) {
     return { id: '', status: 'failed', progress: 0, error: 'The video tool is not installed on this machine.' }
   }
   if (!ffmpegDir) {
-    const ffmpeg = await toolPath('ffmpeg')
+    const ffmpeg = await ffmpegPath()
     ffmpegDir = ffmpeg ? path.dirname(ffmpeg) : ''
   }
+  if (nodePath === undefined) nodePath = nodeBin()
   const id = `local-${Date.now().toString(36)}`
   const job: LocalVideoJob = { id, status: 'running', progress: 5 }
   jobs.set(id, job)
-  void runLocalVideo(job, pageUrl, ytDlpPath, ffmpegDir)
+  void runLocalVideo(job, pageUrl, ytDlpPath, ffmpegDir, nodePath || '', options?.maxHeight || 720)
   return job
 }
 
-async function runLocalVideo(job: LocalVideoJob, pageUrl: string, binary: string, ffmpegDirectory: string) {
+async function runLocalVideo(job: LocalVideoJob, pageUrl: string, binary: string, ffmpegDirectory: string, node: string, maxHeight: number) {
   const dir = path.join(process.cwd(), 'public', 'topic-videos')
   await mkdir(dir, { recursive: true })
   const base = path.join(dir, job.id)
-  const args = [
+  const env = { ...process.env }
+  if (ffmpegDirectory) env.PATH = `${ffmpegDirectory}${path.delimiter}${env.PATH || ''}`
+  const shared = [
     '--no-update',
     '--no-playlist',
-    '--no-warnings',
-    '-f', 'bv*[height<=720]+ba/b[height<=720]/b',
+    ...(ffmpegDirectory ? ['--ffmpeg-location', ffmpegDirectory] : []),
+    ...(node ? ['--js-runtimes', 'node'] : [])
+  ]
+  const saved = await runTool(binary, [
+    ...shared,
+    '-f', `bv*[height<=${maxHeight}]+ba/b[height<=${maxHeight}]/b`,
     '--merge-output-format', 'mp4',
-    '--write-sub',
-    '--write-auto-sub',
-    '--sub-langs', 'en.*',
-    '--convert-subs', 'vtt',
+    '--retries', '3',
     '--write-thumbnail',
     '--print', 'after_move:title',
     '-o', `${base}.%(ext)s`,
     pageUrl
-  ]
-  const env = { ...process.env }
-  if (ffmpegDirectory) env.PATH = `${ffmpegDirectory};${env.PATH || ''}`
-  let output = ''
-  let errors = ''
-  const child = spawn(binary, args, { env, windowsHide: true })
-  const timer = setTimeout(() => {
-    child.kill()
-  }, 180000)
-  child.stdout.on('data', (chunk) => {
-    output += String(chunk)
+  ], env, (percent) => {
+    job.progress = percent
   })
-  child.stderr.on('data', (chunk) => {
-    const text = String(chunk)
-    errors = (errors + text).slice(-800)
-    const match = text.match(/(\d+(?:\.\d+)?)%/)
-    if (match) job.progress = Math.min(95, Math.round(Number(match[1])))
-  })
-  const code: number | null = await new Promise((resolve) => {
-    child.on('error', () => resolve(1))
-    child.on('close', (status) => resolve(status))
-  })
-  clearTimeout(timer)
-  if (code !== 0) {
+  if (saved.code !== 0) {
     job.status = 'failed'
     job.progress = 0
-    job.error = 'The video could not be saved from that link.'
+    job.error = reason(saved.errors)
     return
+  }
+  const output = saved.output
+  const hasCaption = async () => {
+    const names = await readdir(dir).catch(() => [] as string[])
+    return names.some((file) => file.startsWith(`${job.id}.`) && file.toLowerCase().endsWith('.vtt'))
+  }
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await hasCaption()) break
+    job.progress = 96
+    await runTool(binary, [
+      ...shared,
+      '--skip-download',
+      '--write-sub',
+      '--write-auto-sub',
+      '--sub-langs', 'en-orig,en,en-US,en-GB',
+      '--convert-subs', 'vtt',
+      '-o', `${base}.%(ext)s`,
+      pageUrl
+    ], env, undefined, 90000)
+    if (await hasCaption()) break
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 15000 * (attempt + 1)))
   }
   const files = await readdir(dir).catch(() => [] as string[])
   const video = files.find((file) => file.startsWith(`${job.id}.`) && file.toLowerCase().endsWith('.mp4'))
@@ -147,8 +178,11 @@ async function runLocalVideo(job: LocalVideoJob, pageUrl: string, binary: string
   const thumb = files.find((file) => file.startsWith(`${job.id}.`) && /\.(jpe?g|webp|png)$/i.test(file))
   if (caption) {
     const text = await readFile(path.join(dir, caption), 'utf8').catch(() => '')
-    const spoken = captionText(text)
-    if (spoken.length >= 40) job.transcript = spoken
+    const full = captionText(text, 0)
+    if (full.length >= 40) {
+      await writeFile(path.join(dir, `${job.id}.txt`), full)
+      job.transcript = full.slice(0, 6000)
+    }
   }
   const title = output.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !line.includes('%'))
   job.title = (title || 'Video').slice(0, 180)
@@ -156,5 +190,4 @@ async function runLocalVideo(job: LocalVideoJob, pageUrl: string, binary: string
   if (thumb) job.thumbnail = `/topic-videos/${thumb}`
   job.progress = 100
   job.status = 'completed'
-  void errors
 }

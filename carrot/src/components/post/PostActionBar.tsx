@@ -8,7 +8,8 @@ import {
   Bookmark,
   BookmarkCheck,
   Languages,
-  FileText
+  FileText,
+  Minus
 } from "lucide-react";
 
 export type PostActionBarProps = {
@@ -25,6 +26,7 @@ export type PostActionBarProps = {
   permalink?: string; // full URL for share/copy
   initiallySaved?: boolean;
   initiallyLiked?: boolean;
+  initiallyStuck?: boolean;
 };
 
 function PostActionBar(props: PostActionBarProps) {
@@ -42,9 +44,11 @@ function PostActionBar(props: PostActionBarProps) {
     permalink,
     initiallySaved,
     initiallyLiked,
+    initiallyStuck,
   } = props;
 
   const [liked, setLiked] = useState<boolean>(!!initiallyLiked);
+  const [stuck, setStuck] = useState<boolean>(!!initiallyStuck);
   const [saved, setSaved] = useState<boolean>(!!initiallySaved);
   const [serverLikes, setServerLikes] = useState<number | null>(null);
   const likeCount = useMemo(() => {
@@ -55,14 +59,31 @@ function PostActionBar(props: PostActionBarProps) {
   const handleLike = () => {
     const next = !liked;
     setLiked(next);
+    if (next) setStuck(false);
     try { onLike && onLike(next); } catch {}
-    // Fire-and-forget persistence
+    // Fire-and-forget persistence. A carrot replaces a stick.
     try {
       fetch(`/api/posts/${postId}/like`, { method: 'POST' })
         .then(async (res) => {
           if (!res.ok) return;
           const data = await res.json().catch(() => null);
           if (typeof data?.likes === 'number') setServerLikes(data.likes);
+        })
+        .catch(() => void 0);
+    } catch {}
+  };
+
+  const handleStick = () => {
+    const next = !stuck;
+    setStuck(next);
+    if (next) setLiked(false);
+    try {
+      fetch(`/api/posts/${postId}/stick`, { method: 'POST' })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json().catch(() => null);
+          if (typeof data?.likes === 'number') setServerLikes(data.likes);
+          if (typeof data?.stuck === 'boolean') setStuck(data.stuck);
         })
         .catch(() => void 0);
     } catch {}
@@ -107,12 +128,24 @@ function PostActionBar(props: PostActionBarProps) {
             liked ? "text-orange-600 border-orange-200 bg-orange-50" : "text-gray-700",
           ].join(" ")}
           onClick={handleLike}
-          aria-label={liked ? "Unlike" : "Like"}
-          title={liked ? "Unlike" : "Like"}
+          aria-label={liked ? "Remove carrot" : "Carrot"}
+          title={liked ? "Remove carrot" : "Carrot"}
         >
           <Heart className={liked ? "fill-orange-500 text-orange-500" : ""} size={18} />
         </button>
         <span className="min-w-[1.5ch] text-sm text-gray-700 ml-1 mr-2">{likeCount}</span>
+
+        <button
+          className={[
+            "h-9 w-9 inline-flex items-center justify-center rounded-full border bg-white hover:bg-gray-50 transition",
+            stuck ? "text-[#0B0B0F] border-[#0B0B0F] bg-[#F6F3EE]" : "text-gray-700 border-gray-200 bg-white",
+          ].join(" ")}
+          onClick={handleStick}
+          aria-label={stuck ? "Remove stick" : "Stick"}
+          title={stuck ? "Remove stick" : "Stick"}
+        >
+          <Minus size={18} />
+        </button>
 
         {/* Comment */}
         <button

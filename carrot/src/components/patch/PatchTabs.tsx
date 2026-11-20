@@ -53,7 +53,7 @@ export default function PatchTabs({ activeTab, patch, children }: PatchTabsProps
   return (
     <>
       {/* Tabs Bar */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E6E8EC]">
+      <div className="border-b border-[#E6E8EC] bg-white">
         <div className="px-6 md:px-10">
           <div className="flex items-center justify-between py-4">
             {/* Tabs Container with Horizontal Scroll - aligned with content */}

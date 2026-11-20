@@ -3,6 +3,21 @@ export interface ArticleBlock {
   paragraphs: string[]
 }
 
+export function openedPassage(raw: string): string {
+  let text = raw
+    .replace(/(^|[ \t])([B-HJ-Z]) ([a-z]{3,})/g, '$1$2$3')
+    .replace(/[ \t]*\b[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){0,2}[ \t]+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[ \t]+\d{1,2}[ \t]+[A-Za-z]+[ \t]+\d{4}(?:[ \t]+\d{2}\.\d{2}[ \t]+[A-Z]{2,4})?/g, ' ')
+    .replace(/[ \t]*Last modified on[ \t]+\w+[ \t]+\d{1,2}[ \t]+[A-Za-z]+[ \t]+\d{4}(?:[ \t]+\d{2}\.\d{2}[ \t]+[A-Z]{2,4})?/gi, ' ')
+    .replace(/Share Prefer the Guardian on Google/gi, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+  if (/^[a-z]/.test(text)) {
+    const at = text.search(/\s[A-Z][a-z]/)
+    if (at > 0 && at < 48) text = text.slice(at + 1).trim()
+  }
+  return text
+}
+
 export function formatArticle(raw: string): ArticleBlock[] {
   const text = raw.replace(/\r\n/g, '\n').trim()
   if (!text) return []

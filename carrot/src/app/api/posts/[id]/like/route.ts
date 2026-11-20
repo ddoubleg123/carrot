@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '../../../../../lib/prisma';
 import { auth } from '../../../../../auth';
 import { invalidateFeedCache } from '../../../../../lib/feedCache';
+import { recordTaste } from '@/lib/tasteRecord';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const likes = await prisma.postLike.count({ where: { postId: id } });
+    await recordTaste(session.user.id, id, existing ? null : 'carrot').catch((error) => {
+      console.error('[taste] carrot', error)
+    })
     invalidateFeedCache();
     return NextResponse.json({ liked: !existing, likes });
   } catch (e: any) {

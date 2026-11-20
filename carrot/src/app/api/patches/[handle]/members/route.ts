@@ -42,3 +42,37 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   })
   return NextResponse.json({ member: false })
 }
+
+export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
+  const { handle } = await params
+  const patch = await patchFor(handle)
+  if (!patch) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+  const members = await prisma.patchMember.findMany({
+    where: { patchId: patch.id },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          profilePhoto: true,
+          username: true
+        }
+      }
+    },
+    orderBy: { joinedAt: 'desc' },
+    take: 24
+  })
+  return NextResponse.json({
+    followers: members.map((member) => ({
+      id: member.id,
+      user: {
+        id: member.user.id,
+        name: member.user.name,
+        image: member.user.image,
+        profilePhoto: member.user.profilePhoto,
+        username: member.user.username
+      }
+    }))
+  })
+}

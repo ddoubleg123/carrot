@@ -47,6 +47,7 @@ const LIVE: Desk[] = [
       { kind: 'youtube', name: 'Smarter Every Day', ref: 'smartereveryday' },
       { kind: 'rss', name: 'ScienceDaily', ref: 'https://www.sciencedaily.com/rss/top/science.xml' },
       { kind: 'rss', name: 'BBC Science', ref: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml' },
+      { kind: 'rss', name: 'NASA images', ref: 'https://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss' },
       { kind: 'x', name: 'NASA', ref: 'NASA' }
     ]
   },
@@ -65,7 +66,10 @@ const LIVE: Desk[] = [
       { kind: 'youtube', name: 'History Hit', ref: 'HistoryHit' },
       { kind: 'youtube', name: 'Voices of the Past', ref: 'VoicesofthePast' },
       { kind: 'rss', name: 'Smithsonian History', ref: 'https://www.smithsonianmag.com/rss/history/' },
-      { kind: 'rss', name: 'Library of Congress', ref: 'https://www.loc.gov/rss/pao/news.xml' }
+      { kind: 'rss', name: 'Library of Congress', ref: 'https://www.loc.gov/rss/pao/news.xml' },
+      { kind: 'rss', name: 'Library of Congress blog', ref: 'https://blogs.loc.gov/loc/feed/' },
+      { kind: 'rss', name: 'Project Gutenberg', ref: 'https://archive.org/services/collection-rss.php?collection=gutenberg' },
+      { kind: 'rss', name: 'Internet Archive books', ref: 'https://archive.org/services/collection-rss.php?collection=americana' }
     ]
   },
   {
@@ -153,7 +157,8 @@ const LIVE: Desk[] = [
       { kind: 'youtube', name: 'PBS Eons', ref: 'Eons' },
       { kind: 'youtube', name: 'Just Have a Think', ref: 'JustHaveaThink' },
       { kind: 'rss', name: 'NASA climate', ref: 'https://www.nasa.gov/feed/' },
-      { kind: 'rss', name: 'Our World in Data', ref: 'https://ourworldindata.org/atom.xml' }
+      { kind: 'rss', name: 'Our World in Data', ref: 'https://ourworldindata.org/atom.xml' },
+      { kind: 'rss', name: 'Gapminder', ref: 'https://www.gapminder.org/feed/' }
     ]
   },
   {
@@ -233,15 +238,22 @@ const LIVE: Desk[] = [
     sources: [
       { kind: 'youtube', name: 'Real Engineering', ref: 'RealEngineering' },
       { kind: 'rss', name: 'Hacker News best', ref: 'https://hnrss.org/best' },
-      { kind: 'rss', name: 'NASA', ref: 'https://www.nasa.gov/feed/' }
+      { kind: 'rss', name: 'NASA', ref: 'https://www.nasa.gov/feed/' },
+      { kind: 'rss', name: 'Open Library', ref: 'https://blog.openlibrary.org/feed/' }
     ]
   }
 ]
 
 export const DESKS: Desk[] = [...LIVE, ...ROSTER, ...RESTORED]
 
-export const DAILY_CAP = 4
+export const DAILY_CAP = 12
 
 export function deskById(id: string): Desk | undefined {
   return DESKS.find((desk) => desk.id === id)
+}
+
+export function deskByUsername(username: string | null | undefined): Desk | undefined {
+  const key = String(username || '').replace(/^@/, '').trim().toLowerCase()
+  if (!key) return undefined
+  return DESKS.find((desk) => desk.username.toLowerCase() === key || desk.priorUsername.toLowerCase() === key)
 }

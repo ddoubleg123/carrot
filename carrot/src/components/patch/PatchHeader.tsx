@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users, MessageSquare, Calendar, BookOpen, Share2, Zap, Settings } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import COLOR_SCHEMES, { type ColorScheme } from '@/config/colorSchemes';
@@ -53,10 +53,12 @@ export default function PatchHeader({
   const [member, setMember] = useState(isMember || isOwner);
   const [memberCount, setMemberCount] = useState(patch._count.members);
   const [membershipError, setMembershipError] = useState('');
+  const membershipBusy = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [groupCover, setGroupCover] = useState(cover);
   const [coverError, setCoverError] = useState('');
   const [coverBusy, setCoverBusy] = useState(false);
+  const [copied, setCopied] = useState(false)
   const [currentTheme, setCurrentTheme] = useState<UserPatchTheme>(
     userTheme || { mode: 'preset', preset: DEFAULT_THEME_INDEX }
   );
@@ -69,33 +71,57 @@ export default function PatchHeader({
     setGroupCover(cover);
   }, [cover]);
 
-  const handleJoin = async () => {
-    setMembershipError('');
-    const response = await fetch(`/api/patches/${patch.handle}/members`, { method: 'POST' });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      setMembershipError(data?.error || 'Could not join this group.');
-      return;
-    }
-    setMember(true);
-    setMemberCount((count) => count + 1);
-  };
+  const handleJoin = () => {
+    if (membershipBusy.current) return
+    membershipBusy.current = true
+    setMembershipError('')
+    setMember(true)
+    setMemberCount((count) => count + 1)
+    void fetch(`/api/patches/${patch.handle}/members`, { method: 'POST' })
+      .then(async (response) => {
+        if (response.ok) return
+        const data = await response.json().catch(() => null)
+        setMember(isOwner)
+        setMemberCount((count) => Math.max(0, count - 1))
+        setMembershipError(data?.error || 'Could not join this group.')
+      })
+      .catch(() => {
+        setMember(isOwner)
+        setMemberCount((count) => Math.max(0, count - 1))
+        setMembershipError('Could not join this group.')
+      })
+      .finally(() => {
+        membershipBusy.current = false
+      })
+  }
 
-  const handleLeave = async () => {
-    setMembershipError('');
+  const handleLeave = () => {
+    setMembershipError('')
     if (isOwner) {
-      setMembershipError('You started this group, so you stay in it. Delete it from Settings to close it.');
-      return;
+      setMembershipError('You started this group, so you stay in it. Delete it from Settings to close it.')
+      return
     }
-    const response = await fetch(`/api/patches/${patch.handle}/members`, { method: 'DELETE' });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      setMembershipError(data?.error || 'Could not leave this group.');
-      return;
-    }
-    setMember(false);
-    setMemberCount((count) => Math.max(0, count - 1));
-  };
+    if (membershipBusy.current) return
+    membershipBusy.current = true
+    setMember(false)
+    setMemberCount((count) => Math.max(0, count - 1))
+    void fetch(`/api/patches/${patch.handle}/members`, { method: 'DELETE' })
+      .then(async (response) => {
+        if (response.ok) return
+        const data = await response.json().catch(() => null)
+        setMember(true)
+        setMemberCount((count) => count + 1)
+        setMembershipError(data?.error || 'Could not leave this group.')
+      })
+      .catch(() => {
+        setMember(true)
+        setMemberCount((count) => count + 1)
+        setMembershipError('Could not leave this group.')
+      })
+      .finally(() => {
+        membershipBusy.current = false
+      })
+  }
 
   
 
@@ -162,10 +188,14 @@ export default function PatchHeader({
     }).catch(() => null)
   };
 
-  const handleShare = () => {
-    // Open share sheet
-    console.log('Share clicked');
-    // TODO: Implement share functionality
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/patch/${patch.handle}`)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {
+      setCopied(false)
+    }
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,123 +243,23 @@ export default function PatchHeader({
   };
 
   return (
-    <div 
-      className={`relative z-30 px-6 md:px-10 py-8 md:py-10 text-white ${getBackgroundClass()}`}
-      style={getBackgroundStyle()}
-    >
-      <div className="max-w-[1280px] mx-auto">
-        {/* Back Button */}
-        <Link 
-          href="/patch"
-          className="absolute left-6 top-6 md:left-8 md:top-8 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-
-        {/* Main Content */}
-        <div className="pt-16 pl-4">
-          {/* Title Row */}
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="flex-1 min-w-0 max-w-2xl">
-              <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
-                {patch.title}
-              </h1>
-              {patch.description && (
-                <p className="text-white/95 text-base md:text-lg line-clamp-2 mt-2 pr-4">
-                  {patch.description}
-                </p>
-              )}
-              
-              {/* Topic Chips - Fixed duplicates v2 */}
-              {patch.tags && patch.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {[...new Set(patch.tags)].map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="bg-white/20 text-white border-white/30 hover:bg-white/30 transition-colors"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            {/* Right side: Actions - CONSISTENT WIDTH BUTTONS */}
-            <div className="flex flex-col gap-2 flex-shrink-0 items-start">
-        <Button
-          onClick={member ? handleLeave : handleJoin}
-          variant="ghost"
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
-        >
-          <Users className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium whitespace-nowrap">{member ? 'Leave Group' : 'Join Group'}</span>
-        </Button>
-        
-        <Button
-          variant="ghost"
-          onClick={handleShare}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
-        >
-          <Share2 className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">Share</span>
-        </Button>
-
-        {isOwner && (
-        <Button
-          variant="ghost"
-          onClick={handleSettings}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
-        >
-          <Settings className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">Settings</span>
-        </Button>
-        )}
-
-        {/* Lightning Theme Button */}
-        <Button
-          variant="ghost"
-          onClick={() => {
-            const currentIndex = currentTheme.preset ?? DEFAULT_THEME_INDEX;
-            const nextIndex = (currentIndex + 1) % COLOR_SCHEMES.length;
-            handleThemeChange({ mode: 'preset', preset: nextIndex });
-          }}
-          className="text-white hover:bg-white/10 px-4 py-2 flex items-center gap-3 w-40 !justify-start"
-          title={`Current: ${COLOR_SCHEMES[currentTheme.preset ?? DEFAULT_THEME_INDEX]?.name || 'Sunset Pop'}`}
-        >
-          <Zap className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">Theme</span>
-        </Button>
-        {membershipError && (
-          <p className="max-w-[11rem] text-xs leading-5 text-white">{membershipError}</p>
-        )}
-            </div>
-          </div>
-
-
-          {/* Counts Row */}
-          <div className="mt-3 flex flex-wrap gap-3 text-white/90 text-sm">
-            <div className="flex items-center gap-1">
-              <Users className="w-4 h-4" />
-              <span>{memberCount} members</span>
-            </div>
-            
-            <div className="flex items-center gap-1">
-              <MessageSquare className="w-4 h-4" />
-              <span>{patch._count.posts} posts</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Calendar className="w-4 h-4" />
-              <span>{patch._count.events} events</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <BookOpen className="w-4 h-4" />
-              <span>{patch._count.sources} sources</span>
-            </div>
-          </div>
+    <div className="border-b border-[#E6E8EC] bg-white text-[#0B0B0F]">
+      <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-3 px-5 py-4">
+        <Link href="/patch" className="shrink-0 text-sm font-semibold text-[#60646C]">← Groups</Link>
+        <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF6A00]">{patch.title}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={member ? handleLeave : handleJoin} className={`h-9 rounded-full px-3.5 text-sm font-semibold ${member ? 'bg-[#0B0B0F] text-white' : 'border border-[#E6E8EC] bg-white'}`}>
+            {member ? 'Leave group' : 'Join group'}
+          </button>
+          <button type="button" onClick={handleShare} className="h-9 rounded-full bg-[#FF6A00] px-3.5 text-sm font-semibold text-white">
+            {copied ? 'Link copied' : 'Share'}
+          </button>
+          {isOwner && (
+            <button type="button" onClick={handleSettings} className="h-9 rounded-full border border-[#E6E8EC] px-3.5 text-sm font-semibold">Settings</button>
+          )}
         </div>
       </div>
+      {membershipError && <p className="mx-auto max-w-[1120px] px-5 pb-3 text-sm text-red-600">{membershipError}</p>}
       {settingsOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setSettingsOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-5 text-[#0B0B0F]" onClick={(event) => event.stopPropagation()}>

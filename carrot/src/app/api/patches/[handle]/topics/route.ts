@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import prisma from '@/lib/prisma'
-import { createTopic, listTopics } from '@/lib/learn/topic'
+import { createTopic, fillTopicPhotos, listTopics, topicPath, widenTopics } from '@/lib/learn/topic'
 import { showFollowers } from '@/lib/activityFeed'
 
 export const runtime = 'nodejs'
@@ -31,16 +31,31 @@ async function displayName(userId: string): Promise<string> {
   return user?.name || user?.username || 'Member'
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ handle: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ handle: string }> }) {
   const session = await auth()
   const { handle } = await params
   const patch = await prisma.patch.findUnique({
     where: { handle },
-    select: { id: true }
+    select: { id: true, title: true }
   })
   if (!patch) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
   const topics = await listTopics(patch.id, session?.user?.id || '')
-  return NextResponse.json({ topics })
+  if (handle === 'ai') {
+    const alias = await prisma.patch.findUnique({ where: { handle: 'wire-model-policy' }, select: { id: true } })
+    if (alias) {
+      const extra = await listTopics(alias.id, session?.user?.id || '')
+      const seen = new Set(topics.map((topic) => topic.slug || topic.question))
+      topics.push(...extra.filter((topic) => !seen.has(topic.slug || topic.question)))
+    }
+  }
+  const url = new URL(request.url)
+  if (url.searchParams.get('photos') === '1') {
+    const withPhotos = await fillTopicPhotos(patch.id, patch.title, topics)
+    return NextResponse.json({ topics: withPhotos })
+  }
+  if (url.searchParams.get('fill') !== '1') return NextResponse.json({ topics })
+  const filled = await widenTopics(patch.id, patch.title, topics, url.searchParams.get('topic') || '')
+  return NextResponse.json({ topics: filled })
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ handle: string }> }) {
@@ -59,6 +74,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
     adminId: session.user.id,
     adminName: await displayName(session.user.id)
   })
-  await showFollowers(session.user.id, `Asked on ${access.patch.title}: ${question} /patch/${handle}?topic=${topic.slug}`)
+  await showFollowers(session.user.id, `Asked on ${access.patch.title}: ${question} ${topicPath(handle, topic.slug)}`)
   return NextResponse.json({ topic })
 }

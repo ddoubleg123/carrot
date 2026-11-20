@@ -1,8 +1,8 @@
 import { spawn } from 'child_process'
-import { execFile } from 'child_process'
 import { mkdtemp, readdir, readFile, rm } from 'fs/promises'
 import os from 'os'
 import path from 'path'
+import { ffmpegPath, ytdlpPath } from '@/lib/mediaBins'
 
 export interface FoundItem {
   title: string
@@ -60,7 +60,7 @@ export async function fetchText(url: string, timeout = 12000): Promise<string | 
 }
 
 export async function youtubeLatest(handle: string): Promise<FoundItem[]> {
-  const binary = await toolPath('yt-dlp')
+  const binary = await ytdlpPath()
   if (!binary) return []
   const args = [
     '--flat-playlist',
@@ -89,17 +89,6 @@ export async function youtubeLatest(handle: string): Promise<FoundItem[]> {
   }).slice(0, 4)
 }
 
-function toolPath(command: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile('where.exe', [command], { timeout: 8000, windowsHide: true }, (error, stdout) => {
-      if (error) {
-        resolve(null)
-        return
-      }
-      resolve(stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || null)
-    })
-  })
-}
 
 function captionText(raw: string): string {
   const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/).flatMap((line) => {
@@ -118,12 +107,12 @@ function captionText(raw: string): string {
 
 /** Read public captions only. The video file is not downloaded. */
 export async function readCaptions(pageUrl: string): Promise<string | null> {
-  const binary = await toolPath('yt-dlp')
+  const binary = await ytdlpPath()
   if (!binary) return null
-  const ffmpeg = await toolPath('ffmpeg')
+  const ffmpeg = await ffmpegPath()
   const dir = await mkdtemp(path.join(os.tmpdir(), 'carrot-cap-'))
   const env = { ...process.env }
-  if (ffmpeg) env.PATH = `${path.dirname(ffmpeg)};${env.PATH || ''}`
+  if (ffmpeg) env.PATH = `${path.dirname(ffmpeg)}${path.delimiter}${env.PATH || ''}`
   const args = [
     '--skip-download',
     '--no-update',
@@ -131,20 +120,19 @@ export async function readCaptions(pageUrl: string): Promise<string | null> {
     '--no-warnings',
     '--write-sub',
     '--write-auto-sub',
-    '--sub-langs', 'en.*,en',
+    '--sub-langs', 'en-orig,en,en-US,en-GB',
     '--convert-subs', 'vtt',
     '-o', path.join(dir, 'cap.%(ext)s'),
     pageUrl
   ]
   const child = spawn(binary, args, { env, windowsHide: true })
   const timer = setTimeout(() => child.kill(), 45000)
-  const code: number | null = await new Promise((resolve) => {
+  await new Promise((resolve) => {
     child.on('error', () => resolve(1))
     child.on('close', (status) => resolve(status))
   })
   clearTimeout(timer)
   try {
-    if (code !== 0) return null
     const files = await readdir(dir).catch(() => [] as string[])
     const tracks = files.filter((file) => file.toLowerCase().endsWith('.vtt'))
     let best = ''

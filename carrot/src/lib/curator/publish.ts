@@ -98,6 +98,7 @@ async function deskPatch(desk: Desk, userId: string) {
 export interface Published {
   topicUrl: string
   postId: string
+  username: string
 }
 
 function palette(key: string) {
@@ -116,7 +117,12 @@ export async function publishFinding(desk: Desk, finding: {
   summary: string
   publisher: string
   image?: string
+  transcript?: string
+  videoBucket?: string
+  videoPath?: string
 }): Promise<Published> {
+  const hosted = finding.url.startsWith('/topic-videos/') && finding.url.toLowerCase().includes('.mp4')
+  const playable = finding.url.split('?')[0]
   const note = await feedLine(desk.name, finding.title, finding.excerpt || finding.summary)
   if (!note) throw new Error('The page has no idea worth posting.')
   const user = await deskUser(desk)
@@ -126,8 +132,8 @@ export async function publishFinding(desk: Desk, finding: {
   const source: TopicSource = {
     id: sourceId(),
     title: question,
-    url: finding.url,
-    domain: finding.domain,
+    url: playable,
+    domain: hosted ? 'carrot' : finding.domain,
     quote: finding.excerpt,
     summary: finding.summary,
     origin: 'search',
@@ -182,16 +188,16 @@ export async function publishFinding(desk: Desk, finding: {
     }
   }
   const topicUrl = existing
-    ? `/patch/${desk.handle}?topic=${topicSlug(existing.title)}`
+    ? `/patch/${desk.handle}/${topicSlug(existing.title)}`
     : topicId
-      ? `/patch/${desk.handle}?topic=${slug}`
+      ? `/patch/${desk.handle}/${slug}`
       : `/patch/${desk.handle}`
-  const isVideo = Boolean(youtubeIdFromText(finding.url))
-  const link = isVideo ? null : await readLinkCard(finding.url)
-  const remote = youtubeThumb(finding.url) || finding.image || link?.image || (isVideo ? null : await pageImage(finding.url))
+  const isVideo = !hosted && Boolean(youtubeIdFromText(finding.url))
+  const link = isVideo ? null : hosted ? null : await readLinkCard(finding.url)
+  const remote = hosted ? null : (youtubeThumb(finding.url) || finding.image || link?.image || (isVideo ? null : await pageImage(finding.url)))
   const preview = remote ? await savePreview(remote, finding.url) : null
-  const meta = isVideo ? '' : articleLines({ ...link, image: preview || '' })
-  const content = [note, '', question, topicUrl, finding.url, meta].filter((part) => part !== '').join('\n')
+  const meta = isVideo || hosted ? '' : articleLines({ ...link, image: preview || '' })
+  const content = [note, '', question, topicUrl, hosted ? '' : finding.url, meta].filter((part) => part !== '').join('\n')
   const look = palette(finding.url + desk.id)
   const post = await prisma.post.create({
     data: {
@@ -203,22 +209,32 @@ export async function publishFinding(desk: Desk, finding: {
       gradientViaColor: look.colors.gradientViaColor || null,
       gradientToColor: look.colors.gradientToColor,
       imageUrls: preview ? JSON.stringify([preview]) : null,
-      thumbnailUrl: preview
+      thumbnailUrl: preview,
+      videoUrl: hosted
+        ? (finding.videoBucket && finding.videoPath
+          ? `/api/video?path=${encodeURIComponent(finding.videoPath)}&bucket=${encodeURIComponent(finding.videoBucket)}`
+          : playable)
+        : null,
+      videoBucket: finding.videoBucket || null,
+      videoPath: finding.videoPath || null,
+      audioTranscription: hosted && finding.transcript ? finding.transcript.slice(0, 100000) : null,
+      transcriptionStatus: hosted && finding.transcript ? 'ready' : null
     }
   })
   await prisma.patchPost.create({
     data: {
       patchId: patch.id,
       authorId: user.id,
-      type: 'LINK',
+      type: hosted ? 'VIDEO' : 'LINK',
       title: question,
       body: finding.summary,
-      url: finding.url,
+      url: playable,
+      media: hosted ? { type: 'video', url: playable } : undefined,
       tags: ['automated', desk.id],
       metrics: { likes: 0, comments: 0, reposts: 0, views: 0 }
     }
   })
   invalidateFeedCache()
   void topicId
-  return { topicUrl, postId: post.id }
+  return { topicUrl, postId: post.id, username: user.username || desk.username }
 }

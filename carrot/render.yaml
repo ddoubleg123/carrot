@@ -25,6 +25,8 @@ services:
           property: connectionString
       - key: FIREBASE_PROJECT_ID
         value: involuted-river-466315
+      - key: FIREBASE_STORAGE_BUCKET
+        value: involuted-river-466315-p0.firebasestorage.app
       - key: FIREBASE_PRIVATE_KEY
         fromDatabase:
           name: carrot-db

@@ -1,10 +1,16 @@
 import { mkdir, open, readFile, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 import { readPublicUrl } from '@/lib/learn/publicUrl'
+import { chooseDesk } from '@/lib/curator/assign'
+import { listChannels, recentUploads } from '@/lib/curator/channels'
 import { DAILY_CAP, DESKS, type Desk } from '@/lib/curator/desks'
 import { judgeReading, sameStory } from '@/lib/curator/judge'
 import { publishFinding } from '@/lib/curator/publish'
 import { feedItems, fetchText, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
+import { profileQrUrl } from '@/lib/learn/brandClip'
+import { ensureMediaBins } from '@/lib/mediaBins'
+import { storeClip } from '@/lib/curator/storeClip'
+import { startClipOnce } from '@/lib/learn/clipOnce'
 
 export interface Dropped {
   title: string
@@ -49,9 +55,12 @@ interface Memory {
   cursor: number
   titles: string[]
   hunted: Record<string, number>
+  captionMiss: Record<string, number>
 }
 
 const HUNT_WORKERS = 4
+const WATCH_READS = 4
+const WATCH_POSTS = 2
 
 const DIR = path.join(process.cwd(), '.cache', 'curator')
 const JOURNAL = path.join(DIR, 'journal.json')
@@ -82,13 +91,14 @@ function canon(url: string): string {
 async function loadMemory(): Promise<Memory> {
   const raw = await readFile(MEMORY, 'utf8').catch(() => '')
   const parsed = raw ? JSON.parse(raw) as Memory : null
-  const base: Memory = parsed && Array.isArray(parsed.seen) ? parsed : { seen: [], day: today(), posted: {}, cursor: 0, titles: [], hunted: {} }
+  const base: Memory = parsed && Array.isArray(parsed.seen) ? parsed : { seen: [], day: today(), posted: {}, cursor: 0, titles: [], hunted: {}, captionMiss: {} }
   if (base.day !== today()) {
     base.day = today()
     base.posted = {}
   }
   base.titles = Array.isArray(base.titles) ? base.titles : []
   base.hunted = base.hunted && typeof base.hunted === 'object' ? base.hunted : {}
+  base.captionMiss = base.captionMiss && typeof base.captionMiss === 'object' ? base.captionMiss : {}
   return base
 }
 
@@ -96,6 +106,8 @@ async function saveMemory(memory: Memory): Promise<void> {
   await mkdir(DIR, { recursive: true })
   memory.seen = memory.seen.slice(-2500)
   memory.titles = memory.titles.slice(-400)
+  const cutoff = Date.now() - 6 * 60 * 60 * 1000
+  memory.captionMiss = Object.fromEntries(Object.entries(memory.captionMiss || {}).filter(([, at]) => at > cutoff))
   await writeFile(MEMORY, JSON.stringify(memory))
 }
 
@@ -115,6 +127,13 @@ async function saveHunt(hunt: Hunt): Promise<void> {
   const hunts = [hunt, ...(current?.hunts || [])].slice(0, 16)
   await mkdir(DIR, { recursive: true })
   await writeFile(JOURNAL, JSON.stringify({ updatedAt: hunt.at, hunts }))
+}
+
+function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
+  const feeds = desk.sources.filter((source) => source.kind === 'rss')
+  if (feeds.length <= 2) return feeds
+  const start = (Math.floor(Date.now() / 3_600_000) + postedToday) % feeds.length
+  return [0, 1].map((step) => feeds[(start + step) % feeds.length])
 }
 
 function onBeat(desk: Desk, title: string, extra = ''): boolean {
@@ -149,12 +168,13 @@ export interface HuntOptions {
   channels?: number
   videosPerChannel?: number
   articles?: number
+  clipsOnly?: boolean
 }
 
 async function claimLock(): Promise<boolean> {
   await mkdir(DIR, { recursive: true })
   const info = await stat(LOCK).catch(() => null)
-  if (info && Date.now() - info.mtimeMs > 20 * 60 * 1000) await unlink(LOCK).catch(() => undefined)
+  if (info && Date.now() - info.mtimeMs > 90 * 60 * 1000) await unlink(LOCK).catch(() => undefined)
   try {
     const handle = await open(LOCK, 'wx')
     await handle.close()
@@ -179,7 +199,18 @@ export async function runCurator(options: HuntOptions = {}): Promise<Hunt> {
 }
 
 async function hunt(options: HuntOptions): Promise<Hunt> {
+  if (await stat(path.join(DIR, 'pause')).then(() => true).catch(() => false)) {
+    return { at: new Date().toISOString(), desks: [] }
+  }
   const memory = await loadMemory()
+  if (options.clipsOnly) {
+    const passes: DeskPass[] = []
+    await watchChannels(memory, passes)
+    const result: Hunt = { at: new Date().toISOString(), desks: passes }
+    await saveMemory(memory)
+    await saveHunt(result)
+    return result
+  }
   const maxKeep = options.maxKeep ?? 1
   const channelCount = options.channels ?? 2
   const videosPerChannel = options.videosPerChannel ?? 1
@@ -270,7 +301,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         console.log(`[curator] kept ${title}`)
       }
     }
-    const feeds = desk.sources.filter((source) => source.kind === 'rss').slice(0, 2)
+    const feeds = feedWindow(desk, memory.posted[desk.id] || 0)
     let articles = 0
     for (const feed of feeds) {
       pass.looked.push(`Feed · ${feed.name}`)
@@ -385,21 +416,126 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
     }
     passes.push(pass)
   }))
+  await watchChannels(memory, passes)
   const result: Hunt = { at: new Date().toISOString(), desks: passes }
   await saveMemory(memory)
   await saveHunt(result)
   return result
 }
 
+async function watchChannels(memory: Memory, passes: DeskPass[]): Promise<void> {
+  const channels = await listChannels().catch(() => [])
+  let kept = 0
+  let attempts = 0
+  for (const channel of channels) {
+    if (kept >= WATCH_POSTS || attempts >= WATCH_READS) break
+    passes.find((pass) => pass.id === 'watch') || passes.push({ id: 'watch', name: 'Watched channels', handle: 'channels', looked: [], dropped: [], kept: [] })
+    const watch = passes.find((pass) => pass.id === 'watch')
+    watch?.looked.push(`YouTube · ${channel.name}`)
+    const latest = await recentUploads(channel.channelId).catch(() => [] as FoundItem[])
+    if (latest.length === 0) {
+      watch?.dropped.push({ title: channel.name, from: 'YouTube', reason: 'No video from the last 3 days.' })
+      continue
+    }
+    for (const item of latest) {
+      if (kept >= WATCH_POSTS || attempts >= WATCH_READS) break
+      const url = canon(item.url)
+      if (memory.seen.includes(url) || Date.now() - (memory.captionMiss[url] || 0) < 30 * 60 * 1000) continue
+      const title = cleanTitle(item.title, channel.name)
+      if (memory.titles.some((keptTitle) => sameStory(keptTitle, title))) {
+        memory.seen.push(url)
+        continue
+      }
+      if (attempts >= WATCH_READS) break
+      attempts += 1
+      console.log(`[curator] channel ${channel.name}`)
+      const captions = await readCaptions(url)
+      if (!captions) {
+        memory.captionMiss[url] = Date.now()
+        watch?.dropped.push({ title, from: channel.name, reason: 'No English captions on this pass.' })
+        continue
+      }
+      memory.seen.push(url)
+      const reading = judgeReading(captions, title, 'video')
+      if (!reading.keep) {
+        watch?.dropped.push({ title, from: channel.name, reason: reading.reason })
+        continue
+      }
+      const desk = chooseDesk(`${title} ${reading.excerpt}`)
+      if ((memory.posted[desk.id] || 0) >= DAILY_CAP) {
+        watch?.dropped.push({ title, from: desk.name, reason: `Already posted ${DAILY_CAP} times today.` })
+        continue
+      }
+      const clipJob = await startClipOnce({ url, pageUrl: profileQrUrl(desk.username) })
+      for (let wait = 0; wait < 300 && clipJob.status === 'running'; wait += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      }
+      const clip = clipJob.clips[0]
+      if (clipJob.status !== 'completed' || !clip?.src) {
+        watch?.dropped.push({ title, from: channel.name, reason: clipJob.error || 'The clip file was not saved.' })
+        continue
+      }
+      const localFile = path.join(process.cwd(), 'public', clip.src.split('?')[0].replace(/^\//, ''))
+      const stored = await storeClip(localFile).catch((error) => {
+        console.error('[curator] store', error instanceof Error ? error.message : error)
+        return null
+      })
+      if (!stored && process.env.NODE_ENV === 'production') {
+        watch?.dropped.push({ title, from: channel.name, reason: 'The clip could not be stored for playback.' })
+        continue
+      }
+      const base = clipJob.masterCaption ? path.basename(clipJob.masterCaption).split('.')[0] : ''
+      const transcript = base
+        ? await readFile(path.join(path.dirname(clipJob.masterCaption || ''), `${base}.txt`), 'utf8').catch(() => clip.quote)
+        : clip.quote
+      const published = await publishFinding(desk, {
+        title,
+        url: clip.src.split('?')[0],
+        domain: 'carrot',
+        excerpt: clip.quote || reading.excerpt,
+        summary: reading.summary,
+        publisher: channel.name,
+        transcript,
+        videoBucket: stored?.bucket,
+        videoPath: stored?.objectPath
+      }).catch((error) => {
+        watch?.dropped.push({ title, from: channel.name, reason: error instanceof Error ? error.message : 'The clip could not be posted.' })
+        return null
+      })
+      if (!published) continue
+      const home = passes.find((pass) => pass.id === desk.id) || watch
+      home?.kept.push({
+        title,
+        url: clip.src.split('?')[0],
+        from: channel.name,
+        kind: 'video',
+        words: reading.words,
+        why: `${desk.name} posts the saved clip.`,
+        excerpt: reading.excerpt,
+        topicUrl: published.topicUrl
+      })
+      memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
+      memory.titles.push(title)
+      kept += 1
+      console.log(`[curator] kept ${title}`)
+    }
+  }
+}
+
 export function armCurator(): void {
   const holder = globalThis as unknown as { __carrotCurator?: ReturnType<typeof setInterval> }
-  if (holder.__carrotCurator) return
+  if (holder.__carrotCurator) clearInterval(holder.__carrotCurator)
   const pass = () => {
-    void runCurator({ rotate: true, maxKeep: 1, channels: 2, videosPerChannel: 1, articles: 1 }).catch((error) => {
+    void runCurator({ clipsOnly: true, rotate: true, maxKeep: 1, channels: 2, videosPerChannel: 1, articles: 1 }).catch((error) => {
       console.error('[curator] pass failed', error instanceof Error ? error.message : error)
     })
   }
-  holder.__carrotCurator = setInterval(pass, 20 * 1000)
-  holder.__carrotCurator.unref?.()
-  pass()
+  void ensureMediaBins()
+    .catch((error) => console.error('[curator] media tools', error instanceof Error ? error.message : error))
+    .finally(() => {
+      if (holder.__carrotCurator) clearInterval(holder.__carrotCurator)
+      holder.__carrotCurator = setInterval(pass, 20 * 1000)
+      holder.__carrotCurator.unref?.()
+      pass()
+    })
 }

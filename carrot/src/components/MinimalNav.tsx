@@ -9,6 +9,8 @@ import { signOutAction } from '../actions/auth-actions';
 import { SidebarIcons } from './icons/SidebarIcons';
 import { logoutClient } from '../lib/logoutClient';
 import { prefetchNotifications } from '../lib/notificationFeed';
+import { useSession } from 'next-auth/react';
+import { isAdminEmail } from '../lib/admin';
 
 // Minimalist icon components unified with currentColor
 const NavIcons = {
@@ -43,10 +45,8 @@ const NavIcons = {
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <rect x="4" y="6" width="12" height="2" rx="1" fill="currentColor" opacity="0.9"/>
-        <rect x="4" y="9" width="10" height="2" rx="1" fill="currentColor" opacity="0.9"/>
-        <rect x="4" y="12" width="14" height="2" rx="1" fill="currentColor"/>
-        <rect x="4" y="15" width="8" height="2" rx="1" fill="currentColor" opacity="0.8"/>
+        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2"/>
+        <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="2"/>
       </svg>
     </div>
   ),
@@ -93,11 +93,25 @@ const NavIcons = {
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <path d="M4 20V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M8 20V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M12 20V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M16 20V4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        <path d="M20 20V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M3 19h18M5.5 19V11M9.5 19V11M14.5 19V11M18.5 19V11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+        <path d="M3.5 11h17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+        <path d="M7 11V8.5h10V11" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
+        <path d="M12 8.5V5.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+        <circle cx="12" cy="4.2" r="1.05" fill="currentColor"/>
+      </svg>
+    </div>
+  ),
+  Admin: ({ isActive }: { isActive: boolean }) => (
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
+      isActive
+        ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
+        : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
+    }`}>
+      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+        <circle cx="8" cy="15" r="3.2" stroke="currentColor" strokeWidth="2"/>
+        <path d="M10.5 13.2 20 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M16.5 7.2h2.2V9.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 9.6h2.2V11.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>
   ),
@@ -109,7 +123,7 @@ const NavIcons = {
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-        <path d="m12 1 3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6z" stroke="currentColor" strokeWidth="2"/>
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     </div>
   ),
@@ -158,11 +172,19 @@ const MENU_ITEMS = [
   },
 ];
 
+const ADMIN_ITEM = {
+  href: '/admin',
+  icon: NavIcons.Admin,
+  label: 'Admin',
+}
+
 export default function MinimalNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const items = isAdminEmail(session?.user?.email) ? [...MENU_ITEMS, ADMIN_ITEM] : MENU_ITEMS;
   useEffect(() => setMounted(true), []);
 
   // Build the menu pages one at a time after the current page is up, so the
@@ -210,7 +232,7 @@ export default function MinimalNav() {
 
       {/* Menu Items */}
       <div className="flex flex-col gap-4">
-        {MENU_ITEMS.map((item, index) => {
+        {items.map((item, index) => {
           const path = pathname || ''
           const isActive = path === item.href || path.startsWith(`${item.href}/`)
           const IconComponent = item.icon;

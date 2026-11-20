@@ -78,9 +78,18 @@ export function parseFeedPost(content?: string | null): FeedPostParts {
 
 /** The patch conversation this post is pointing at, when the text carries that path. */
 export function patchConversation(content?: string | null): string | null {
-  const match = String(content || '').match(/\/patch\/([A-Za-z0-9_-]+)(?:\?topic=([A-Za-z0-9_-]+))?/)
+  const match = String(content || '').match(/\/patch\/([A-Za-z0-9_-]+)(?:\/([a-z0-9]+(?:-[a-z0-9]+)*)|\?topic=([A-Za-z0-9_-]+))?/)
   if (!match) return null
-  return match[2] ? `/patch/${match[1]}?topic=${match[2]}` : `/patch/${match[1]}`
+  const slug = match[2] || match[3]
+  return slug ? `/patch/${match[1]}/${slug}` : `/patch/${match[1]}`
+}
+
+/** A readable name for the patch handle, without the raw path. */
+export function patchName(path: string): string {
+  const handle = path.split('/').filter(Boolean)[1] || ''
+  const words = handle.replace(/^wire-/, '').split('-').filter(Boolean)
+  if (!words.length) return 'Patch'
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
 export function articleLines(card: { title?: string; published?: string; site?: string; image?: string }): string {

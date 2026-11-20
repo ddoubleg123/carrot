@@ -113,7 +113,38 @@ async function commonsPhoto(query: string, tokens: string[]): Promise<string | n
   return ranked[0]?.url || null
 }
 
-const GRAPHIC = /moorman|zapruder|autopsy|coffin|funeral|wounded|blood/i
+const GRAPHIC = /moorman|zapruder|autopsy|coffin|funeral|wounded|blood|bomb|attack|corpse|casualty|rubble|missile/i
+
+function nameQuery(question: string): string {
+  const skip = new Set(['what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how', 'does', 'did', 'was', 'were', 'this', 'that', 'with', 'from', 'about', 'have', 'has', 'had', 'into', 'over', 'after', 'before', 'their', 'there', 'would', 'could', 'should', 'call', 'calls', 'called', 'than', 'then', 'them', 'they', 'your', 'been', 'being', 'will', 'make', 'made', 'also'])
+  const words = question.match(/[A-Za-z][A-Za-z0-9'.-]*/g) || []
+  return words
+    .map((word) => word.replace(/['’]/g, ''))
+    .filter((word) => word.length >= 4 && !skip.has(word.toLowerCase()))
+    .slice(0, 3)
+    .join(' ')
+}
+
+export async function cardPhoto(question: string): Promise<string | null> {
+  const tokens = tokensOf(question)
+  const focus = nameQuery(question)
+  if (!focus && tokens.length === 0) return null
+  const url = await wikiPhoto(focus || question, tokens.length ? tokens : focus.toLowerCase().split(' '))
+  if (!url || !isRaster(url) || GRAPHIC.test(url)) return null
+  return url.split('?')[0]
+}
+
+export async function questionPhoto(question: string): Promise<string | null> {
+  const tokens = tokensOf(question)
+  if (tokens.length === 0) return null
+  const focus = [...tokens].sort((a, b) => b.length - a.length)[0]
+  const candidates = [await wikiPhoto(question, tokens), await commonsPhoto(`${focus} ${tokens.find((token) => token !== focus) || ''}`, tokens)]
+  const ranked = candidates
+    .filter((url): url is string => Boolean(url) && isRaster(url) && !GRAPHIC.test(url) && decodeURIComponent(url).toLowerCase().includes(focus))
+    .map((url) => ({ url: url.split('?')[0], points: score(decodeURIComponent(url), tokens) }))
+    .sort((a, b) => b.points - a.points)
+  return ranked[0]?.url || null
+}
 
 export async function pageThumbnail(titles: string[]): Promise<string | null> {
   const unique = [...new Set(titles.map((title) => title.trim()).filter(Boolean))].slice(0, 6)

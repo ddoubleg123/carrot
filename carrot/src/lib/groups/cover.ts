@@ -105,6 +105,11 @@ async function remember(id: string, entity: unknown, cover: string, source: 'pho
   }).catch(() => null)
 }
 
+export function knownCover(entity: unknown): string {
+  const cover = readMeta(entity).cover
+  return localCover(cover) ? cover as string : ''
+}
+
 export async function ensureGroupCover(patch: { id: string; title: string; entity: unknown }, options?: { remote?: boolean }): Promise<string> {
   const meta = readMeta(patch.entity)
   if (localCover(meta.cover) && meta.source === 'member') return meta.cover as string

@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import NoteOpen from './NoteOpen';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,7 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
 
   return (
     <main style={{maxWidth: 720, margin: '2rem auto', padding: '0 1rem'}}>
+      <NoteOpen postId={id} />
       <p><Link href="/home">← Back</Link></p>
       <h1 style={{fontSize: '1.25rem', marginBottom: '0.5rem'}}>Post {id}</h1>
       <section style={{marginBottom: '1rem'}}>

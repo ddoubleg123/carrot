@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { useState } from 'react';
+import Link from 'next/link';
+import { Plus } from 'lucide-react';
 import CreateGroupModal from '@/components/patch/CreateGroupModal';
 
 interface Patch {
@@ -26,20 +27,7 @@ interface PatchPageClientProps {
 
 export default function PatchPageClient({ patches }: PatchPageClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isReducedMotion, setIsReducedMotion] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // Check for reduced motion preference
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setIsReducedMotion(mediaQuery.matches);
-    
-    const handleChange = (e: MediaQueryListEvent) => setIsReducedMotion(e.matches);
-    mediaQuery.addEventListener('change', handleChange);
-    
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
 
   const handleCreateGroup = () => {
     setIsCreateGroupModalOpen(true);
@@ -105,171 +93,67 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
   );
 
   return (
-    <div className="bg-white min-h-screen">
-      {/* Hero Section with Plato */}
-      <div 
-        className="relative w-full overflow-hidden"
-        style={{ height: '50vh' }}
-      >
-        {/* Background gradient */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(135deg, #FF6A00 0%, #FF8A00 50%, #FFA500 100%)',
-            opacity: 0.9
-          }}
-        />
-        
-        {/* Subtle grain texture */}
-        <div 
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)',
-            backgroundSize: '20px 20px'
-          }}
-        />
-
-        {/* Plato Image - Right side */}
-        <div
-          className={`absolute right-0 bottom-0 w-[40%] max-w-md h-full flex items-end justify-end pr-4 pb-4 ${
-            !isReducedMotion ? 'transform-gpu' : ''
-          }`}
-          style={{
-            transform: !isReducedMotion ? 'translateY(0px)' : 'none',
-            willChange: !isReducedMotion ? 'transform' : 'auto'
-          }}
-        >
-          <div className="relative">
-            {/* Real Plato image with duotone effect */}
-            <div className="w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 relative">
-              <img
-                src="/agents/Plato.png"
-                alt="Plato"
-                className="w-full h-full object-cover rounded-full opacity-20"
-                style={{
-                  filter: 'grayscale(100%) contrast(1.2) brightness(1.1)',
-                  mixBlendMode: 'overlay'
-                }}
-              />
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-orange-400/30 to-orange-600/20 mix-blend-mode-overlay" />
-            </div>
-          </div>
+    <div className="min-h-screen bg-white text-[#0B0B0F]">
+      <div className="mx-auto max-w-[1120px] px-5 pb-16 pt-8">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF6A00]">Carrot Patch</p>
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <h1 className="text-[2.5rem] font-semibold leading-none tracking-[-0.035em]">Groups</h1>
+          <button
+            type="button"
+            onClick={handleCreateGroup}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#FF6A00] px-4 text-sm font-semibold text-white hover:bg-[#E55A00]"
+          >
+            <Plus size={16} />
+            Create group
+          </button>
         </div>
 
-        {/* Quote Overlay - Left/Center */}
-        <div
-          className={`absolute left-0 top-0 w-full h-full flex items-center justify-center px-8 ${
-            !isReducedMotion ? 'transform-gpu' : ''
-          }`}
-          style={{
-            transform: !isReducedMotion ? 'translateY(0px)' : 'none',
-            willChange: !isReducedMotion ? 'transform' : 'auto'
-          }}
-        >
-          <div className="max-w-6xl mx-auto text-center lg:text-left">
-            {/* Quote in white text */}
-            <blockquote className="relative">
-              <div className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-wide break-words text-white drop-shadow-lg">
-                The more you know, the more you realize you know nothing.
-              </div>
-            </blockquote>
-
-            {/* Author attribution */}
-            <cite className="block mt-4 text-lg md:text-xl text-white font-medium drop-shadow-md">
-              — Plato
-            </cite>
-          </div>
+        <div className="mt-6 flex items-center rounded-full border border-[#E6E8EC] px-4 focus-within:border-[#FF6A00]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Find a group"
+            className="h-12 w-full bg-transparent text-base outline-none placeholder:text-[#8A8F98]"
+            aria-label="Find a group"
+          />
         </div>
-      </div>
 
-      {/* Action Row - Centered on orange header border (50/50 overlap) */}
-      <div 
-        className="relative z-10 px-6"
-        style={{ marginTop: '-60px' }}
-      >
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              {/* Search Input */}
-              <div className="flex-1 relative">
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Let's go"
-                  className="w-full h-12 px-4 pr-12 rounded-xl border border-[#E6E8EC] focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent outline-none text-lg placeholder-[#60646C]"
-                  aria-label="Search knowledge and groups"
-                />
-                <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-[#60646C]" size={20} />
-              </div>
-
-              {/* Create Group Button */}
-              <button
-                onClick={handleCreateGroup}
-                className="h-12 px-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-200 hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2 min-w-[140px]"
+        {filteredPatches.length === 0 ? (
+          <p className="border-t border-[#E6E8EC] py-10 text-sm text-[#60646C]">
+            {searchQuery ? 'No groups match that search.' : 'No groups yet.'}
+          </p>
+        ) : (
+          <div className="mt-2 border-t border-[#E6E8EC]">
+            {filteredPatches.map((patch) => (
+              <Link
+                key={patch.id}
+                href={`/patch/${patch.handle}`}
+                className="group grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-4 border-b border-[#E6E8EC] py-4 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto]"
               >
-                <Plus size={20} />
-                Create Group
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Groups Grid - Same size as AI agent tiles */}
-      <div className="px-6 pb-16 pt-8">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Explore Groups</h2>
-          
-          {filteredPatches.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">
-                {searchQuery ? 'No groups found matching your search.' : 'No groups available yet.'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPatches.map((patch) => (
-                <div
-                  key={patch.id}
-                  className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group h-[300px] flex flex-col"
-                  onClick={() => window.location.href = `/patch/${patch.handle}`}
-                >
-                  {/* Header Image - Fixed height like AI agent tiles */}
-                  <div className="h-[200px] relative overflow-hidden bg-[#141414]">
-                    {patch.cover ? (
-                      <img src={patch.cover} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-end bg-gradient-to-br from-[#1F2937] to-[#7C2D12] p-4">
-                        <span className="text-xl font-semibold text-white">{patch.title}</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Group Info - Fixed height like AI agent tiles */}
-                  <div className="h-[100px] p-4 flex flex-col justify-between">
-                    <h3 className="text-lg font-bold text-gray-900 group-hover:text-orange-600 transition-colors">
-                      {patch.title}
-                    </h3>
-                    
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-gray-200 rounded-full flex items-center justify-center">
-                          <span className="text-xs">👥</span>
-                        </div>
-                        <span>{patch._count.members.toLocaleString()} members</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="h-[4.5rem] w-[4.5rem] overflow-hidden rounded-lg bg-[#E7E5E4]">
+                  {patch.cover ? (
+                    <img src={patch.cover} alt="" className="h-full w-full object-cover" />
+                  ) : null}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <div className="min-w-0">
+                  <h2 className="truncate text-[17px] font-semibold tracking-[-0.02em] group-hover:text-[#E55A00]">{patch.title}</h2>
+                  {patch.description ? (
+                    <p className="mt-0.5 line-clamp-1 text-sm text-[#60646C]">{patch.description}</p>
+                  ) : null}
+                  <p className="mt-0.5 text-[13px] text-[#8A8F98] sm:hidden">
+                    {patch._count.members.toLocaleString()} {patch._count.members === 1 ? 'member' : 'members'}
+                  </p>
+                </div>
+                <span className="hidden text-[13px] text-[#8A8F98] sm:block">
+                  {patch._count.members.toLocaleString()} {patch._count.members === 1 ? 'member' : 'members'}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Create Group Modal */}
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}

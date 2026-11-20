@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 
-const MAX_BYTES = 750_000
+const MAX_BYTES = 2_000_000
 const MAX_PDF_BYTES = 8_000_000
 const MAX_REDIRECTS = 3
 const TIMEOUT_MS = 12_000
@@ -157,7 +157,19 @@ export function looksLikeChrome(text: string): boolean {
 }
 
 function plain(value: string): string {
-  return decodeEntities(value.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+  const inline = value
+    .replace(/<\/(span|a|em|strong|b|i|mark|sup|sub|small|time|abbr)\s*>/gi, '')
+    .replace(/<(span|a|em|strong|b|i|mark|sup|sub|small|time|abbr)\b[^>]*>/gi, '')
+  return decodeEntities(inline.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+}
+
+function articleRegion(html: string): string {
+  const stand = html.indexOf('data-gu-name="standfirst"')
+  const body = html.indexOf('data-gu-name="body"')
+  if (stand < 0 && body < 0) return html
+  const start = stand >= 0 ? stand : body
+  const end = html.indexOf('data-gu-name="submeta"', start + 20)
+  return html.slice(start, end > start ? end : start + 120000)
 }
 
 export function pageImage(html: string): string {
@@ -173,7 +185,7 @@ export function pageImage(html: string): string {
 
 export function htmlToText(html: string): { title: string; text: string } {
   const title = plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')
-  const withoutCode = html
+  const withoutCode = articleRegion(html)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
@@ -323,4 +335,41 @@ export async function readPublicUrl(raw: string): Promise<ReadPage> {
   }
 
   throw new PublicUrlError('That link could not be read.')
+}
+
+export async function resolveGoogleNews(raw: string): Promise<string> {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return raw
+  }
+  if (!/(^|\.)news\.google\.com$/i.test(parsed.hostname) || !/\/articles\//.test(parsed.pathname)) return raw
+  const page = await fetch(parsed, {
+    redirect: 'follow',
+    headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' },
+    signal: AbortSignal.timeout(8000)
+  }).catch(() => null)
+  if (!page?.ok) return raw
+  const html = await page.text()
+  const id = html.match(/data-n-a-id="([^"]+)"/)?.[1]
+  const timestamp = html.match(/data-n-a-ts="([^"]+)"/)?.[1]
+  const signature = html.match(/data-n-a-sg="([^"]+)"/)?.[1]
+  if (!id || !timestamp || !signature) return raw
+  const inner = JSON.stringify(['garturlreq', [['X', 'X', ['X', 'X'], null, null, 1, 1, 'US:en', null, 1, null, null, null, null, null, 0, 1], 'X', 'X', 1, [1, 1, 1], 1, 1, null, 0, 0, null, 0], id, Number(timestamp), signature])
+  const decoded = await fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'User-Agent': 'Mozilla/5.0' },
+    body: `f.req=${encodeURIComponent(JSON.stringify([[['Fbv4je', inner, null, 'generic']]]))}`,
+    signal: AbortSignal.timeout(8000)
+  }).catch(() => null)
+  if (!decoded?.ok) return raw
+  const text = await decoded.text()
+  const url = text.match(/https?:\/\/(?!news\.google\.com)[^"\\]+/)?.[0]
+  if (!url) return raw
+  try {
+    return new URL(url).toString()
+  } catch {
+    return raw
+  }
 }

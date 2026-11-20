@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import prisma from '../../../../lib/prisma'
 import { auth } from '@/auth'
 import { projectPost } from '../../posts/_project'
@@ -136,15 +135,19 @@ export async function POST(_req: Request, ctx: { params: Promise<{ username: str
   const next = has ? current.filter((id) => id !== person.id) : [...current, person.id]
   const targetMeta = asRecord(person.metadata)
   const count = typeof targetMeta.followerCount === 'number' ? targetMeta.followerCount : 0
+  const followingJson = JSON.stringify(next)
+  const followerCount = JSON.stringify(Math.max(0, count + (has ? -1 : 1)))
   await prisma.$transaction([
-    prisma.user.update({
-      where: { id: viewerId },
-      data: { metadata: { ...meta, following: next } as Prisma.InputJsonValue }
-    }),
-    prisma.user.update({
-      where: { id: person.id },
-      data: { metadata: { ...targetMeta, followerCount: Math.max(0, count + (has ? -1 : 1)) } as Prisma.InputJsonValue }
-    })
+    prisma.$executeRaw`
+      UPDATE "User"
+      SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{following}', ${followingJson}::jsonb, true)
+      WHERE id = ${viewerId}
+    `,
+    prisma.$executeRaw`
+      UPDATE "User"
+      SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{followerCount}', ${followerCount}::jsonb, true)
+      WHERE id = ${person.id}
+    `
   ])
   remembered.clear()
   return NextResponse.json({ following: !has })

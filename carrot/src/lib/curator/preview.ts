@@ -106,7 +106,11 @@ export async function pageImage(url: string): Promise<string | null> {
 export async function savePreview(remote: string, key: string): Promise<string | null> {
   try {
     const res = await fetch(remote, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CarrotPreview/1.0)', Accept: 'image/*' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; CarrotPreview/1.0)',
+        Accept: 'image/*',
+        ...(key.startsWith('http') ? { Referer: key } : {})
+      },
       signal: AbortSignal.timeout(12000),
       redirect: 'follow'
     })

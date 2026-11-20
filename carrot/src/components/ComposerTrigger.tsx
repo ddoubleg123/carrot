@@ -21,26 +21,24 @@ export default function ComposerTrigger({ onOpenModal }: ComposerTriggerProps) {
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {
     return (
-      <div className="relative -mx-6 px-[1px] mb-6">
+      <div className="relative mb-4">
         <div
-          className="relative bg-white rounded-2xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+          className="relative bg-white rounded-[18px] border border-[#E6E8EC] px-4 py-3.5 cursor-pointer"
           onClick={onOpenModal}
         >
           <div className="flex items-center gap-3">
-            {/* Placeholder avatar during hydration */}
             <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white font-semibold">
+              <div className="w-10 h-10 bg-[#FF6A00] rounded-full flex items-center justify-center text-white font-semibold">
                 U
               </div>
             </div>
             <div className="flex-1">
-              <div className="text-gray-500 text-lg">
+              <div className="text-[#8A8F98] text-[17px]">
                 What's happening?
               </div>
             </div>
-            <button className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-full shadow-sm relative overflow-hidden">
-              <span className="relative z-10">Create post</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-orange-200/75 via-white/25 to-transparent animate-wave"></div>
+            <button className="h-[38px] px-4 bg-[#FF6A00] text-white font-bold rounded-full">
+              Create post
             </button>
           </div>
         </div>
@@ -60,13 +58,12 @@ export default function ComposerTrigger({ onOpenModal }: ComposerTriggerProps) {
     : 'U';
 
   return (
-    <div className="relative -mx-6 px-[1px] mb-6">
+    <div className="relative mb-4">
       <div
-        className="relative bg-white rounded-2xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+        className="relative bg-white rounded-[18px] border border-[#E6E8EC] px-4 py-3.5 cursor-pointer"
         onClick={onOpenModal}
       >
         <div className="flex items-center gap-3">
-          {/* User Avatar */}
           <div className="flex-shrink-0">
             {avatarUrl ? (
               <Image
@@ -77,29 +74,24 @@ export default function ComposerTrigger({ onOpenModal }: ComposerTriggerProps) {
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white font-semibold">
+              <div className="w-10 h-10 bg-[#FF6A00] rounded-full flex items-center justify-center text-white font-semibold">
                 {initials}
               </div>
             )}
           </div>
-          
-          {/* Placeholder Text */}
-          <div className="flex-1">
-            <div className="text-gray-500 text-lg">
+          <div className="flex-1 text-left">
+            <div className="text-[#8A8F98] text-[17px]">
               What's happening?
             </div>
           </div>
-          
-          {/* Create Post Button */}
           <button
-            className="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-full shadow-sm relative overflow-hidden"
+            className="h-[38px] px-4 bg-[#FF6A00] text-white font-bold rounded-full"
             onClick={(e) => {
               e.stopPropagation();
               onOpenModal();
             }}
           >
-            <span className="relative z-10">Create post</span>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-orange-200/75 via-white/25 to-transparent animate-wave"></div>
+            Create post
           </button>
         </div>
       </div>

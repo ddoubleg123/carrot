@@ -10,7 +10,7 @@ export default function TrendingTopicsCard() {
   ];
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4 w-full border border-gray-100">
+    <div className="bg-white rounded-2xl p-4 w-full border border-[#E6E8EC]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <HashtagIcon className="h-5 w-5 text-orange-500" />

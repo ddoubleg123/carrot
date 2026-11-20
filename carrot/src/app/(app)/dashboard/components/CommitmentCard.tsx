@@ -20,7 +20,7 @@ import PostActionBar from "../../../../components/post/PostActionBar";
 import ShareSheet from "../../../../components/share/ShareSheet";
 import VideoErrorBoundary from "../../../../components/VideoErrorBoundary";
 import { youtubeEmbedSrc, youtubeIdFromText } from "../../../../lib/youtube";
-import { parseFeedPost, patchConversation } from "../../../../lib/feedPost";
+import { parseFeedPost, patchConversation, patchName } from "../../../../lib/feedPost";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -220,10 +220,29 @@ function FeedYoutube({ videoId, poster, postId }: { videoId: string; poster?: st
 }
 
 function ArticlePreview({ url, title, published, site, image, embedded }: { url: string; title: string; published: string; site: string; image?: string; embedded?: boolean }) {
+  const [src, setSrc] = useState(image || '')
+  const tried = useRef(false)
   let host = site
   if (!host) {
     try { host = new URL(url).hostname.replace(/^www\./, '') } catch {}
   }
+  const recover = () => {
+    if (tried.current || !url) {
+      setSrc('')
+      return
+    }
+    tried.current = true
+    fetch(`/api/internal/preview-image?url=${encodeURIComponent(url)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const next = typeof data?.image === 'string' ? data.image : ''
+        setSrc(next ? `${next}?v=${Date.now()}` : '')
+      })
+      .catch(() => setSrc(''))
+  }
+  useEffect(() => {
+    if (!src && url) recover()
+  }, [])
   return (
     <a
       href={url}
@@ -234,9 +253,9 @@ function ArticlePreview({ url, title, published, site, image, embedded }: { url:
         : 'mt-3 block overflow-hidden rounded-xl border border-gray-200 bg-white'}
       onClick={(event) => event.stopPropagation()}
     >
-      {image ? (
-        <div className="relative h-[150px] w-full overflow-hidden rounded-lg bg-gray-100">
-          <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+      {src ? (
+        <div className="relative h-[150px] w-full overflow-hidden rounded-lg bg-[#F6F3EE]">
+          <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover object-center" onError={recover} />
         </div>
       ) : null}
       <div className={embedded ? 'px-0.5 pt-3' : 'px-3 py-3'}>
@@ -263,12 +282,25 @@ function ProfileLink({ username, className, children }: { username?: string | nu
   )
 }
 
-function PostCopy({ content }: { content: string }) {
+function PostCopy({ content, name }: { content: string; name?: string }) {
+  const talk = patchConversation(content)
+  const patchLabel = String(name || '').trim() || (talk ? patchName(talk) : '')
+  const lines = content.split('\n')
+  const questionAt = lines.findIndex((line) => {
+    const trimmed = line.trim()
+    return trimmed.endsWith('?') && trimmed.length > 8 && !/^https?:\/\//.test(trimmed)
+  })
+  const question = questionAt >= 0 ? lines[questionAt].trim() : ''
   return (
     <>
-      {content.split('\n').map((line, index) => {
+      {question ? (
+        <span className="mb-2 block whitespace-normal text-[1.35rem] font-semibold leading-[1.15] tracking-[-0.03em] text-[#0B0B0F]">{question}</span>
+      ) : null}
+      {lines.map((line, index) => {
+        if (index === questionAt) return null
         const trimmed = line.trim()
         if (!trimmed) return <span key={index}>{'\n'}</span>
+        if (/^\/patch\/\S+$/.test(trimmed)) return null
         if (/^https?:\/\/\S+$/.test(trimmed)) {
           let host = trimmed
           try { host = new URL(trimmed).hostname.replace(/^www\./, '') } catch {}
@@ -287,6 +319,19 @@ function PostCopy({ content }: { content: string }) {
         }
         return <span key={index}>{line}{'\n'}</span>
       })}
+      {talk ? (
+        <Link
+          href={talk}
+          onClick={(event) => event.stopPropagation()}
+          className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[#E6E8EC] bg-[#FAFAF8] px-4 py-3 no-underline hover:border-[#FF6A00]"
+        >
+          <span>
+            <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF6A00]">In the patch</span>
+            <span className="mt-1 block text-[15px] font-semibold tracking-tight text-[#0B0B0F]">{patchLabel}</span>
+          </span>
+          <span className="text-sm font-semibold text-[#FF6A00]">Open</span>
+        </Link>
+      ) : null}
     </>
   )
 }
@@ -369,7 +414,12 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const { openPostModal } = useModalRoute();
   const router = useRouter();
   const talk = patchConversation(content);
+  const opened = useRef(false);
   const openCard = (panel?: 'transcript' | 'translate' | 'comments') => {
+    if (!opened.current) {
+      opened.current = true;
+      fetch(`/api/posts/${id}/open`, { method: 'POST' }).catch(() => void 0);
+    }
     if (talk) {
       router.push(talk);
       return;
@@ -594,11 +644,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
     if (innerBoxColor) dataAttrs[`data-${prefix}-inner-box-color`] = safeColor(innerBoxColor);
   }
 
-  // Compute gradient background if provided
-  const hasGradient = Boolean(props.gradientFromColor && props.gradientToColor);
-  const gradientCss = hasGradient
-    ? `linear-gradient(135deg, ${props.gradientFromColor}, ${props.gradientViaColor || props.gradientFromColor}, ${props.gradientToColor})`
-    : undefined;
+  // The sheet stays white. The post's saved color is only the left edge.
+  const hasGradient = false;
+  const gradientCss = undefined;
+  const edgeColor = props.gradientFromColor || props.gradientToColor || '';
 
   // Detect presence of any video media to avoid rendering images/GIF alongside video
   const hasVideoMedia = Boolean(cfUid || cfPlaybackUrlHls || videoUrl);
@@ -623,13 +672,12 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       onMouseLeave={() => setHovering(false)}
     >
       <div
-        className={[
-          hasGradient
-            ? "rounded-2xl shadow-sm p-4 bg-white border border-white/60"
-            : "bg-white border border-white/40 rounded-2xl shadow-sm p-4",
-        ].join(' ')}
+        className="bg-white border border-[#E6E8EC] rounded-[18px] p-4"
         data-card-inner
-        style={innerBoxColor ? { backgroundColor: innerBoxColor } : undefined}
+        style={{
+          ...(innerBoxColor ? { backgroundColor: innerBoxColor } : null),
+          ...(edgeColor ? { borderLeftWidth: 5, borderLeftColor: edgeColor } : null),
+        }}
       >
         {carrotText ? (
           <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
@@ -781,7 +829,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   className="bg-white/90 border border-white/60 rounded-lg p-3 sm:p-4 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
                   onClick={() => openCard()}
                 >
-                  <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} />
+                  <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} name={author?.name} />
                   {article ? (
                     <ArticlePreview
                       embedded
@@ -815,10 +863,10 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         ) : (
           content ? (
             <div
-              className="mt-3 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
+              className="mt-3 text-[15px] leading-relaxed text-[#60646C] whitespace-pre-wrap break-words cursor-pointer"
               onClick={() => openCard()}
             >
-              <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} />
+              <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} name={author?.name} />
             </div>
           ) : null
         )}
@@ -909,8 +957,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         {(cfUid || cfPlaybackUrlHls || videoUrl) && (
           <div className="mt-3">
             <div
-              className="rounded-xl p-2 relative group"
-              style={hasGradient ? { background: gradientCss } : undefined}
+              className="rounded-xl overflow-hidden relative group bg-[#141416]"
               onClick={(e) => {
                 // Prevent video clicks from opening PostModal
                 e.stopPropagation();

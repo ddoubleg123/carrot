@@ -56,6 +56,7 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
   };
   const proxVideo = (u?: string | null) => {
     if (!u) return null;
+    if (u.startsWith('/topic-videos/') && !u.includes('..')) return u;
     // For Firebase Storage URLs with signed tokens, use them directly (no proxy needed)
     if (u.includes('firebasestorage.googleapis.com') || u.includes('.appspot.com')) {
       try {

@@ -7,7 +7,9 @@ import { projectPost } from './_project';
 import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
 import { POSTS_SNAPSHOT, invalidateFeedCache } from '../../../lib/feedCache';
 import { createResilientFetch } from '@/lib/retryUtils';
-import { buildTimeline } from '@/lib/feedTimeline';
+import { buildTimeline, orderByTaste } from '@/lib/feedTimeline';
+import { subjectOf, TASTE_HOURS, TASTE_LEARN_AFTER } from '@/lib/taste';
+import { tasteForViewer } from '@/lib/tasteRecord';
 
 let botAuthorCache: { at: number; ids: Set<string> } | null = null
 
@@ -25,15 +27,34 @@ async function homeTimeline(posts: any[]) {
   const session = await auth()
   const viewerId = (session as { user?: { id?: string } } | null)?.user?.id || ''
   let following: string[] = []
+  let metadata: unknown = null
   if (viewerId) {
     const viewer = await prisma.user.findUnique({ where: { id: viewerId }, select: { metadata: true } })
-    const meta = viewer?.metadata
-    if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
-      const list = (meta as { following?: unknown }).following
+    metadata = viewer?.metadata
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      const list = (metadata as { following?: unknown }).following
       if (Array.isArray(list)) following = list.map(String)
     }
   }
-  return buildTimeline(posts, { viewerId, following, botIds: await botAuthorIds() })
+  const lined = buildTimeline(posts, { viewerId, following, botIds: await botAuthorIds() })
+  if (!viewerId) return { posts: lined, personal: false }
+  const taste = await tasteForViewer(viewerId, metadata).catch((error) => {
+    console.error('[taste] feed', error)
+    return null
+  })
+  if (!taste) return { posts: lined, personal: true }
+  const followed = new Set(following)
+  const ranked = orderByTaste(lined, {
+    signals: taste.signals,
+    learnAfter: TASTE_LEARN_AFTER,
+    hoursFor: (post) => {
+      const authorId = String(post.userId || '')
+      const username = (post as { User?: { username?: string | null } }).User?.username
+      const learned = taste.desks[subjectOf(username, authorId)] || 0
+      return learned + (followed.has(authorId) ? TASTE_HOURS.follow : 0)
+    }
+  })
+  return { posts: ranked, personal: true }
 }
 
 // POST /api/posts - create a new post
@@ -639,7 +660,8 @@ async function newerPosts(after: string) {
       _count: { select: { likes: true, comments: true } },
     },
   })
-  const response = NextResponse.json(await homeTimeline(shapeRows(posts)))
+  const feed = await homeTimeline(shapeRows(posts))
+  const response = NextResponse.json(feed.posts)
   response.headers.set('Cache-Control', 'no-store')
   return response
 }
@@ -664,9 +686,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     if (cachedPosts) {
       console.log('[GET /api/posts] Cache hit, returning cached data');
       if (!existsSync(POSTS_SNAPSHOT)) writePostsSnapshot(cachedPosts as any[]);
-      const response = NextResponse.json(await homeTimeline(cachedPosts as any[]));
-      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-      response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      const feed = await homeTimeline(cachedPosts as any[]);
+      const response = NextResponse.json(feed.posts);
+      if (feed.personal) {
+        response.headers.set('Cache-Control', 'private, no-store');
+      } else {
+        response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+        response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      }
       response.headers.set('X-Cache', 'HIT');
       return response;
     }
@@ -677,9 +704,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
       if (Date.now() - snapshot.savedAt > 60_000) {
         void loadPosts().catch(() => {});
       }
-      const response = NextResponse.json(await homeTimeline(snapshot.posts));
-      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-      response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      const feed = await homeTimeline(snapshot.posts);
+      const response = NextResponse.json(feed.posts);
+      if (feed.personal) {
+        response.headers.set('Cache-Control', 'private, no-store');
+      } else {
+        response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+        response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+      }
       response.headers.set('X-Cache', 'STALE');
       return response;
     }
@@ -687,9 +719,14 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     const shaped = await loadPosts();
     
     // Add caching headers for better performance
-    const response = NextResponse.json(await homeTimeline(shaped));
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
-    response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+    const feed = await homeTimeline(shaped);
+    const response = NextResponse.json(feed.posts);
+    if (feed.personal) {
+      response.headers.set('Cache-Control', 'private, no-store');
+    } else {
+      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+      response.headers.set('CDN-Cache-Control', 'public, s-maxage=300');
+    }
     response.headers.set('X-Cache', 'MISS');
     return response;
   }

@@ -209,6 +209,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         console.log('[proxVideo] URL already proxied, returning as-is:', u.substring(0, 100));
         return u;
       }
+
+      if (u.startsWith('/topic-videos/') && !u.includes('..')) {
+        return u;
+      }
       
       // Check if it's a data URI with video MIME type
       if (u.startsWith('data:')) {
@@ -1052,31 +1056,29 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     <VideoProvider>
       <div className="dashboard-feed-root">
         {/* Fixed Composer Container */}
-        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-100">
-          <div className="px-4" style={{ paddingTop: '32px', paddingBottom: '16px' }}>
+        <div className="sticky top-0 z-20 bg-[#F6F3EE]">
+          <div className="pb-3">
             {isModalComposer ? (
               <ComposerTrigger onOpenModal={() => setIsModalOpen(true)} />
             ) : (
               <ComposerDynamic onPost={handleCreateCommitment} onPostUpdate={handleUpdateCommitment} />
             )}
           </div>
-          {freshPosts.length > 0 && (
-            <div className="flex justify-center px-4 pb-3">
-              <button
-                type="button"
-                onClick={revealFresh}
-                className="rounded-full bg-[#1C1917] px-4 py-2 text-sm font-semibold text-white shadow-md"
-              >
-                {freshPosts.length === 1 ? '1 new post' : `${freshPosts.length} new posts`}
-              </button>
-            </div>
-          )}
         </div>
+        {freshPosts.length > 0 && (
+          <button
+            type="button"
+            onClick={revealFresh}
+            className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-[#1C1917] px-4 py-2 text-sm font-semibold text-white shadow-lg"
+          >
+            {freshPosts.length === 1 ? '1 new post' : `${freshPosts.length} new posts`}
+          </button>
+        )}
         
         {/* Scrollable Feed Content */}
         <div className="px-4">
           {/* Professional compact spacing for social media feed */}
-          <div className="space-y-3 mt-6">
+          <div className="space-y-4">
             {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).slice(0, visiblePostCount).map((commitment, index) => (
               <div key={commitment.id} data-post-index={index}>
                 <CommitmentCard

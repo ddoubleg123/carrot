@@ -2,10 +2,13 @@ import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { assertPublicUrl, PublicUrlError, readPublicUrl, textFromPdf } from '@/lib/learn/publicUrl'
-import { formatArticle } from '@/lib/learn/articleText'
+import { assertPublicUrl, PublicUrlError, readPublicUrl, resolveGoogleNews, textFromPdf } from '@/lib/learn/publicUrl'
+import { formatArticle, openedPassage } from '@/lib/learn/articleText'
 import { lookupWikipedia } from '@/lib/learn/wikipedia'
-import { pageThumbnail, pageThumbnails } from '@/lib/learn/hero'
+import { cardPhoto, pageThumbnail, pageThumbnails, questionPhoto } from '@/lib/learn/hero'
+import { youtubeIdFromText } from '@/lib/youtube'
+import { searchOpenShelf } from '@/lib/learn/openShelf'
+import { gatherMix } from '@/lib/learn/sourceMix'
 import { bridgeTerms, covers, leadToken, plainSentences, questionTokens, searchWord } from '@/lib/learn/terms'
 import { describePassage, explainPhotograph, lookupStatusPhoto, splitReading, statusPhotoTarget } from '@/lib/learn/readPhoto'
 import { readXPost } from '@/lib/learn/xPost'
@@ -114,9 +117,29 @@ export function topicSlug(question: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-    .replace(/-+$/g, '')
-  return slug || 'question'
+  if (!slug) return 'question'
+  if (slug.length <= 120) return slug
+  const cut = slug.slice(0, 120)
+  const hyphen = cut.lastIndexOf('-')
+  return (hyphen >= 50 ? cut.slice(0, hyphen) : cut).replace(/-+$/g, '') || 'question'
+}
+
+function preferredSlug(stored: string | undefined, question: string): string {
+  const fresh = topicSlug(question)
+  if (!stored) return fresh
+  if (stored === fresh || stored.startsWith(`${fresh}-`)) return stored
+  if (fresh.startsWith(stored) && stored.length >= 48) return fresh
+  return stored
+}
+
+export function topicTitleFromSlug(slug: string): string {
+  const words = slug.replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!words) return 'Question'
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+export function topicPath(handle: string, slug: string): string {
+  return `/patch/${handle}/${slug}`
 }
 
 function withSlugs(cards: TopicCard[]): TopicCard[] {
@@ -125,7 +148,7 @@ function withSlugs(cards: TopicCard[]): TopicCard[] {
   const byAge = (a: TopicCard, b: TopicCard) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
   const ordered = [...cards.filter((card) => card.slugLocked).sort(byAge), ...cards.filter((card) => !card.slugLocked).sort(byAge)]
   for (const card of ordered) {
-    let slug = card.slug || topicSlug(card.question)
+    let slug = preferredSlug(card.slug, card.question)
     if (taken.has(slug)) {
       let n = 2
       while (taken.has(`${slug}-${n}`)) n += 1
@@ -135,7 +158,7 @@ function withSlugs(cards: TopicCard[]): TopicCard[] {
     assigned.set(card.id, slug)
   }
   return cards.map((card) => {
-    const next = { ...card, slug: assigned.get(card.id) || topicSlug(card.question) }
+    const next = { ...card, slug: assigned.get(card.id) || preferredSlug(card.slug, card.question) }
     delete next.slugLocked
     return next
   })
@@ -161,6 +184,7 @@ async function nextSlug(patchId: string, question: string): Promise<string> {
 export async function topicLabel(patchId: string, key: string): Promise<{ question: string; slug: string } | null> {
   const topics = await listTopics(patchId, '')
   const found = topics.find((topic) => topic.id === key || topic.slug === key)
+    || topics.find((topic) => key.length >= 48 && (topic.slug.startsWith(key) || key.startsWith(topic.slug)))
   return found ? { question: found.question, slug: found.slug } : null
 }
 
@@ -203,7 +227,7 @@ export function contentTitle(text: string, fallback = 'Post'): string {
 
 export function readableQuote(raw: string): string {
   const paragraphs = formatArticle(raw).flatMap((block) => block.paragraphs)
-  return paragraphs.join('\n\n').slice(0, 1400)
+  return openedPassage(paragraphs.join('\n\n').slice(0, 1400))
 }
 
 function focusedQuote(text: string, tokens: string[], groupTitle: string, question = '', title = ''): string {
@@ -238,11 +262,46 @@ function termQuote(text: string, term: string, tokens: string[], groupTitle: str
   return readableQuote((withLead.length ? withLead : withGroup).slice(0, 2).join(' '))
 }
 
+function sourceKindKey(item: TopicSource): string {
+  if (item.video || /youtu\.be|youtube\.com/i.test(item.url)) return 'video'
+  if (/\.pdf($|\?)/i.test(item.url) || /\/pdf\//i.test(item.url)) return 'pdf'
+  if (item.image && (/commons\.wikimedia\.org/i.test(item.url) || item.quote.length < 320)) return 'photo'
+  if (item.domain === 'x.com' || item.domain === 'twitter.com') return 'post'
+  if (/wikipedia\.org/i.test(item.url)) return 'background'
+  return 'article'
+}
+
+function takeDiverse(items: TopicSource[], limit = 10): TopicSource[] {
+  const buckets = new Map<string, TopicSource[]>()
+  for (const item of items) {
+    const key = sourceKindKey(item)
+    buckets.set(key, [...(buckets.get(key) || []), item])
+  }
+  const order = ['article', 'background', 'pdf', 'video', 'photo', 'post']
+  const picked: TopicSource[] = []
+  const seen = new Set<string>()
+  while (picked.length < limit) {
+    let added = false
+    for (const key of order) {
+      const next = (buckets.get(key) || []).find((item) => !seen.has(item.url))
+      if (!next) continue
+      seen.add(next.url)
+      picked.push(next)
+      added = true
+      if (picked.length >= limit) break
+    }
+    if (!added) break
+  }
+  return picked
+}
+
 export async function gatherTopicSources(question: string, groupTitle: string, skipUrls: string[] = []): Promise<TopicSource[]> {
   const specific = questionTokens(question, groupTitle)
   const searchQuery = specific.length ? `${groupTitle} ${specific.map((token) => searchWord(token)).join(' ')}` : groupTitle
   const outside = searchScholarly(specific.length ? `${specific.map((token) => searchWord(token)).join(' ')} ${groupTitle}` : question, specific, groupTitle)
   const posts = searchPosts(specific, groupTitle)
+  const mixed = gatherMix(question, specific)
+  const shelf = searchOpenShelf(question, specific)
   const page = await lookupWikipedia(searchQuery, groupTitle, specific).catch(() => null)
   const found: TopicSource[] = []
   const blocked = new Set(skipUrls)
@@ -253,8 +312,9 @@ export async function gatherTopicSources(question: string, groupTitle: string, s
     const aboutGroup = !groupTitle || covers(hay, [groupTitle])
     if (!clean || (specific.length > 0 && hits < 1)) return
     if (specific.length === 1 && !aboutGroup) return
-    if (specific.length > 2 && hits < 2) return
-    if (blocked.has(url) || found.some((item) => item.url === url)) return
+    if (specific.length > 6 && hits < 2) return
+    if (blocked.has(url) || found.some((item) => item.url === url || sameDocument(item.url, url))) return
+    if (found.filter((item) => item.domain === domainOf(url)).length >= 3) return
     found.push({
       id: idFor(),
       title,
@@ -288,7 +348,6 @@ export async function gatherTopicSources(question: string, groupTitle: string, s
   }
   const papers = await outside.catch(() => [])
   for (const paper of papers) {
-    if (found.length >= 5) break
     const quote = focusedQuote(paper.text, specific, groupTitle, question, paper.title) || readableQuote(paper.text)
     add(paper.title, paper.url, quote)
   }
@@ -313,9 +372,21 @@ export async function gatherTopicSources(question: string, groupTitle: string, s
       seen.push(follow.main.title)
     }
   }
-  const fromX = found.filter((item) => item.domain === 'x.com' || item.domain === 'twitter.com').slice(0, 2)
+  const extra = await mixed.catch(() => [])
+  for (const item of extra) {
+    add(item.title, item.url, item.quote)
+    const saved = found.find((source) => source.url === item.url)
+    if (saved && item.image) saved.image = item.image
+  }
+  const shelved = await shelf.catch(() => [])
+  for (const item of shelved) {
+    add(item.title, item.url, item.quote)
+    const saved = found.find((source) => source.url === item.url)
+    if (saved && item.image) saved.image = item.image
+  }
+  const postsKept = found.filter((item) => item.domain === 'x.com' || item.domain === 'twitter.com').slice(0, 2)
   const rest = found.filter((item) => item.domain !== 'x.com' && item.domain !== 'twitter.com')
-  return [...rest.slice(0, 5 - fromX.length), ...fromX]
+  return takeDiverse([...rest, ...postsKept], 10)
 }
 
 function directionWords(lookFor: string): string[] {
@@ -459,7 +530,7 @@ function readMeta(value: unknown): TopicMeta | null {
     adminName: typeof meta.adminName === 'string' ? meta.adminName : 'Member',
     note: typeof meta.note === 'string' ? meta.note : '',
     image: typeof meta.image === 'string' ? meta.image : undefined,
-    slug: typeof meta.slug === 'string' ? meta.slug.slice(0, 96) : '',
+    slug: typeof meta.slug === 'string' ? meta.slug.slice(0, 160) : '',
     pending: Array.isArray(meta.pending) ? meta.pending.filter((item) => item && typeof item.url === 'string' && typeof item.quote === 'string') : [],
     unrelated: Array.isArray(meta.unrelated) ? meta.unrelated.flatMap((item) => keptSource(item)) : [],
     skipped: Array.isArray(meta.skipped) ? meta.skipped.filter((item): item is string => typeof item === 'string') : [],
@@ -576,6 +647,149 @@ export async function listTopics(patchId: string, viewerId: string): Promise<Top
   }))
 }
 
+const SOURCE_TARGET = 10
+
+function rasterUrl(url?: string | null): string {
+  if (!url || !/^https?:\/\//i.test(url)) return ''
+  if (/i\.ytimg\.com\/vi\//i.test(url)) return url
+  return /\.(jpe?g|png|webp)(\?|$)/i.test(url) ? url : ''
+}
+
+function storedThumb(topic: TopicCard): string {
+  for (const source of topic.sources) {
+    const videoId = youtubeIdFromText(source.url) || youtubeIdFromText(source.video)
+    if (videoId) return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  }
+  for (const source of topic.sources) {
+    const image = rasterUrl(source.image)
+    if (image) return image
+  }
+  return ''
+}
+
+async function stampImage(id: string, image: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE discovered_content
+    SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{image}', to_jsonb(${image}::text), true)
+    WHERE id = ${id} AND type = 'topic'
+  `
+}
+
+export async function fillTopicPhotos(_patchId: string, _groupTitle: string, topics: TopicCard[]): Promise<TopicCard[]> {
+  const need = topics.filter((topic) => !rasterUrl(topic.image))
+  const bare: TopicCard[] = []
+  await Promise.all(need.map(async (topic) => {
+    const local = storedThumb(topic)
+    if (!local) {
+      bare.push(topic)
+      return
+    }
+    topic.image = local
+    await stampImage(topic.id, local).catch(() => undefined)
+  }))
+  const lookup = bare.slice(0, 4)
+  await Promise.race([
+    Promise.all(lookup.map(async (topic) => {
+      const photo = await cardPhoto(topic.question).catch(() => null)
+      if (!photo) return
+      topic.image = photo
+      await stampImage(topic.id, photo).catch(() => undefined)
+    })),
+    new Promise((resolve) => setTimeout(resolve, 4000))
+  ])
+  return topics
+}
+
+export async function widenTopics(patchId: string, groupTitle: string, topics: TopicCard[], focus = ''): Promise<TopicCard[]> {
+  const focused = focus
+    ? topics.filter((topic) => topic.id === focus || topic.slug === focus || (focus.length >= 48 && (topic.slug.startsWith(focus) || focus.startsWith(topic.slug))))
+    : []
+  const rest = topics.filter((topic) => !focused.includes(topic))
+  const ordered = [...focused, ...rest]
+  const needSources = ordered.filter((topic) => topic.sources.length < SOURCE_TARGET).slice(0, focus ? 1 : 2)
+  const sourceIds = new Set(needSources.map((topic) => topic.id))
+  const needRepair = ordered.filter((topic) => !sourceIds.has(topic.id) && topic.sources.some(sourceNeedsRepair)).slice(0, focus ? 1 : 1)
+  const needImages = ordered.filter((topic) => !topic.image && !sourceIds.has(topic.id) && !needRepair.includes(topic)).slice(0, 8)
+  await Promise.race([
+    Promise.all([
+      ...needImages.map((topic) => widenOne(patchId, groupTitle, topic, false)),
+      ...needRepair.map((topic) => widenOne(patchId, groupTitle, topic, false)),
+      ...needSources.map((topic) => widenOne(patchId, groupTitle, topic, true))
+    ]),
+    new Promise((resolve) => setTimeout(resolve, focus ? 25000 : 12000))
+  ])
+  return ordered
+}
+
+function sourceNeedsRepair(source: TopicSource): boolean {
+  if (/news\.google\.com\/(?:rss\/)?articles\//i.test(source.url)) return true
+  if (/youtube\.com|youtu\.be|x\.com|twitter\.com|wikipedia\.org|archive\.org/i.test(source.url)) return false
+  const quote = source.quote.trim()
+  if (quote.length < 140 && source.title && quote.startsWith(source.title.slice(0, 24))) return true
+  return /^[a-z]/.test(quote) || /^[A-Z] [a-z]{3,}/.test(quote) || /Last modified on/i.test(quote)
+}
+
+async function repairSources(meta: TopicMeta, question: string, groupTitle: string): Promise<boolean> {
+  const pending = meta.sources.filter(sourceNeedsRepair).slice(0, 4)
+  const results = await Promise.all(pending.map(async (source) => {
+    const wasNews = /news\.google\.com/i.test(source.url)
+    const publisher = await resolveGoogleNews(source.url).catch(() => source.url)
+    const page = await readPublicUrl(publisher).catch(() => null)
+    if (!page?.text || page.text.trim().length < 80) {
+      if (publisher !== source.url && /^https:\/\//i.test(publisher)) {
+        source.url = publisher
+        source.domain = domainOf(publisher)
+        return true
+      }
+      return false
+    }
+    const quote = quoteFromMemberPage(page.text, question, groupTitle, '') || readableQuote(page.text)
+    if (quote.trim().length < 40) return false
+    source.url = page.finalUrl
+    source.domain = domainOf(page.finalUrl)
+    source.quote = quote
+    if (wasNews && page.title) source.title = page.title.replace(/\s+\|\s+.*$/, '').slice(0, 180)
+    if (source.summary && /^[a-z]/.test(source.summary.trim())) source.summary = undefined
+    return true
+  }))
+  return results.some(Boolean)
+}
+
+async function widenOne(patchId: string, groupTitle: string, topic: TopicCard, sources: boolean): Promise<void> {
+  const row = await topicRow(patchId, topic.id)
+  const meta = row ? readMeta(row.metadata) : null
+  if (!row || !meta) return
+  let changed = false
+  if (await repairSources(meta, row.title, groupTitle).catch(() => false)) changed = true
+  if (!meta.image) {
+    const photo = await questionPhoto(topic.question).catch(() => null)
+    if (photo) {
+      meta.image = photo
+      changed = true
+    }
+  }
+  if (sources && meta.sources.length < SOURCE_TARGET) {
+    const more = await gatherTopicSources(topic.question, groupTitle, meta.sources.map((source) => source.url)).catch(() => [])
+    const fresh = more.filter((item) => !meta.sources.some((have) => sameDocument(have.url, item.url)))
+    if (fresh.length) {
+      meta.sources = [...meta.sources, ...fresh].slice(0, 24)
+      changed = true
+    }
+  }
+  const freshSlug = preferredSlug(meta.slug, row.title)
+  if (freshSlug && freshSlug !== meta.slug) {
+    meta.slug = freshSlug
+    changed = true
+  }
+  if (!changed) return
+  await writeMeta(row.id, meta, row.title)
+  const card = toCard({ ...row, metadata: meta }, '')
+  if (!card) return
+  topic.sources = card.sources
+  topic.image = card.image
+  topic.slug = preferredSlug(card.slug, card.question)
+}
+
 export async function createTopic(options: {
   patchId: string
   question: string
@@ -586,11 +800,14 @@ export async function createTopic(options: {
   skipImage?: boolean
 }): Promise<TopicCard> {
   const question = options.question.trim().slice(0, 240)
-  const gathered = options.sources || await gatherTopicSources(question, options.groupTitle).catch(() => [])
+  const [gathered, photo] = await Promise.all([
+    options.sources ? Promise.resolve(options.sources) : gatherTopicSources(question, options.groupTitle).catch(() => [] as TopicSource[]),
+    options.skipImage ? Promise.resolve(null) : questionPhoto(question).catch(() => null)
+  ])
   const remembered = options.sources ? [] : await rememberedSources(options.patchId, question, options.groupTitle, gathered.map((source) => source.url)).catch(() => [])
   const sources = [...remembered, ...gathered.filter((source) => !remembered.some((item) => item.url && item.url === source.url))].slice(0, 24)
   const leadTitles = questionTokens(question, options.groupTitle).includes('jfk') ? ['John F. Kennedy'] : []
-  const image = options.skipImage ? null : await pageThumbnail([...leadTitles, ...sources.map((source) => source.title)]).catch(() => null)
+  const image = photo || (options.skipImage ? null : await pageThumbnail([...leadTitles, ...sources.map((source) => source.title)]).catch(() => null))
   const token = `${Date.now().toString(36)}${idFor()}`
   const url = `https://topic.carrot/${options.patchId}/${token}`
   const meta: TopicMeta = {

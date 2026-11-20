@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
           ? await addTopicUploadedVideo(allowed.patch.id, id, session.user.id, member, bytes, file.type, file.name)
           : await addTopicImageSource(allowed.patch.id, id, session.user.id, member, bytes, file.type, caption)
       if (!topic) return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-      await showFollowers(session.user.id, `Added a file on ${allowed.patch.title}: ${topic.question} /patch/${handle}?topic=${topic.slug}`)
+      await showFollowers(session.user.id, `Added a file on ${allowed.patch.title}: ${topic.question} /patch/${handle}/${topic.slug}`)
       return NextResponse.json({ topic })
     } catch (error) {
       const message = error instanceof PublicUrlError ? error.message : 'Could not save that file.'
@@ -77,7 +77,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
       if (text.length < 1) return NextResponse.json({ error: 'Write a reply first.' }, { status: 400 })
       const topic = await addTopicReply(allowed.patch.id, id, session.user.id, name, text)
       if (!topic) return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-      await showFollowers(session.user.id, `Replied on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}?topic=${topic.slug}`)
+      await showFollowers(session.user.id, `Replied on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}/${topic.slug}`)
       return NextResponse.json({ topic })
     }
     if (action === 'image') {
@@ -93,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
       if (text.length < 3) return NextResponse.json({ error: 'Ask about something specific.' }, { status: 400 })
       const topic = await askTopic(allowed.patch.id, id, allowed.patch.title, session.user.id, name, text)
       if (!topic) return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-      await showFollowers(session.user.id, `Asked on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}?topic=${topic.slug}`)
+      await showFollowers(session.user.id, `Asked on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}/${topic.slug}`)
       return NextResponse.json({ topic })
     }
     if (action === 'clip') {
@@ -104,7 +104,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
         title: typeof body?.title === 'string' ? body.title : ''
       })
       if (!topic) return NextResponse.json({ error: 'Select a longer passage first.' }, { status: 400 })
-      await showFollowers(session.user.id, `Added a passage on ${allowed.patch.title}: ${topic.question} /patch/${handle}?topic=${topic.slug}`)
+      await showFollowers(session.user.id, `Added a passage on ${allowed.patch.title}: ${topic.question} /patch/${handle}/${topic.slug}`)
       return NextResponse.json({ topic })
     }
     if (action === 'text') {
@@ -112,7 +112,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
       if (text.length < 1) return NextResponse.json({ error: 'Write something first.' }, { status: 400 })
       const topic = await addTopicText(allowed.patch.id, id, session.user.id, name, text)
       if (!topic) return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-      await showFollowers(session.user.id, `Wrote on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}?topic=${topic.slug}`)
+      await showFollowers(session.user.id, `Wrote on ${allowed.patch.title}: ${text.slice(0, 180)} /patch/${handle}/${topic.slug}`)
       return NextResponse.json({ topic })
     }
     if (action === 'search') {

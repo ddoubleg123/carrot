@@ -1,14 +1,15 @@
 'use client'
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Download, MessageCircle, Search, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { formatArticle } from '@/lib/learn/articleText'
+import { formatArticle, openedPassage } from '@/lib/learn/articleText'
 import RichComposer from '@/components/messaging/RichComposer'
 import CommentBody from '@/components/messaging/CommentBody'
 import { decodeComment, encodeComment } from '@/components/messaging/commentCodec'
 import { uploadFileToFirebase } from '@/lib/uploadToFirebase'
 import CFVideoPlayer from '@/components/CFVideoPlayer'
+import { youtubeEmbedSrc, youtubeIdFromText } from '@/lib/youtube'
 
 interface AskViewProps {
   patch: {
@@ -96,19 +97,44 @@ interface TopicCard {
   createdAt: string
 }
 
-function CardPhoto({ src, className }: { src: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) {
+function cardCandidates(topic: TopicCard): string[] {
+  const urls: string[] = []
+  const add = (url?: string | null) => {
+    if (!url || !/^https?:\/\//i.test(url) || urls.includes(url)) return
+    urls.push(url)
+  }
+  const raster = (url?: string | null) => Boolean(url && /\.(jpe?g|png|webp)(\?|$)/i.test(url))
+  if (raster(topic.image) || (topic.image && topic.image.includes('i.ytimg.com'))) add(topic.image)
+  for (const source of topic.sources) {
+    const videoId = youtubeIdFromText(source.url) || youtubeIdFromText(source.video)
+    if (videoId) add(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`)
+  }
+  for (const source of topic.sources) {
+    if (raster(source.image)) add(source.image)
+  }
+  add(topic.image)
+  return urls
+}
+
+function cardThumb(topic: TopicCard): string {
+  return cardCandidates(topic)[0] || ''
+}
+
+function CardPhoto({ src, className }: { src: string | string[]; className?: string }) {
+  const list = (Array.isArray(src) ? src : [src]).filter(Boolean)
+  const [index, setIndex] = useState(0)
+  const current = list[index]
+  if (!current) {
     return <div className={`h-full w-full bg-gradient-to-br from-[#1F2937] via-[#7C2D12] to-[#FF6A00] ${className || ''}`} />
   }
-  const proxied = src.startsWith('/') ? src : `/api/img?url=${encodeURIComponent(src)}`
   return (
     <img
-      src={proxied}
+      src={current}
       alt=""
       loading="lazy"
+      referrerPolicy="no-referrer"
       className={`h-full w-full object-cover object-[center_18%] ${className || ''}`}
-      onError={() => setFailed(true)}
+      onError={() => setIndex((value) => value + 1)}
     />
   )
 }
@@ -146,7 +172,7 @@ function Quote({ text }: { text: string }) {
 }
 
 function sourceKind(source: TopicSource): 'video' | 'photo' | 'passage' {
-  if (source.video || source.cfUid) return 'video'
+  if (source.video || source.cfUid || /youtu\.be|youtube\.com/i.test(source.url)) return 'video'
   if (source.image) return 'photo'
   return 'passage'
 }
@@ -326,9 +352,22 @@ function SpokenWords({ listen, videoUrl }: { listen: Listen; videoUrl: string })
 function isPdfSource(url: string): boolean {
   if (url.startsWith('/topic-docs/') && !url.includes('..')) return url.toLowerCase().endsWith('.pdf')
   try {
-    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
+    const parsed = new URL(url)
+    return parsed.pathname.toLowerCase().endsWith('.pdf') || /\/pdf(\/|$)/i.test(parsed.pathname) || /[?&](format|type)=pdf\b/i.test(parsed.search)
   } catch {
     return false
+  }
+}
+
+function archiveEmbed(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname !== 'archive.org' && !parsed.hostname.endsWith('.archive.org')) return ''
+    const [slot, id] = parsed.pathname.split('/').filter(Boolean)
+    if (!id || (slot !== 'details' && slot !== 'embed' && slot !== 'stream')) return ''
+    return `https://archive.org/embed/${encodeURIComponent(id)}`
+  } catch {
+    return ''
   }
 }
 
@@ -561,32 +600,48 @@ function SourceCard({
     return () => { cancelled = true }
   }, [open, expanded, captionUrl, source.quote.length, transcript])
   const external = source.url.startsWith('http')
-  const pdf = isPdfSource(source.url)
-  const xStatus = isXStatus(source.url) && !source.video && !source.cfUid && !source.image?.startsWith('/')
-  const photo = source.image ? (source.image.startsWith('/') ? source.image : `/api/img?url=${encodeURIComponent(source.image)}`) : ''
+  const hosted = source.video && !youtubeIdFromText(source.video) ? source.video : ''
+  const youtube = !source.cfUid && !hosted ? (youtubeIdFromText(source.url) || youtubeIdFromText(source.video)) : null
+  const archive = !source.cfUid && !hosted && !youtube ? archiveEmbed(source.url) : ''
+  const pdf = !archive && isPdfSource(source.url)
+  const xStatus = isXStatus(source.url) && !hosted && !source.cfUid && !youtube
+  const photo = source.image || (/\.(jpe?g|png|gif|webp)(\?|$)/i.test(source.url) ? source.url : '')
   const longQuote = (source.video || source.cfUid) && source.quote.length > 280
-  const heavy = pdf || xStatus || Boolean(source.video || source.cfUid || photo)
   const label = contentLabel(source)
-  const preview = previewText(source)
-  const summary = whyItMatters(source)
-  const titleKey = label.replace(/…$/, '').slice(0, 48)
-  const sameAsTitle = Boolean(titleKey) && (preview.startsWith(titleKey) || titleKey.startsWith(preview.slice(0, 48)))
+  const passage = openedPassage(source.quote)
+  const summaryText = whyItMatters(source)
+  const summary = summaryText && !/^[a-z]/.test(summaryText.trim()) && !passage.toLowerCase().includes(summaryText.trim().slice(0, 48).toLowerCase()) ? summaryText : ''
   return (
-    <article id={`source-${source.id}`} className="scroll-mt-24 overflow-hidden rounded-[18px] border border-[#E6E8EC] bg-white">
-      {open && source.cfUid ? (
+    <article id={`source-${source.id}`} className="scroll-mt-24 border-b border-[#E6E8EC]">
+      <button type="button" onClick={toggle} className="grid w-full grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-3 py-3.5 text-left sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-[#FF6A00]">{sourceTag(source)}</span>
+        <span className={`min-w-0 font-medium text-[#0B0B0F] ${open ? '' : 'truncate'}`}>{label}</span>
+        <span className="hidden truncate text-[13px] text-[#8A8F98] sm:block">{source.domain}</span>
+      </button>
+      {open && (
+      <div className="pb-4 sm:pl-[6.7rem]">
+      {source.cfUid ? (
         <CFVideoPlayer uid={source.cfUid} autoPlay={false} muted={false} loop={false} controls poster={photo || undefined} />
       ) : null}
-      {open && !source.cfUid && source.video ? (
+      {hosted ? (
         <>
-          <video src={source.video} controls playsInline preload="none" poster={photo || undefined} className="max-h-[28rem] w-full bg-black" />
-          {listen && source.video.startsWith('/topic-videos/') && source.video.toLowerCase().endsWith('.mp4') && (
-            <SpokenWords listen={listen} videoUrl={source.video} />
+          <video src={hosted} controls playsInline preload="metadata" poster={photo || undefined} className="mt-1 max-h-[28rem] w-full rounded-[14px] bg-black" />
+          {listen && hosted.startsWith('/topic-videos/') && hosted.toLowerCase().endsWith('.mp4') && (
+            <SpokenWords listen={listen} videoUrl={hosted} />
           )}
         </>
       ) : null}
-      {open && !source.cfUid && !source.video && photo ? (
-        <button type="button" onClick={() => setFull(true)} className="block w-full bg-[#F4F5F7]">
-          <img src={photo} alt="" className="mx-auto max-h-80 w-full object-contain" />
+      {youtube ? (
+        <div className="mt-1 aspect-video w-full overflow-hidden rounded-[14px] bg-black">
+          <iframe title={label} src={youtubeEmbedSrc(youtube, false)} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+        </div>
+      ) : null}
+      {archive ? (
+        <iframe title={label} src={archive} className="mt-1 h-[75vh] min-h-[32rem] w-full rounded-[14px] border border-[#E6E8EC] bg-white" allowFullScreen />
+      ) : null}
+      {!source.cfUid && !hosted && !youtube && !archive && photo ? (
+        <button type="button" onClick={() => setFull(true)} className="mt-1 block w-full bg-[#F4F5F7]">
+          <img src={photo} alt="" referrerPolicy="no-referrer" className="mx-auto max-h-[28rem] w-full object-contain" />
         </button>
       ) : null}
       {full && photo && (
@@ -597,13 +652,9 @@ function SourceCard({
           <img src={photo} alt="" className="mx-auto mb-10 w-auto max-w-[96vw]" onClick={(event) => event.stopPropagation()} />
         </div>
       )}
-      <div className="p-5">
-        <p className="text-xs uppercase tracking-wide text-[#60646C]">{sourceTag(source)}</p>
-        <h3 className="mt-1 text-xl font-semibold tracking-tight text-[#0B0B0F]">{label}</h3>
-        {open ? (
-          xStatus ? <div className="mt-3"><XPostBody url={source.url} fallback={source.quote} listen={listen} /></div> : (
+        {xStatus ? <div className="mt-3"><XPostBody url={source.url} fallback={source.quote} listen={listen} /></div> : (
             <>
-              {summary && !source.quote.toLowerCase().includes('why it matters') && (
+              {summary && (
                 <div className="mt-3">
                   <p className="text-xs uppercase tracking-wide text-[#60646C]">Why it matters</p>
                   <p className="mt-2 whitespace-pre-line text-[15px] leading-7 text-[#0B0B0F]">{summary}</p>
@@ -611,7 +662,7 @@ function SourceCard({
               )}
               {pdf ? <PdfView url={source.url} title={label} /> : (
                 <div className={longQuote && !expanded ? 'mt-3 max-h-72 overflow-y-auto pr-1' : 'mt-3'}>
-                  <Quote text={expanded && transcript ? transcript : source.quote} />
+                  <Quote text={expanded && transcript ? transcript : passage} />
                 </div>
               )}
               {!pdf && longQuote && (
@@ -620,21 +671,8 @@ function SourceCard({
                 </button>
               )}
             </>
-          )
-        ) : summary ? (
-          <div className="mt-2">
-            <p className="text-xs uppercase tracking-wide text-[#60646C]">Why it matters</p>
-            <p className="mt-1 whitespace-pre-line text-[15px] leading-6 text-[#3F3F46]">{summary}</p>
-          </div>
-        ) : (
-          !sameAsTitle && preview ? <p className="mt-2 line-clamp-2 text-[15px] leading-6 text-[#3F3F46]">{preview}</p> : null
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {(heavy || preview.length > 140 || Boolean(summary)) && (
-            <button type="button" onClick={toggle} className="rounded-full border border-[#E6E8EC] bg-white px-3.5 py-2 text-sm font-semibold">
-              {open ? 'Close' : 'Read more'}
-            </button>
           )}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           {external && (
             <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#FF6A00]">
               {source.domain || 'Source link'}
@@ -649,6 +687,7 @@ function SourceCard({
         <SourceNotes source={source} canNote={canNote} busy={busy} onNote={onNote} />
         {children}
       </div>
+      )}
     </article>
   )
 }
@@ -1122,6 +1161,7 @@ function TopicRoom({
   setDragging,
   onBack,
   patchHandle,
+  patchName,
   onUpdate,
   onUpload,
   onUploadPdfs,
@@ -1145,6 +1185,7 @@ function TopicRoom({
   setDragging: (value: boolean) => void
   onBack: () => void
   patchHandle: string
+  patchName: string
   onUpdate: (action: 'reply' | 'source' | 'image' | 'search' | 'approve' | 'deny' | 'ask' | 'text' | 'video' | 'clip' | 'vote' | 'archive' | 'restore' | 'addendum', payload: Record<string, string>) => Promise<boolean>
   onUpload: (file: File) => void
   onUploadPdfs: (files: File[]) => void
@@ -1187,7 +1228,6 @@ function TopicRoom({
     ['video', 'Video', 'A copy we host'],
     ['write', 'Write', 'Something you know']
   ] as const
-  const hosted = topic.sources.filter((source) => source.video || source.cfUid).length
   const sections = topic.sources.some((source) => sourceYear(source))
     ? ['timeline', 'record', 'add', 'discussion']
     : ['record', 'add', 'discussion']
@@ -1210,16 +1250,17 @@ function TopicRoom({
   })
 
   return (
-    <article className="mx-auto mt-2 max-w-5xl">
-      <div className="sticky top-0 z-30 flex items-center justify-between bg-white/95 py-3 backdrop-blur">
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-[#60646C]">
+    <article id="question-top" className="mx-auto mt-2 max-w-5xl">
+      <div className="flex items-center justify-between gap-3 bg-white py-3">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-[#60646C]">
           <ArrowLeft className="h-4 w-4" />
           Questions
         </button>
+        <span className="truncate text-[11px] font-bold uppercase tracking-[0.12em] text-[#FF6A00]">{patchName}</span>
         <button
           type="button"
           onClick={async () => {
-            const url = `${window.location.origin}/patch/${patchHandle}?topic=${topic.slug || topic.id}`
+            const url = `${window.location.origin}/patch/${patchHandle}/${topic.slug || topic.id}`
             try {
               await navigator.clipboard.writeText(url)
               setCopied(true)
@@ -1228,27 +1269,28 @@ function TopicRoom({
               setCopied(false)
             }
           }}
-          className="h-12 rounded-full bg-[#FF6A00] px-6 text-base font-semibold text-white shadow-sm"
+          className="h-10 shrink-0 rounded-full bg-[#FF6A00] px-4 text-sm font-semibold text-white"
         >
           {copied ? 'Link copied' : 'Share'}
         </button>
       </div>
       <div className="mt-4 flex gap-4">
         <div className="h-24 w-16 shrink-0 overflow-hidden rounded-md bg-[#141414]">
-          <CardPhoto src={topic.image} />
+                <CardPhoto src={cardCandidates(topic)} />
         </div>
         <div className="min-w-0">
-          <h2 className="text-2xl font-semibold tracking-tight text-[#0B0B0F] md:text-3xl">{topic.question}</h2>
-          <p className="mt-2 text-sm text-[#60646C]">Asked by {topic.adminName}{topic.isAdmin ? ' · You started this' : ' · You can add to it and comment'}</p>
+          <h2 className="text-[1.7rem] font-semibold leading-tight tracking-tight text-[#0B0B0F] md:text-[2rem]">{topic.question}</h2>
+          <p className="mt-2 text-sm text-[#60646C]">{topic.adminName}{topic.isAdmin ? ' · You started this' : ''} <span title="Sources are the quoted record. Comments are discussion. A claim inside a source is not a finding." className="ml-1 rounded-full border border-[#E6E8EC] px-2 py-0.5 text-xs text-[#3F3F46]">Quotes only</span></p>
         </div>
       </div>
       {topic.note.trim() && (
         <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-[#0B0B0F]">{topic.note}</p>
       )}
 
-      <p className="mt-5 rounded-[14px] border border-[#E6E8EC] bg-white px-4 py-3 text-sm text-[#0B0B0F]">
-        {topic.sources.length} kept sources{hosted > 0 ? ` · ${hosted} hosted video${hosted === 1 ? '' : 's'}` : ''} · {topic.replies.length} comments. Sources are the quoted record. Comments are discussion. A claim inside a source is not a finding.
-      </p>
+      <section className="mt-5 rounded-2xl border-l-4 border-[#8A8F98] bg-[#F7F4EF] px-5 py-4">
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#6B7079]">Not checked yet</p>
+        <h3 className="mt-1 text-lg font-semibold leading-snug tracking-tight text-[#0B0B0F]">{topic.sources.length} {topic.sources.length === 1 ? 'source' : 'sources'} in the record. The quotes have not been checked against this question.</h3>
+      </section>
       <nav className="mt-4 flex flex-wrap gap-2">
         {sections.map((id) => (
           <button key={id} type="button" onClick={() => {
@@ -1267,9 +1309,8 @@ function TopicRoom({
       <SourceTimeline sources={topic.sources} onOpen={revealSource} />
       <section id="record" ref={saved} className="mt-8">
         {notice && <p className="mb-3 text-sm font-medium text-[#0B0B0F]">{notice}</p>}
-        <h3 className="text-2xl font-semibold tracking-tight text-[#0B0B0F]">Record</h3>
-        <p className="mt-1 text-sm text-[#60646C]">The post or the player, then the words. A claim in a post is not a finding.</p>
-        <div className="mt-4 space-y-4">
+        <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#0B0B0F]">Sources <span className="ml-2 font-medium normal-case tracking-normal text-[#60646C]">{topic.sources.length}</span></h3>
+        <div className="mt-2 border-t border-[#E6E8EC]">
           {topic.sources.map((source) => (
             <SourceCard key={source.id} source={source} listen={listen} open={openSources.includes(source.id)} onToggle={() => toggleSource(source.id)} canNote={topic.isAdmin || source.postedByMe} busy={busy} onNote={(text) => onUpdate('addendum', { sourceId: source.id, text })}>
               <SourceTools source={source} busy={busy} isAdmin={topic.isAdmin} archived={false} onUpdate={onUpdate} />
@@ -1640,6 +1681,12 @@ function TopicRoom({
   )
 }
 
+function titleFromSlug(slug: string): string {
+  const words = slug.replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!words) return 'Question'
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
   const [question, setQuestion] = useState('')
   const [topics, setTopics] = useState<TopicCard[]>([])
@@ -1655,20 +1702,100 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
   const [notice, setNotice] = useState('')
   const [addDock, setAddDock] = useState<HTMLElement | null>(null)
 
-  const open = topics.find((topic) => topic.id === openId || topic.slug === openId) || null
+  const open = topics.find((topic) => topic.id === openId || topic.slug === openId)
+    || topics.find((topic) => {
+      if (!openId || openId.length < 40) return false
+      const slug = topic.slug || ''
+      return slug.startsWith(openId) || openId.startsWith(slug)
+    })
+    || null
+  const waiting = Boolean(openId) && !open
+  const filled = useRef(new Set<string>())
 
   useEffect(() => {
     let cancelled = false
     fetch(`/api/patches/${patch.handle}/topics`)
       .then((response) => response.json())
       .then((data) => {
-        if (!cancelled && Array.isArray(data?.topics)) setTopics(data.topics)
+        if (cancelled || !Array.isArray(data?.topics)) return
+        setTopics(data.topics)
+        if (!data.topics.some((topic: TopicCard) => !cardThumb(topic))) return
+        fetch(`/api/patches/${patch.handle}/topics?photos=1`)
+          .then((response) => response.json())
+          .then((filled) => {
+            if (!cancelled && Array.isArray(filled?.topics)) setTopics(filled.topics)
+          })
+          .catch(() => undefined)
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
   }, [patch.handle])
+
+  useEffect(() => {
+    const target = open
+    if (!target) return
+    const needsRepair = target.sources.some((source) => /news\.google\.com/i.test(source.url) || /^[a-z]/.test(source.quote.trim()) || /^[A-Z] [a-z]{3,}/.test(source.quote.trim()))
+    if (filled.current.has(target.id) || (target.sources.length >= 10 && target.image && !needsRepair)) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      filled.current.add(target.id)
+      const focus = `?fill=1&topic=${encodeURIComponent(target.slug || target.id)}`
+      fetch(`/api/patches/${patch.handle}/topics${focus}`)
+        .then((response) => response.json())
+        .then((data) => {
+          if (!cancelled && Array.isArray(data?.topics)) setTopics(data.topics)
+        })
+        .catch(() => undefined)
+    }, 600)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [open, patch.handle])
+
+  useLayoutEffect(() => {
+    if (!openId) return
+    const previous = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+    let userMoved = false
+    const stop = () => { userMoved = true }
+    const toTop = () => {
+      if (userMoved) return
+      window.scrollTo(0, 0)
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
+      let node = document.getElementById('question-top')?.parentElement || null
+      while (node) {
+        if (node.scrollTop) node.scrollTop = 0
+        node = node.parentElement
+      }
+    }
+    toTop()
+    let frames = 0
+    let raf = 0
+    const tick = () => {
+      if (userMoved || frames > 12) return
+      toTop()
+      frames += 1
+      raf = window.requestAnimationFrame(tick)
+    }
+    raf = window.requestAnimationFrame(tick)
+    const timers = [80, 200, 450].map((delay) => window.setTimeout(toTop, delay))
+    const arm = window.setTimeout(() => {
+      window.addEventListener('wheel', stop, { passive: true, once: true })
+      window.addEventListener('touchmove', stop, { passive: true, once: true })
+      window.addEventListener('keydown', stop, { once: true })
+    }, 60)
+    return () => {
+      userMoved = true
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(arm)
+      timers.forEach((timer) => window.clearTimeout(timer))
+      window.history.scrollRestoration = previous
+    }
+  }, [openId])
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 1024px)')
@@ -1679,17 +1806,19 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
   }, [openId])
 
   useEffect(() => {
-    const url = new URL(window.location.href)
     if (open?.slug) {
-      url.searchParams.set('topic', open.slug)
+      const next = `/patch/${patch.handle}/${open.slug}`
       document.title = `${open.question} · ${patch.name}`
-    } else if (!openId) url.searchParams.delete('topic')
-    else return
-    const next = `${url.pathname}${url.search}`
-    if (next !== `${window.location.pathname}${window.location.search}`) {
-      window.history.replaceState(null, '', next)
+      if (`${window.location.pathname}${window.location.search}` !== next) {
+        window.history.replaceState(null, '', next)
+      }
+      return
     }
-  }, [open?.slug, open?.question, openId, patch.name])
+    if (!openId) {
+      const next = `/patch/${patch.handle}`
+      if (window.location.pathname !== next) window.history.replaceState(null, '', next)
+    }
+  }, [open?.slug, open?.question, openId, patch.handle, patch.name])
 
   const replaceTopic = (topic: TopicCard) => {
     setTopics((current) => [topic, ...current.filter((item) => item.id !== topic.id)])
@@ -1806,13 +1935,12 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
   }
 
   return (
-    <div className="px-6 py-10 md:px-8">
+    <div className="px-6 py-10 md:px-8 [overflow-anchor:none]">
       <div className="mx-auto max-w-5xl">
-        {!open && (
+        {!open && !waiting && (
           <>
             <div className="text-center">
-              <p className="text-sm font-medium uppercase tracking-wide text-[#FF6A00]">{patch.name}</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#0B0B0F] md:text-4xl">
+              <h2 className="text-3xl font-semibold tracking-tight text-[#0B0B0F] md:text-4xl">
                 What do you want to learn about?
               </h2>
               <p className="mt-3 text-sm text-[#60646C]">
@@ -1844,6 +1972,18 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
+        {waiting && (
+          <article className="mx-auto mt-2 max-w-5xl">
+            <div className="flex items-center justify-between py-3">
+              <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-2 text-sm font-medium text-[#60646C]">
+                <ArrowLeft className="h-4 w-4" />
+                Questions
+              </button>
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-[#0B0B0F] md:text-3xl">{titleFromSlug(openId || '')}</h2>
+          </article>
+        )}
+
         {open ? (
           <TopicRoom
             topic={open}
@@ -1868,17 +2008,28 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
             onUpdate={update}
             onUpload={uploadImage}
             onUploadPdfs={uploadPdfs}
+            patchName={patch.name}
           />
+        ) : waiting ? null : topics.length === 0 ? (
+          <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="aspect-[2/3] animate-pulse rounded-md bg-[#F5F5F4]" />
+            ))}
+          </div>
         ) : (
           <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
             {topics.map((topic) => (
-              <button
+              <a
                 key={topic.id}
-                type="button"
-                onClick={() => setOpenId(topic.id)}
+                href={`/patch/${patch.handle}/${topic.slug || topic.id}`}
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                  event.preventDefault()
+                  setOpenId(topic.slug || topic.id)
+                }}
                 className="group relative aspect-[2/3] overflow-hidden rounded-md bg-[#141414] text-left shadow-md transition duration-200 hover:z-10 hover:scale-[1.04] hover:shadow-xl"
               >
-                <CardPhoto src={topic.image} className="absolute inset-0 transition duration-300 group-hover:scale-105" />
+                <CardPhoto src={cardCandidates(topic)} className="absolute inset-0 transition duration-300 group-hover:scale-105" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-3 text-white">
                   <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{topic.question}</h3>
@@ -1893,7 +2044,7 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
                     <span>{topic.sources.length} sources</span>
                   </p>
                 </div>
-              </button>
+              </a>
             ))}
           </div>
         )}

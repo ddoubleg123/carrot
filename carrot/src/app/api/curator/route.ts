@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 import { curatorAllowed } from '@/lib/curator/access'
-import { readJournal, runCurator } from '@/lib/curator/hunt'
+import { loadFloor } from '@/lib/curator/floor'
+import { runCurator } from '@/lib/curator/hunt'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 export async function GET() {
   if (!(await curatorAllowed())) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const journal = await readJournal()
-  return NextResponse.json(journal || { updatedAt: null, hunts: [] })
+  const floor = await loadFloor()
+  return NextResponse.json(floor, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST() {
