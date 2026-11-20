@@ -140,7 +140,7 @@ export async function questionPhoto(question: string): Promise<string | null> {
   const focus = [...tokens].sort((a, b) => b.length - a.length)[0]
   const candidates = [await wikiPhoto(question, tokens), await commonsPhoto(`${focus} ${tokens.find((token) => token !== focus) || ''}`, tokens)]
   const ranked = candidates
-    .filter((url): url is string => Boolean(url) && isRaster(url) && !GRAPHIC.test(url) && decodeURIComponent(url).toLowerCase().includes(focus))
+    .filter((url): url is string => typeof url === 'string' && isRaster(url) && !GRAPHIC.test(url) && decodeURIComponent(url).toLowerCase().includes(focus || ''))
     .map((url) => ({ url: url.split('?')[0], points: score(decodeURIComponent(url), tokens) }))
     .sort((a, b) => b.points - a.points)
   return ranked[0]?.url || null

@@ -135,7 +135,8 @@ export async function loadFloor(now = new Date()): Promise<FloorSnapshot> {
   for (const row of rows) {
     const user = userById.get(row.userId)
     if (!user) continue
-    const desk = known.get(user.username) 
+    const username = user.username || ''
+    const desk = username ? known.get(username) : undefined
     const parsed = readPost(row.content || '')
     const at = row.createdAt.toISOString()
     const stamp = row.createdAt.getTime()
@@ -143,9 +144,9 @@ export async function loadFloor(now = new Date()): Promise<FloorSnapshot> {
       id: row.id,
       at,
       deskId: desk?.id || user.id,
-      name: desk?.name || user.name || user.username,
+      name: desk?.name || user.name || username || 'Desk',
       handle: desk?.handle || '',
-      username: desk?.username || user.username,
+      username: desk?.username || username,
       avatar: desk?.avatar || user.profilePhoto || user.image || '',
       beat: desk?.beat || '',
       title: parsed.title,
