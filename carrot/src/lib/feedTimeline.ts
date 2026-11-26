@@ -3,7 +3,14 @@ export const BACKFILL_DAY_POSTS = 8
 
 const DAY = 24 * 60 * 60 * 1000
 
-type Row = { userId?: string | null; createdAt?: string | Date | null }
+type Row = {
+  userId?: string | null
+  createdAt?: string | Date | null
+  bucket?: string | null
+  media?: string | null
+  outlet?: string | null
+  lane?: string | null
+}
 
 /**
  * Home is the people you follow, newest first, plus your own posts.
@@ -23,14 +30,15 @@ export function buildTimeline<T extends Row>(
   const cutoff = Date.now() - DAY
   const recent = inNetwork.filter((post) => new Date(post.createdAt || 0).getTime() >= cutoff).length
   const thin = opts.following.length < BACKFILL_FOLLOWS || recent < BACKFILL_DAY_POSTS
-  if (!thin) return inNetwork
+  const limits = { media: 2, bucket: 2 }
+  if (!thin) return spreadSlate(inNetwork, limits)
   const extra = posts.filter((post) => {
     const id = post.userId || ''
     return Boolean(id) && opts.botIds.has(id) && id !== opts.viewerId && !followed.has(id)
   })
   const merged = [...inNetwork, ...extra]
   merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  return spreadAuthors(merged)
+  return spreadSlate(merged, limits)
 }
 
 const HOUR = 60 * 60 * 1000
@@ -51,20 +59,48 @@ export function orderByTaste<T extends Row>(
     const bAt = new Date(b.createdAt || 0).getTime() + opts.hoursFor(b) * HOUR
     return bAt - aAt
   })
-  return spreadAuthors(ranked)
+  return spreadSlate(ranked, { media: 2, bucket: 2 })
 }
 
-function spreadAuthors<T extends Row>(posts: T[]): T[] {
+function runLength<T extends Row>(out: T[], key: 'media' | 'bucket' | 'outlet' | 'lane', value: string | null | undefined): number {
+  if (!value) return 0
+  let count = 0
+  for (let i = out.length - 1; i >= 0; i--) {
+    if (out[i][key] !== value) break
+    count += 1
+  }
+  return count
+}
+
+function recentCount<T extends Row>(out: T[], key: 'media' | 'outlet' | 'lane', value: string | null | undefined, span: number): number {
+  if (!value) return 0
+  let count = 0
+  const start = Math.max(0, out.length - span)
+  for (let i = out.length - 1; i >= start; i--) {
+    if (out[i][key] === value) count += 1
+  }
+  return count
+}
+
+function fits<T extends Row>(out: T[], post: T, limits: { media: number; bucket: number }): boolean {
+  const last = out[out.length - 1]
+  if (last?.userId && post.userId === last.userId) return false
+  if (runLength(out, 'media', post.media) >= limits.media) return false
+  if (runLength(out, 'bucket', post.bucket) >= limits.bucket) return false
+  if (recentCount(out, 'outlet', post.outlet, 6) >= 1) return false
+  if (recentCount(out, 'lane', post.lane, 6) >= 1) return false
+  if (recentCount(out, 'media', post.media, 5) >= 2) return false
+  return true
+}
+
+/** Break a run of the same person, outlet, subject, or kind of post. */
+export function spreadSlate<T extends Row>(posts: T[], limits: { media: number; bucket: number }): T[] {
   const pending = [...posts]
   const out: T[] = []
   while (pending.length) {
-    let index = 0
-    const last = out[out.length - 1]?.userId
-    const prev = out[out.length - 2]?.userId
-    if (last && prev === last) {
-      const other = pending.findIndex((post) => post.userId !== last)
-      if (other >= 0) index = other
-    }
+    let index = pending.findIndex((post) => fits(out, post, limits))
+    if (index < 0) index = pending.findIndex((post) => !post.outlet || recentCount(out, 'outlet', post.outlet, 6) === 0)
+    if (index < 0) index = 0
     out.push(pending.splice(index, 1)[0])
   }
   return out

@@ -1,17 +1,18 @@
 import { mkdir, open, readFile, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 import { readPublicUrl } from '@/lib/learn/publicUrl'
-import { chooseDesk } from '@/lib/curator/assign'
+import { chooseDesk, isPast } from '@/lib/curator/assign'
 import { listChannels, recentUploads } from '@/lib/curator/channels'
 import { DAILY_CAP, DESKS, type Desk } from '@/lib/curator/desks'
 import { judgeReading, sameStory } from '@/lib/curator/judge'
-import { publishFinding } from '@/lib/curator/publish'
+import { alreadyPosted, publishFinding } from '@/lib/curator/publish'
 import { feedItems, fetchText, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
 import { profileQrUrl } from '@/lib/learn/brandClip'
 import { ensureMediaBins } from '@/lib/mediaBins'
 import { runQaMonitor } from '@/lib/curator/qaMonitor'
 import { storeClip } from '@/lib/curator/storeClip'
 import { startClipOnce } from '@/lib/learn/clipOnce'
+import { applyCardNames, readNameCard } from '@/lib/learn/nameCard'
 
 export interface Dropped {
   title: string
@@ -138,8 +139,9 @@ function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
 }
 
 function onBeat(desk: Desk, title: string, extra = ''): boolean {
-  if (!desk.focus || desk.focus.length === 0) return true
   const hay = `${title} ${extra}`.toLowerCase()
+  if (desk.past && !isPast(hay)) return false
+  if (!desk.focus || desk.focus.length === 0) return true
   return desk.focus.some((term) => hay.includes(term.toLowerCase()))
 }
 
@@ -170,6 +172,10 @@ export interface HuntOptions {
   videosPerChannel?: number
   articles?: number
   clipsOnly?: boolean
+  /** Desk pages only. The clip pass already read the watched channels. */
+  skipWatch?: boolean
+  /** How many groups the rotating pass reads. */
+  maxDesks?: number
 }
 
 async function claimLock(): Promise<boolean> {
@@ -223,7 +229,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
     const ready = DESKS.filter((desk) => desk.sources.length > 0)
     if (ready.length === 0) return { at: new Date().toISOString(), desks: [] }
     const ranked = [...ready].sort((a, b) => (memory.hunted[a.id] || 0) - (memory.hunted[b.id] || 0))
-    desks = ranked.slice(0, HUNT_WORKERS)
+    desks = ranked.slice(0, options.maxDesks ?? HUNT_WORKERS)
     const now = Date.now()
     for (const desk of desks) memory.hunted[desk.id] = now
     memory.cursor = (memory.cursor + desks.length) % ready.length
@@ -340,9 +346,11 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
           summary: reading.summary,
           publisher: feed.name,
           image: page?.image
-        }).catch(() => null)
+        }).catch((error) => {
+          pass.dropped.push({ title, from: feed.name, reason: error instanceof Error ? error.message : 'The page could not be posted.' })
+          return null
+        })
         if (!published) {
-          pass.dropped.push({ title, from: feed.name, reason: 'The page was worth keeping, but it could not be posted.' })
           continue
         }
         pass.kept.push({
@@ -417,7 +425,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
     }
     passes.push(pass)
   }))
-  await watchChannels(memory, passes)
+  if (!options.skipWatch) await watchChannels(memory, passes)
   const result: Hunt = { at: new Date().toISOString(), desks: passes }
   await saveMemory(memory)
   await saveHunt(result)
@@ -442,6 +450,10 @@ async function watchChannels(memory: Memory, passes: DeskPass[]): Promise<void> 
       if (kept >= WATCH_POSTS || attempts >= WATCH_READS) break
       const url = canon(item.url)
       if (memory.seen.includes(url) || Date.now() - (memory.captionMiss[url] || 0) < 30 * 60 * 1000) continue
+      if (await alreadyPosted({ url, sourceUrl: url })) {
+        memory.seen.push(url)
+        continue
+      }
       const title = cleanTitle(item.title, channel.name)
       if (memory.titles.some((keptTitle) => sameStory(keptTitle, title))) {
         memory.seen.push(url)
@@ -486,14 +498,18 @@ async function watchChannels(memory: Memory, passes: DeskPass[]): Promise<void> 
         continue
       }
       const base = clipJob.masterCaption ? path.basename(clipJob.masterCaption).split('.')[0] : ''
-      const transcript = base
+      const rawTranscript = base
         ? await readFile(path.join(path.dirname(clipJob.masterCaption || ''), `${base}.txt`), 'utf8').catch(() => clip.quote)
         : clip.quote
+      const card = await readNameCard(localFile)
+      const excerpt = applyCardNames(clip.quote || reading.excerpt, card)
+      const transcript = applyCardNames(rawTranscript, card)
       const published = await publishFinding(desk, {
         title,
         url: clip.src.split('?')[0],
+        sourceUrl: url,
         domain: 'carrot',
-        excerpt: clip.quote || reading.excerpt,
+        excerpt,
         summary: reading.summary,
         publisher: channel.name,
         transcript,
@@ -528,9 +544,21 @@ export function armCurator(): void {
   if (holder.__carrotCurator) clearInterval(holder.__carrotCurator)
   const pass = () => {
     void runQaMonitor().catch((error) => console.error('[qa] monitor', error instanceof Error ? error.message : error))
-    void runCurator({ clipsOnly: true, rotate: true, maxKeep: 1, channels: 2, videosPerChannel: 1, articles: 1 }).catch((error) => {
-      console.error('[curator] pass failed', error instanceof Error ? error.message : error)
-    })
+    void runCurator({ clipsOnly: true, maxKeep: 1, channels: 2, videosPerChannel: 1 })
+      .catch((error) => console.error('[curator] pass failed', error instanceof Error ? error.message : error))
+      .finally(() => {
+        void runCurator({
+          rotate: true,
+          maxKeep: 1,
+          channels: 1,
+          videosPerChannel: 1,
+          articles: 1,
+          maxDesks: 2,
+          skipWatch: true
+        }).catch((error) => {
+          console.error('[curator] group pass failed', error instanceof Error ? error.message : error)
+        })
+      })
   }
   void ensureMediaBins()
     .catch((error) => console.error('[curator] media tools', error instanceof Error ? error.message : error))

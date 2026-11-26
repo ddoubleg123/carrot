@@ -8,6 +8,8 @@ import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
 import { POSTS_SNAPSHOT, invalidateFeedCache } from '../../../lib/feedCache';
 import { createResilientFetch } from '@/lib/retryUtils';
 import { buildTimeline, orderByTaste } from '@/lib/feedTimeline';
+import { mediaKind } from '@/lib/mediaKind';
+import { laneOf, outletFromContent } from '@/lib/curator/variety';
 import { subjectOf, TASTE_HOURS, TASTE_LEARN_AFTER } from '@/lib/taste';
 import { tasteForViewer } from '@/lib/tasteRecord';
 
@@ -23,7 +25,25 @@ async function botAuthorIds() {
   return botAuthorCache.ids
 }
 
+function labelPosts(posts: any[]) {
+  return posts.map((post) => {
+    const content = String(post?.content || '')
+    const quote = /^kind:\s*quote\b/im.test(content)
+    const username = post?.User?.username
+    const authorId = String(post?.userId || '')
+    const bucket = post?.bucket || subjectOf(username, authorId)
+    return {
+      ...post,
+      bucket,
+      media: quote ? 'card' : mediaKind(post),
+      outlet: outletFromContent(content),
+      lane: laneOf(bucket)
+    }
+  })
+}
+
 async function homeTimeline(posts: any[]) {
+  posts = labelPosts(posts)
   const session = await auth()
   const viewerId = (session as { user?: { id?: string } } | null)?.user?.id || ''
   let following: string[] = []

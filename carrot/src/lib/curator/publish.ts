@@ -16,6 +16,7 @@ import { linkResolves, postRules, quoteIsExact, reviewAgainstSource } from '@/li
 import { lowQualitySource, sourceCleared } from '@/lib/curator/cleared'
 import { logQa, notifyDutyReviewer } from '@/lib/curator/qaLog'
 import { oneQuoteCard } from '@/lib/curator/quoteCardPick'
+import { laneOf, mediaOf, outletFromContent, outletOf, varietyBlock } from '@/lib/curator/variety'
 import { renderQuoteCard } from '@/lib/curator/quoteImage'
 
 function sourceId(): string {
@@ -164,6 +165,24 @@ export async function publishFinding(desk: Desk, finding: {
   if (await alreadyPosted(finding)) throw new Error('Already posted.')
   const passage = finding.excerpt || finding.summary
   if (lowQualitySource(finding.url)) throw new Error('Not worth posting.')
+  const recentMix = await prisma.post.findMany({
+    where: { bucket: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    take: 8,
+    select: { content: true, bucket: true, videoUrl: true }
+  }).catch(() => [])
+  const mixBlock = varietyBlock(
+    recentMix.map((post) => ({ outlet: outletFromContent(post.content), lane: laneOf(post.bucket), media: mediaOf(post) })),
+    {
+      outlet: outletOf(finding.publisher) || outletOf(finding.url),
+      lane: laneOf(desk.id),
+      media: finding.videoPath || youtubeIdFromText(finding.url) ? 'video' : 'article'
+    }
+  )
+  if (mixBlock) {
+    await logQa({ kind: 'check', severity: 2, sourceUrl: finding.url, reason: mixBlock })
+    throw new Error(mixBlock)
+  }
   if (!(await worthPosting(finding.title, passage))) throw new Error('Not worth posting.')
   if ((await deskGrade(desk.beat, finding.title, passage)) < 3) throw new Error('Not worth posting.')
   const sourceText = [finding.title, finding.publisher, passage, finding.transcript || ''].filter(Boolean).join('\n')
@@ -327,6 +346,20 @@ export async function publishFinding(desk: Desk, finding: {
     if (!(await strangerPass(spoken))) continue
     if (!sourceCleared(finding.url) && !sourceCleared(preview || '')) {
       await logQa({ kind: 'check', severity: 2, sourceUrl: finding.url, reason: 'The source is not cleared for a quote card.' })
+      break
+    }
+    const cardMix = await prisma.post.findMany({
+      where: { bucket: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: { content: true, bucket: true, videoUrl: true }
+    }).catch(() => [])
+    const cardBlock = varietyBlock(
+      cardMix.map((post) => ({ outlet: outletFromContent(post.content), lane: laneOf(post.bucket), media: mediaOf(post) })),
+      { outlet: '', lane: '', media: 'card' }
+    )
+    if (cardBlock) {
+      await logQa({ kind: 'check', severity: 2, sourceUrl: finding.url, reason: cardBlock })
       break
     }
     await publishQuoteCard(desk, user.id, spoken, sourceName, preview, when).catch(() => null)

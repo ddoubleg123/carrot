@@ -174,7 +174,8 @@ app.prepare().then(async () => {
     console.log(`> Ready on http://${hostname}:${port} (HTTP/1.1 only)`);
     console.log('> HTTP/2 disabled - using HTTP/1.1 for all connections');
     if (dev) warmMenuRoutes(port);
-    const curatorOn = process.env.CURATOR_ENABLED === '1' || (!dev && process.env.CURATOR_ENABLED !== '0');
+    const onRender = process.env.RENDER === 'true' || Boolean(process.env.RENDER_SERVICE_ID);
+    const curatorOn = onRender && process.env.CURATOR_ENABLED !== '0';
     if (curatorOn) {
       setTimeout(() => {
         fetch(`http://127.0.0.1:${port}/api/internal/curator-arm`, { method: 'POST' })

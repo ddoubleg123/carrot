@@ -1,6 +1,7 @@
 import { postRules, quoteIsExact } from '../curator/qa'
 import { lowQualitySource, sourceCleared } from '../curator/cleared'
 import { oneQuoteCard } from '../curator/quoteCardPick'
+import { outletOf, varietyBlock } from '../curator/variety'
 
 const SOURCE = 'Costa Rica put forward a candidate for UN secretary general. The Council votes Friday. The frontrunner could be stopped by a P5 veto.'
 
@@ -46,6 +47,19 @@ describe('one card, and only a cleared source', () => {
       'https://x/o/quote-cards%2Fa__poster__ink.png?alt=media'
     ])
     expect(chosen).toContain('__split__')
+  })
+
+  it('treats two BBC sport pages as one outlet and will not stack them', () => {
+    expect(outletOf('https://www.bbc.co.uk/sport/golf/articles/1')).toBe('bbc')
+    expect(outletOf('https://www.bbc.com/sport/formula1/articles/2')).toBe('bbc')
+    expect(outletOf('BBC Sport')).toBe('bbc')
+    expect(outletOf('https://www.washingtonpost.com/politics/x')).toBe('washington post')
+    const recent = [
+      { outlet: 'bbc', lane: 'sport', media: 'article' },
+      { outlet: 'reuters', lane: 'world', media: 'article' }
+    ]
+    expect(varietyBlock(recent, { outlet: 'bbc', lane: 'money', media: 'video' })).toBe('That outlet was just used.')
+    expect(varietyBlock(recent, { outlet: 'cbs', lane: 'sport', media: 'article' })).toBe('')
   })
 
   it('clears a government host and refuses a news site', () => {
