@@ -12,6 +12,7 @@ import { ensureMediaBins } from '@/lib/mediaBins'
 import { runQaMonitor } from '@/lib/curator/qaMonitor'
 import { storeClip } from '@/lib/curator/storeClip'
 import { startClipOnce } from '@/lib/learn/clipOnce'
+import { citedPages } from '@/lib/curator/wikiRefs'
 import { applyCardNames, readNameCard } from '@/lib/learn/nameCard'
 
 export interface Dropped {
@@ -365,6 +366,54 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         })
         memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
         memory.titles.push(title)
+      }
+    }
+    if (room()) {
+      pass.looked.push('Wikipedia · cited pages')
+      const cited = await citedPages(desk.name).catch(() => [] as string[])
+      let tried = 0
+      for (const raw of cited) {
+        if (!room() || tried >= 2) break
+        const url = canon(raw)
+        if (memory.seen.includes(url)) continue
+        tried += 1
+        memory.seen.push(url)
+        const host = domainOf(url)
+        console.log(`[curator] wiki ${host}`)
+        const page = await readPublicUrl(url).catch(() => null)
+        const text = page?.text || ''
+        const title = cleanTitle(page?.title || desk.name, host)
+        const reading = judgeReading(text, title, 'page')
+        if (!reading.keep) {
+          pass.dropped.push({ title, from: 'Wikipedia', reason: reading.reason })
+          continue
+        }
+        const published = await publishFinding(desk, {
+          title,
+          url: page?.finalUrl || url,
+          domain: domainOf(page?.finalUrl || url),
+          excerpt: reading.excerpt,
+          summary: reading.summary,
+          publisher: host,
+          image: page?.image
+        }).catch((error) => {
+          pass.dropped.push({ title, from: 'Wikipedia', reason: error instanceof Error ? error.message : 'The cited page could not be posted.' })
+          return null
+        })
+        if (!published) continue
+        pass.kept.push({
+          title,
+          url: page?.finalUrl || url,
+          from: host,
+          kind: 'page',
+          words: reading.words,
+          why: `Cited from Wikipedia, ${reading.words} words. ${reading.reason}`,
+          excerpt: reading.excerpt,
+          topicUrl: published.topicUrl
+        })
+        memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
+        memory.titles.push(title)
+        console.log(`[curator] kept ${title}`)
       }
     }
     const accounts = desk.sources.filter((source) => source.kind === 'x').slice(0, 1)
