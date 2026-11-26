@@ -27,6 +27,7 @@ export type PostActionBarProps = {
   initiallySaved?: boolean;
   initiallyLiked?: boolean;
   initiallyStuck?: boolean;
+  onStick?: (stuck: boolean) => void;
 };
 
 function PostActionBar(props: PostActionBarProps) {
@@ -45,6 +46,7 @@ function PostActionBar(props: PostActionBarProps) {
     initiallySaved,
     initiallyLiked,
     initiallyStuck,
+    onStick,
   } = props;
 
   const [liked, setLiked] = useState<boolean>(!!initiallyLiked);
@@ -59,7 +61,10 @@ function PostActionBar(props: PostActionBarProps) {
   const handleLike = () => {
     const next = !liked;
     setLiked(next);
-    if (next) setStuck(false);
+    if (next) {
+      setStuck(false);
+      try { onStick && onStick(false); } catch {}
+    }
     try { onLike && onLike(next); } catch {}
     // Fire-and-forget persistence. A carrot replaces a stick.
     try {
@@ -77,13 +82,17 @@ function PostActionBar(props: PostActionBarProps) {
     const next = !stuck;
     setStuck(next);
     if (next) setLiked(false);
+    try { onStick && onStick(next); } catch {}
     try {
       fetch(`/api/posts/${postId}/stick`, { method: 'POST' })
         .then(async (res) => {
           if (!res.ok) return;
           const data = await res.json().catch(() => null);
           if (typeof data?.likes === 'number') setServerLikes(data.likes);
-          if (typeof data?.stuck === 'boolean') setStuck(data.stuck);
+          if (typeof data?.stuck === 'boolean') {
+            setStuck(data.stuck);
+            try { onStick && onStick(data.stuck); } catch {}
+          }
         })
         .catch(() => void 0);
     } catch {}

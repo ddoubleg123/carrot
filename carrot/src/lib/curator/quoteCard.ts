@@ -9,11 +9,19 @@ const HANGING_END = /\b(it|this|that|they|them|one)\.$/i
 const ASIDE = /\b(i think|this committee|this council|when we talk)\b/i
 const POINTED = /^(if you|when we)\b/i
 const INSTRUCTION = /^(heat|preheat|bake|stir|mix|add|pour|line|chop|slice|dice|whisk|simmer|boil|fry|roast|grill|season|combine|place|cover|remove|transfer|serve|cook|fold|spread|brush|drain|rinse|toss|sprinkle|bring|reduce)\b/i
-const RECIPE = /\b(tbsp|tsp|tablespoons?|teaspoons?|gas \d|baking trays?|preheat|°[cf])\b/i
+const RECIPE = /\b(tbsp|tsp|tablespoons?|teaspoons?|gas \d|baking trays?|preheat|°[cf])\b|\b\d+\s*(ml|g|kg|oz|cups?|grams?)\b|\b(he|she|they)\s+(combines?|adds?|mixes?|pours?|stirs?)\b/i
+const ROLE = /^(the|a|an)\s+(?:[a-z0-9'-]+\s+){0,6}(champion|forward|passenger|seamer|player|driver|chef|minister|guy|star|rookie|official)(?![-'])\b/i
+const VAGUE = /^(the|this|that)\s+(deal|move|change|decision|plan|bill|report|study|news|story|announcement)\b/i
+const PRONOUN = /,\s*(he|she|they|it)\b/i
+const GLUED = /\b[a-z]{2,} (A|The) [a-z]|\s[-–—]\s/
+const CREDIT = /\b(shutterstock|getty|reuters)\b/i
+const BEAT = /^(cricket|tennis|food|fashion|rugby|mlb|baseball|hockey|formula 1|college football|nfl|nba)$/i
 
 export interface QuoteCard {
   sentence: string
   source: string
+  /** When the quote was made. Empty when the page did not say. */
+  date: string
 }
 
 /** One whole sentence a stranger can read with the article and the video hidden. */
@@ -28,7 +36,7 @@ export function quoteSentence(source: string): string | null {
 function standsAlone(sentence: string): boolean {
   if (!sentence.endsWith('.') || sentence.includes('?') || sentence.includes('…')) return false
   if (FILLER.test(sentence) || HOST.test(sentence) || ADDRESS.test(sentence) || ASIDE.test(sentence) || POINTED.test(sentence) || JUNK.test(sentence) || STUTTER.test(sentence) || HANGING_END.test(sentence)) return false
-  if (INSTRUCTION.test(sentence) || RECIPE.test(sentence)) return false
+  if (INSTRUCTION.test(sentence) || RECIPE.test(sentence) || ROLE.test(sentence) || VAGUE.test(sentence) || PRONOUN.test(sentence) || GLUED.test(sentence) || CREDIT.test(sentence)) return false
   if (/\b(his|her|their)\b/i.test(sentence)) {
     const at = sentence.search(/\b(his|her|their)\b/i)
     if (!/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(sentence.slice(0, at))) return false
@@ -39,6 +47,25 @@ function standsAlone(sentence: string): boolean {
   const named = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(sentence)
   const number = /\d/.test(sentence)
   return named || number
+}
+
+export interface QuoteGrade {
+  pass: boolean
+  failures: string[]
+}
+
+/**
+ * The checklist for one card. A miss stays off the feed.
+ * The hunt tries the next sentence in the same piece before it gives up.
+ */
+export function quoteGrade(card: QuoteCard & { image?: string | null }): QuoteGrade {
+  const failures: string[] = []
+  const sentence = card.sentence.replace(/\s+/g, ' ').trim()
+  if (quoteSentence(sentence) !== sentence) failures.push('The sentence cannot stand on its own.')
+  if (!card.source.trim() || BEAT.test(card.source.trim())) failures.push('The card does not name who it came from.')
+  if (!card.date.trim()) failures.push('The card does not give the date.')
+  if (!String(card.image || '').trim()) failures.push('The card has no picture.')
+  return { pass: failures.length === 0, failures }
 }
 
 /** The picture is hidden. Fail closed when the check cannot be run. */
@@ -77,15 +104,17 @@ ${sentence}`
   }
 }
 
-export function quotePost(sentence: string, source: string): string {
+export function quotePost(sentence: string, source: string, date = ''): string {
   const from = source.replace(/\s+/g, ' ').trim()
-  return ['kind: quote', from ? `source: ${from}` : '', '', sentence].filter((line) => line !== '').join('\n')
+  const when = date.replace(/\s+/g, ' ').trim()
+  return ['kind: quote', from ? `source: ${from}` : '', when ? `when: ${when}` : '', '', sentence].filter((line) => line !== '').join('\n')
 }
 
 export function readQuote(content?: string | null): QuoteCard | null {
   const lines = String(content || '').split('\n')
   if (!/^kind:\s*quote\s*$/i.test(lines[0]?.trim() || '')) return null
   let source = ''
+  let date = ''
   const sentence: string[] = []
   for (const line of lines.slice(1)) {
     const trimmed = line.trim()
@@ -93,10 +122,14 @@ export function readQuote(content?: string | null): QuoteCard | null {
       source = trimmed.replace(/^source:\s*/i, '').trim()
       continue
     }
+    if (/^when:\s*/i.test(trimmed)) {
+      date = trimmed.replace(/^when:\s*/i, '').trim()
+      continue
+    }
     if (!trimmed && sentence.length === 0) continue
     sentence.push(line)
   }
   const text = sentence.join('\n').trim()
   if (!text) return null
-  return { sentence: text, source }
+  return { sentence: text, source, date }
 }
