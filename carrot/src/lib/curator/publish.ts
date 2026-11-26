@@ -273,8 +273,8 @@ export async function publishFinding(desk: Desk, finding: {
   void topicId
   const sourceName = link?.site || finding.publisher
   const when = link?.published || ''
-  const passage = [finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n')
-  const ready = passage.replace(/\s+/g, ' ').split(/(?<=[.])\s+/).map((part) => part.trim())
+  const quotePassage = [finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n')
+  const ready = quotePassage.replace(/\s+/g, ' ').split(/(?<=[.])\s+/).map((part) => part.trim())
   for (const spoken of ready) {
     if (quoteSentence(spoken) !== spoken) continue
     const grade = quoteGrade({ sentence: spoken, source: sourceName, date: when, image: preview || 'pending' })
