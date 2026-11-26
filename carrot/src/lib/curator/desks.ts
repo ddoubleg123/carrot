@@ -1,5 +1,6 @@
 import { RESTORED } from '@/lib/curator/restored'
 import { ROSTER } from '@/lib/curator/roster'
+import { deskSlug } from '@/lib/curator/slug'
 
 export interface DeskSource {
   kind: 'youtube' | 'rss' | 'x'
@@ -15,12 +16,18 @@ export interface Desk {
   username: string
   /** Previous login, kept so an existing account is updated instead of copied. */
   priorUsername: string
+  /** Older public logins, so a renamed account is updated instead of copied. */
+  formerUsernames?: string[]
   avatar: string
   banner: string
   bio: string
   beat: string
   /** A headline has to contain one of these before it is read. */
   focus?: string[]
+  /** Extra words used only to route a clip. They do not filter the desk's own feed. */
+  route?: string[]
+  /** History only. A current-events story cannot land here. */
+  past?: boolean
   sources: DeskSource[]
 }
 
@@ -33,11 +40,12 @@ export function deskDisclosure(): string {
 const LIVE: Desk[] = [
   {
     id: 'science',
-    name: 'Nina Neutron',
+    name: 'Science',
     handle: 'wire-science',
-    username: 'nina-neutron',
-    priorUsername: 'science-desk',
-    avatar: '/curator-avatars/nina.svg',
+    username: deskSlug('Science'),
+    formerUsernames: ['how-things-work'],
+    priorUsername: 'nina-neutron',
+    avatar: '/curator-avatars/nina.jpg',
     banner: '/curator-banners/nina.svg',
     bio: 'I follow experiments in physics, engineering, and the natural world, then post the mechanism. Follow me when you want the result explained, not a press release.',
     beat: 'Mechanisms, experiments, and the physical world.',
@@ -53,20 +61,20 @@ const LIVE: Desk[] = [
   },
   {
     id: 'history',
-    name: 'Hugo History',
+    name: 'History in Their Own Words',
     handle: 'wire-history',
-    username: 'hugo-history',
-    priorUsername: 'history-desk',
-    avatar: '/curator-avatars/hugo.svg',
+    username: deskSlug('History in Their Own Words'),
+    priorUsername: 'hugo-history',
+    avatar: '/curator-avatars/hugo.jpg',
     banner: '/curator-banners/hugo.svg',
     bio: 'I read campaigns, objects, and accounts written while the events were still happening. Follow me for history that names the person and the thing, not an "on this day" line.',
     beat: 'Campaigns, objects, and primary accounts.',
+    past: true,
     sources: [
       { kind: 'youtube', name: 'Kings and Generals', ref: 'KingsandGenerals' },
       { kind: 'youtube', name: 'History Hit', ref: 'HistoryHit' },
       { kind: 'youtube', name: 'Voices of the Past', ref: 'VoicesofthePast' },
       { kind: 'rss', name: 'Smithsonian History', ref: 'https://www.smithsonianmag.com/rss/history/' },
-      { kind: 'rss', name: 'Library of Congress', ref: 'https://www.loc.gov/rss/pao/news.xml' },
       { kind: 'rss', name: 'Library of Congress blog', ref: 'https://blogs.loc.gov/loc/feed/' },
       { kind: 'rss', name: 'Project Gutenberg', ref: 'https://archive.org/services/collection-rss.php?collection=gutenberg' },
       { kind: 'rss', name: 'Internet Archive books', ref: 'https://archive.org/services/collection-rss.php?collection=americana' }
@@ -74,11 +82,11 @@ const LIVE: Desk[] = [
   },
   {
     id: 'world',
-    name: 'Atlas Wren',
+    name: 'World News',
     handle: 'wire-world',
-    username: 'atlas-wren',
-    priorUsername: 'world-desk',
-    avatar: '/curator-avatars/atlas.svg',
+    username: deskSlug('World News'),
+    priorUsername: 'atlas-wren',
+    avatar: '/curator-avatars/atlas.jpg',
     banner: '/curator-banners/atlas.svg',
     bio: 'I post what a government or a wire service put on the record, from the place it happened. Follow me for the world as reported, with the source still attached.',
     beat: 'What governments and reporters put on the record.',
@@ -92,11 +100,12 @@ const LIVE: Desk[] = [
   },
   {
     id: 'technology',
-    name: 'Chip Faraday',
+    name: 'Technology',
     handle: 'wire-technology',
-    username: 'chip-faraday',
-    priorUsername: 'technology-desk',
-    avatar: '/curator-avatars/chip.svg',
+    username: deskSlug('Technology'),
+    formerUsernames: ['how-technology-works'],
+    priorUsername: 'chip-faraday',
+    avatar: '/curator-avatars/chip.jpg',
     banner: '/curator-banners/chip.svg',
     bio: 'I read how chips, code, and papers actually work. Follow me for the system underneath a launch, not the launch itself.',
     beat: 'How systems are built, not product launches.',
@@ -110,11 +119,12 @@ const LIVE: Desk[] = [
   },
   {
     id: 'money',
-    name: 'Penny Ledger',
+    name: 'Markets and Central Banks',
     handle: 'wire-money',
-    username: 'penny-ledger',
-    priorUsername: 'money-desk',
-    avatar: '/curator-avatars/penny.svg',
+    username: deskSlug('Markets and Central Banks'),
+    formerUsernames: ['how-money-moves'],
+    priorUsername: 'penny-ledger',
+    avatar: '/curator-avatars/penny.jpg',
     banner: '/curator-banners/penny.svg',
     bio: 'I follow central banks, filings, and the plumbing that moves money. Follow me when a rate or a rule changes and you want the number, not the mood.',
     beat: 'Central banks, markets, and the mechanics of payment.',
@@ -128,11 +138,11 @@ const LIVE: Desk[] = [
   },
   {
     id: 'health',
-    name: 'Mira Wells',
+    name: 'Medical Research',
     handle: 'wire-health',
-    username: 'mira-wells',
-    priorUsername: 'health-desk',
-    avatar: '/curator-avatars/mira.svg',
+    username: deskSlug('Medical Research'),
+    priorUsername: 'mira-wells',
+    avatar: '/curator-avatars/mira.jpg',
     banner: '/curator-banners/mira.svg',
     bio: 'I read medical and biology studies and post what the paper actually measured. Follow me for the research. I do not give treatment advice.',
     beat: 'Research reporting. Not treatment advice.',
@@ -145,11 +155,11 @@ const LIVE: Desk[] = [
   },
   {
     id: 'climate',
-    name: 'Cleo Climate',
+    name: 'Climate and Energy',
     handle: 'wire-climate',
-    username: 'cleo-climate',
-    priorUsername: 'climate-desk',
-    avatar: '/curator-avatars/cleo.svg',
+    username: deskSlug('Climate and Energy'),
+    priorUsername: 'cleo-climate',
+    avatar: '/curator-avatars/cleo.jpg',
     banner: '/curator-banners/cleo.svg',
     bio: 'I post energy systems, weather records, and climate measurements. Follow me when the piece has a number in it, not a slogan.',
     beat: 'Measurements, energy systems, and the record.',
@@ -163,11 +173,12 @@ const LIVE: Desk[] = [
   },
   {
     id: 'cities',
-    name: 'Nell Street',
+    name: 'Cities',
     handle: 'wire-cities',
-    username: 'nell-street',
-    priorUsername: 'cities-desk',
-    avatar: '/curator-avatars/nell.svg',
+    username: deskSlug('Cities'),
+    formerUsernames: ['how-cities-work'],
+    priorUsername: 'nell-street',
+    avatar: '/curator-avatars/nell.jpg',
     banner: '/curator-banners/nell.svg',
     bio: 'I follow streets, buildings, and transit, and the decision that changes how a city works. Follow me for how a place is put together.',
     beat: 'Streets, buildings, and how a city is put together.',
@@ -180,11 +191,11 @@ const LIVE: Desk[] = [
   },
   {
     id: 'culture',
-    name: 'Mara Canvas',
+    name: 'Film and Art',
     handle: 'wire-culture',
-    username: 'mara-canvas',
-    priorUsername: 'culture-desk',
-    avatar: '/curator-avatars/mara.svg',
+    username: deskSlug('Film and Art'),
+    priorUsername: 'mara-canvas',
+    avatar: '/curator-avatars/mara.jpg',
     banner: '/curator-banners/mara.svg',
     bio: 'I watch films, shows, and pictures for the cut, the frame, or the performance that makes them work. Follow me for how it was made, not a plot recap.',
     beat: 'Essays on film, art, and how a work is made.',
@@ -196,11 +207,11 @@ const LIVE: Desk[] = [
   },
   {
     id: 'law',
-    name: 'Casey Brief',
+    name: 'Courts and Statutes',
     handle: 'wire-law',
-    username: 'casey-brief',
-    priorUsername: 'law-desk',
-    avatar: '/curator-avatars/casey.svg',
+    username: deskSlug('Courts and Statutes'),
+    priorUsername: 'casey-brief',
+    avatar: '/curator-avatars/casey.jpg',
     banner: '/curator-banners/casey.svg',
     bio: 'I read what a court or a statute actually did. Follow me for the holding first. Anyone\'s opinion of it comes after the text.',
     beat: 'What a court or a statute actually did.',
@@ -211,29 +222,14 @@ const LIVE: Desk[] = [
     ]
   },
   {
-    id: 'sport',
-    name: 'Robbie Pitch',
-    handle: 'wire-sport',
-    username: 'robbie-pitch',
-    priorUsername: 'sport-desk',
-    avatar: '/curator-avatars/robbie.svg',
-    banner: '/curator-banners/robbie.svg',
-    bio: 'I post the match and the decision that changed it, from the match report. Follow me for the game with the context still attached.',
-    beat: 'The event and the reporting around it.',
-    sources: [
-      { kind: 'youtube', name: 'Tifo Football', ref: 'TifoFootball' },
-      { kind: 'rss', name: 'BBC Sport', ref: 'https://feeds.bbci.co.uk/sport/rss.xml' }
-    ]
-  },
-  {
     id: 'finds',
-    name: 'Scout Rummage',
+    name: 'Everything Else',
     handle: 'wire-finds',
-    username: 'scout-rummage',
-    priorUsername: 'finds-desk',
-    avatar: '/curator-avatars/scout.svg',
+    username: 'other-finds',
+    priorUsername: 'scout-rummage',
+    avatar: '/curator-avatars/scout.jpg',
     banner: '/curator-banners/scout.svg',
-    bio: 'I pick up the strong page or talk that does not fit the other accounts. Follow me for the odd find that is still worth reading.',
+    bio: 'This is the pile that did not fit a named account. A post about a clear subject belongs on that account.',
     beat: 'A strong page or talk that does not fit the other desks.',
     sources: [
       { kind: 'youtube', name: 'Real Engineering', ref: 'RealEngineering' },
@@ -252,8 +248,14 @@ export function deskById(id: string): Desk | undefined {
   return DESKS.find((desk) => desk.id === id)
 }
 
+export function deskByHandle(handle: string | null | undefined): Desk | undefined {
+  const key = String(handle || '').trim().toLowerCase()
+  if (!key) return undefined
+  return DESKS.find((desk) => desk.handle.toLowerCase() === key)
+}
+
 export function deskByUsername(username: string | null | undefined): Desk | undefined {
   const key = String(username || '').replace(/^@/, '').trim().toLowerCase()
   if (!key) return undefined
-  return DESKS.find((desk) => desk.username.toLowerCase() === key || desk.priorUsername.toLowerCase() === key)
+  return DESKS.find((desk) => desk.username.toLowerCase() === key || desk.priorUsername.toLowerCase() === key || (desk.formerUsernames || []).some((name) => name.toLowerCase() === key))
 }

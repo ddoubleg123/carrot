@@ -40,8 +40,12 @@ export async function deskUser(desk: Desk) {
       OR: [
         { username: desk.username },
         { username: desk.priorUsername },
+        { username: desk.id },
+        ...(desk.formerUsernames || []).map((name) => ({ username: name })),
         { email: `${desk.priorUsername}@bots.carrot.invalid` },
-        { email: `${desk.username}@bots.carrot.invalid` }
+        { email: `${desk.username}@bots.carrot.invalid` },
+        { email: `${desk.id}@bots.carrot.invalid` },
+        ...(desk.formerUsernames || []).map((name) => ({ email: `${name}@bots.carrot.invalid` }))
       ]
     }
   })

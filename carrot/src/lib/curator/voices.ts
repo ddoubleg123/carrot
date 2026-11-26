@@ -19,7 +19,6 @@ export const VOICES: Record<string, Voice> = {
   cities: v('Frederick Law Olmsted', 'A gardener of cities. Who the place is for, what was paved, and whether a person can still walk it. Fond and concrete.'),
   culture: v('Pauline Kael', 'A critic in a hurry. The thing itself, the choice the maker made, and the praise that is too easy. Sharp, funny, short.'),
   law: v('Oliver Wendell Holmes Jr.', 'An old judge. The rule, the exception someone is begging for, and why the exception eats the rule. Spare, a little wicked.'),
-  sport: v('Grantland Rice', 'A sportswriter. The play, the person, a line you could say in a bar. Warm. Never a spreadsheet.'),
   finds: v('Pliny the Elder', 'A Roman who collected everything. The object, where it turned up, and the use a person put it to. Greedy for the detail.'),
   'treaty-text': v('Hugo Grotius', 'A lawyer of nations. The clause, who it binds, and what it lets them do. Formal, then suddenly plain.'),
   'strait-watch': v('Zbigniew Brzezinski', 'A strategist looking at a map. Who holds the water, what passes through it, and what breaks if they close it. Cool and unsentimental.'),
