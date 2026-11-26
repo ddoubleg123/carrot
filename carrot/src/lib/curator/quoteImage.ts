@@ -38,7 +38,8 @@ export interface QuoteCardJob {
 
 /** Render with the v2 kit. Empty on a laptop, or when every variant fails a gate. */
 export async function renderQuoteCard(card: QuoteCardJob): Promise<string[]> {
-  if (process.env.RENDER !== 'true') return []
+  const onServer = process.env.RENDER === 'true' || Boolean(process.env.RENDER_SERVICE_ID)
+  if (!onServer) return []
   const sentence = card.sentence.trim()
   const speaker = card.speaker.trim()
   if (!sentence || !speaker) return []
@@ -74,11 +75,16 @@ export async function renderQuoteCard(card: QuoteCardJob): Promise<string[]> {
     ], { timeout: 300000, windowsHide: true, maxBuffer: 8_000_000 })
     stdout = String(result.stdout || '')
   } catch (error) {
-    const failed = error as { stdout?: string }
+    const failed = error as { stdout?: string; stderr?: string; message?: string }
     stdout = String(failed?.stdout || '')
+    const detail = String(failed?.stderr || failed?.message || '').replace(/\s+/g, ' ').trim().slice(0, 400)
+    if (detail) console.error('[quote-card]', detail)
   }
   const line = stdout.split('\n').map((row) => row.trim()).filter((row) => row.startsWith('RESULT ')).pop()
-  if (!line) return []
+  if (!line) {
+    console.error('[quote-card] no result')
+    return []
+  }
   const parsed = JSON.parse(line.slice('RESULT '.length)) as { passes?: QuoteVariation[] }
   const urls: string[] = []
   for (const pass of parsed.passes || []) {
