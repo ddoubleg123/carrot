@@ -193,6 +193,8 @@ model Post {
   cfHeight            Int?         @map("cf_height")
   cfPlaybackUrlHls    String?      @map("cf_playback_url_hls")
   captionVttUrl       String?      @map("caption_vtt_url")
+  /// Topic desk id, a personal ask id, or pol-watch.
+  bucket              String?
   User                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Comments relation
   comments            Comment[]
@@ -201,6 +203,7 @@ model Post {
   saves               PostSave[]
 
   @@index([videoBucket, videoPath])
+  @@index([bucket])
   @@map("posts")
 }
 
