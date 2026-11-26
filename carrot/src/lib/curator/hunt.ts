@@ -6,7 +6,7 @@ import { listChannels, recentUploads } from '@/lib/curator/channels'
 import { DAILY_CAP, DESKS, type Desk } from '@/lib/curator/desks'
 import { judgeReading, sameStory } from '@/lib/curator/judge'
 import { alreadyPosted, publishFinding } from '@/lib/curator/publish'
-import { feedItems, fetchText, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
+import { fillQuery, itemsFrom, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
 import { profileQrUrl } from '@/lib/learn/brandClip'
 import { ensureMediaBins } from '@/lib/mediaBins'
 import { runQaMonitor } from '@/lib/curator/qaMonitor'
@@ -133,10 +133,23 @@ async function saveHunt(hunt: Hunt): Promise<void> {
 }
 
 function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
+  const hour = Math.floor(Date.now() / 3_600_000) + postedToday
   const feeds = desk.sources.filter((source) => source.kind === 'rss')
-  if (feeds.length <= 2) return feeds
-  const start = (Math.floor(Date.now() / 3_600_000) + postedToday) % feeds.length
-  return [0, 1].map((step) => feeds[(start + step) % feeds.length])
+  const opened = desk.sources.filter((source) => source.kind === 'site' || source.kind === 'query')
+  const picked: Desk['sources'] = []
+  const take = (list: Desk['sources'], offset: number) => {
+    if (list.length === 0) return
+    picked.push(list[(hour + offset) % list.length])
+  }
+  if (opened.length && hour % 2 === 1) {
+    take(opened, 0)
+    take(feeds, 0)
+  } else {
+    take(feeds, 0)
+    take(opened, 0)
+  }
+  if (picked.length < 2) take(feeds, 1)
+  return picked.slice(0, 2)
 }
 
 function onBeat(desk: Desk, title: string, extra = ''): boolean {
@@ -312,11 +325,12 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
     const feeds = feedWindow(desk, memory.posted[desk.id] || 0)
     let articles = 0
     for (const feed of feeds) {
-      pass.looked.push(`Feed · ${feed.name}`)
-      const xml = await fetchText(feed.ref)
-      const items = xml ? feedItems(xml, desk.focus?.length ? 24 : 8) : []
-      if (!xml) {
-        pass.dropped.push({ title: feed.name, from: 'Feed', reason: 'The feed could not be read.' })
+      const label = feed.kind === 'query' ? 'Record' : feed.kind === 'site' ? 'Site' : 'Feed'
+      pass.looked.push(`${label} · ${feed.name}`)
+      const ref = feed.kind === 'query' ? fillQuery(feed.ref, desk.name) : feed.ref
+      const items = await itemsFrom(feed.kind, ref, desk.focus?.length ? 24 : 8).catch(() => [] as FoundItem[])
+      if (items.length === 0) {
+        pass.dropped.push({ title: feed.name, from: label, reason: 'Nothing on that source could be opened.' })
         continue
       }
       for (const item of items) {

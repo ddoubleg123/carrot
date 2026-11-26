@@ -1,12 +1,13 @@
 import { ARTICLE_FEEDS } from '@/lib/curator/articleFeeds'
+import { OPEN_SOURCES } from '@/lib/curator/openSources'
 import { RESTORED } from '@/lib/curator/restored'
 import { ROSTER } from '@/lib/curator/roster'
 import { deskSlug } from '@/lib/curator/slug'
 
 export interface DeskSource {
-  kind: 'youtube' | 'rss' | 'x'
+  kind: 'youtube' | 'rss' | 'x' | 'site' | 'query'
   name: string
-  /** YouTube handle without @, a feed address, or an X handle. */
+  /** A channel, a feed, a handle, a site, or a record address. `{q}` is the group name. */
   ref: string
 }
 
@@ -262,7 +263,13 @@ function applyArticleFeeds(desks: Desk[]): Desk[] {
       seen.add(host)
       return true
     })
-    return { ...desk, sources: [...kept, ...added] }
+    const openSeen = new Set<string>()
+    const opened = (OPEN_SOURCES[desk.name] || []).filter((source) => {
+      if (openSeen.has(source.ref)) return false
+      openSeen.add(source.ref)
+      return true
+    })
+    return { ...desk, sources: [...kept, ...added, ...opened] }
   })
 }
 
