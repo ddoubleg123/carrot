@@ -1,3 +1,4 @@
+import { ARTICLE_FEEDS } from '@/lib/curator/articleFeeds'
 import { RESTORED } from '@/lib/curator/restored'
 import { ROSTER } from '@/lib/curator/roster'
 import { deskSlug } from '@/lib/curator/slug'
@@ -240,7 +241,32 @@ const LIVE: Desk[] = [
   }
 ]
 
-export const DESKS: Desk[] = [...LIVE, ...ROSTER, ...RESTORED]
+const DROP_ARTICLE_HOST = /(^|\.)(?:bbc\.co\.uk|bbc\.com|bbci\.co\.uk|theguardian\.com|cbssports\.com)$/
+
+function articleHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/** Keep the videos and the primary feeds. Drop BBC, Guardian, and CBS Sports, then add the wider list. */
+function applyArticleFeeds(desks: Desk[]): Desk[] {
+  return desks.map((desk) => {
+    const kept = desk.sources.filter((source) => source.kind !== 'rss' || !DROP_ARTICLE_HOST.test(articleHost(source.ref)))
+    const seen = new Set(kept.filter((source) => source.kind === 'rss').map((source) => articleHost(source.ref)))
+    const added = (ARTICLE_FEEDS[desk.name] || []).filter((source) => {
+      const host = articleHost(source.ref)
+      if (!host || seen.has(host)) return false
+      seen.add(host)
+      return true
+    })
+    return { ...desk, sources: [...kept, ...added] }
+  })
+}
+
+export const DESKS: Desk[] = applyArticleFeeds([...LIVE, ...ROSTER, ...RESTORED])
 
 export const DAILY_CAP = 12
 
