@@ -37,7 +37,9 @@ export async function GET(_request: Request, context: { params: Promise<{ name: 
   if (!NAME.test(name)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const file = await readCard(name)
   if (!file) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return new NextResponse(file, {
+  const image = new Uint8Array(file.byteLength)
+  image.set(file)
+  return new NextResponse(image, {
     headers: {
       'Content-Type': 'image/png',
       'Cache-Control': 'no-store',
