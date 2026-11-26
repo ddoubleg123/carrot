@@ -10,7 +10,7 @@ import { createHash } from 'crypto'
 import { youtubeIdFromText } from '@/lib/youtube'
 import { deskGrade, feedLine, patchQuestion, worthPosting } from '@/lib/curator/voice'
 import { sameStory } from '@/lib/curator/judge'
-import { quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
+import { quoteGrade, quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
 import { renderQuoteCard } from '@/lib/curator/quoteImage'
 
 function sourceId(): string {
@@ -271,19 +271,26 @@ export async function publishFinding(desk: Desk, finding: {
   })
   invalidateFeedCache()
   void topicId
-  const spoken = quoteSentence([finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n'))
-  if (spoken && await strangerPass(spoken)) {
-    await publishQuoteCard(desk, user.id, spoken, finding.publisher, preview).catch(() => null)
+  const sourceName = link?.site || finding.publisher
+  const when = link?.published || ''
+  const passage = [finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n')
+  const ready = passage.replace(/\s+/g, ' ').split(/(?<=[.])\s+/).map((part) => part.trim())
+  for (const spoken of ready) {
+    if (quoteSentence(spoken) !== spoken) continue
+    const grade = quoteGrade({ sentence: spoken, source: sourceName, date: when, image: preview || 'pending' })
+    if (grade.failures.some((reason) => reason !== 'The card has no picture.')) continue
+    if (!(await strangerPass(spoken))) continue
+    await publishQuoteCard(desk, user.id, spoken, sourceName, preview, when).catch(() => null)
+    break
   }
   return { topicUrl, postId: post.id, username: user.username || desk.username }
 }
 
 /** A second post. The sentence only, set as a card. The article post stays the article. */
-async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null) {
-  if (!image) return
-  const cards = await renderQuoteCard(sentence, source, image)
+async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null, date: string) {
+  const cards = await renderQuoteCard({ sentence, speaker: source, date, imageUrl: image })
   if (cards.length === 0) return
-  const content = quotePost(sentence, source)
+  const content = quotePost(sentence, source, date)
   const prior = await prisma.post.findFirst({
     where: { content: { contains: sentence.slice(0, 140) } },
     select: { id: true }

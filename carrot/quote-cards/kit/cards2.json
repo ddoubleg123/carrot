@@ -1,0 +1,72 @@
+{
+ "_note": "quote = the exact string. big and emphasis must be exact substrings of quote; they change weight or color only, never words. photo = full-resolution PNG from frames.py. kicker/date follow S11/S12.",
+ "cards": [
+  {
+   "id": "house-floor",
+   "quote": "In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.",
+   "big": "10 years",
+   "emphasis": "kept me alive for 10 years",
+   "speaker": "Rep. Mark DeSaulnier",
+   "context": "House floor",
+   "date": "18 November 2026",
+   "timecode": "03:43",
+   "graphic": "years10",
+   "portrait": "photos/desaulnier-official.jpg",
+   "cutout": "photos/desaulnier-cutout.png",
+   "portrait_source": "Official House portrait, public domain (US government work), via github.com/unitedstates/images"
+  },
+  {
+   "id": "lake",
+   "quote": "The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.",
+   "big": "8 kilometers",
+   "emphasis": "nearly 8 kilometers",
+   "speaker": "Narration",
+   "context": "From the recording",
+   "date": "",
+   "timecode": "02:57",
+   "graphic": "scale"
+  },
+  {
+   "id": "measles",
+   "quote": "For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.",
+   "big": "26 years",
+   "emphasis": "lost its measles-free status",
+   "speaker": "Narration",
+   "context": "CDC statement",
+   "date": "17 November 2026",
+   "timecode": "00:08",
+   "graphic": "years26"
+  },
+  {
+   "id": "two-wars",
+   "quote": "I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.",
+   "big": "two wars",
+   "emphasis": "nearly starved",
+   "speaker": "Paul Dawson",
+   "context": "Retired fire safety officer",
+   "date": "",
+   "timecode": "00:38"
+  },
+  {
+   "id": "one-point-five",
+   "quote": "The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.",
+   "big": "1.5°C",
+   "emphasis": "inevitably is going to breach 1.5°C",
+   "speaker": "Rachel Cleetus",
+   "context": "Democracy Now, Antalya",
+   "date": "",
+   "timecode": "00:40",
+   "graphic": "gauge"
+  },
+  {
+   "id": "hearing",
+   "quote": "AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.",
+   "big": "AI",
+   "emphasis": "displace jobs more rapidly",
+   "speaker": "Mr. Gallagher",
+   "context": "House hearing",
+   "date": "20 November 2026",
+   "timecode": "03:30"
+  }
+ ]
+}

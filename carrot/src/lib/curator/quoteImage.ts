@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { createHash } from 'crypto'
-import { access, mkdir } from 'fs/promises'
+import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
 import { promisify } from 'util'
 
@@ -9,7 +9,7 @@ const BUCKET = 'involuted-river-466315-p0.firebasestorage.app'
 
 export interface QuoteVariation {
   direction: string
-  palette: number
+  palette: string
   file: string
   quality: 'high'
 }
@@ -28,31 +28,50 @@ async function publishVariation(file: string, name: string): Promise<string | nu
   return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketId)}/o/${encodeURIComponent(objectPath)}?alt=media`
 }
 
-/** Render every high-quality variation. Empty on a laptop, or when none pass. */
-export async function renderQuoteCard(sentence: string, source: string, imageUrl: string): Promise<string[]> {
+export interface QuoteCardJob {
+  sentence: string
+  speaker: string
+  context?: string
+  date?: string
+  imageUrl?: string | null
+}
+
+/** Render with the v2 kit. Empty on a laptop, or when every variant fails a gate. */
+export async function renderQuoteCard(card: QuoteCardJob): Promise<string[]> {
   if (process.env.RENDER !== 'true') return []
-  const clean = imageUrl.split('?')[0]
-  if (!clean.startsWith('/') || clean.includes('..')) return []
-  const photo = path.join(process.cwd(), 'public', clean.slice(1))
-  try {
-    await access(photo)
-  } catch {
-    return []
-  }
+  const sentence = card.sentence.trim()
+  const speaker = card.speaker.trim()
+  if (!sentence || !speaker) return []
   const id = createHash('sha1').update(sentence).digest('hex').slice(0, 12)
   const dir = path.join(process.cwd(), 'public', 'quote-cards', id)
   await mkdir(dir, { recursive: true })
-  const script = path.join(process.cwd(), 'quote-review', 'kit', 'kit', 'ship.py')
+  let picture = ''
+  const imageUrl = card.imageUrl || ''
+  const local = imageUrl.split('?')[0]
+  if (local.startsWith('/') && !local.includes('..')) {
+    picture = path.join(process.cwd(), 'public', local.slice(1))
+  } else if (/^https?:\/\//i.test(imageUrl)) {
+    picture = imageUrl
+  }
+  const jobPath = path.join(dir, 'job.json')
+  await writeFile(jobPath, JSON.stringify({
+    id,
+    quote: sentence,
+    speaker,
+    context: card.context || '',
+    date: card.date || '',
+    picture
+  }))
+  const script = path.join(process.cwd(), 'quote-cards', 'kit', 'service.py')
   let stdout = ''
   try {
     const result = await run('python3', [
       script,
-      '--id', id,
-      '--quote', sentence,
-      '--speaker', source || 'Narration',
-      '--photo', photo,
-      '--out', dir
-    ], { timeout: 300000, windowsHide: true, maxBuffer: 4_000_000 })
+      '--job', jobPath,
+      '--out', dir,
+      '--variants', process.env.VARIANTS_PER_QUOTE || '12',
+      '--shortlist', process.env.SHORTLIST_SIZE || '8'
+    ], { timeout: 300000, windowsHide: true, maxBuffer: 8_000_000 })
     stdout = String(result.stdout || '')
   } catch (error) {
     const failed = error as { stdout?: string }
@@ -64,7 +83,7 @@ export async function renderQuoteCard(sentence: string, source: string, imageUrl
   const urls: string[] = []
   for (const pass of parsed.passes || []) {
     if (pass.quality !== 'high' || !pass.file) continue
-    const name = `${id}__${pass.direction}__p${pass.palette}.png`
+    const name = `${id}__${pass.direction}__${pass.palette}.png`
     const stored = await publishVariation(pass.file, name)
     urls.push(stored || `/quote-cards/${id}/${name}`)
   }
