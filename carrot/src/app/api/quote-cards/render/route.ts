@@ -7,7 +7,10 @@ export const maxDuration = 300
 
 /** Ask the server kit for variants of one quote. A person still approves what posts. */
 export async function POST(request: Request) {
-  if (!(await curatorAllowed())) {
+  const secret = process.env.CURATOR_SECRET || process.env.INGEST_WORKER_SECRET || ''
+  const header = request.headers.get('x-curator-secret') || ''
+  const bySecret = Boolean(secret) && header === secret
+  if (!bySecret && !(await curatorAllowed())) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 401 })
   }
   const body = await request.json().catch(() => null) as {
