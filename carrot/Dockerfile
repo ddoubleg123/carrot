@@ -4,11 +4,23 @@ FROM node:20-bookworm-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies. Quote cards are rendered here, not on a laptop.
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    ffmpeg \
+    tesseract-ocr \
+    python3 \
+    python3-pil \
+    python3-numpy \
+    python3-opencv \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pip3 install --break-system-packages playwright pytesseract \
+    && python3 -m playwright install --with-deps chromium \
+    && chmod -R 755 /ms-playwright
 
 # Copy package files
 COPY package*.json ./

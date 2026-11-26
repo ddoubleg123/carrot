@@ -20,7 +20,10 @@ import PostActionBar from "../../../../components/post/PostActionBar";
 import ShareSheet from "../../../../components/share/ShareSheet";
 import VideoErrorBoundary from "../../../../components/VideoErrorBoundary";
 import { youtubeEmbedSrc, youtubeIdFromText } from "../../../../lib/youtube";
-import { parseFeedPost, patchConversation, patchName } from "../../../../lib/feedPost";
+import { directArticleNote, parseFeedPost, patchConversation, patchName } from "../../../../lib/feedPost";
+import { readQuote } from "../../../../lib/curator/quoteCard";
+import QuoteMeme from "../../../../components/QuoteMeme";
+import { isFinishedQuote, pickQuoteCard } from "../../../../lib/curator/quoteCardPick";
 
 export type VoteType = "carrot" | "stick" | null;
 
@@ -254,7 +257,7 @@ function ArticlePreview({ url, title, published, site, image, embedded }: { url:
       onClick={(event) => event.stopPropagation()}
     >
       {src ? (
-        <div className="relative h-[150px] w-full overflow-hidden rounded-lg bg-[#F6F3EE]">
+        <div className="relative w-full overflow-hidden rounded-lg bg-[#F6F3EE]" style={{ aspectRatio: '16 / 9' }}>
           <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover object-center" onError={recover} />
         </div>
       ) : null}
@@ -563,11 +566,12 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const isOwnPost = useMemo(() => Boolean(currentUserId && author?.id && currentUserId === author.id), [currentUserId, author?.id]);
   const displayTime = useMemo(() => {
     const d = timestamp ? new Date(timestamp) : new Date();
+    if (Number.isNaN(d.getTime())) return ''
     const diff = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (diff < 60) return `${diff}s`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return `${Math.floor(diff / 86400)}d`;
+    if (diff < 3600) return `${Math.max(1, Math.ceil(diff / 3600))}h`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`
+    const sameYear = d.getFullYear() === new Date().getFullYear()
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' })
   }, [timestamp]);
 
   // Lightweight debug info for the overflow menu
@@ -594,6 +598,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
 
   // In-app Share sheet state
   const [showShare, setShowShare] = useState(false);
+  const [passed, setPassed] = useState(false);
 
   const copyDebugToClipboard = async () => {
     try {
@@ -653,7 +658,11 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const hasVideoMedia = Boolean(cfUid || cfPlaybackUrlHls || videoUrl);
   const youtubeId = youtubeIdFromText(content);
   const parts = parseFeedPost(content);
-  const article = !youtubeId && parts.url ? parts : null;
+  const quoteCard = readQuote(content);
+  const article = !quoteCard && !youtubeId && parts.url ? parts : null;
+  const articleText = article
+    ? [directArticleNote(parts.note), patchConversation(content)].filter(Boolean).join('\n')
+    : '';
   const textOnGradient = Boolean(
     hasGradient && !gifUrl && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl
     && (article || !imageUrls || imageUrls.length === 0)
@@ -672,13 +681,14 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
       onMouseLeave={() => setHovering(false)}
     >
       <div
-        className="bg-white border border-[#E6E8EC] rounded-[18px] p-4"
+        className="bg-white border border-[#E6E8EC] rounded-[18px] flex flex-col overflow-hidden sm:flex-row sm:items-stretch"
         data-card-inner
         style={{
           ...(innerBoxColor ? { backgroundColor: innerBoxColor } : null),
           ...(edgeColor ? { borderLeftWidth: 5, borderLeftColor: edgeColor } : null),
         }}
       >
+        <div className="min-w-0 flex-1 p-4">
         {carrotText ? (
           <div className="text-sm font-semibold text-gray-700 mb-1">{carrotText}</div>
         ) : null}
@@ -733,7 +743,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   className="text-xs text-gray-500 underline-offset-2 hover:underline"
                   onClick={() => openCard()}
                   aria-label="Open post permalink"
-                  title="Open post"
+                  title={timestamp ? new Date(timestamp).toLocaleString() : 'Open post'}
                 >
                   • {displayTime}
                 </button>
@@ -819,6 +829,19 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           </div>
         </div>
 
+        {passed ? (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[#F6F3EE] px-3 py-2.5 text-sm text-[#44403C]">
+            <span>Less like this.</span>
+            <button
+              type="button"
+              className="font-semibold text-[#FF6A00]"
+              onClick={() => document.getElementById(`stick-${id}`)?.click()}
+            >
+              Undo
+            </button>
+          </div>
+        ) : (
+        <>
         {/* Content */}
         {/* Non-media posts: place content inside the gradient visual to mirror composer */}
         {textOnGradient ? (
@@ -829,7 +852,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   className="bg-white/90 border border-white/60 rounded-lg p-3 sm:p-4 text-[15px] text-gray-900 whitespace-pre-wrap break-words cursor-pointer"
                   onClick={() => openCard()}
                 >
-                  <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} name={author?.name} />
+                  <PostCopy content={article ? articleText : (youtubeId ? parts.note : content)} name={author?.name} />
                   {article ? (
                     <ArticlePreview
                       embedded
@@ -842,31 +865,51 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   ) : null}
                 </div>
               ) : null}
-              {/* Composer parity: place actions over the gradient for non-media posts */}
-              <PostActionBar
-                postId={id}
-                stats={stats}
-                canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
-                permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
-                onComment={() => openCard('comments')}
-                onLike={(liked) => {
-                  try { console.log('[ActionBar] like toggled', { id, liked }); } catch {}
-                }}
-                onSaveToggle={(saved) => { try { console.log('[ActionBar] save toggled', { id, saved }); } catch {} }}
-                onShareInApp={() => setShowShare(true)}
-                onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
-                onTranscribe={() => { try { console.log('[ActionBar] open transcript/chapters', { id }); openCard('transcript'); } catch {} }}
-                onTranslate={() => { try { console.log('[ActionBar] translate requested', { id }); openCard('translate'); } catch {} }}
-              />
             </div>
           </div>
+        ) : quoteCard ? (
+          <div className="mt-3">
+            {isFinishedQuote(imageUrls?.[0] || thumbnailUrl) ? (
+              <img
+                src={pickQuoteCard(imageUrls?.length ? imageUrls : [thumbnailUrl || ''], id)}
+                alt=""
+                className="w-full cursor-pointer rounded-2xl"
+                onClick={() => openCard()}
+              />
+            ) : (
+              <QuoteMeme
+                sentence={quoteCard.sentence}
+                source={quoteCard.source}
+                image={imageUrls?.[0] || thumbnailUrl}
+                onClick={() => openCard()}
+              />
+            )}
+          </div>
         ) : (
-          content ? (
+          article ? (
+            <>
+              <ArticlePreview
+                url={article.url}
+                title={article.title}
+                published={article.published}
+                site={article.site}
+                image={article.image || imageUrls?.[0]}
+              />
+              {articleText ? (
+                <div
+                  className="mt-3 text-[15px] leading-relaxed text-[#60646C] whitespace-pre-wrap break-words cursor-pointer"
+                  onClick={() => openCard()}
+                >
+                  <PostCopy content={articleText} name={author?.name} />
+                </div>
+              ) : null}
+            </>
+          ) : content ? (
             <div
               className="mt-3 text-[15px] leading-relaxed text-[#60646C] whitespace-pre-wrap break-words cursor-pointer"
               onClick={() => openCard()}
             >
-              <PostCopy content={article ? parts.note : (youtubeId ? parts.note : content)} name={author?.name} />
+              <PostCopy content={youtubeId ? parts.note : content} name={author?.name} />
             </div>
           ) : null
         )}
@@ -899,15 +942,7 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
               />
             </div>
           </div>
-        ) : article && !textOnGradient ? (
-          <ArticlePreview
-            url={article.url}
-            title={article.title}
-            published={article.published}
-            site={article.site}
-            image={article.image || imageUrls?.[0]}
-          />
-        ) : !article && !hasVideoMedia && imageUrls && imageUrls.length > 0 ? (
+        ) : !quoteCard && !article && !hasVideoMedia && imageUrls && imageUrls.length > 0 ? (
           <div className="mt-3">
             {/* Wrap media in gradient even when images exist so color passes over */}
             <div
@@ -1020,17 +1055,6 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                   );
                 }
                 
-                // CRITICAL FIX: Memoized player defined outside component prevents remounts
-                console.log('[CommitmentCard] ✓ Valid video URL, rendering SINGLE VideoPlayer (SimpleVideo):', {
-                  postId: id,
-                  hasVideoUrl: !!videoUrl,
-                  videoUrl: videoUrl?.slice(0, 100),
-                  isProxied,
-                  isFirebase,
-                  hasValidExtension,
-                  renderTimestamp: Date.now()
-                });
-                
                 return (
                   <VideoErrorBoundary postId={id}>
                     <MemoizedVideoPlayer
@@ -1078,33 +1102,31 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
           </div>
         )}
 
-        {/* Actions (skip here if non-media gradient already rendered them inside) */}
-        {!textOnGradient && (
-          <PostActionBar
-            postId={id}
-            stats={stats}
-            canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
-            permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
-            onComment={() => openCard('comments')}
-            onLike={(liked) => {
-              try {
-                // Optimistic UI already handled in child; optionally call API here
-                console.log('[ActionBar] like toggled', { id, liked });
-              } catch {}
-            }}
-            onSaveToggle={(saved) => {
-              try { console.log('[ActionBar] save toggled', { id, saved }); } catch {}
-            }}
-            onShareInApp={() => setShowShare(true)}
-            onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
-            onTranscribe={() => {
-              try { console.log('[ActionBar] open transcript/chapters', { id }); openCard('transcript'); } catch {}
-            }}
-            onTranslate={() => {
-              try { console.log('[ActionBar] translate requested', { id }); openCard('translate'); } catch {}
-            }}
-          />
+        </>
         )}
+        </div>
+        <PostActionBar
+          postId={id}
+          stats={stats}
+          canTranscribe={Boolean(audioUrl || cfUid || cfPlaybackUrlHls || videoUrl)}
+          permalink={typeof window !== 'undefined' ? `${window.location.origin}/post/${id}` : undefined}
+          onStick={setPassed}
+          onComment={() => openCard('comments')}
+          onLike={(liked) => {
+            try { console.log('[ActionBar] like toggled', { id, liked }); } catch {}
+          }}
+          onSaveToggle={(saved) => {
+            try { console.log('[ActionBar] save toggled', { id, saved }); } catch {}
+          }}
+          onShareInApp={() => setShowShare(true)}
+          onShareExternal={(url) => { try { console.log('[ActionBar] external share', url); } catch {} }}
+          onTranscribe={() => {
+            try { console.log('[ActionBar] open transcript/chapters', { id }); openCard('transcript'); } catch {}
+          }}
+          onTranslate={() => {
+            try { console.log('[ActionBar] translate requested', { id }); openCard('translate'); } catch {}
+          }}
+        />
 
       </div>
 

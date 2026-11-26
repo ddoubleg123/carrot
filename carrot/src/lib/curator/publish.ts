@@ -6,9 +6,12 @@ import { COLOR_SCHEMES } from '@/config/colorSchemes'
 import { deskDisclosure, type Desk } from '@/lib/curator/desks'
 import { pageImage, readLinkCard, savePreview, youtubeThumb } from '@/lib/curator/preview'
 import { articleLines } from '@/lib/feedPost'
+import { createHash } from 'crypto'
 import { youtubeIdFromText } from '@/lib/youtube'
-import { feedLine, patchQuestion } from '@/lib/curator/voice'
+import { deskGrade, feedLine, patchQuestion, worthPosting } from '@/lib/curator/voice'
 import { sameStory } from '@/lib/curator/judge'
+import { quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
+import { renderQuoteCard } from '@/lib/curator/quoteImage'
 
 function sourceId(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -101,6 +104,30 @@ export interface Published {
   username: string
 }
 
+function thumbKey(url: string): string {
+  return createHash('sha1').update(url.split('?')[0]).digest('hex').slice(0, 16)
+}
+
+/** The same page, the same clip file, or the same talk, even when the caption is new. */
+export async function alreadyPosted(finding: {
+  url: string
+  sourceUrl?: string
+  transcript?: string
+  videoPath?: string
+}): Promise<boolean> {
+  const or: Prisma.PostWhereInput[] = []
+  if (finding.videoPath) or.push({ videoPath: finding.videoPath })
+  const ids = [...new Set([youtubeIdFromText(finding.sourceUrl), youtubeIdFromText(finding.url)].filter((id): id is string => Boolean(id)))]
+  for (const id of ids) or.push({ content: { contains: id } })
+  const keys = [...new Set([finding.url, finding.sourceUrl || ''].map((url) => url.split('?')[0]).filter((url) => url.startsWith('http')))]
+  for (const key of keys) or.push({ thumbnailUrl: { contains: thumbKey(key) } })
+  const transcript = (finding.transcript || '').replace(/\s+/g, ' ').trim()
+  if (transcript.length >= 80) or.push({ audioTranscription: { startsWith: transcript.slice(0, 160) } })
+  if (or.length === 0) return false
+  const prior = await prisma.post.findFirst({ where: { OR: or }, select: { id: true } })
+  return Boolean(prior)
+}
+
 function palette(key: string) {
   let n = 0
   for (const ch of key) n = (n * 33 + ch.charCodeAt(0)) >>> 0
@@ -120,10 +147,16 @@ export async function publishFinding(desk: Desk, finding: {
   transcript?: string
   videoBucket?: string
   videoPath?: string
+  /** The page the clip was cut from. A new clip file still counts as the same video. */
+  sourceUrl?: string
 }): Promise<Published> {
   const hosted = finding.url.startsWith('/topic-videos/') && finding.url.toLowerCase().includes('.mp4')
   const playable = finding.url.split('?')[0]
-  const note = await feedLine(desk.name, finding.title, finding.excerpt || finding.summary)
+  if (await alreadyPosted(finding)) throw new Error('Already posted.')
+  const passage = finding.excerpt || finding.summary
+  if (!(await worthPosting(finding.title, passage))) throw new Error('Not worth posting.')
+  if ((await deskGrade(desk.beat, finding.title, passage)) < 3) throw new Error('Not worth posting.')
+  const note = await feedLine(desk.name, finding.title, passage)
   if (!note) throw new Error('The page has no idea worth posting.')
   const user = await deskUser(desk)
   const patch = await deskPatch(desk, user.id)
@@ -197,7 +230,8 @@ export async function publishFinding(desk: Desk, finding: {
   const remote = hosted ? null : (youtubeThumb(finding.url) || finding.image || link?.image || (isVideo ? null : await pageImage(finding.url)))
   const preview = remote ? await savePreview(remote, finding.url) : null
   const meta = isVideo || hosted ? '' : articleLines({ ...link, image: preview || '' })
-  const content = [note, '', question, topicUrl, hosted ? '' : finding.url, meta].filter((part) => part !== '').join('\n')
+  const sourceLine = finding.sourceUrl && finding.sourceUrl !== playable ? finding.sourceUrl : ''
+  const content = [note, '', topicUrl, hosted ? sourceLine : finding.url, meta].filter((part) => part !== '').join('\n')
   const look = palette(finding.url + desk.id)
   const post = await prisma.post.create({
     data: {
@@ -218,7 +252,8 @@ export async function publishFinding(desk: Desk, finding: {
       videoBucket: finding.videoBucket || null,
       videoPath: finding.videoPath || null,
       audioTranscription: hosted && finding.transcript ? finding.transcript.slice(0, 100000) : null,
-      transcriptionStatus: hosted && finding.transcript ? 'ready' : null
+      transcriptionStatus: hosted && finding.transcript ? 'ready' : null,
+      bucket: desk.id === 'member-card' ? 'pol-watch' : desk.id
     }
   })
   await prisma.patchPost.create({
@@ -236,5 +271,38 @@ export async function publishFinding(desk: Desk, finding: {
   })
   invalidateFeedCache()
   void topicId
+  const spoken = quoteSentence([finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n'))
+  if (spoken && await strangerPass(spoken)) {
+    await publishQuoteCard(desk, user.id, spoken, finding.publisher, preview).catch(() => null)
+  }
   return { topicUrl, postId: post.id, username: user.username || desk.username }
+}
+
+/** A second post. The sentence only, set as a card. The article post stays the article. */
+async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null) {
+  if (!image) return
+  const cards = await renderQuoteCard(sentence, source, image)
+  if (cards.length === 0) return
+  const content = quotePost(sentence, source)
+  const prior = await prisma.post.findFirst({
+    where: { content: { contains: sentence.slice(0, 140) } },
+    select: { id: true }
+  })
+  if (prior) return
+  const look = palette(`${sentence}:${desk.id}`)
+  await prisma.post.create({
+    data: {
+      userId,
+      content,
+      emoji: '▸',
+      gradientDirection: look.direction,
+      gradientFromColor: look.colors.gradientFromColor,
+      gradientViaColor: look.colors.gradientViaColor || null,
+      gradientToColor: look.colors.gradientToColor,
+      imageUrls: JSON.stringify(cards),
+      thumbnailUrl: cards[0],
+      bucket: desk.id === 'member-card' ? 'pol-watch' : desk.id
+    }
+  })
+  invalidateFeedCache()
 }

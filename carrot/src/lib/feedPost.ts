@@ -92,6 +92,20 @@ export function patchName(path: string): string {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
+/** A long desk essay is not the post. One or two plain sentences can stay. */
+export function directArticleNote(note: string): string {
+  const body = note
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^\/patch\/\S+$/.test(line))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const sentences = body.split(/(?<=[.!])\s+/).filter(Boolean)
+  if (!body || sentences.length > 2 || body.length > 240) return ''
+  return body
+}
+
 export function articleLines(card: { title?: string; published?: string; site?: string; image?: string }): string {
   const lines = [
     card.title ? `Title: ${decodeEntities(card.title)}` : '',

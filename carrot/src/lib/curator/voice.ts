@@ -1,5 +1,7 @@
 import path from 'path'
 import { config as loadEnv } from 'dotenv'
+import type { Voice } from '@/lib/curator/voices'
+import { bareWitness, brokenPost } from '@/lib/learn/nameCard'
 
 const CHROME = /image source|getty images|image caption|photograph:|view image in fullscreen|photo credit|credit:|read more|continue reading|skip to|sign in to|cookie|all rights reserved|official website of the united states|here'?s how you know|\.gov website belongs|before we begin|day pass|like and subscribe|early readers like|big pharma/i
 
@@ -76,12 +78,167 @@ function acceptable(line: string): string | null {
   if (clean.length < 40 || clean.length > 360) return null
   if (CHROME.test(clean) || CANNED.test(clean)) return null
   if (/^(how|why|what)\b/i.test(clean) && !/[.!?…]/.test(clean)) return null
+  if (brokenPost(clean)) return null
   return clean
+}
+
+const SCENE = /\b(i was|i keep|i sat|i stood|beside me|beside mine|my desk|in my |holding room|school uniform)\b/i
+
+/** Two short paragraphs. A line must not end in a question, or the feed lifts it into a headline. A scene is not a post. */
+function spoken(text: string, person: string): string | null {
+  const clean = text.replace(/^["“]+|["”]+$/g, '').trim()
+  if (!clean || /^skip\b/i.test(clean)) return null
+  const paragraphs = clean
+    .split(/\n+/)
+    .map((part) => part.replace(/\s+/g, ' ').replace(/\?+\s*$/, '.').trim())
+    .filter((part) => part && !/^(title|when|from|image):/i.test(part) && !/^(what|why|how)\b/i.test(part))
+    .slice(0, 2)
+  const flat = paragraphs.join(' ')
+  if (flat.length < 70 || flat.length > 520) return null
+  if (CHROME.test(flat) || CANNED.test(flat) || SCENE.test(flat)) return null
+  if (/^(i |my )\b/i.test(paragraphs[0] || '')) return null
+  if (person && flat.toLowerCase().includes(person.toLowerCase())) return null
+  return paragraphs.join('\n\n')
 }
 
 function fallbackLine(title: string, excerpt: string): string | null {
   const body = dropTitle(tidy(excerpt || ''), title)
   return acceptable(firstFact(body))
+}
+
+const JUNK = /\b(promo code|bonus bet|draftkings|fandulk|fanduel|betmgm|sign[- ]up bonus|league pass|coupon code|affiliate|gift guide|round-?up|shopping guide|best .{0,48}tested|face masks?)\b/i
+
+/** 1 or 2 is the wrong desk, or too thin to tell as that desk. Those do not publish. */
+export async function deskGrade(beat: string, title: string, excerpt: string): Promise<number> {
+  const source = tidy(`${title}. ${excerpt}`).slice(0, 1800)
+  const job = beat.replace(/\s+/g, ' ').trim()
+  if (!source || !job) return 0
+  const key = deepseekKey()
+  if (!key) return 0
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-flash',
+        temperature: 0,
+        max_tokens: 40,
+        thinking: { type: 'disabled' },
+        messages: [{
+          role: 'user',
+          content: `This desk posts only this: ${job.slice(0, 240)}
+Grade the source from 1 to 10 for that job.
+1 or 2: a different subject, a metaphor stretched onto the beat, or too thin to retell as this beat.
+3 or 4: the right subject, missing the concrete fact the beat exists for.
+5 to 7: the right subject and one concrete fact.
+8 to 10: the thing this desk exists to tell, with the detail.
+Do not reward outrage. Reply JSON only: {"score":n}
+
+${source}`
+        }]
+      }),
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!response.ok) return 0
+    const data = await response.json().catch(() => null)
+    const raw = String(data?.choices?.[0]?.message?.content || '')
+    const match = raw.match(/\{[\s\S]*\}/)
+    if (!match) return 0
+    const score = Number((JSON.parse(match[0]) as { score?: unknown }).score)
+    if (!Number.isInteger(score) || score < 1 || score > 10) return 0
+    return score
+  } catch {
+    return 0
+  }
+}
+
+/** The writing instructions leaked into the post. */
+export function repeatsInstructions(note: string, manner: string): boolean {
+  const needle = manner.replace(/\s+/g, ' ').trim().toLowerCase()
+  const hay = note.replace(/\s+/g, ' ').toLowerCase()
+  if (needle.length < 24 || !hay) return false
+  const size = Math.min(40, needle.length)
+  for (let i = 0; i + size <= needle.length; i += 12) {
+    if (hay.includes(needle.slice(i, i + size))) return true
+  }
+  return false
+}
+
+/** Every post, clip or page, has to be something a person would send to a friend. */
+export async function worthPosting(title: string, excerpt: string): Promise<boolean> {
+  const source = tidy(`${title}. ${excerpt}`).slice(0, 1800)
+  if (!source || JUNK.test(source)) return false
+  const key = deepseekKey()
+  if (!key) return false
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-flash',
+        temperature: 0,
+        max_tokens: 80,
+        thinking: { type: 'disabled' },
+        messages: [{
+          role: 'user',
+          content: `Decide if this is worth a post. Pass only if a person would send it to a friend. It needs one concrete detail and a finished point. Fail a promo, a betting offer, a product roundup, a list of who is near a cutoff, a routine recap, a trend with no fact, and anything too thin to retell. Do not reward outrage. Reply JSON only: {"pass":true} or {"pass":false}\n\n${source}`
+        }]
+      }),
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!response.ok) return false
+    const data = await response.json().catch(() => null)
+    const raw = String(data?.choices?.[0]?.message?.content || '')
+    const match = raw.match(/\{[\s\S]*\}/)
+    if (!match) return false
+    const parsed = JSON.parse(match[0]) as { pass?: boolean }
+    return parsed.pass === true
+  } catch {
+    return false
+  }
+}
+
+/** One sentence of what the headline says happened. No question. */
+export async function happened(title: string): Promise<string | null> {
+  const clean = title.replace(/\s+/g, ' ').trim().slice(0, 220)
+  if (!clean) return null
+  const stated = !/[?？]\s*$/.test(clean) && !/^(how|why|what|who|when|where|would|will|did|does|do|is|are|can|could|should)\b/i.test(clean)
+  const fallback = stated ? clean.replace(/[.!]?$/, '.') : null
+  const key = deepseekKey()
+  if (!key) return fallback
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-flash',
+        temperature: 0.2,
+        max_tokens: 80,
+        thinking: { type: 'disabled' },
+        messages: [{
+          role: 'user',
+          content: `Rewrite this headline as one sentence about what happened. Use only what the headline says. No question mark. No hashtag. Do not add a fact.\n\n${clean}`
+        }]
+      }),
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!response.ok) return fallback
+    const data = await response.json().catch(() => null)
+    const text = String(data?.choices?.[0]?.message?.content || '').replace(/^["“]+|["”]+$/g, '').replace(/\s+/g, ' ').trim()
+    if (!text || text.length < 20 || text.length > 220 || /[?？]/.test(text) || /^skip\b/i.test(text)) return fallback
+    return text.replace(/[.!]?$/, '.')
+  } catch {
+    return fallback
+  }
 }
 
 function deepseekKey(): string {
@@ -128,12 +285,24 @@ export async function patchQuestion(beat: string, title: string, excerpt: string
   }
 }
 
-/** One or two sentences a person would post. Null when the source has no idea. */
-export async function feedLine(name: string, title: string, excerpt: string): Promise<string | null> {
+function instruction(_name: string, _voice: Voice | null, rewrite: boolean): string {
+  const skip = rewrite
+    ? 'Rewrite the source. It is already a post. Do not reply SKIP. Do not add a title line.'
+    : 'If the page is a banner, a seal, a title, a menu, or an announcement with no idea, reply with exactly SKIP.'
+  return `Say what the source says happened. One or two sentences. Who, what, and the number if it is there. Plain speech, the way a person texts a friend. No character, no metaphor, no scene, no lesson. Use only facts in the source. Do not add a name, a number, a date, or a cause. No hashtags. No question. ${skip}`
+}
+
+function keepLine(line: string | null, source: string): string | null {
+  if (!line || bareWitness(line, source) || brokenPost(line)) return null
+  return line
+}
+
+/** A post in the desk's voice. Null when the source has no idea. */
+export async function feedLine(name: string, title: string, excerpt: string, voice: Voice | null = null, rewrite = false): Promise<string | null> {
   const source = tidy(excerpt || '').slice(0, 1800)
   if (!source || (CHROME.test(source) && source.length < 500)) return null
   const key = deepseekKey()
-  if (!key) return fallbackLine(title, source)
+  if (!key) return keepLine(fallbackLine(title, source), source)
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -143,23 +312,25 @@ export async function feedLine(name: string, title: string, excerpt: string): Pr
       },
       body: JSON.stringify({
         model: 'deepseek-flash',
-        temperature: 0.4,
-        max_tokens: 180,
+        temperature: 0.3,
+        max_tokens: voice ? 280 : 180,
         thinking: { type: 'disabled' },
         messages: [
           {
             role: 'user',
-            content: `You are ${name}, posting on a social feed. Write one or two sentences a sharp person would actually post about this. It needs a mechanism, a surprising number, a conflict, or a consequence. Use only facts in the source. No hashtags, no "check this out", no site name as the post. If the page is a banner, a seal, a title, a menu, or an announcement with no idea, reply with exactly SKIP.\n\nTitle: ${title.slice(0, 180)}\n\nSource:\n${source}`
+            content: `${instruction(name, voice, rewrite)}\n\nTitle: ${title.slice(0, 180)}\n\nSource:\n${source}`
           }
         ]
       }),
       signal: AbortSignal.timeout(25000)
     })
-    if (!response.ok) return fallbackLine(title, source)
+    if (!response.ok) return keepLine(fallbackLine(title, source), source)
     const data = await response.json().catch(() => null)
     const text = String(data?.choices?.[0]?.message?.content || '').trim()
-    return acceptable(text) || ( /^skip\b/i.test(text) ? null : fallbackLine(title, source) )
+    if (/^skip\b/i.test(text) && !rewrite) return null
+    const written = voice ? spoken(text, voice.person) : acceptable(text)
+    return keepLine(written, source) || keepLine(fallbackLine(title, source), source)
   } catch {
-    return fallbackLine(title, source)
+    return keepLine(fallbackLine(title, source), source)
   }
 }

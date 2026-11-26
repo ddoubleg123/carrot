@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import ShareSheet from '@/components/share/ShareSheet';
 import { youtubeEmbedSrc, youtubeIdFromText } from '@/lib/youtube';
-import { parseFeedPost } from '@/lib/feedPost';
+import { directArticleNote, parseFeedPost } from '@/lib/feedPost';
+import { readQuote } from '@/lib/curator/quoteCard';
+import QuoteMeme from '@/components/QuoteMeme';
+import { isFinishedQuote, pickQuoteCard } from '@/lib/curator/quoteCardPick';
 
 interface Comment {
   id: string;
@@ -260,6 +263,22 @@ export default function LightweightPostModal({
               />
             </div>
           ) : null}
+          {(() => {
+            const quote = readQuote(post.content)
+            if (!quote) return null
+            const parts = parseFeedPost(post.content)
+            const picture = parts.image || post.thumbnailUrl || post.mediaUrl || ''
+            return (
+              <div className="px-4 py-4">
+                {isFinishedQuote(picture) ? (
+                  <img src={pickQuoteCard([picture], post.id)} alt="" className="w-full rounded-2xl" />
+                ) : (
+                  <QuoteMeme sentence={quote.sentence} source={quote.source} image={picture} />
+                )}
+              </div>
+            )
+          })()}
+          {!readQuote(post.content) ? (
           <div className="px-6 py-6 sm:px-8">
             {(() => {
               const parts = parseFeedPost(post.content)
@@ -275,7 +294,7 @@ export default function LightweightPostModal({
                       className="mb-4 max-h-[58vh] w-full rounded-xl object-contain"
                     />
                   ) : null}
-                  {parts.note.split('\n').filter(Boolean).map((line, index) => (
+                  {(article ? directArticleNote(parts.note) : parts.note).split('\n').filter(Boolean).map((line, index) => (
                     <p key={index} className="text-[17px] leading-8 text-[#1C1917]">{line}</p>
                   ))}
                   {article ? (
@@ -286,8 +305,8 @@ export default function LightweightPostModal({
                       className="mt-4 block overflow-hidden rounded-xl border border-[#E7E5E4] bg-white"
                     >
                       {picture ? (
-                        <div className="h-[150px] overflow-hidden bg-gray-100">
-                          <img src={picture} alt="" className="h-full w-full object-cover object-center" />
+                        <div className="relative w-full overflow-hidden bg-gray-100" style={{ aspectRatio: '16 / 9' }}>
+                          <img src={picture} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
                         </div>
                       ) : null}
                       <div className="px-4 py-3">
@@ -303,6 +322,7 @@ export default function LightweightPostModal({
               )
             })()}
           </div>
+          ) : null}
         </div>
         )}
 

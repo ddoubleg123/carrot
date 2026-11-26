@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { patchConversation } from "../../lib/feedPost";
+import { isFinishedQuote, pickQuoteCard } from "../../lib/curator/quoteCardPick";
 import LightweightPostModal from "./LightweightPostModal";
 import { useModalRoute } from "../../hooks/useModalRoute";
 import { recallPost, rememberPost, usePostModal, usePostSnapshots, type PostSnapshot } from "./postModalStore";
@@ -16,7 +17,11 @@ function snapshotFromApi(post: any): PostSnapshot {
       if (Array.isArray(parsed)) imageList = parsed.filter(Boolean);
     } catch {}
   }
-  const imageUrl = post?.gifUrl || imageList[0] || post?.thumbnailUrl || undefined;
+  const imageUrl = post?.gifUrl
+    || (imageList.length && imageList.every(isFinishedQuote) ? pickQuoteCard(imageList, String(post.id)) : '')
+    || imageList[0]
+    || post?.thumbnailUrl
+    || undefined;
   const hasVideo = Boolean(post?.videoUrl || post?.cfUid || post?.cfPlaybackUrlHls);
   const created = post?.createdAt ? new Date(post.createdAt) : new Date();
   const displayName = String(user.name || '').trim() || user.username || 'Someone';
