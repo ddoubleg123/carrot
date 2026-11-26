@@ -1,6 +1,7 @@
 import path from 'path'
 import { config as loadEnv } from 'dotenv'
 import type { Voice } from '@/lib/curator/voices'
+import { saysSomething } from '@/lib/curator/meaning'
 import { bareWitness, brokenPost } from '@/lib/learn/nameCard'
 
 const CHROME = /image source|getty images|image caption|photograph:|view image in fullscreen|photo credit|credit:|read more|continue reading|skip to|sign in to|cookie|all rights reserved|official website of the united states|here'?s how you know|\.gov website belongs|before we begin|day pass|like and subscribe|early readers like|big pharma/i
@@ -75,10 +76,11 @@ function firstFact(text: string): string {
 function acceptable(line: string): string | null {
   const clean = line.replace(/^["“]+|["”]+$/g, '').replace(/\s+/g, ' ').trim()
   if (!clean || /^skip\b/i.test(clean)) return null
-  if (clean.length < 40 || clean.length > 360) return null
+  if (clean.length < 40 || clean.length > 480) return null
   if (CHROME.test(clean) || CANNED.test(clean)) return null
   if (/^(how|why|what)\b/i.test(clean) && !/[.!?…]/.test(clean)) return null
   if (brokenPost(clean)) return null
+  if (!saysSomething(clean)) return null
   return clean
 }
 
@@ -98,6 +100,7 @@ function spoken(text: string, person: string): string | null {
   if (CHROME.test(flat) || CANNED.test(flat) || SCENE.test(flat)) return null
   if (/^(i |my )\b/i.test(paragraphs[0] || '')) return null
   if (person && flat.toLowerCase().includes(person.toLowerCase())) return null
+  if (!saysSomething(flat)) return null
   return paragraphs.join('\n\n')
 }
 
@@ -204,6 +207,45 @@ export async function worthPosting(title: string, excerpt: string): Promise<bool
   }
 }
 
+/**
+ * A second read, of the finished post only.
+ * The earlier grades look at the article. This one has to be able to say what the post itself says.
+ */
+export async function reviewPost(note: string): Promise<boolean> {
+  const text = note.replace(/\s+/g, ' ').trim().slice(0, 900)
+  if (!saysSomething(text)) return false
+  const key = deepseekKey()
+  if (!key) return false
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-flash',
+        temperature: 0,
+        max_tokens: 40,
+        thinking: { type: 'disabled' },
+        messages: [{
+          role: 'user',
+          content: `You are reviewing a finished post. You cannot see the article. Pass only if a stranger can say who did what, or can repeat a quote and who said it, or can repeat a judgment of right or wrong that names the act. Fail a scene, a metaphor, a mood, a person called only she or he, and a line that could describe anything. Reply JSON only: {"pass":true} or {"pass":false}\n\n${text}`
+        }]
+      }),
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!response.ok) return false
+    const data = await response.json().catch(() => null)
+    const raw = String(data?.choices?.[0]?.message?.content || '')
+    const match = raw.match(/\{[\s\S]*\}/)
+    if (!match) return false
+    return (JSON.parse(match[0]) as { pass?: boolean }).pass === true
+  } catch {
+    return false
+  }
+}
+
 /** One sentence of what the headline says happened. No question. */
 export async function happened(title: string): Promise<string | null> {
   const clean = title.replace(/\s+/g, ' ').trim().slice(0, 220)
@@ -289,7 +331,7 @@ function instruction(_name: string, _voice: Voice | null, rewrite: boolean): str
   const skip = rewrite
     ? 'Rewrite the source. It is already a post. Do not reply SKIP. Do not add a title line.'
     : 'If the page is a banner, a seal, a title, a menu, or an announcement with no idea, reply with exactly SKIP.'
-  return `Say what the source says happened. One or two sentences. Who, what, and the number if it is there. Plain speech, the way a person texts a friend. No character, no metaphor, no scene, no lesson. Use only facts in the source. Do not add a name, a number, a date, or a cause. No hashtags. No question. ${skip}`
+  return `Write the post so someone who does not open the link understands it. One or two plain sentences that say what the article says: who did what, and the point. If one sentence in the source says it better, quote that sentence and name who said it. If the story is about something being right or wrong, add one short sentence of that judgment. The judgment has to follow from the source. Do not invent a fact, a name, a number, or a motive. No hashtag. No question. No scene. No character. ${skip}`
 }
 
 function keepLine(line: string | null, source: string): string | null {
@@ -298,7 +340,7 @@ function keepLine(line: string | null, source: string): string | null {
 }
 
 /** A post in the desk's voice. Null when the source has no idea. */
-export async function feedLine(name: string, title: string, excerpt: string, voice: Voice | null = null, rewrite = false): Promise<string | null> {
+export async function feedLine(name: string, title: string, excerpt: string, voice: Voice | null = null, rewrite = false, fault = ''): Promise<string | null> {
   const source = tidy(excerpt || '').slice(0, 1800)
   if (!source || (CHROME.test(source) && source.length < 500)) return null
   const key = deepseekKey()
@@ -318,7 +360,7 @@ export async function feedLine(name: string, title: string, excerpt: string, voi
         messages: [
           {
             role: 'user',
-            content: `${instruction(name, voice, rewrite)}\n\nTitle: ${title.slice(0, 180)}\n\nSource:\n${source}`
+            content: `${instruction(name, voice, rewrite)}\n${fault ? `The last draft failed QA. Repair only the failure. Do not change a quoted sentence. Do not add a name, a number, or a fact.\nFailure: ${fault.slice(0, 400)}\n` : ''}\nTitle: ${title.slice(0, 180)}\n\nSource:\n${source}`
           }
         ]
       }),

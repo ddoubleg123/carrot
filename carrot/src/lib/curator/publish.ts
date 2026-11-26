@@ -8,9 +8,11 @@ import { pageImage, readLinkCard, savePreview, youtubeThumb } from '@/lib/curato
 import { articleLines } from '@/lib/feedPost'
 import { createHash } from 'crypto'
 import { youtubeIdFromText } from '@/lib/youtube'
+import { saysSomething } from '@/lib/curator/meaning'
 import { deskGrade, feedLine, patchQuestion, worthPosting } from '@/lib/curator/voice'
 import { sameStory } from '@/lib/curator/judge'
 import { quoteGrade, quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
+import { linkResolves, postRules, quoteIsExact, reviewAgainstSource } from '@/lib/curator/qa'
 import { renderQuoteCard } from '@/lib/curator/quoteImage'
 
 function sourceId(): string {
@@ -156,8 +158,34 @@ export async function publishFinding(desk: Desk, finding: {
   const passage = finding.excerpt || finding.summary
   if (!(await worthPosting(finding.title, passage))) throw new Error('Not worth posting.')
   if ((await deskGrade(desk.beat, finding.title, passage)) < 3) throw new Error('Not worth posting.')
-  const note = await feedLine(desk.name, finding.title, passage)
-  if (!note) throw new Error('The page has no idea worth posting.')
+  const sourceText = [finding.title, finding.publisher, passage, finding.transcript || ''].filter(Boolean).join('\n')
+  if (!(await linkResolves(finding.url))) throw new Error('The link is dead.')
+  let note: string | null = null
+  let fault = ''
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const draft = await feedLine(desk.name, finding.title, passage, null, attempt > 0, fault)
+    if (!draft || !saysSomething(draft)) {
+      fault = 'The post does not say who did what.'
+      continue
+    }
+    const rules = postRules(draft, sourceText)
+    const held = rules.find((item) => item.severity === 1)
+    if (held) throw new Error(held.reason)
+    if (rules.length) {
+      fault = rules.map((item) => item.reason).join(' ')
+      console.error('[qa] rewrite', fault)
+      continue
+    }
+    const reviewed = await reviewAgainstSource(draft, sourceText)
+    if (reviewed.length) {
+      fault = reviewed.map((item) => item.reason).join(' ')
+      console.error('[qa] rewrite', fault)
+      continue
+    }
+    note = draft
+    break
+  }
+  if (!note) throw new Error('The post does not say what happened.')
   const user = await deskUser(desk)
   const patch = await deskPatch(desk, user.id)
   const question = await patchQuestion(desk.beat, finding.title, finding.excerpt || finding.summary)
@@ -277,6 +305,7 @@ export async function publishFinding(desk: Desk, finding: {
   const ready = quotePassage.replace(/\s+/g, ' ').split(/(?<=[.])\s+/).map((part) => part.trim())
   for (const spoken of ready) {
     if (quoteSentence(spoken) !== spoken) continue
+    if (!quoteIsExact(spoken, quotePassage)) continue
     const grade = quoteGrade({ sentence: spoken, source: sourceName, date: when, image: preview || 'pending' })
     if (grade.failures.some((reason) => reason !== 'The card has no picture.')) continue
     if (!(await strangerPass(spoken))) continue
