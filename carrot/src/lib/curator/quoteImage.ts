@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { createHash } from 'crypto'
+import { existsSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
 import { promisify } from 'util'
@@ -64,6 +65,13 @@ export async function renderQuoteCard(card: QuoteCardJob): Promise<string[]> {
     picture
   }))
   const script = path.join(process.cwd(), 'quote-cards', 'kit', 'service.py')
+  const bundled = path.join(process.cwd(), 'quote-cards', 'py')
+  const browsers = path.join(process.cwd(), 'quote-cards', '.browsers')
+  const env = { ...process.env }
+  if (existsSync(bundled)) {
+    env.PYTHONPATH = [bundled, env.PYTHONPATH].filter(Boolean).join(':')
+    env.PLAYWRIGHT_BROWSERS_PATH = browsers
+  }
   let stdout = ''
   try {
     const result = await run('python3', [
@@ -72,7 +80,7 @@ export async function renderQuoteCard(card: QuoteCardJob): Promise<string[]> {
       '--out', dir,
       '--variants', process.env.VARIANTS_PER_QUOTE || '12',
       '--shortlist', process.env.SHORTLIST_SIZE || '8'
-    ], { timeout: 300000, windowsHide: true, maxBuffer: 8_000_000 })
+    ], { timeout: 300000, windowsHide: true, maxBuffer: 8_000_000, env })
     stdout = String(result.stdout || '')
   } catch (error) {
     const failed = error as { stdout?: string; stderr?: string; message?: string }
