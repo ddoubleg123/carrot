@@ -18,7 +18,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN pip3 install --break-system-packages playwright pytesseract \
+RUN pip3 install --break-system-packages numpy pillow opencv-python-headless playwright pytesseract \
+    && python3 -c "import numpy, PIL, cv2, pytesseract" \
     && python3 -m playwright install --with-deps chromium \
     && chmod -R 755 /ms-playwright
 
