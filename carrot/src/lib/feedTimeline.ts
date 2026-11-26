@@ -87,8 +87,7 @@ function fits<T extends Row>(out: T[], post: T, limits: { media: number; bucket:
   if (last?.userId && post.userId === last.userId) return false
   if (runLength(out, 'media', post.media) >= limits.media) return false
   if (runLength(out, 'bucket', post.bucket) >= limits.bucket) return false
-  if (recentCount(out, 'outlet', post.outlet, 6) >= 1) return false
-  if (recentCount(out, 'lane', post.lane, 6) >= 1) return false
+  if (runLength(out, 'outlet', post.outlet) >= 1) return false
   if (recentCount(out, 'media', post.media, 5) >= 2) return false
   return true
 }
@@ -99,7 +98,7 @@ export function spreadSlate<T extends Row>(posts: T[], limits: { media: number; 
   const out: T[] = []
   while (pending.length) {
     let index = pending.findIndex((post) => fits(out, post, limits))
-    if (index < 0) index = pending.findIndex((post) => !post.outlet || recentCount(out, 'outlet', post.outlet, 6) === 0)
+    if (index < 0) index = pending.findIndex((post) => runLength(out, 'outlet', post.outlet) < 1)
     if (index < 0) index = 0
     out.push(pending.splice(index, 1)[0])
   }

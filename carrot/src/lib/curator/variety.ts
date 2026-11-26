@@ -55,7 +55,7 @@ function outletHost(url: string): string {
 }
 
 export function outletFromContent(content?: string | null): string {
-  const from = String(content || '').match(/^From:\s*(.+)$/im)
+  const from = String(content || '').match(/^(?:from|source):\s*(.+)$/im)
   if (from) return outletOf(from[1])
   const url = String(content || '').match(/https?:\/\/\S+/)
   return url ? outletOf(url[0]) : ''

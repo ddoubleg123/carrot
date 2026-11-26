@@ -153,10 +153,8 @@ function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
 }
 
 function onBeat(desk: Desk, title: string, extra = ''): boolean {
-  const hay = `${title} ${extra}`.toLowerCase()
-  if (desk.past && !isPast(hay)) return false
-  if (!desk.focus || desk.focus.length === 0) return true
-  return desk.focus.some((term) => hay.includes(term.toLowerCase()))
+  if (!desk.past) return true
+  return isPast(`${title} ${extra}`.toLowerCase())
 }
 
 function domainOf(url: string): string {

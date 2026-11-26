@@ -9,6 +9,6 @@ describe('home keeps outlets and subjects apart', () => {
       { id: 'clip', userId: 'd', bucket: 'science', lane: 'science', outlet: '', media: 'video' }
     ]
     const slate = spreadSlate(posts, { media: 2, bucket: 2 })
-    expect(slate.slice(0, 3).map((post) => post.id)).toEqual(['golf', 'world', 'clip'])
+    expect(slate.map((post) => post.id)).toEqual(['golf', 'world', 'clip', 'race'])
   })
 })
