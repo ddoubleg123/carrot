@@ -1,5 +1,5 @@
 import { execFile } from 'child_process'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { existsSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
@@ -22,11 +22,16 @@ async function publishVariation(file: string, name: string): Promise<string | nu
   const { app } = await import('@/lib/firebase-admin')
   const admin = require('firebase-admin')
   const bucket = admin.storage(app).bucket(bucketId)
+  const token = randomUUID()
   await bucket.upload(file, {
     destination: objectPath,
-    metadata: { contentType: 'image/png', cacheControl: 'public, max-age=31536000' }
+    metadata: {
+      contentType: 'image/png',
+      cacheControl: 'public, max-age=31536000',
+      metadata: { firebaseStorageDownloadTokens: token }
+    }
   })
-  return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketId)}/o/${encodeURIComponent(objectPath)}?alt=media`
+  return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketId)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`
 }
 
 export interface QuoteCardJob {
