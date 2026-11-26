@@ -13,6 +13,9 @@ import { deskGrade, feedLine, patchQuestion, worthPosting } from '@/lib/curator/
 import { sameStory } from '@/lib/curator/judge'
 import { quoteGrade, quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
 import { linkResolves, postRules, quoteIsExact, reviewAgainstSource } from '@/lib/curator/qa'
+import { lowQualitySource, sourceCleared } from '@/lib/curator/cleared'
+import { logQa, notifyDutyReviewer } from '@/lib/curator/qaLog'
+import { oneQuoteCard } from '@/lib/curator/quoteCardPick'
 import { renderQuoteCard } from '@/lib/curator/quoteImage'
 
 function sourceId(): string {
@@ -156,6 +159,7 @@ export async function publishFinding(desk: Desk, finding: {
   const playable = finding.url.split('?')[0]
   if (await alreadyPosted(finding)) throw new Error('Already posted.')
   const passage = finding.excerpt || finding.summary
+  if (lowQualitySource(finding.url)) throw new Error('Not worth posting.')
   if (!(await worthPosting(finding.title, passage))) throw new Error('Not worth posting.')
   if ((await deskGrade(desk.beat, finding.title, passage)) < 3) throw new Error('Not worth posting.')
   const sourceText = [finding.title, finding.publisher, passage, finding.transcript || ''].filter(Boolean).join('\n')
@@ -170,22 +174,29 @@ export async function publishFinding(desk: Desk, finding: {
     }
     const rules = postRules(draft, sourceText)
     const held = rules.find((item) => item.severity === 1)
-    if (held) throw new Error(held.reason)
+    if (held) {
+      await logQa({ kind: 'hold', severity: 1, sourceUrl: finding.url, reason: held.reason })
+      await notifyDutyReviewer(held.reason, finding.url)
+      throw new Error(held.reason)
+    }
     if (rules.length) {
       fault = rules.map((item) => item.reason).join(' ')
-      console.error('[qa] rewrite', fault)
+      await logQa({ kind: 'fix', severity: 2, sourceUrl: finding.url, reason: fault })
       continue
     }
     const reviewed = await reviewAgainstSource(draft, sourceText)
     if (reviewed.length) {
       fault = reviewed.map((item) => item.reason).join(' ')
-      console.error('[qa] rewrite', fault)
+      await logQa({ kind: 'fix', severity: 2, sourceUrl: finding.url, reason: fault })
       continue
     }
     note = draft
     break
   }
-  if (!note) throw new Error('The post does not say what happened.')
+  if (!note) {
+    await logQa({ kind: 'fix', severity: 2, sourceUrl: finding.url, reason: fault || 'The post does not say what happened.' })
+    throw new Error('The post does not say what happened.')
+  }
   const user = await deskUser(desk)
   const patch = await deskPatch(desk, user.id)
   const question = await patchQuestion(desk.beat, finding.title, finding.excerpt || finding.summary)
@@ -298,6 +309,7 @@ export async function publishFinding(desk: Desk, finding: {
     }
   })
   invalidateFeedCache()
+  await logQa({ kind: 'check', severity: 0, postId: post.id, sourceUrl: finding.url, reason: 'Posted.' })
   void topicId
   const sourceName = link?.site || finding.publisher
   const when = link?.published || ''
@@ -309,6 +321,10 @@ export async function publishFinding(desk: Desk, finding: {
     const grade = quoteGrade({ sentence: spoken, source: sourceName, date: when, image: preview || 'pending' })
     if (grade.failures.some((reason) => reason !== 'The card has no picture.')) continue
     if (!(await strangerPass(spoken))) continue
+    if (!sourceCleared(finding.url) && !sourceCleared(preview || '')) {
+      await logQa({ kind: 'check', severity: 2, sourceUrl: finding.url, reason: 'The source is not cleared for a quote card.' })
+      break
+    }
     await publishQuoteCard(desk, user.id, spoken, sourceName, preview, when).catch(() => null)
     break
   }
@@ -318,7 +334,8 @@ export async function publishFinding(desk: Desk, finding: {
 /** A second post. The sentence only, set as a card. The article post stays the article. */
 async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null, date: string) {
   const cards = await renderQuoteCard({ sentence, speaker: source, date, imageUrl: image })
-  if (cards.length === 0) return
+  const chosen = oneQuoteCard(cards)
+  if (!chosen) return
   const content = quotePost(sentence, source, date)
   const prior = await prisma.post.findFirst({
     where: { content: { contains: sentence.slice(0, 140) } },
@@ -335,8 +352,8 @@ async function publishQuoteCard(desk: Desk, userId: string, sentence: string, so
       gradientFromColor: look.colors.gradientFromColor,
       gradientViaColor: look.colors.gradientViaColor || null,
       gradientToColor: look.colors.gradientToColor,
-      imageUrls: JSON.stringify(cards),
-      thumbnailUrl: cards[0],
+      imageUrls: JSON.stringify([chosen]),
+      thumbnailUrl: chosen,
       bucket: desk.id === 'member-card' ? 'pol-watch' : desk.id
     }
   })

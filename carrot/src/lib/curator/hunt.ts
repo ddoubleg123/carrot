@@ -9,6 +9,7 @@ import { publishFinding } from '@/lib/curator/publish'
 import { feedItems, fetchText, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
 import { profileQrUrl } from '@/lib/learn/brandClip'
 import { ensureMediaBins } from '@/lib/mediaBins'
+import { runQaMonitor } from '@/lib/curator/qaMonitor'
 import { storeClip } from '@/lib/curator/storeClip'
 import { startClipOnce } from '@/lib/learn/clipOnce'
 
@@ -526,6 +527,7 @@ export function armCurator(): void {
   const holder = globalThis as unknown as { __carrotCurator?: ReturnType<typeof setInterval> }
   if (holder.__carrotCurator) clearInterval(holder.__carrotCurator)
   const pass = () => {
+    void runQaMonitor().catch((error) => console.error('[qa] monitor', error instanceof Error ? error.message : error))
     void runCurator({ clipsOnly: true, rotate: true, maxKeep: 1, channels: 2, videosPerChannel: 1, articles: 1 }).catch((error) => {
       console.error('[curator] pass failed', error instanceof Error ? error.message : error)
     })

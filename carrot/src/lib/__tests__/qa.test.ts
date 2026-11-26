@@ -1,4 +1,6 @@
 import { postRules, quoteIsExact } from '../curator/qa'
+import { lowQualitySource, sourceCleared } from '../curator/cleared'
+import { oneQuoteCard } from '../curator/quoteCardPick'
 
 const SOURCE = 'Costa Rica put forward a candidate for UN secretary general. The Council votes Friday. The frontrunner could be stopped by a P5 veto.'
 
@@ -33,5 +35,22 @@ describe('a post has to match the source', () => {
   it('requires the card to use the source words', () => {
     expect(quoteIsExact('The Council votes Friday.', SOURCE)).toBe(true)
     expect(quoteIsExact('The Council might vote next week.', SOURCE)).toBe(false)
+  })
+})
+
+describe('one card, and only a cleared source', () => {
+  it('keeps a single photograph layout', () => {
+    const chosen = oneQuoteCard([
+      'https://x/o/quote-cards%2Fa__typeonly__sage.png?alt=media',
+      'https://x/o/quote-cards%2Fa__split__butter.png?alt=media',
+      'https://x/o/quote-cards%2Fa__poster__ink.png?alt=media'
+    ])
+    expect(chosen).toContain('__split__')
+  })
+
+  it('clears a government host and refuses a news site', () => {
+    expect(sourceCleared('https://www.cdc.gov/story')).toBe(true)
+    expect(sourceCleared('https://www.theguardian.com/world/x')).toBe(false)
+    expect(lowQualitySource('https://www.draftkings.com/bet')).toBe(true)
   })
 })
