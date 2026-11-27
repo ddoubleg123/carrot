@@ -152,6 +152,67 @@ model User {
   patchThemes       UserPatchTheme[]
   patchFollowers    Follower[]
   botSubscriptions  BotSubscription[]
+  mailMemberships   MailMember[]
+  mailTyping        MailTyping[]
+}
+
+/// A DM between two people, or an email thread with someone outside Carrot.
+model MailThread {
+  id        String       @id @default(cuid())
+  kind      String
+  subject   String?
+  outside   String?
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  members   MailMember[]
+  messages  MailMessage[]
+  typing    MailTyping[]
+
+  @@index([kind, outside])
+  @@map("mail_threads")
+}
+
+model MailMember {
+  id       String     @id @default(cuid())
+  threadId String     @map("thread_id")
+  userId   String     @map("user_id")
+  unread   Int        @default(0)
+  thread   MailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId])
+  @@map("mail_members")
+}
+
+model MailMessage {
+  id         String     @id @default(cuid())
+  threadId   String     @map("thread_id")
+  senderId   String?    @map("sender_id")
+  direction  String
+  body       String
+  image      String?
+  fromAddr   String?    @map("from_addr")
+  toAddr     String?    @map("to_addr")
+  state      String     @default("sent")
+  failReason String?    @map("fail_reason")
+  externalId String?    @unique @map("external_id")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  thread     MailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("mail_messages")
+}
+
+model MailTyping {
+  threadId String     @map("thread_id")
+  userId   String     @map("user_id")
+  at       DateTime   @default(now())
+  thread   MailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+  @@map("mail_typing")
 }
 
 model Post {
@@ -195,6 +256,8 @@ model Post {
   captionVttUrl       String?      @map("caption_vtt_url")
   /// Topic desk id, a personal ask id, or pol-watch.
   bucket              String?
+  /// Set when the post was made inside a patch the viewer can belong to.
+  patchId             String?
   User                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Comments relation
   comments            Comment[]
@@ -204,7 +267,17 @@ model Post {
 
   @@index([videoBucket, videoPath])
   @@index([bucket])
+  @@index([patchId])
   @@map("posts")
+}
+
+/// One row. The home ranker reads it on each feed request.
+model FeedRank {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("feed_rank")
 }
 
 model OnboardingQuestion {
