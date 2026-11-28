@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useVideoContext } from '@/context/VideoContext';
 
 const visibility = new Map<string, number>();
@@ -9,6 +10,28 @@ let activeVideoId: string | null = null;
 let preparedVideoId: string | null = null;
 const activeListeners = new Set<() => void>();
 const prepareListeners = new Set<() => void>();
+let listeningId: string | null = null;
+const listeningListeners = new Set<() => void>();
+
+function setListening(id: string | null) {
+  if (listeningId === id) return;
+  listeningId = id;
+  notify(listeningListeners);
+}
+
+function releaseActive(id: string) {
+  if (activeVideoId !== id) return;
+  visibility.set(id, 0);
+  let bestId: string | null = null;
+  let bestRatio = 0;
+  for (const [candidate, candidateRatio] of visibility) {
+    if (candidate === id || candidateRatio <= bestRatio) continue;
+    bestId = candidate;
+    bestRatio = candidateRatio;
+  }
+  activeVideoId = bestRatio >= 0.5 ? bestId : null;
+  notify(activeListeners);
+}
 
 function notify(listeners: Set<() => void>) {
   listeners.forEach((listener) => listener());
@@ -154,6 +177,14 @@ export default function SimpleVideo({
   const [isStuck, setIsStuck] = useState(false);
   const [isMuted, setIsMuted] = useState(muted); // CRITICAL FIX: Track mute state for user interaction
   const [isActive, setIsActive] = useState(autoPlay);
+  const [isListening, setIsListening] = useState(false);
+  const [seenRatio, setSeenRatio] = useState(autoPlay ? 1 : 0);
+  const [dockOn, setDockOn] = useState(false);
+  const listeningRef = useRef(false);
+  const seenRatioRef = useRef(autoPlay ? 1 : 0);
+  const suppressDockRef = useRef(false);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const [hasUserInteracted, setHasUserInteracted] = useState(false); // CRITICAL FIX: Track user interaction
   const [errorMessage, setErrorMessage] = useState<string | null>(null); // Track specific error message
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -215,7 +246,10 @@ export default function SimpleVideo({
     let io: IntersectionObserver | null = null;
     if (el) {
       io = new IntersectionObserver((entries) => {
-        reportVisibility(postId, entries[0]?.intersectionRatio || 0);
+        const ratio = entries[0]?.intersectionRatio || 0;
+        seenRatioRef.current = ratio;
+        setSeenRatio(ratio);
+        reportVisibility(postId, ratio);
       }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
       io.observe(el);
     }
@@ -225,6 +259,37 @@ export default function SimpleVideo({
       io?.disconnect();
     };
   }, [autoPlay, postId]);
+
+  useEffect(() => {
+    if (!postId) return;
+    const sync = () => {
+      const on = listeningId === postId;
+      listeningRef.current = on;
+      setIsListening(on);
+    };
+    listeningListeners.add(sync);
+    sync();
+    return () => {
+      listeningListeners.delete(sync);
+      if (listeningId === postId) setListening(null);
+    };
+  }, [postId]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !postId) return;
+    const claim = () => {
+      if (suppressDockRef.current && seenRatioRef.current < 0.35) return;
+      suppressDockRef.current = false;
+      if (!video.muted && !video.paused) setListening(postId);
+    };
+    video.addEventListener('play', claim);
+    video.addEventListener('volumechange', claim);
+    return () => {
+      video.removeEventListener('play', claim);
+      video.removeEventListener('volumechange', claim);
+    };
+  }, [postId, videoSrc, isActive, isListening]);
 
   // FeedMediaManager integration for single-video playback
   useEffect(() => {
@@ -265,6 +330,10 @@ export default function SimpleVideo({
                     
                     // CRITICAL FIX: Only play if readyState >= 3 (HAVE_FUTURE_DATA)
                     // This ensures enough data is buffered to prevent flickering
+                    if (!listeningRef.current) {
+                      video.muted = true;
+                      setIsMuted(true);
+                    }
                     if (video.readyState >= 3) {
                       playAttemptsRef.current++;
                       await video.play();
@@ -275,6 +344,7 @@ export default function SimpleVideo({
                       const playWhenReady = async () => {
                         try {
                           if (video.readyState >= 3) {
+                            if (!listeningRef.current) video.muted = true;
                             playAttemptsRef.current++;
                             await video.play();
                             console.log('[SimpleVideo] Play started (after canplaythrough)', { postId, readyState: video.readyState });
@@ -301,6 +371,7 @@ export default function SimpleVideo({
                 },
             pause: () => {
               try {
+                if (listeningRef.current) return;
                 const video = videoRef.current;
                 if (video && !video.paused) {
                   video.pause();
@@ -312,6 +383,7 @@ export default function SimpleVideo({
             },
             setPaused: () => {
               try {
+                if (listeningRef.current) return;
                 const video = videoRef.current;
                 if (video) {
                   video.pause();
@@ -545,7 +617,7 @@ export default function SimpleVideo({
         } catch (e) {
           console.warn('[SimpleVideo] Failed to promote visible video', e);
         }
-      } else {
+      } else if (!listeningRef.current) {
         // Video is not visible - pause it (preloading handled by FeedMediaManager)
         try { 
           video.pause(); 
@@ -633,35 +705,27 @@ export default function SimpleVideo({
         } catch (e) {
           console.warn('[SimpleVideo] Dummy audio failed (expected on some browsers):', e);
         }
-        
-        // CRITICAL FIX: Use GlobalVideoManager to play (prevents play() interrupted errors)
-        if (video.paused && video.readyState >= 2) {
-          try {
-            const { default: GlobalVideoManager } = await import('../lib/GlobalVideoManager');
-            await GlobalVideoManager.requestPlay(video, postId || 'unknown');
-            console.log('[SimpleVideo] Started playback via GlobalVideoManager', { 
-              postId: postId || 'unknown',
-              paused: video.paused,
-              muted: video.muted,
-              volume: video.volume,
-              currentTime: video.currentTime
-            });
-          } catch (e: any) {
-            console.error('[SimpleVideo] GlobalVideoManager play failed:', e.message);
-            // Fallback to direct play if GlobalVideoManager fails
-            try {
-              await video.play();
-              console.log('[SimpleVideo] Fallback direct play succeeded', { postId: postId || 'unknown' });
-            } catch (fallbackError) {
-              console.error('[SimpleVideo] Both play methods failed', { postId: postId || 'unknown', error: fallbackError });
-            }
-          }
-        }
       } catch (e) {
         console.warn('[SimpleVideo] User interaction handler error:', e);
       }
     }
   }, [hasUserInteracted, postId]);
+
+  const onSurfaceClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button')) return;
+    void handleUserInteraction();
+    if (controls && target.tagName === 'VIDEO') {
+      const height = target.clientHeight || video.clientHeight;
+      if (event.nativeEvent.offsetY >= height - 48) return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (video.paused) void video.play().catch(() => {});
+    else video.pause();
+  }, [controls, handleUserInteraction]);
 
   // CRITICAL FIX: Comprehensive cleanup on unmount
   useEffect(() => {
@@ -953,6 +1017,10 @@ export default function SimpleVideo({
     const video = videoRef.current;
     if (!video) return;
     if (isActive) {
+      if (!listeningRef.current) {
+        video.muted = true;
+        setIsMuted(true);
+      }
       const start = () => {
         void video.play().catch(() => {});
       };
@@ -960,8 +1028,25 @@ export default function SimpleVideo({
       else video.addEventListener('canplay', start, { once: true });
       return () => video.removeEventListener('canplay', start);
     }
-    video.pause();
-  }, [isActive, videoSrc]);
+    if (!listeningRef.current) video.pause();
+  }, [isActive, videoSrc, isListening]);
+
+  const wantDock = Boolean(postId) && isListening && seenRatio < 0.35 && !suppressDockRef.current;
+  useLayoutEffect(() => {
+    const video = videoRef.current;
+    const slot = slotRef.current;
+    if (wantDock && video) {
+      if (!dockOn) {
+        setDockOn(true);
+        return;
+      }
+      const dock = dockRef.current;
+      if (dock && video.parentElement !== dock) dock.appendChild(video);
+      return;
+    }
+    if (video && slot && video.parentElement !== slot) slot.appendChild(video);
+    if (dockOn) setDockOn(false);
+  }, [wantDock, dockOn, videoSrc, isActive, isListening]);
 
   const handleLoadStart = () => {
     const startTime = Date.now();
@@ -1268,10 +1353,31 @@ export default function SimpleVideo({
         );
       }
 
-  const showVideo = Boolean(videoSrc && (isActive || preparing));
+  const showVideo = Boolean(videoSrc && (isActive || preparing || isListening || dockOn));
+  const closeDock = (event?: { preventDefault: () => void; stopPropagation: () => void }) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    suppressDockRef.current = true;
+    listeningRef.current = false;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.muted = true;
+      setIsMuted(true);
+    }
+    if (typeof document !== 'undefined' && document.pictureInPictureElement) {
+      void document.exitPictureInPicture().catch(() => {});
+    }
+    if (postId) {
+      setListening(null);
+      releaseActive(postId);
+    }
+    setDockOn(false);
+  };
 
   return (
-    <div ref={containerRef} className={`relative aspect-video w-full overflow-hidden bg-black ${className}`}>
+    <>
+    <div ref={containerRef} className={`relative aspect-video w-full overflow-hidden bg-black cursor-pointer ${className}`} onClick={onSurfaceClick}>
       {isActive && isLoading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
           <div className="text-center">
@@ -1281,33 +1387,53 @@ export default function SimpleVideo({
         </div>
       )}
 
-      {poster && !showVideo && (
+      {poster && (!showVideo || wantDock) && (
         <img src={poster} alt="" className="absolute inset-0 h-full w-full object-contain" />
       )}
       {showVideo && (
-        <video
-          ref={videoRef}
-          src={videoSrc || undefined}
-          poster={poster}
-          controls={controls}
-          autoPlay={isActive}
-          muted={isMuted}
-          playsInline={playsInline}
-          onLoadStart={handleLoadStart}
-          onLoadedData={handleLoadedData}
-          onLoadedMetadata={handleLoadedMetadata}
-          onError={handleError}
-          onCanPlay={handleCanPlay}
-          onCanPlayThrough={handleCanPlayThrough}
-          onClick={handleUserInteraction}
-          onTouchStart={handleUserInteraction}
-          className="absolute inset-0 h-full w-full object-contain cursor-pointer"
-          preload="auto"
-          crossOrigin={videoSrc?.includes('firebasestorage.googleapis.com') ? undefined : 'anonymous'}
-          data-start-time={Date.now()}
-          data-post-id={postId}
-        />
+        <div ref={slotRef} className="absolute inset-0">
+          <video
+            ref={videoRef}
+            src={videoSrc || undefined}
+            poster={poster}
+            controls={controls}
+            disablePictureInPicture
+            autoPlay={isActive}
+            muted={isMuted}
+            playsInline={playsInline}
+            onLoadStart={handleLoadStart}
+            onLoadedData={handleLoadedData}
+            onLoadedMetadata={handleLoadedMetadata}
+            onError={handleError}
+            onCanPlay={handleCanPlay}
+            onCanPlayThrough={handleCanPlayThrough}
+            className="absolute inset-0 h-full w-full object-contain"
+            preload="auto"
+            crossOrigin={videoSrc?.includes('firebasestorage.googleapis.com') ? undefined : 'anonymous'}
+            data-start-time={Date.now()}
+            data-post-id={postId}
+          />
+        </div>
       )}
     </div>
+    {dockOn && typeof document !== 'undefined' && createPortal(
+      <div className="fixed bottom-5 right-5 z-50 w-72">
+        <div className="relative">
+          <div className="overflow-hidden rounded-xl bg-black shadow-2xl">
+            <div ref={dockRef} className="relative aspect-video w-full" />
+          </div>
+          <button
+            type="button"
+            aria-label="Close mini player"
+            onPointerDown={closeDock}
+            className="absolute -right-2 -top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black text-lg leading-none text-white shadow"
+          >
+            ×
+          </button>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

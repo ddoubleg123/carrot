@@ -14,7 +14,7 @@ import PatchChat from '@/components/patch/PatchChat'
 import AskView from '@/components/patch/AskView'
 import COLOR_SCHEMES from '@/config/colorSchemes'
 import PerfTracker from '@/components/PerfTracker'
-import { knownCover } from '@/lib/groups/cover'
+import { knownCover, portraitCover } from '@/lib/groups/cover'
 import { topicTitleFromSlug } from '@/lib/learn/topic'
 // No need to import PatchPageSkeleton - using inline loading component
 
@@ -48,7 +48,8 @@ export default async function PatchBody({
             members: true,
             posts: true,
             events: true,
-            sources: true
+            sources: true,
+            discoveredContent: true
           }
         }
       }
@@ -76,6 +77,7 @@ export default async function PatchBody({
     }
 
     const patchWithName = { ...patch, name: patch.title }
+    const hasContent = patch._count.posts + patch._count.discoveredContent > 0
     const activeTab = (search.tab as string) || 'ask'
     const formattedEvents = activeTab === 'timeline'
       ? (await prisma.patchMember.findMany({
@@ -109,7 +111,7 @@ export default async function PatchBody({
               ...patchWithName,
               updatedAt: patchWithName.updatedAt.toISOString()
             }}
-            cover={knownCover(patch.entity)}
+            cover={portraitCover(patch.handle) || knownCover(patch.entity)}
             isOwner={Boolean(userId && patch.createdBy === userId)}
             isMember={Boolean(userId && (patch.createdBy === userId || membership))}
             userTheme={actualUserTheme ? {
@@ -124,18 +126,20 @@ export default async function PatchBody({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 py-8">
               {/* Main Content Area */}
               <div className="max-w-[880px] min-w-0">
-                <PatchTabs activeTab={activeTab === 'discovery' ? 'facts' : activeTab} patch={patchWithName}>
-                  {activeTab === 'ask' && <AskView patch={patchWithName} initialTopicId={topicKey || (typeof search.topic === 'string' ? search.topic : '')} />}
-                  {activeTab === 'chat' && (
-                    <div className="px-6 md:px-10 py-6">
-                      <PatchChat patchId={patchWithName.id} patchHandle={patchWithName.handle} />
-                    </div>
-                  )}
-                  {activeTab === 'documents' && <Overview patch={patchWithName} />}
-                  {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
-                  {(activeTab === 'facts' || activeTab === 'discovery') && <DiscoveryView patch={patchWithName} />}
-                  {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
-                </PatchTabs>
+                {hasContent ? (
+                  <PatchTabs activeTab={activeTab === 'discovery' ? 'facts' : activeTab} patch={patchWithName}>
+                    {activeTab === 'ask' && <AskView patch={patchWithName} initialTopicId={topicKey || (typeof search.topic === 'string' ? search.topic : '')} />}
+                    {activeTab === 'chat' && (
+                      <div className="px-6 md:px-10 py-6">
+                        <PatchChat patchId={patchWithName.id} patchHandle={patchWithName.handle} />
+                      </div>
+                    )}
+                    {activeTab === 'documents' && <Overview patch={patchWithName} />}
+                    {activeTab === 'timeline' && <TimelineView events={formattedEvents as any} patchId={patchWithName.id} />}
+                    {(activeTab === 'facts' || activeTab === 'discovery') && <DiscoveryView patch={patchWithName} />}
+                    {activeTab === 'discussions' && <DiscussionsView patch={patchWithName} />}
+                  </PatchTabs>
+                ) : null}
               </div>
 
               {/* Right Rail */}

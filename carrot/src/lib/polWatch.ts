@@ -16,6 +16,7 @@ export type Official = {
   offices?: OfficeLine[]
   staff?: StaffLine[]
   staffChecked?: boolean
+  staffMark?: number
   photo?: string
   username?: string
 }
@@ -355,6 +356,33 @@ function cleanText(value: string): string {
     .replace(/&#\d+;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+const STAFF_MARK = 2
+
+export function assemblyEmails(html: string): { name: string; district: string; email: string }[] {
+  return [...html.matchAll(/>([^<]{2,80})<\/a>\s*<div class="email2">(\d+)(?:st|nd|rd|th) District<\/div>\s*<a href="mailto:([^"<>]+@nyassembly\.gov)"/gi)]
+    .map((match) => ({
+      name: match[1].replace(/\s+/g, ' ').trim(),
+      district: match[2],
+      email: match[3].toLowerCase()
+    }))
+    .filter((row) => row.email && row.district)
+}
+
+let assemblyBook: { at: number; rows: { name: string; district: string; email: string }[] } | null = null
+
+async function nyAssemblyEmails(): Promise<{ name: string; district: string; email: string }[]> {
+  if (assemblyBook && Date.now() - assemblyBook.at < 12 * 60 * 60 * 1000) return assemblyBook.rows
+  const rows = assemblyEmails(await readText('https://www.nyassembly.gov/mem/email/', 15000))
+  if (rows.length > 40) assemblyBook = { at: Date.now(), rows }
+  return rows
+}
+
+function publishedAssemblyEmail(person: Official, rows: { district: string; email: string }[]): string {
+  if (person.state !== 'NY' || person.level !== 'state' || !/assembly/i.test(person.office)) return ''
+  const district = person.office.match(/(\d+)/)?.[1] || ''
+  return rows.find((row) => row.district === district)?.email || ''
 }
 
 function staffFromHtml(html: string): StaffLine[] {
@@ -700,11 +728,29 @@ export async function activityFor(person: Official, topic = ''): Promise<FeedIte
   return items
 }
 
+function personKey(name: string): string {
+  const bits = name.toLowerCase().split(/[^a-z]+/).filter((part) => part.length > 1)
+  if (!bits.length) return ''
+  if (bits.length === 1) return bits[0]
+  return `${bits[0][0]}:${bits[bits.length - 1]}`
+}
+
+export function uniqueStaff(rows: StaffLine[]): StaffLine[] {
+  return rows.filter((row, index) => rows.findIndex((item) => {
+    const email = row.email.toLowerCase().replace(/\s+/g, '')
+    const other = item.email.toLowerCase().replace(/\s+/g, '')
+    if (email && other && email === other) return true
+    const who = personKey(row.name)
+    return Boolean(who) && who === personKey(item.name)
+  }) === index)
+}
+
 export async function enrichOfficials(people: Official[]): Promise<Official[]> {
   const offices = await districtOffices()
-  const [directory, houseRows] = await Promise.all([
+  const [directory, houseRows, assembly] = await Promise.all([
     legislativeDirectory().catch(() => ({ house: [], senate: [] })),
-    housePhonebook().catch(() => [] as HouseEmployee[])
+    housePhonebook().catch(() => [] as HouseEmployee[]),
+    nyAssemblyEmails().catch(() => [] as { name: string; district: string; email: string }[])
   ])
   const book = new Map(offices.map((row) => [row.id?.bioguide || '', row.offices || []]))
   return Promise.all(people.map(async (person) => {
@@ -743,14 +789,19 @@ export async function enrichOfficials(people: Official[]): Promise<Official[]> {
       if (row.name && withMail.some((item) => item.name.toLowerCase() === row.name.toLowerCase())) return false
       return Boolean(row.email || row.phone)
     })
-    const staff = georgia ? georgiaStaff : [...withMail, ...rest].slice(0, 24)
-    const email = base.email || staff.find((row) => row.email)?.email || ''
+    const staff = uniqueStaff(georgia ? georgiaStaff : [...withMail, ...rest]).slice(0, 24)
+    const published = publishedAssemblyEmail(base, assembly)
+    if (published && !staff.some((row) => row.email === published)) {
+      staff.unshift({ name: base.name, role: 'Member', email: published, phone: base.phone || '' })
+    }
+    const email = published || base.email || staff.find((row) => row.email)?.email || ''
     return {
       ...base,
       phone: base.phone || '',
       offices: lines,
       staff,
       staffChecked: true,
+      staffMark: STAFF_MARK,
       email
     }
   }))

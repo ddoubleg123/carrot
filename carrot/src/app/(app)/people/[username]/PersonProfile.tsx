@@ -56,9 +56,9 @@ function imagesOf(post: PersonPost): string[] {
   return post.thumbnailUrl ? [post.thumbnailUrl] : []
 }
 
-export default function PersonProfile({ username }: { username: string }) {
+export default function PersonProfile({ username, initial = null }: { username: string; initial?: Person | null }) {
   const { status } = useSession()
-  const [person, setPerson] = useState<Person | null>(null)
+  const [person, setPerson] = useState<Person | null>(initial)
   const [posts, setPosts] = useState<PersonPost[] | null>(null)
   const [missing, setMissing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -69,12 +69,12 @@ export default function PersonProfile({ username }: { username: string }) {
     fetch(`/api/people/${handle}?part=card`, { cache: 'no-store' }).then(async (res) => {
       if (stopped) return
       if (!res.ok) {
-        setMissing(true)
+        if (!initial) setMissing(true)
         return
       }
       const card = await res.json()
       setPerson({ ...card, posts: [] })
-    }).catch(() => { if (!stopped) setMissing(true) })
+    }).catch(() => { if (!stopped && !initial) setMissing(true) })
     fetch(`/api/people/${handle}?part=posts`, { cache: 'no-store' }).then(async (res) => {
       if (stopped || !res.ok) return
       const body = await res.json()
@@ -115,29 +115,27 @@ export default function PersonProfile({ username }: { username: string }) {
 
   return (
     <div>
-      <div className="relative overflow-hidden rounded-b-3xl">
+      <div className="relative h-40 overflow-hidden rounded-b-3xl bg-[#E7D3C4]">
         <button
           type="button"
           onClick={() => {
             if (document.referrer.startsWith(window.location.origin)) window.history.back()
             else window.location.assign('/home')
           }}
-          className="absolute left-4 top-4 z-10 rounded-full bg-white/95 px-3 py-1.5 text-sm font-semibold text-gray-900 shadow"
+          className="absolute left-4 top-4 z-20 rounded-full bg-white/95 px-3 py-1.5 text-sm font-semibold text-gray-900 shadow"
         >
           Back
         </button>
-        {person.banner ? (
-          <img src={person.banner} alt="" className="h-44 w-full object-cover" />
-        ) : (
-          <div className="h-44 w-full bg-[#1C1917]" />
+        {person.banner && (
+          <img src={person.banner} alt="" className="absolute inset-0 h-full w-full scale-150 object-cover blur-2xl" />
         )}
       </div>
-      <div className="px-2">
+      <div className="px-4">
         <div className="flex items-end justify-between">
           <img
             src={person.avatar || '/avatar-placeholder.svg'}
             alt=""
-            className="-mt-14 h-28 w-28 rounded-3xl border-4 border-[#F6F3EE] bg-white object-cover shadow-sm"
+            className="relative z-10 -mt-16 h-32 w-32 rounded-full border-4 border-[#F6F3EE] bg-white object-cover object-[center_22%] shadow-sm"
           />
           {!person.isSelf && (
             <button

@@ -7,11 +7,14 @@ import { projectPost } from './_project';
 import { cache, cacheKeys, cacheTTL } from '../../../lib/cache';
 import { POSTS_SNAPSHOT, invalidateFeedCache } from '../../../lib/feedCache';
 import { createResilientFetch } from '@/lib/retryUtils';
-import { buildTimeline, orderByTaste } from '@/lib/feedTimeline';
+import { buildTimeline, feedVisible, isPolPost, placePol, rankHome, spreadSlate } from '@/lib/feedTimeline';
+import { subjectOf } from '@/lib/taste';
+import { loadFeedRank } from '@/lib/feedRankStore';
+import { hoursForPost, loadViewerContext } from '@/lib/feedViewer';
 import { mediaKind } from '@/lib/mediaKind';
 import { laneOf, outletFromContent } from '@/lib/curator/variety';
-import { subjectOf, TASTE_HOURS, TASTE_LEARN_AFTER } from '@/lib/taste';
-import { tasteForViewer } from '@/lib/tasteRecord';
+import { interestGroups } from '@/lib/interestCatalog';
+import { picksFrom, recordInterest } from '@/lib/recordInterest';
 
 let botAuthorCache: { at: number; ids: Set<string> } | null = null
 
@@ -27,54 +30,77 @@ async function botAuthorIds() {
 
 function labelPosts(posts: any[]) {
   return posts.map((post) => {
-    const content = String(post?.content || '')
-    const quote = /^kind:\s*quote\b/im.test(content)
     const username = post?.User?.username
     const authorId = String(post?.userId || '')
-    const bucket = post?.bucket || subjectOf(username, authorId)
+    const pol = isPolPost(post)
     return {
       ...post,
-      bucket,
-      media: quote ? 'card' : mediaKind(post),
-      outlet: outletFromContent(content),
-      lane: laneOf(bucket)
+      office: Boolean(post?.office),
+      bucket: pol ? 'pol-watch' : (post?.bucket || subjectOf(username, authorId)),
+      media: mediaKind(post),
+      outlet: outletFromContent(post?.content),
+      lane: laneOf(pol ? 'pol-watch' : (post?.bucket || subjectOf(username, authorId)))
     }
   })
 }
 
+function spreadOnly(posts: any[]) {
+  const prepared = labelPosts(feedVisible(posts))
+  const rest = prepared.filter((post) => post.bucket !== 'pol-watch')
+  return spreadSlate(rest.length > 0 ? rest : prepared, { media: 2, bucket: 2 })
+}
+
 async function homeTimeline(posts: any[]) {
-  posts = labelPosts(posts)
+  posts = feedVisible(posts)
   const session = await auth()
   const viewerId = (session as { user?: { id?: string } } | null)?.user?.id || ''
-  let following: string[] = []
-  let metadata: unknown = null
-  if (viewerId) {
-    const viewer = await prisma.user.findUnique({ where: { id: viewerId }, select: { metadata: true } })
-    metadata = viewer?.metadata
-    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-      const list = (metadata as { following?: unknown }).following
-      if (Array.isArray(list)) following = list.map(String)
-    }
-  }
-  const lined = buildTimeline(posts, { viewerId, following, botIds: await botAuthorIds() })
-  if (!viewerId) return { posts: lined, personal: false }
-  const taste = await tasteForViewer(viewerId, metadata).catch((error) => {
-    console.error('[taste] feed', error)
+  const prepared = labelPosts(posts)
+  const pol = prepared.filter((post) => post.bucket === 'pol-watch')
+  const rest = prepared.filter((post) => post.bucket !== 'pol-watch')
+  const rank = await loadFeedRank().catch(() => null)
+  const mediaRun = rank?.mediaRun ?? 2
+  const bucketRun = rank?.bucketRun ?? 2
+  const viewer = viewerId ? await loadViewerContext(viewerId).catch((error) => {
+    console.error('[feed] viewer', error)
     return null
+  }) : null
+  const lined = buildTimeline(rest, {
+    viewerId,
+    following: viewer?.following || [],
+    botIds: await botAuthorIds(),
+    patchIds: viewer?.groups,
+    mediaRun,
+    bucketRun
   })
-  if (!taste) return { posts: lined, personal: true }
-  const followed = new Set(following)
-  const ranked = orderByTaste(lined, {
-    signals: taste.signals,
-    learnAfter: TASTE_LEARN_AFTER,
-    hoursFor: (post) => {
-      const authorId = String(post.userId || '')
-      const username = (post as { User?: { username?: string | null } }).User?.username
-      const learned = taste.desks[subjectOf(username, authorId)] || 0
-      return learned + (followed.has(authorId) ? TASTE_HOURS.follow : 0)
-    }
+  const withPol = (rows: typeof lined) => placePol(rows, pol, rank?.polEvery ?? 0)
+  if (!viewer) return { posts: withPol(lined), personal: Boolean(viewerId) }
+  const ranked = rankHome(lined, {
+    seen: viewer.seen,
+    mediaRun,
+    bucketRun,
+    hoursFor: (post) => hoursForPost(viewer, post)
   })
-  return { posts: ranked, personal: true }
+  return { posts: withPol(ranked), personal: true }
+}
+
+async function feedOrPosts(posts: any[]) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timed = new Promise<{ posts: any[]; personal: boolean }>((resolve) => {
+    timer = setTimeout(() => resolve({ posts: spreadOnly(posts), personal: true }), 20000)
+  })
+  try {
+    return await Promise.race([
+      homeTimeline(posts).catch(() => ({ posts: spreadOnly(posts), personal: true })),
+      timed
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** The home screen paints the first page. The rest stays on the server. */
+function firstPage(feed: { posts: any[]; personal: boolean }) {
+  return { ...feed, posts: feed.posts.slice(0, 40) }
 }
 
 // POST /api/posts - create a new post
@@ -132,6 +158,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     carrotText,
     stickText,
     externalUrl,
+    bucket: requestedBucket,
     // Cloudflare fields removed for Firebase-only plan
   } = body;
   // Attempt to derive a durable storage path from a Firebase thumbnail URL
@@ -352,11 +379,22 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     const thumbInfo = deriveThumbInfo(thumbnailUrl);
     const safeThumbUrl = thumbInfo.url ?? thumbnailUrl ?? null;
 
+    let bucket = 'finds'
+    if (typeof requestedBucket === 'string') {
+      const id = requestedBucket.trim()
+      if (id === 'pol-watch' || id.startsWith('ask:') || interestGroups().some((group) => group.id === id)) bucket = id
+    }
+    if (bucket === 'finds') {
+      const viewer = await prisma.user.findUnique({ where: { id: session.user.id }, select: { metadata: true } })
+      const first = picksFrom(viewer?.metadata)[0]?.id
+      if (first && (typeof requestedBucket !== 'string' || !requestedBucket.trim())) bucket = first
+    }
     // Create post first
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
         content,
+        bucket,
         gradientDirection: gDir,
         gradientFromColor: gFrom,
         gradientViaColor: gVia,
@@ -393,6 +431,9 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       },
     });
 
+    await recordInterest(session.user.id, bucket, 'post', `post:${post.id}`).catch((error) => {
+      console.error('[interest] post', error)
+    })
     console.log(`✅ POST /api/posts - Post created successfully with ID: ${post.id}`);
     console.log(`🔍 POST /api/posts - Post audioUrl: ${post.audioUrl ? 'Present' : 'Missing'}`);
     console.log(`🔍 POST /api/posts - Transcription status: ${post.transcriptionStatus}`);
@@ -706,7 +747,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     if (cachedPosts) {
       console.log('[GET /api/posts] Cache hit, returning cached data');
       if (!existsSync(POSTS_SNAPSHOT)) writePostsSnapshot(cachedPosts as any[]);
-      const feed = await homeTimeline(cachedPosts as any[]);
+      const feed = firstPage(await feedOrPosts(cachedPosts as any[]));
       const response = NextResponse.json(feed.posts);
       if (feed.personal) {
         response.headers.set('Cache-Control', 'private, no-store');
@@ -724,7 +765,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
       if (Date.now() - snapshot.savedAt > 60_000) {
         void loadPosts().catch(() => {});
       }
-      const feed = await homeTimeline(snapshot.posts);
+      const feed = firstPage(await feedOrPosts(snapshot.posts));
       const response = NextResponse.json(feed.posts);
       if (feed.personal) {
         response.headers.set('Cache-Control', 'private, no-store');
@@ -739,7 +780,7 @@ export async function GET(req: Request, _ctx: { params: Promise<{}> }) {
     const shaped = await loadPosts();
     
     // Add caching headers for better performance
-    const feed = await homeTimeline(shaped);
+    const feed = firstPage(await feedOrPosts(shaped));
     const response = NextResponse.json(feed.posts);
     if (feed.personal) {
       response.headers.set('Cache-Control', 'private, no-store');

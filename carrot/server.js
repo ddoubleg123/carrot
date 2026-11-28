@@ -6,6 +6,9 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
+const { loadEnvConfig } = require('@next/env');
+
+loadEnvConfig(process.cwd());
 
 // Validate environment at boot
 // Note: In production, this will be called during build/start
@@ -66,6 +69,7 @@ const MENU_ROUTES = [
   '/messages',
   '/rabbit',
   '/dashboard/funds',
+  '/api/user/funds',
   '/settings',
   // These compile the first time a page asks for them, and that compile
   // blocks the next menu click for several seconds. Warm them up front.

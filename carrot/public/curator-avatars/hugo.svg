@@ -1,17 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
-  <rect width="320" height="320" fill="#4A1C24"/>
-  <path d="M40 250h70M40 270h50" stroke="#E2B657" stroke-width="4"/>
-  <ellipse cx="168" cy="304" rx="116" ry="74" fill="#2A0E14"/>
-  <ellipse cx="156" cy="296" rx="116" ry="74" fill="#1C1917"/>
-  <path d="M86 176c6-58 34-100 78-100s70 40 76 100v36H86z" fill="#2A0E14"/>
-  <path d="M78 168c6-58 34-100 78-100s70 40 76 100v36H78z" fill="#6E3B2A"/>
-  <path d="M92 112c10-46 36-70 64-70 22 0 40 12 52 32-8 18-28 16-48 8-30 16-52 18-68 30z" fill="#D9D3CB"/>
-  <path d="M70 92c28-8 46-28 62-28 8 22-6 40-24 48-20-4-32-8-38-20z" fill="#E2B657"/>
-  <path d="M168 78c18-6 40 6 48 24-22 6-36-2-48-10-6 8-20 12-34 8 4-12 18-20 34-22z" fill="#E2B657"/>
-  <path d="M118 158h18M176 162h16" stroke="#2A0E14" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="126" cy="174" r="5" fill="#1C1917"/>
-  <circle cx="184" cy="174" r="5" fill="#1C1917"/>
-  <path d="M108 148l16 6" stroke="#E2B657" stroke-width="3"/>
-  <path d="M146 206h28" stroke="#3A2018" stroke-width="4" stroke-linecap="round"/>
-  <rect x="196" y="214" width="28" height="36" rx="3" fill="#E7D7B8" stroke="#2A0E14" stroke-width="3"/>
+  <rect width="320" height="320" fill="#FDE7EF"/>
+  <circle cx="262" cy="52" r="16" fill="#E11D48" opacity="0.9"/>
+  <circle cx="248" cy="40" r="7" fill="#FFFFFF" opacity="0.8"/>
+  <ellipse cx="160" cy="286" rx="92" ry="62" fill="#FBCFE8"/>
+  <circle cx="160" cy="150" r="78" fill="#C68642"/>
+  <path d="M112 124c4-16 14-24 24-22 2 12-6 18-14 18z" fill="#3A2E24"/><path d="M176 100c14 0 26 10 30 24-14 2-22-6-30-12-4 8-12 12-18 6 2-8 8-16 18-18z" fill="#3A2E24"/>
+  <ellipse cx="118" cy="172" rx="14" ry="8" fill="#F43F5E" opacity="0.28"/>
+  <ellipse cx="204" cy="172" rx="14" ry="8" fill="#F43F5E" opacity="0.28"/>
+  <ellipse cx="136" cy="158" rx="11" ry="12" fill="#2B2118"/><ellipse cx="188" cy="158" rx="11" ry="12" fill="#2B2118"/><circle cx="140" cy="154" r="3.5" fill="#FFFFFF"/><circle cx="192" cy="154" r="3.5" fill="#FFFFFF"/>
+  <path d="M146 186c6 10 22 10 28 0" stroke="#C2410C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M124 176c4 22 18 34 36 34s32-12 36-34c-8 10-22 14-36 14s-28-4-36-14z" fill="#3A2E24" opacity="0.9"/>
+  <rect x="222" y="216" width="30" height="14" rx="7" fill="#FFF7ED" stroke="#7C4A2D" stroke-width="2"/>
 </svg>

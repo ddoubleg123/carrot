@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../../lib/prisma';
 import { auth } from '../../../../../auth';
+import { bucketOf, recordInterest } from '@/lib/recordInterest';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { id } = await ctx.params;
 
-    const post = await prisma.post.findUnique({ where: { id }, select: { id: true } });
+    const post = await prisma.post.findUnique({
+      where: { id },
+      select: { id: true, bucket: true, userId: true, User: { select: { username: true } } }
+    });
     if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const existing = await (prisma as any).postSave.findUnique({ where: { post_user_save_unique: { post_id: id, user_id: session.user.id } } });
@@ -23,6 +27,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const saved = !existing;
+    if (saved) {
+      await recordInterest(session.user.id, bucketOf(post), 'save', `save:${id}`).catch((error) => {
+        console.error('[interest] save', error)
+      })
+    }
     return NextResponse.json({ saved });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });

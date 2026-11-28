@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patch options</title>
+  <style>
+    :root {
+      --ink: #0B0B0F;
+      --orange: #FF6A00;
+      --muted: #60646C;
+      --line: #E6E8EC;
+      --paper: #FAFAF8;
+      --page: #F6F3EE;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.6rem;
+      letter-spacing: -0.03em;
+    }
+    p.lead {
+      margin: 0 0 28px;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    article {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+    }
+    .num {
+      margin: 0 0 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+    }
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--paper);
+    }
+    .chip img {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      flex: none;
+    }
+    .kicker {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+    }
+    .name {
+      display: block;
+      margin-top: 4px;
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .open {
+      margin-left: auto;
+      font-size: 14px;
+      font-weight: 650;
+      color: var(--orange);
+    }
+    .shape {
+      margin: 10px 2px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Four patch options</h1>
+    <p class="lead">Each one uses the post name, U.S. Weapons and Aid. Pick a number.</p>
+    <div class="grid">
+      <article>
+        <p class="num">1 · Round</p>
+        <div class="chip">
+          <img src="/patch-option-round.jpg" alt="Round green merit badge with an embroidered carrot" />
+          <span>
+            <span class="kicker">In the patch</span>
+            <span class="name">U.S. Weapons and Aid</span>
+          </span>
+          <span class="open">Open</span>
+        </div>
+        <p class="shape">Forest green field, black stitched edge.</p>
+      </article>
+      <article>
+        <p class="num">2 · Shield</p>
+        <div class="chip">
+          <img src="/patch-option-shield.jpg" alt="Navy shield patch with a carrot and two gold stars" />
+          <span>
+            <span class="kicker">In the patch</span>
+            <span class="name">U.S. Weapons and Aid</span>
+          </span>
+          <span class="open">Open</span>
+        </div>
+        <p class="shape">Navy field, gold edge, a star on each side.</p>
+      </article>
+      <article>
+        <p class="num">3 · Square</p>
+        <div class="chip">
+          <img src="/patch-option-square.jpg" alt="Square cream camp patch with an orange border and a blank rocker" />
+          <span>
+            <span class="kicker">In the patch</span>
+            <span class="name">U.S. Weapons and Aid</span>
+          </span>
+          <span class="open">Open</span>
+        </div>
+        <p class="shape">Cream field, orange edge, blank rocker for a name.</p>
+      </article>
+      <article>
+        <p class="num">4 · Oval</p>
+        <div class="chip">
+          <img src="/patch-option-oval.jpg" alt="Oval white shoulder patch with a red edge and an embroidered carrot" />
+          <span>
+            <span class="kicker">In the patch</span>
+            <span class="name">U.S. Weapons and Aid</span>
+          </span>
+          <span class="open">Open</span>
+        </div>
+        <p class="shape">White field, red edge. Shoulder-patch shape.</p>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

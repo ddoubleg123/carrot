@@ -13,6 +13,18 @@ from render import FIT_JS, BASE_CSS, face_overlap, norm, ocr_recall, typeset
 from render2 import DIR, P
 
 ROOT = Path(__file__).resolve().parent
+LOGO = ROOT.parents[1] / "public" / "carrot-logo.png"
+MARK_CSS = """
+html,body{height:1422px!important;background:#1C1917}
+.made{width:1080px;height:72px;background:#1C1917;color:#F4F1EA;display:flex;align-items:center;gap:18px;padding:0 28px;font-family:Inter,sans-serif;font-size:28px;font-weight:500;letter-spacing:.04em}
+.made .logo{width:36px;height:36px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:none}
+.made img{height:64px;width:64px;max-width:none;object-fit:contain}
+"""
+
+
+def mark_html():
+    logo = f"<span class='logo'><img src='{LOGO.as_uri()}' alt=''></span>" if LOGO.exists() else ""
+    return f"<div class='made'>{logo}<span>gotcarrot.com</span></div>"
 
 # CSS size of the photograph in each direction. A direction is eligible only when
 # the source is at least that large, so the picture is never stretched.
@@ -190,11 +202,11 @@ def render_variants(card, img, jobs, out, check_ocr):
     rows = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=2)
+        page = browser.new_page(viewport={"width": 1080, "height": 1422}, device_scale_factor=2)
         for index, (direction, palette, variant) in enumerate(jobs, 1):
             colors = P.get(palette) or P["ink"]
             body = DIR[direction](card, colors, img, variant)
-            doc = f"<!doctype html><html><head><meta charset='utf-8'><style>{BASE_CSS}</style></head><body>{body}</body></html>"
+            doc = f"<!doctype html><html><head><meta charset='utf-8'><style>{BASE_CSS}{MARK_CSS}</style></head><body>{body}{mark_html()}</body></html>"
             label = palette or variant.get("g") or "field"
             name = f"{index:02d}_{direction}__{label}"
             html_path = folder / "html" / f"{name}.html"

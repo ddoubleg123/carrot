@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import CreateGroupModal from '@/components/patch/CreateGroupModal';
+import { PortraitCard, PortraitGrid } from '@/components/search/PortraitCard';
+import { HalfPageAd, useBoardAdSlot } from '@/components/search/HalfPageAd';
 
 interface Patch {
   id: string;
@@ -25,8 +27,46 @@ interface PatchPageClientProps {
   patches: Patch[];
 }
 
+type GroupPost = {
+  id: string;
+  href: string;
+  group: string;
+  text: string;
+  image?: string;
+  createdAt: string;
+};
+
+function GroupPosts({ posts, searching, error }: { posts: GroupPost[]; searching: boolean; error: string }) {
+  const slot = useBoardAdSlot(posts.map((post) => post.id).join('|'), posts.length);
+  if (error) return <p className="mt-8 px-1 text-sm leading-6 text-[#B91C1C]">{error}</p>;
+  if (searching && posts.length === 0) return <p className="mt-8 px-1 text-sm leading-6 text-[#60646C]">Searching…</p>;
+  if (posts.length === 0) return <p className="mt-8 px-1 text-sm leading-6 text-[#60646C]">No posts match that search.</p>;
+  return (
+    <PortraitGrid className="mt-6">
+      {posts.map((post, index) => (
+        <Fragment key={post.id}>
+          {index === slot && <HalfPageAd />}
+          <PortraitCard
+            href={post.href}
+            image={post.image}
+            title={post.text}
+            byline={post.group}
+            meta={new Date(post.createdAt).toLocaleDateString()}
+          />
+        </Fragment>
+      ))}
+      {slot === posts.length && <HalfPageAd />}
+    </PortraitGrid>
+  );
+}
+
 export default function PatchPageClient({ patches }: PatchPageClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [posts, setPosts] = useState<GroupPost[]>([]);
+  const [postsKey, setPostsKey] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const requestId = useRef(0);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
 
   const handleCreateGroup = () => {
@@ -85,12 +125,37 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
     }
   };
 
-  // Filter patches based on search query
-  const filteredPatches = patches.filter(patch =>
-    patch.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    patch.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    patch.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) return;
+    const id = ++requestId.current;
+    const controller = new AbortController();
+    const handle = window.setTimeout(async () => {
+      setSearching(true);
+      setSearchError('');
+      try {
+        const res = await fetch(`/api/groups/search?q=${encodeURIComponent(query)}`, { cache: 'no-store', signal: controller.signal });
+        const json = await res.json().catch(() => null);
+        if (id !== requestId.current) return;
+        if (!res.ok) setSearchError(json?.error || 'Search failed');
+        setPosts(Array.isArray(json?.posts) ? json.posts : []);
+        setPostsKey(query);
+      } catch {
+        if (controller.signal.aborted || id !== requestId.current) return;
+        setSearchError('Search failed. Try again.');
+      } finally {
+        if (id === requestId.current) setSearching(false);
+      }
+    }, 280);
+    return () => {
+      window.clearTimeout(handle);
+      controller.abort();
+    };
+  }, [searchQuery]);
+
+  const query = searchQuery.trim();
+  const postsReady = query.length >= 2 && postsKey === query;
+  const filteredPatches = patches;
 
   return (
     <div className="min-h-screen bg-white text-[#0B0B0F]">
@@ -113,16 +178,16 @@ export default function PatchPageClient({ patches }: PatchPageClientProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Find a group"
-            className="h-12 w-full bg-transparent text-base outline-none placeholder:text-[#8A8F98]"
-            aria-label="Find a group"
+            placeholder="Search posts in groups"
+            className="h-12 w-full bg-transparent px-1 text-base outline-none placeholder:text-[#8A8F98]"
+            aria-label="Search posts in groups"
           />
         </div>
 
-        {filteredPatches.length === 0 ? (
-          <p className="border-t border-[#E6E8EC] py-10 text-sm text-[#60646C]">
-            {searchQuery ? 'No groups match that search.' : 'No groups yet.'}
-          </p>
+        {query.length >= 2 ? (
+          <GroupPosts posts={postsReady ? posts : []} searching={!postsReady || searching} error={searchError} />
+        ) : filteredPatches.length === 0 ? (
+          <p className="mt-8 text-sm leading-6 text-[#60646C]">No groups yet.</p>
         ) : (
           <div className="mt-2 border-t border-[#E6E8EC]">
             {filteredPatches.map((patch) => (

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pol Watch, as a feed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #F4F1EC; color: #1C1917; }
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 72px; }
+    .kicker { margin: 0; color: #FF6A00; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    h1 { margin: 6px 0 0; font-size: 32px; letter-spacing: -0.03em; }
+    .lede { max-width: 680px; margin: 10px 0 0; color: #57534E; font-size: 15px; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; gap: 16px; align-items: start; margin-top: 22px; }
+    .people, .panel { border-radius: 24px; }
+    .people { background: white; padding: 12px; }
+    .person { display: flex; gap: 8px; align-items: center; padding: 8px; border-radius: 16px; }
+    .person.on { background: #1C1917; color: white; }
+    .av { width: 36px; height: 36px; border-radius: 99px; display: grid; place-items: center; font-size: 13px; font-weight: 700; flex: none; background: #F5F5F4; color: #57534E; }
+    .person.on .av { background: rgba(255,255,255,.15); color: white; }
+    .person b { display: block; font-size: 14px; }
+    .person span { display: block; font-size: 12px; color: #A8A29E; }
+    .person.on span { color: rgba(255,255,255,.7); }
+    .everyone { width: 100%; border: 0; background: transparent; text-align: left; border-radius: 16px; padding: 8px 12px; color: #57534E; font: inherit; font-size: 14px; margin-bottom: 4px; }
+    .col-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 2px 12px; }
+    .col-head h2 { margin: 0; font-size: 18px; }
+    .col-head p { margin: 0; color: #A8A29E; font-size: 12px; }
+    .card {
+      display: flex; background: white; border: 1px solid #E6E8EC; border-radius: 18px;
+      overflow: hidden; margin-bottom: 12px;
+    }
+    .main { flex: 1; min-width: 0; padding: 14px 16px 16px; }
+    .who { display: flex; gap: 10px; align-items: center; }
+    .who .av { width: 40px; height: 40px; background: #E7E5E4; color: #44403C; }
+    .name { font-weight: 700; font-size: 15px; }
+    .when { color: #A8A29E; font-weight: 500; font-size: 13px; }
+    .copy { margin: 12px 0 0; font-size: 15.5px; line-height: 1.5; color: #44403C; }
+    .preview {
+      display: block; margin-top: 12px; text-decoration: none; color: inherit;
+      border: 1px solid #E7E5E4; border-radius: 12px; overflow: hidden; background: white;
+    }
+    .preview .band { height: 92px; background: linear-gradient(160deg, #3a2e28, #1a1412 58%, #c47a3a); }
+    .preview .meta { padding: 10px 12px 12px; }
+    .host { color: #78716C; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .headline { margin-top: 4px; font-size: 15px; font-weight: 650; line-height: 1.35; }
+    .rail {
+      width: 92px; flex: none; border-left: 1px solid #F0EEE9; background: #FFFcf8;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 12px 8px;
+    }
+    .act { width: 40px; height: 40px; border: 0; border-radius: 99px; background: transparent; color: #78716C; display: grid; place-items: center; }
+    .count { font-size: 12px; color: #78716C; margin: -4px 0 6px; }
+    .pass { border: 0; background: transparent; color: #78716C; border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 6px; }
+    .pass span { font-size: 11px; font-weight: 700; line-height: 1.15; text-align: center; }
+    .panel { background: #1C1917; color: white; padding: 20px; }
+    .panel .office { color: rgba(255,255,255,.5); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
+    .panel h2 { margin: 4px 0 0; font-size: 24px; }
+    .panel a { color: #FDBA74; text-decoration: none; font-size: 14px; }
+    .panel p { margin: 8px 0 0; color: rgba(255,255,255,.7); font-size: 14px; line-height: 1.45; }
+    .note { margin-top: 18px; color: #A8A29E; font-size: 13px; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .rail { width: auto; flex-direction: row; border-left: 0; border-top: 1px solid #F0EEE9; justify-content: center; }
+      .card { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <p class="kicker">Preview</p>
+    <h1>What is moving, as a feed</h1>
+    <p class="lede">Same Pol Watch items, set in the newsfeed card: the person is the author, the sentence is the post, and the source sits underneath as a link. The live page is unchanged. This is only for looking.</p>
+
+    <div class="grid">
+      <aside class="people">
+        <div class="everyone">Everyone · 10</div>
+        <div class="person"><div class="av">B</div><div><b>Brian Kemp</b><span>Governor of Georgia</span></div></div>
+        <div class="person"><div class="av">R</div><div><b>Raphael G. Warnock</b><span>U.S. Senate</span></div></div>
+        <div class="person"><div class="av">J</div><div><b>Jon Ossoff</b><span>U.S. Senate</span></div></div>
+        <div class="person"><div class="av">B</div><div><b>Barry Loudermilk</b><span>U.S. House, district 11</span></div></div>
+        <div class="person on"><div class="av">H</div><div><b>Hakeem S. Jeffries</b><span>U.S. House, district 8</span></div></div>
+      </aside>
+
+      <section>
+        <div class="col-head">
+          <h2>What is moving</h2>
+          <p>Refreshes every minute</p>
+        </div>
+
+        <article class="card">
+          <div class="main">
+            <div class="who"><div class="av">H</div><div><span class="name">Hakeem S. Jeffries</span> <span class="when">· 12m</span></div></div>
+            <p class="copy">Today, House Speaker-Designate Hakeem Jeffries appeared on CBS’s Face the Nation, where he made clear that in the 120th Congress, the House is committed to the change people are asking for.</p>
+            <a class="preview" href="https://jeffries.house.gov/">
+              <div class="band"></div>
+              <div class="meta">
+                <div class="host">Official site</div>
+                <div class="headline">Speaker-designate Jeffries on CBS: committed to the change the American people are demanding</div>
+              </div>
+            </a>
+          </div>
+          <div class="rail">
+            <button class="act" aria-label="Carrot"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Comment"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 18 0z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Share"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+            <button class="act" aria-label="Save"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button>
+            <button class="pass" aria-label="Not interested"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 6.1A8 8 0 0 1 20 12c-.6 1-1.5 2-2.6 2.8M6.7 6.7C5 8 3.8 9.8 3 12c1.3 2.4 4.4 6 9 6 1.5 0 2.8-.4 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg><span>Not interested</span></button>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="main">
+            <div class="who"><div class="av">H</div><div><span class="name">Hakeem S. Jeffries</span> <span class="when">· 1h</span></div></div>
+            <p class="copy">The Washington Post reports that Democrats have nominated Hakeem Jeffries to be the first Black speaker of the House next year.</p>
+            <a class="preview" href="https://www.washingtonpost.com/">
+              <div class="band"></div>
+              <div class="meta">
+                <div class="host">The Washington Post</div>
+                <div class="headline">Democrat Hakeem Jeffries nominated to be first Black speaker of House next year</div>
+              </div>
+            </a>
+          </div>
+          <div class="rail">
+            <button class="act" aria-label="Carrot"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Comment"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 18 0z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Share"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+            <button class="act" aria-label="Save"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button>
+            <button class="pass" aria-label="Not interested"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 6.1A8 8 0 0 1 20 12c-.6 1-1.5 2-2.6 2.8M6.7 6.7C5 8 3.8 9.8 3 12c1.3 2.4 4.4 6 9 6 1.5 0 2.8-.4 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg><span>Not interested</span></button>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="main">
+            <div class="who"><div class="av">H</div><div><span class="name">Hakeem S. Jeffries</span> <span class="when">· 3h</span></div></div>
+            <p class="copy">Today, House Speaker-designate Hakeem Jeffries appeared on MS NOW’s The Briefing with Jen Psaki, where he reflected on the historic nature of the moment.</p>
+            <a class="preview" href="https://jeffries.house.gov/">
+              <div class="band"></div>
+              <div class="meta">
+                <div class="host">Official site</div>
+                <div class="headline">Speaker-designate Jeffries on MS NOW: we’ve got to make meaningful, dramatic, decisive progress</div>
+              </div>
+            </a>
+          </div>
+          <div class="rail">
+            <button class="act" aria-label="Carrot"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Comment"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 18 0z"/></svg></button>
+            <div class="count">0</div>
+            <button class="act" aria-label="Share"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+            <button class="act" aria-label="Save"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg></button>
+            <button class="pass" aria-label="Not interested"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 6.1A8 8 0 0 1 20 12c-.6 1-1.5 2-2.6 2.8M6.7 6.7C5 8 3.8 9.8 3 12c1.3 2.4 4.4 6 9 6 1.5 0 2.8-.4 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg><span>Not interested</span></button>
+          </div>
+        </article>
+      </section>
+
+      <aside class="panel">
+        <div class="office">U.S. House, district 8</div>
+        <h2>Hakeem S. Jeffries</h2>
+        <a href="/people/hakeem-jeffries">Public profile</a>
+        <p>Democrat · 11239</p>
+        <p>202-225-5936</p>
+        <p><a href="mailto:zachary.lobel@mail.house.gov">zachary.lobel@mail.house.gov</a></p>
+        <p class="note">The contact card stays as it is. This preview only changes the middle column.</p>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,9 +1,12 @@
 'use client'
 
-import { FormEvent, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { FormEvent, Fragment, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Download, MessageCircle, Search, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Download, Search, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { PortraitCard, PortraitGrid } from '@/components/search/PortraitCard'
+import { HalfPageAd, InArticleAd, useBoardAdSlot } from '@/components/search/HalfPageAd'
 import { formatArticle, openedPassage } from '@/lib/learn/articleText'
+import { isPdfLink } from '@/lib/learn/pdfLink'
 import RichComposer from '@/components/messaging/RichComposer'
 import CommentBody from '@/components/messaging/CommentBody'
 import { decodeComment, encodeComment } from '@/components/messaging/commentCodec'
@@ -114,10 +117,6 @@ function cardCandidates(topic: TopicCard): string[] {
   }
   add(topic.image)
   return urls
-}
-
-function cardThumb(topic: TopicCard): string {
-  return cardCandidates(topic)[0] || ''
 }
 
 function CardPhoto({ src, className }: { src: string | string[]; className?: string }) {
@@ -350,13 +349,7 @@ function SpokenWords({ listen, videoUrl }: { listen: Listen; videoUrl: string })
 }
 
 function isPdfSource(url: string): boolean {
-  if (url.startsWith('/topic-docs/') && !url.includes('..')) return url.toLowerCase().endsWith('.pdf')
-  try {
-    const parsed = new URL(url)
-    return parsed.pathname.toLowerCase().endsWith('.pdf') || /\/pdf(\/|$)/i.test(parsed.pathname) || /[?&](format|type)=pdf\b/i.test(parsed.search)
-  } catch {
-    return false
-  }
+  return isPdfLink(url)
 }
 
 function archiveEmbed(url: string): string {
@@ -378,8 +371,26 @@ function pdfFrameSrc(url: string): string {
   return `/api/learn/pdf?url=${encodeURIComponent(url)}`
 }
 
+async function pdfBytesOpen(src: string): Promise<boolean> {
+  const response = await fetch(src, { headers: { Range: 'bytes=0-4' } }).catch(() => null)
+  if (!response || (!response.ok && response.status !== 206)) return false
+  const type = (response.headers.get('content-type') || '').toLowerCase()
+  if (type.includes('text/html') || type.startsWith('text/plain')) {
+    await response.body?.cancel().catch(() => undefined)
+    return false
+  }
+  const reader = response.body?.getReader()
+  if (!reader) return type.includes('pdf')
+  const { value } = await reader.read().catch(() => ({ value: undefined }))
+  await reader.cancel().catch(() => undefined)
+  const mark = value ? String.fromCharCode(...value.slice(0, 5)) : ''
+  return mark.startsWith('%PDF-') || type.includes('pdf') || type.includes('octet-stream')
+}
+
 function PdfView({ url, title }: { url: string; title: string }) {
   const base = pdfFrameSrc(url)
+  const [ready, setReady] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [query, setQuery] = useState('')
   const [pages, setPages] = useState<string[] | null>(null)
   const [hits, setHits] = useState<number[]>([])
@@ -387,6 +398,18 @@ function PdfView({ url, title }: { url: string; title: string }) {
   const [status, setStatus] = useState('')
   const page = hits[at]
   const src = page ? `${base}#page=${page}` : `${base}#view=FitH`
+  useEffect(() => {
+    let cancelled = false
+    setReady(false)
+    pdfBytesOpen(base).then((open) => {
+      if (cancelled) return
+      if (open) setReady(true)
+      else setFailed(true)
+    })
+    return () => { cancelled = true }
+  }, [base])
+  if (failed) return <p className="mt-3 text-sm leading-6 text-[#60646C]">This PDF could not be opened.</p>
+  if (!ready) return <p className="mt-3 text-sm leading-6 text-[#60646C]">Opening the PDF…</p>
   const find = async (value: string) => {
     const needle = value.trim().toLowerCase()
     if (needle.length < 2) return
@@ -1310,6 +1333,7 @@ function TopicRoom({
       <section id="record" ref={saved} className="mt-8">
         {notice && <p className="mb-3 text-sm font-medium text-[#0B0B0F]">{notice}</p>}
         <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#0B0B0F]">Sources <span className="ml-2 font-medium normal-case tracking-normal text-[#60646C]">{topic.sources.length}</span></h3>
+        <InArticleAd />
         <div className="mt-2 border-t border-[#E6E8EC]">
           {topic.sources.map((source) => (
             <SourceCard key={source.id} source={source} listen={listen} open={openSources.includes(source.id)} onToggle={() => toggleSource(source.id)} canNote={topic.isAdmin || source.postedByMe} busy={busy} onNote={(text) => onUpdate('addendum', { sourceId: source.id, text })}>
@@ -1710,34 +1734,31 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
     })
     || null
   const waiting = Boolean(openId) && !open
+  const boardSlot = useBoardAdSlot(topics.map((topic) => topic.id).join('|'), open || waiting ? 0 : topics.length)
   const filled = useRef(new Set<string>())
 
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/patches/${patch.handle}/topics`)
+    const address = initialTopicId
+      ? `/api/patches/${patch.handle}/topics?topic=${encodeURIComponent(initialTopicId)}`
+      : `/api/patches/${patch.handle}/topics`
+    fetch(address)
       .then((response) => response.json())
       .then((data) => {
         if (cancelled || !Array.isArray(data?.topics)) return
         setTopics(data.topics)
-        if (!data.topics.some((topic: TopicCard) => !cardThumb(topic))) return
-        fetch(`/api/patches/${patch.handle}/topics?photos=1`)
-          .then((response) => response.json())
-          .then((filled) => {
-            if (!cancelled && Array.isArray(filled?.topics)) setTopics(filled.topics)
-          })
-          .catch(() => undefined)
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [patch.handle])
+  }, [patch.handle, initialTopicId])
 
   useEffect(() => {
     const target = open
     if (!target) return
     const needsRepair = target.sources.some((source) => /news\.google\.com/i.test(source.url) || /^[a-z]/.test(source.quote.trim()) || /^[A-Z] [a-z]{3,}/.test(source.quote.trim()))
-    if (filled.current.has(target.id) || (target.sources.length >= 10 && target.image && !needsRepair)) return
+    if (filled.current.has(target.id) || !needsRepair) return
     let cancelled = false
     const timer = window.setTimeout(() => {
       filled.current.add(target.id)
@@ -2000,7 +2021,17 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
             setWritten={setWritten}
             dragging={dragging}
             setDragging={setDragging}
-            onBack={() => { setOpenId(null); setError(''); setNotice('') }}
+            onBack={() => {
+              setOpenId(null)
+              setError('')
+              setNotice('')
+              fetch(`/api/patches/${patch.handle}/topics`)
+                .then((response) => response.json())
+                .then((data) => {
+                  if (Array.isArray(data?.topics)) setTopics(data.topics)
+                })
+                .catch(() => undefined)
+            }}
             patchHandle={patch.handle}
             notice={notice}
             error={error}
@@ -2010,43 +2041,27 @@ export default function AskView({ patch, initialTopicId = '' }: AskViewProps) {
             onUploadPdfs={uploadPdfs}
             patchName={patch.name}
           />
-        ) : waiting ? null : topics.length === 0 ? (
-          <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
-            {Array.from({ length: 6 }, (_, index) => (
-              <div key={index} className="aspect-[2/3] animate-pulse rounded-md bg-[#F5F5F4]" />
+        ) : waiting || topics.length === 0 ? null : (
+          <PortraitGrid className="mt-10">
+            {topics.map((topic, index) => (
+              <Fragment key={topic.id}>
+                {index === boardSlot && <HalfPageAd />}
+                <PortraitCard
+                  href={`/patch/${patch.handle}/${topic.slug || topic.id}`}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                    event.preventDefault()
+                    setOpenId(topic.slug || topic.id)
+                  }}
+                  image={cardCandidates(topic)}
+                  title={topic.question}
+                  byline={`${topic.adminName} · ${shortDate(topic.createdAt)}`}
+                  meta={`${topic.sources.length} sources`}
+                />
+              </Fragment>
             ))}
-          </div>
-        ) : (
-          <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
-            {topics.map((topic) => (
-              <a
-                key={topic.id}
-                href={`/patch/${patch.handle}/${topic.slug || topic.id}`}
-                onClick={(event) => {
-                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
-                  event.preventDefault()
-                  setOpenId(topic.slug || topic.id)
-                }}
-                className="group relative aspect-[2/3] overflow-hidden rounded-md bg-[#141414] text-left shadow-md transition duration-200 hover:z-10 hover:scale-[1.04] hover:shadow-xl"
-              >
-                <CardPhoto src={cardCandidates(topic)} className="absolute inset-0 transition duration-300 group-hover:scale-105" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                  <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{topic.question}</h3>
-                  <p className="mt-2 truncate text-[11px] text-white/80">
-                    {topic.adminName} · {shortDate(topic.createdAt)}
-                  </p>
-                  <p className="mt-1 flex items-center gap-3 text-[11px] text-white/80">
-                    <span className="inline-flex items-center gap-1">
-                      <MessageCircle className="h-3 w-3" />
-                      {topic.replies.length}
-                    </span>
-                    <span>{topic.sources.length} sources</span>
-                  </p>
-                </div>
-              </a>
-            ))}
-          </div>
+            {boardSlot === topics.length && <HalfPageAd />}
+          </PortraitGrid>
         )}
       </div>
     </div>

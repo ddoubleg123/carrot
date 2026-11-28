@@ -181,7 +181,7 @@ async function runLocalVideo(job: LocalVideoJob, pageUrl: string, binary: string
     const full = captionText(text, 0)
     if (full.length >= 40) {
       await writeFile(path.join(dir, `${job.id}.txt`), full)
-      job.transcript = full.slice(0, 6000)
+      job.transcript = full.slice(0, 200000)
     }
   }
   const title = output.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !line.includes('%'))

@@ -317,7 +317,7 @@ function windows(lines: Line[]): Window[] {
     let end = opening.end
     let next = index
     let owed = question
-    while (next + 1 < turns.length && end - opening.start < 100 && (owed || end - opening.start < 24)) {
+    while (next + 1 < turns.length && end - opening.start < 110 && (owed || end - opening.start < 60)) {
       next += 1
       const follow = turns[next]
       const followText = turnText(follow)
@@ -329,13 +329,13 @@ function windows(lines: Line[]): Window[] {
       end = slice.end
       if (playedClip) owed = true
       else owed = owesReply(slice.text)
-      if (!owed && end - opening.start >= 24 && !hanging(slice.text)) break
+      if (!owed && end - opening.start >= 60 && !hanging(slice.text)) break
     }
     const sealed = seal(lines, opening.start, end)
     const duration = sealed.end - opening.start
     const spoken = sealed.text
     const lastWords = lastChunk(spoken).split(/\s+/).filter(Boolean).length
-    if (duration >= 20 && duration <= 150 && spoken.length > 80 && hasReply(spoken.split('\n\n')) && lastWords >= 20 && closed(lastChunk(spoken)) && !/^because\b/i.test(openingText)) {
+    if (duration >= 45 && duration <= 120 && spoken.length > 80 && hasReply(spoken.split('\n\n')) && lastWords >= 20 && closed(lastChunk(spoken)) && !/^because\b/i.test(openingText)) {
       built.push({ start: opening.start, end: sealed.end, text: spoken.slice(0, 4000) })
     }
     index = Math.max(index + 1, next)
@@ -405,7 +405,9 @@ function brokenStart(text: string): boolean {
   const cleaned = text.trim()
   if (/^(and|but|because|second|delineate|question|uh|um)\b/i.test(cleaned)) return true
   const letter = cleaned.match(/[A-Za-z]/)
-  return Boolean(letter && letter[0] === letter[0].toLowerCase())
+  if (letter && letter[0] === letter[0].toLowerCase()) return true
+  const rest = cleaned.replace(/^(?:(?:Mr|Mrs|Ms|Miss|Dr)\.?\s+)?[A-Z][A-Za-z'’-]{2,},\s+/, '')
+  return rest !== cleaned && /^(because|since|although|though|while|if|when|which|who|that)\b/i.test(rest)
 }
 
 function nudge(lines: Line[], start: number, end: number, move: 'extend' | 'shorten' | 'trim'): { start: number; end: number; text: string } | null {
@@ -607,6 +609,118 @@ async function waitForCopy(id: string, clip: ClipOnceJob): Promise<{ video: stri
   throw new Error('Saving the copy took too long.')
 }
 
+function digest(lines: Line[]): string {
+  if (lines.length === 0) return ''
+  const end = lines[lines.length - 1].end || 1
+  const step = Math.max(15, end / 80)
+  const rows: string[] = []
+  let nextAt = 0
+  for (const line of lines) {
+    if (line.start < nextAt) continue
+    rows.push(`[${Math.round(line.start)}] ${line.text.slice(0, 160)}`)
+    nextAt = line.start + step
+  }
+  return rows.join('\n').slice(0, 9000)
+}
+
+async function scoutMoments(lines: Line[]): Promise<Array<{ start: number; end: number }>> {
+  const key = process.env.DEEPSEEK_API_KEY || ''
+  const text = digest(lines)
+  if (!key || text.length < 200) return []
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      temperature: 0.2,
+      max_tokens: 500,
+      thinking: { type: 'disabled' },
+      messages: [{
+        role: 'user',
+        content: `Read this whole talk. The numbers in brackets are seconds. Find up to 5 stretches a person would send to a friend. Each stretch needs a hook, one concrete detail, and a finished point. Skip introductions, sponsorships, and a question that never gets an answer. Each stretch should run 50 to 90 seconds and include the setup and the payoff, not only the punch line. Reply JSON only: [{"start":120,"end":185}]\n\n${text}`
+      }]
+    }),
+    signal: AbortSignal.timeout(30000)
+  }).catch(() => null)
+  if (!response?.ok) return []
+  const data = await response.json().catch(() => null)
+  const raw = String(data?.choices?.[0]?.message?.content || '')
+  const match = raw.match(/\[[\s\S]*\]/)
+  if (!match) return []
+  let parsed: Array<{ start?: number; end?: number }>
+  try {
+    parsed = JSON.parse(match[0]) as Array<{ start?: number; end?: number }>
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed.flatMap((item) => {
+    const start = Number(item.start)
+    const end = Number(item.end)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return []
+    return [{ start, end }]
+  }).slice(0, 5)
+}
+
+function momentFromScout(lines: Line[], start: number, end: number): Window | null {
+  const index = lines.findIndex((line) => line.end > start)
+  if (index < 0) return null
+  let openAt = index
+  for (let cursor = index; cursor > 0; cursor -= 1) {
+    const previous = lines[cursor - 1]
+    if (previous.end < lines[openAt].start - 25) break
+    if (closed(previous.text)) break
+    openAt = cursor - 1
+  }
+  const open = lines[openAt].start
+  const target = Math.min(Math.max(end, open + 60), open + 100)
+  const sealed = seal(lines, open, target)
+  const duration = sealed.end - open
+  if (duration < 45 || duration > 120) return null
+  if (!closed(lastChunk(sealed.text)) || brokenStart(sealed.text) || endsOnQuestion(sealed.text)) return null
+  if (sealed.text.split(/\s+/).filter(Boolean).length < 90) return null
+  return { start: open, end: sealed.end, text: sealed.text.slice(0, 4000) }
+}
+
+async function gradeClip(text: string): Promise<{ pass: boolean; score: number; why: string }> {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length < 90 || brokenStart(text) || !closed(lastChunk(text)) || endsOnQuestion(text)) {
+    return { pass: false, score: 0, why: 'The moment is too thin to stand on its own.' }
+  }
+  const key = process.env.DEEPSEEK_API_KEY || ''
+  if (!key) return { pass: false, score: 0, why: 'The quality check could not run.' }
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      temperature: 0,
+      max_tokens: 160,
+      thinking: { type: 'disabled' },
+      messages: [{
+        role: 'user',
+        content: `You are the QA agent for one clip that will be posted. Pass only if a person would send it to a friend. That means all of these: the opening is a point, not hello or throat-clearing; there is one concrete detail a listener could repeat; the ending lands that point; the clip is specific, not a fragment and not only a question. Do not reward outrage. Reward a complete, specific moment. Reply JSON only: {"pass":true,"score":8} or {"pass":false,"score":3,"why":"short reason"}\n\n${text.slice(0, 2500)}`
+      }]
+    }),
+    signal: AbortSignal.timeout(30000)
+  }).catch(() => null)
+  if (!response?.ok) return { pass: false, score: 0, why: 'The quality check did not answer.' }
+  const data = await response.json().catch(() => null)
+  const raw = String(data?.choices?.[0]?.message?.content || '')
+  const match = raw.match(/\{[\s\S]*\}/)
+  if (!match) return { pass: false, score: 0, why: 'The quality check did not answer.' }
+  let parsed: { pass?: boolean; score?: number; why?: string }
+  try {
+    parsed = JSON.parse(match[0]) as { pass?: boolean; score?: number; why?: string }
+  } catch {
+    return { pass: false, score: 0, why: 'The quality check did not answer.' }
+  }
+  const score = Number(parsed.score)
+  const safeScore = Number.isFinite(score) ? score : 0
+  const why = typeof parsed.why === 'string' ? parsed.why.trim().slice(0, 140) : ''
+  return { pass: parsed.pass === true && safeScore >= 7, score: safeScore, why }
+}
+
 export async function startClipOnce(input: { url?: string; useSaved?: boolean; pageUrl?: string }): Promise<ClipOnceJob> {
   const id = `clip-${Date.now().toString(36)}`
   const job: ClipOnceJob = { id, status: 'running', stage: 'Starting', detail: 'The bot is taking one video.', clips: [] }
@@ -641,11 +755,22 @@ async function runClipOnce(job: ClipOnceJob, input: { url?: string; useSaved?: b
   job.detail = 'Reading the timed captions.'
   const lines = timedLines(await readFile(master.caption, 'utf8'))
   if (lines.length < 4) throw new Error('The captions do not have enough timed lines.')
+  job.stage = 'Scanning'
+  job.detail = 'Reading the whole talk for the moments worth keeping.'
+  const scouted = (await scoutMoments(lines).catch(() => [])).flatMap((range) => {
+    const moment = momentFromScout(lines, range.start, range.end)
+    return moment ? [moment] : []
+  })
   const choices = windows(lines)
-  if (choices.length === 0) throw new Error('No 15 to 90 second moment could be formed.')
+  const ranked = [...scouted]
+  for (const choice of choices) {
+    if (!ranked.some((have) => Math.abs(have.start - choice.start) < 8)) ranked.push(choice)
+  }
+  if (ranked.length === 0) throw new Error('No complete moment could be formed from this talk.')
   job.stage = 'Picking'
-  job.detail = `${choices.length} moments are on the table. The bot is picking three.`
-  const chosen = (await askModel(choices).catch(() => null)) || fallback(choices)
+  job.detail = `${ranked.length} moments are on the table. Grading the strongest.`
+  const picked = scouted.length ? ranked.slice(0, 8) : ((await askModel(ranked).catch(() => null)) || fallback(ranked))
+  const chosen = picked.length ? picked : ranked.slice(0, 8)
   const titled = chosen.map((window) => {
     const sealed = seal(lines, window.start, window.end)
     const title = (window as Window & { title?: string }).title || sealed.text.split(/\s+/).slice(0, 8).join(' ')
@@ -659,7 +784,7 @@ async function runClipOnce(job: ClipOnceJob, input: { url?: string; useSaved?: b
   if (!ffmpeg) throw new Error('ffmpeg is not installed on this machine.')
   const dir = path.join(process.cwd(), 'public', 'topic-videos', 'clips')
   await mkdir(dir, { recursive: true })
-  const clips: ClipCut[] = []
+  const clips: Array<ClipCut & { score: number }> = []
   const rejected: string[] = []
   for (const window of titled) {
     let start = window.start
@@ -690,6 +815,12 @@ async function runClipOnce(job: ClipOnceJob, input: { url?: string; useSaved?: b
       rejected.push(`${Math.round(window.start)}:${trace.join('>')}`)
       continue
     }
+    job.detail = `Grading the moment at ${Math.round(start)} seconds.`
+    const grade = await gradeClip(text)
+    if (!grade.pass) {
+      rejected.push(`${Math.round(start)}:${grade.why || 'not worth posting'}`)
+      continue
+    }
     const file = `${job.id}-${clips.length + 1}.mp4`
     job.detail = `Cutting clip ${clips.length + 1}.`
     await cutClip(ffmpeg, master.video, path.join(dir, file), start, end, input.pageUrl || 'https://gotcarrot.com')
@@ -699,11 +830,17 @@ async function runClipOnce(job: ClipOnceJob, input: { url?: string; useSaved?: b
       end,
       quote: text.slice(0, 6000),
       src: `/topic-videos/clips/${file}`,
-      note: 'QA passed'
+      note: grade.why || 'QA passed',
+      score: grade.score
     })
-    job.clips = clips
+    clips.sort((left, right) => right.score - left.score)
+    job.clips = clips.map(({ score, ...clip }) => {
+      void score
+      return clip
+    })
+    if (clips.length >= 3) break
   }
-  if (clips.length === 0) throw new Error(`The check rejected every clip. ${rejected.join(' | ')}`)
+  if (clips.length === 0) throw new Error(`The quality check rejected every moment. ${rejected.join(' | ')}`)
   await remember(job)
   job.status = 'completed'
   job.stage = 'Done'

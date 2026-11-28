@@ -337,7 +337,7 @@ export default function SettingsPageUnified() {
           <header className="mb-6">
             <p className="text-sm font-medium text-orange-600">Account</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">Settings</h1>
-            <p className="mt-1 text-sm text-gray-500">Your profile, privacy, and how posts play.</p>
+            <p className="mt-1 text-sm text-gray-500">Your profile, privacy, and how posts play. <a href="/settings/topics" className="text-orange-700 underline">Topics on your home feed</a>.</p>
           </header>
           <FirebaseClientInit />
           <ClientSessionProvider>

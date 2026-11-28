@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import prisma from '@/lib/prisma'
-import { activityFor, enrichOfficials, lineupForZip, type FeedItem, type OfficeLine, type Official, type StaffLine } from '@/lib/polWatch'
-import { attachProfiles, collapseOfficePosts, ensureOffices, followOffices, settleOfficePosts, storyText, worthSharing } from '@/lib/politicianAccount'
+import { activityFor, enrichOfficials, lineupForZip, uniqueStaff, type FeedItem, type OfficeLine, type Official, type StaffLine } from '@/lib/polWatch'
+import { attachProfiles, collapseOfficePosts, ensureOffices, followOffices, officePost, settleOfficePosts, worthSharing } from '@/lib/politicianAccount'
 import { sameStory } from '@/lib/curator/judge'
 import { invalidateFeedCache } from '@/lib/feedCache'
 
@@ -51,10 +51,58 @@ function savedPeople(metadata: unknown): Official[] {
       contactForm: typeof row.contactForm === 'string' ? row.contactForm : undefined,
       address: typeof row.address === 'string' ? row.address : undefined,
       offices: lines(row.offices, 'office') as OfficeLine[],
-      staff: Array.isArray(row.staff) ? lines(row.staff, 'staff') as StaffLine[] : undefined,
-      staffChecked: row.staffChecked === true
+      staff: Array.isArray(row.staff) ? uniqueStaff(lines(row.staff, 'staff') as StaffLine[]) : undefined,
+      staffChecked: row.staffChecked === true,
+      staffMark: row.staffMark === 2 ? 2 : undefined
     }]
   })
+}
+
+function partyLetter(party: string) {
+  if (/dem|^d$/i.test(party.trim())) return 'D'
+  if (/rep|^r$/i.test(party.trim())) return 'R'
+  return ''
+}
+
+/** Stories for the home rail. Read only: no office setup, no seen-list writes, no new posts. */
+async function railStories(people: Official[]) {
+  const watched = people.slice(0, 12)
+  const groups = await Promise.all(watched.map((person) => activityFor(person).catch(() => [] as FeedItem[])))
+  const picked = groups.map((items) => items.slice(0, 6))
+  const items: { id: string; name: string; office: string; place: string; party: string; line: string; source: string; kind: FeedItem['kind']; url: string }[] = []
+  const depth = picked.reduce((max, list) => Math.max(max, list.length), 0)
+  for (let slot = 0; slot < depth && items.length < 24; slot++) {
+    for (let index = 0; index < watched.length && items.length < 24; index++) {
+      const item = picked[index][slot]
+      if (!item?.title || !item.url) continue
+      const person = watched[index]
+      items.push({
+        id: item.id,
+        name: person.name,
+        office: person.office,
+        place: person.place || person.state,
+        party: partyLetter(person.party),
+        line: item.title.replace(/\s+/g, ' ').trim(),
+        source: item.source,
+        kind: item.kind,
+        url: item.url
+      })
+    }
+  }
+  return { count: watched.length, items }
+}
+
+const railMemory = new Map<string, { at: number; body: { count: number; items: Awaited<ReturnType<typeof railStories>>['items'] } }>()
+const railJobs = new Map<string, Promise<void>>()
+
+function rememberRail(viewerId: string, people: Official[]) {
+  if (railJobs.has(viewerId)) return
+  const job = railStories(people).then((body) => {
+    railMemory.set(viewerId, { at: Date.now(), body })
+  }).catch(() => {}).finally(() => {
+    railJobs.delete(viewerId)
+  })
+  railJobs.set(viewerId, job)
 }
 
 function seenUrls(metadata: unknown): string[] {
@@ -80,7 +128,13 @@ export async function GET(req: Request) {
   if (!viewerId) return NextResponse.json({ people: [], feed: [] })
   const viewer = await prisma.user.findUnique({ where: { id: viewerId }, select: { metadata: true } })
   const stored = savedPeople(viewer?.metadata)
-  const people = stored.length > 0 && stored.every((person) => person.staffChecked)
+  if (new URL(req.url).searchParams.get('part') === 'rail') {
+    const hit = railMemory.get(viewerId)
+    const fresh = hit && Date.now() - hit.at < 3 * 60 * 1000
+    if (!fresh) rememberRail(viewerId, stored)
+    return NextResponse.json(fresh && hit ? hit.body : { count: stored.length, items: hit?.body.items || [], pending: true })
+  }
+  const people = stored.length > 0 && stored.every((person) => person.staffChecked && person.staffMark === 2)
     ? stored
     : await enrichOfficials(stored)
   const params = new URL(req.url).searchParams
@@ -151,11 +205,14 @@ export async function GET(req: Request) {
         select: { content: true },
         take: 20
       })
-      if (recent.some((post) => sameStory((post.content || '').split('\n')[0], item.title))) continue
+      if (recent.some((post) => sameStory(post.content || '', item.title))) continue
+      const content = await officePost(item).catch(() => null)
+      if (!content) continue
       await prisma.post.create({
         data: {
           userId: account.id,
-          content: storyText(item)
+          content,
+          bucket: 'pol-watch'
         }
       }).catch(() => null)
     }

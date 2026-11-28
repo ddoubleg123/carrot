@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import CommitmentCard, { CommitmentCardProps, VoteType } from './components/CommitmentCard';
@@ -10,6 +10,9 @@ import ComposerTrigger from '../../../components/ComposerTrigger';
 import { useState as useModalState } from 'react';
 import Toast from './components/Toast';
 import { VideoProvider } from '../../../context/VideoContext';
+import { FeedRectangle } from '@/components/search/HalfPageAd';
+import LiveFeedCard, { pickFeedLives, subscribeRail } from '@/components/live/LiveFeedCard';
+import type { RailItem } from '@/lib/live/now';
 
 export interface DashboardCommitmentCardProps extends Omit<CommitmentCardProps, 'onVote' | 'onToggleBookmark'> {
   // Add any additional props specific to Dashboard if needed
@@ -42,7 +45,7 @@ const ComposerModalDynamic = dynamic(() => import('../../../components/ComposerM
 
 let feedRequest: Promise<any[] | null> | null = null;
 
-const FEED_CACHE_KEY = 'carrot-home-feed-v6';
+const FEED_CACHE_KEY = 'carrot-home-feed-v11';
 
 function readFeedCache(): any[] | null {
   try {
@@ -75,7 +78,7 @@ function writeFeedCache(posts: any[]) {
 function fetchFeedOnce(): Promise<any[] | null> {
   if (feedRequest) return feedRequest;
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 15000);
+  const timer = window.setTimeout(() => controller.abort(), 30000);
   feedRequest = fetch('/api/posts', { cache: 'no-cache', signal: controller.signal, keepalive: false })
     .then((res) => (res.ok ? res.json() : null))
     .catch(() => null)
@@ -86,10 +89,95 @@ function fetchFeedOnce(): Promise<any[] | null> {
   return feedRequest;
 }
 
+function hasQuotePhoto(post: { content?: string | null; imageUrls?: string[] | null }): boolean {
+  if (!/^kind:\s*quote\b/im.test(post.content || '')) return true
+  return Array.isArray(post.imageUrls) && post.imageUrls.some(Boolean)
+}
+
+function forHome<T extends { author?: { id?: string | null } | null; userId?: string | null; repostedBy?: string | null }>(posts: T[], viewerId?: string | null): T[] {
+  if (!viewerId) return posts
+  return posts.filter((post) => {
+    const author = post.author?.id || post.userId
+    if (!author || author !== viewerId) return true
+    const by = String(post.repostedBy || '').trim()
+    return Boolean(by) && by !== viewerId
+  })
+}
+
+function unstacked<T extends { author?: { id?: string | null } | null }>(posts: T[]): T[] {
+  const pending = posts.filter(hasQuotePhoto)
+  const out: T[] = []
+  while (pending.length) {
+    const last = out[out.length - 1]?.author?.id
+    let index = pending.findIndex((post) => !last || post.author?.id !== last)
+    if (index < 0) index = 0
+    out.push(pending.splice(index, 1)[0])
+  }
+  return out
+}
+
+function feedLiveSlot(index: number): number {
+  if (index % 6 !== 0) return -1
+  return index / 6
+}
+
+function DwellMark({ postId, children }: { postId: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const started = useRef<number | null>(null);
+  const sent = useRef(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const send = (ms: number) => {
+      if (sent.current) return;
+      sent.current = true;
+      fetch('/api/feed/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, ms })
+      }).catch(() => {});
+    };
+    let timer: number | null = null;
+    const clearTimer = () => {
+      if (timer == null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.15) {
+        if (started.current == null) started.current = Date.now();
+        if (timer == null) {
+          timer = window.setTimeout(() => {
+            timer = null;
+            if (started.current != null) send(Date.now() - started.current);
+          }, 800);
+        }
+        return;
+      }
+      clearTimer();
+      if (started.current != null) {
+        send(Date.now() - started.current);
+        started.current = null;
+      }
+    }, { threshold: [0, 0.15, 0.6] });
+    observer.observe(node);
+    return () => {
+      clearTimer();
+      if (started.current != null) send(Date.now() - started.current);
+      observer.disconnect();
+    };
+  }, [postId]);
+  return <div ref={ref}>{children}</div>;
+}
+
 export default function DashboardClient({ initialCommitments, isModalComposer = false, serverPrefs }: DashboardClientProps) {
   useSyncFirebaseAuth();
   const [commitments, setCommitments] = useState<DashboardCommitmentCardProps[]>(initialCommitments);
+  const [feedNote, setFeedNote] = useState<'loading' | 'failed' | ''>(initialCommitments.length > 0 ? '' : 'loading');
   const [freshPosts, setFreshPosts] = useState<DashboardCommitmentCardProps[]>([]);
+  const [liveShows, setLiveShows] = useState<RailItem[]>([]);
   const [visiblePostCount, setVisiblePostCount] = useState(5); // CRITICAL FIX: Only render first 5 posts initially
   const [isModalOpen, setIsModalOpen] = useModalState(false);
   const { data: session } = useSession();
@@ -101,6 +189,10 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   const [showToast, setShowToast] = useState(false);
   const showSuccessToast = (msg: string) => { setToastMessage(msg); setToastType('success'); setShowToast(true); };
   const showErrorToast = (msg: string) => { setToastMessage(msg); setToastType('error'); setShowToast(true); };
+
+  useEffect(() => subscribeRail((snap) => {
+    setLiveShows(pickFeedLives(snap.items))
+  }), [])
 
   // Register media Service Worker for HLS/segment prefetch when flagged
   useEffect(() => {
@@ -435,6 +527,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
 
       setCommitments(prev => {
         if (prev.find(p => p.id === id)) return prev;
+        const viewerId = (session?.user as { id?: string } | undefined)?.id
+        const by = String(tempPost?.repostedBy || '').trim()
+        if (viewerId && optimistic.author?.id === viewerId && (!by || by === viewerId)) return prev
         return [optimistic, ...prev];
       });
     } catch {}
@@ -781,7 +876,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   // Paint the last timeline before the network returns, the same way a reload of X does.
   useLayoutEffect(() => {
     const cached = readFeedCache();
-    if (cached) setCommitments(cached);
+    if (cached) setCommitments(unstacked(forHome(cached, (session?.user as { id?: string } | undefined)?.id)));
   }, []);
 
   // On mount, fetch latest posts and reconcile to avoid any SSR/env mismatch issues.
@@ -789,7 +884,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return; // skip API in mock mode
+      if (process.env.NEXT_PUBLIC_USE_MOCK_FEED === '1') return;
       try {
         const params = new URLSearchParams(window.location.search);
         const openId = params.get('modal') === '1' ? params.get('post') : null;
@@ -797,13 +892,19 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
           await fetch(`/api/posts/${encodeURIComponent(openId)}`).catch(() => null);
         }
         const posts = await fetchFeedOnce();
-        if (!posts || cancelled) return;
-        const mapped = posts.map(mapServerPostToCard).filter((post: any) => post && post.author && post.author.username);
+        if (cancelled) return;
+        if (!posts) {
+          setFeedNote('failed');
+          return;
+        }
+        const mapped = unstacked(forHome(posts.map(mapServerPostToCard).filter((post: any) => post && post.author && post.author.username), (session?.user as { id?: string } | undefined)?.id));
         if (cancelled) return;
         setCommitments(mapped);
         setFreshPosts([]);
+        setFeedNote('');
         writeFeedCache(mapped);
       } catch (e) {
+        if (!cancelled) setFeedNote('failed');
         console.warn('Feed load error', e);
       }
     };
@@ -830,9 +931,9 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         const rows = await res.json();
         if (!Array.isArray(rows) || stopped) return;
         const known = new Set(current.map((post) => post.id));
-        const mapped = rows
+        const mapped = forHome(rows
           .map((row) => mapRef.current(row))
-          .filter((post) => post && post.author && post.author.username && !known.has(post.id));
+          .filter((post) => post && post.author && post.author.username && !known.has(post.id) && hasQuotePhoto(post)), (session?.user as { id?: string } | undefined)?.id);
         if (!stopped) setFreshPosts(mapped);
       } catch {}
     };
@@ -852,7 +953,7 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
     if (freshPosts.length === 0) return;
     setCommitments((prev) => {
       const ids = new Set(freshPosts.map((post) => post.id));
-      const next = [...freshPosts, ...prev.filter((post) => !ids.has(post.id))];
+      const next = unstacked([...freshPosts, ...prev.filter((post) => !ids.has(post.id))]);
       writeFeedCache(next);
       return next;
     });
@@ -1077,10 +1178,28 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
         
         {/* Scrollable Feed Content */}
         <div className="px-4">
-          {/* Professional compact spacing for social media feed */}
+          {commitments.length === 0 && feedNote === 'loading' && (
+            <p className="py-8 text-sm text-[#60646C]">Loading your feed…</p>
+          )}
+          {commitments.length === 0 && feedNote === 'failed' && (
+            <div className="py-8">
+              <p className="text-sm text-[#60646C]">The feed did not load.</p>
+              <button
+                type="button"
+                onClick={() => { setFeedNote('loading'); window.location.reload(); }}
+                className="mt-3 rounded-full bg-[#0B0B0F] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Try again
+              </button>
+            </div>
+          )}
           <div className="space-y-4">
-            {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).slice(0, visiblePostCount).map((commitment, index) => (
-              <div key={commitment.id} data-post-index={index}>
+            {commitments.filter(commitment => commitment && commitment.author && commitment.author.username).slice(0, visiblePostCount).map((commitment, index) => {
+              const liveShow = liveShows[feedLiveSlot(index)]
+              return (
+              <Fragment key={commitment.id}>
+              <DwellMark postId={commitment.id}>
+              <div data-post-index={index}>
                 <CommitmentCard
                   {...commitment}
                   currentUserId={(session?.user as any)?.id}
@@ -1091,7 +1210,12 @@ export default function DashboardClient({ initialCommitments, isModalComposer = 
                   feedIndex={index}
                 />
               </div>
-            ))}
+              </DwellMark>
+              {(index + 1) % 5 === 0 && <FeedRectangle />}
+              {liveShow && <LiveFeedCard item={liveShow} />}
+              </Fragment>
+              )
+            })}
           </div>
         </div>
       </div>

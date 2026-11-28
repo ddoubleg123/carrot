@@ -4,6 +4,8 @@ import path from 'path'
 import { Readable } from 'node:stream'
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { ensureOpenPdf, readCachedPdf } from '@/lib/learn/browserPdf'
+import { isPdfLink } from '@/lib/learn/pdfLink'
 import { assertPublicUrl, PublicUrlError } from '@/lib/learn/publicUrl'
 
 export const runtime = 'nodejs'
@@ -13,7 +15,7 @@ const MAX_BYTES = 8_000_000
 
 function pdfTarget(raw: string): Promise<URL> {
   return assertPublicUrl(raw).then((url) => {
-    if (!url.pathname.toLowerCase().endsWith('.pdf')) throw new PublicUrlError('That file is not a PDF.')
+    if (!isPdfLink(url.toString())) throw new PublicUrlError('That file is not a PDF.')
     return url
   })
 }
@@ -122,12 +124,26 @@ export async function GET(request: Request) {
   const raw = requestUrl.searchParams.get('url') || ''
   try {
     const target = await pdfTarget(raw)
-    const upstream = await openPdf(target, pages || download ? null : request.headers.get('range'))
-    if (!upstream?.ok && upstream?.status !== 206) return new NextResponse('That PDF could not be opened.', { status: 502 })
-    const type = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
-    if (type && type !== 'application/pdf' && type !== 'application/x-pdf' && type !== 'application/octet-stream') {
-      await upstream.body?.cancel().catch(() => undefined)
-      return new NextResponse('That file is not a PDF.', { status: 400 })
+    const range = request.headers.get('range')
+    const serveFile = async (file: string) => {
+      if (pages) {
+        const bytes = await readFile(file).catch(() => null)
+        if (!bytes || bytes.length > 20_000_000) return NextResponse.json({ pages: [] })
+        const list = await pageList(bytes).catch(() => [])
+        return NextResponse.json({ pages: list })
+      }
+      return localPdf(file, range, download)
+    }
+    const cached = await readCachedPdf(target.toString())
+    if (cached) return serveFile(cached)
+    const upstream = await openPdf(target, pages || download ? null : range)
+    const type = (upstream?.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
+    const direct = Boolean(upstream && (upstream.ok || upstream.status === 206) && (type === 'application/pdf' || type === 'application/x-pdf'))
+    if (!upstream || !direct) {
+      await upstream?.body?.cancel().catch(() => undefined)
+      const file = await ensureOpenPdf(target.toString())
+      if (!file) return new NextResponse('That PDF could not be opened.', { status: 502 })
+      return serveFile(file)
     }
     const length = Number(upstream.headers.get('content-length') || 0)
     if (length > MAX_BYTES) {

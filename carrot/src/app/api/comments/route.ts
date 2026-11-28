@@ -164,6 +164,10 @@ export async function POST(request: Request, context: { params: Promise<{}> }) {
       isLiked: false,
     };
 
+    const { bucketOf, recordInterest } = await import('@/lib/recordInterest')
+    await recordInterest(session.user.id, bucketOf(post), 'comment', `comment:${postId}`).catch((error) => {
+      console.error('[interest] comment', error)
+    })
     invalidateFeedCache();
     await showFollowers(session.user.id, `Commented: ${content.trim().slice(0, 220)}`)
     return NextResponse.json(transformedComment, { status: 201 });

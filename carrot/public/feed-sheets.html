@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sheets feed, with the side rails</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink:#0B0B0F; --muted:#60646C; --faint:#8A8F98; --line:#E6E8EC; --paper:#FAFAF8; --page:#F6F3EE; --orange:#FF6A00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--ink); background: var(--page); }
+  button, input, textarea { font: inherit; }
+  button { cursor: pointer; }
+  .app { min-height: 100vh; display: flex; }
+  .rail {
+    width: 92px; flex: none; position: sticky; top: 0; height: 100vh; overflow: auto;
+    background: var(--paper); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0 18px;
+  }
+  .rail a { width: 68px; text-decoration: none; color: #374151; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; }
+  .ico { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: white; display: grid; place-items: center; color: #374151; }
+  .rail a.on .ico, .rail a:hover .ico { background: var(--orange); color: white; border-color: transparent; }
+  .logo {
+    width: 48px; height: 48px; border-radius: 12px; background: white;
+    border: 1px solid #f3f4f6; box-shadow: 0 8px 16px rgba(0,0,0,.08);
+    display: grid; place-items: center;
+  }
+  .logo img { width: 32px; height: 32px; object-fit: contain; display: block; }
+  .center { flex: 1; min-width: 0; }
+  .feed { width: min(680px, 100%); margin: 0 auto; padding: 22px 20px 80px; }
+  .compose {
+    display: flex; align-items: center; gap: 12px; background: white; border: 1px solid var(--line);
+    border-radius: 18px; padding: 14px 16px; margin-bottom: 18px;
+  }
+  .avatar { width: 40px; height: 40px; border-radius: 999px; background: var(--orange); color: white; display: grid; place-items: center; font-weight: 700; flex: none; }
+  .compose .prompt { flex: 1; color: var(--faint); font-size: 17px; background: none; border: 0; text-align: left; }
+  .post-btn { height: 38px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--orange); color: white; font-weight: 700; }
+  .item { margin-top: 16px; background: white; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .frame { aspect-ratio: 16/9; background: #141416; display: grid; place-items: center; }
+  .play { width: 52px; height: 52px; border: 0; border-radius: 999px; background: white; font-size: 18px; }
+  .pad { padding: 16px 18px 14px; }
+  .kicker { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--orange); }
+  .question { margin: 8px 0 0; font-size: 1.3rem; line-height: 1.15; letter-spacing: -.03em; font-weight: 600; }
+  .line { margin: 10px 0 0; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .who { margin: 12px 0 0; font-size: 13px; color: var(--faint); }
+  .who strong { color: var(--ink); font-weight: 600; }
+  .actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .cluster { display: flex; gap: 6px; flex-wrap: wrap; }
+  .act { height: 34px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: white; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .act.on { background: #FFF1E8; border-color: #FFD0B0; color: var(--orange); }
+  .act svg { width: 16px; height: 16px; }
+  .panel { display: none; margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); padding: 12px; }
+  .panel.open { display: block; }
+  .panel input { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: white; }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  .send { height: 36px; border: 0; border-radius: 999px; background: var(--ink); color: white; padding: 0 14px; font-weight: 600; }
+  .reply { margin-top: 8px; font-size: 14px; }
+  .rail-right {
+    width: 320px; flex: none; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow: auto;
+    padding: 22px 18px 40px 0;
+  }
+  .card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 14px; }
+  .card h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .card header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .card header button { border: 0; background: none; color: var(--faint); font-size: 12px; }
+  .big { font-size: 1.8rem; font-weight: 700; letter-spacing: -.03em; }
+  .tiny { color: var(--faint); font-size: 12px; }
+  .bar { height: 6px; border-radius: 99px; background: #F1E7DF; margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 46%; background: var(--orange); }
+  .topic { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .tag { background: #FFF1E8; color: #9A3412; border-radius: 8px; padding: 2px 6px; font-weight: 600; font-size: 12px; }
+  .person { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .person b { display: block; font-size: 13px; }
+  .connect { height: 28px; border: 0; border-radius: 999px; background: var(--orange); color: white; padding: 0 10px; font-size: 12px; font-weight: 700; }
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .metrics div { border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; text-align: center; }
+  .metrics strong { display: block; font-size: 18px; }
+  .veil { position: fixed; inset: 0; background: rgba(11,11,15,.45); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 5; }
+  .veil.open { display: flex; }
+  .modal { width: min(560px, 100%); background: white; border-radius: 20px; padding: 22px; }
+  .modal h2 { margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }
+  .modal textarea { width: 100%; min-height: 120px; margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; resize: vertical; }
+  .modal textarea:focus { outline: 2px solid #FFD0B0; border-color: var(--orange); }
+  .tools { display: flex; gap: 8px; margin-top: 12px; }
+  .file-name { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .ghost { height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: white; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Menu">
+    <a href="#top" class="on" title="Home">
+      <span class="logo" aria-hidden="true">
+        <img src="/carrot-logo.png" alt="" width="32" height="32" />
+      </span>
+      Home
+    </a>
+    <a href="#search"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>Search</a>
+    <a href="#alerts"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke="currentColor" stroke-width="2"/><path d="M10 21a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="2"/></svg></span>Alerts</a>
+    <a href="#patch" title="Carrot Patch"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="2"/></svg></span>Patch</a>
+    <a href="#watch" title="Pol Watch"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 19h18M5.5 19V11M9.5 19V11M14.5 19V11M18.5 19V11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.5 11h17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7 11V8.5h10V11" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8.5V5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4.2" r="1.05" fill="currentColor"/></svg></span>Watch</a>
+    <a href="#messages"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 6h14v10H8l-3 3V6z" stroke="currentColor" stroke-width="2"/></svg></span>Messages</a>
+    <a href="#rabbit"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><ellipse cx="9" cy="7" rx="1.2" ry="3.2"/><ellipse cx="14" cy="7" rx="1.2" ry="3.2"/><ellipse cx="12" cy="15" rx="5" ry="4"/></svg></span>Rabbit</a>
+    <a href="#funds"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M17 6H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>Funds</a>
+    <a href="#settings"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>Settings</a>
+  </nav>
+
+  <main class="center" id="top">
+    <div class="feed" id="feed">
+      <div class="compose">
+        <div class="avatar">D</div>
+        <button class="prompt" type="button" id="open-compose">What's happening?</button>
+        <button class="post-btn" type="button" id="open-compose-2">Create post</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="rail-right" aria-label="Home rail">
+    <section class="card">
+      <header><h2>Carrots earned</h2><button type="button">How to earn more</button></header>
+      <div class="big">128</div>
+      <div class="tiny">all time · 6-day streak</div>
+      <div class="bar" title="23 of 50 this week"><i></i></div>
+      <p class="tiny">23 of 50 this week</p>
+    </section>
+    <section class="card">
+      <header><h2>Trending topics</h2><button type="button">View all</button></header>
+      <div class="topic"><span><span class="tag">#clean-energy</span></span><span class="tiny">1,240 · rising</span></div>
+      <div class="topic"><span><span class="tag">#term-limits</span></span><span class="tiny">2,110 · rising</span></div>
+      <div class="topic"><span><span class="tag">#ubi</span></span><span class="tiny">980 · steady</span></div>
+    </section>
+    <section class="card">
+      <header><h2>New connections</h2><button type="button">View all</button></header>
+      <div class="person"><div><b>Alex Chen</b><span class="tiny">@alexchen · 3 mutuals</span></div><button class="connect" type="button">Connect</button></div>
+      <div class="person"><div><b>Mina Park</b><span class="tiny">@minap · 2 mutuals</span></div><button class="connect" type="button">Connect</button></div>
+      <div class="person"><div><b>Samir Khan</b><span class="tiny">@samirk · 4 mutuals</span></div><button class="connect" type="button">Connect</button></div>
+    </section>
+    <section class="card">
+      <header><h2>Your week</h2><button type="button">View analytics</button></header>
+      <div class="metrics">
+        <div><strong>5</strong><span class="tiny">Posts</span></div>
+        <div><strong>28</strong><span class="tiny">Followers</span></div>
+        <div><strong>612</strong><span class="tiny">Replies</span></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<div class="veil" id="veil">
+  <form class="modal" id="composer">
+    <h2>Create post</h2>
+    <textarea id="draft" placeholder="What's happening?"></textarea>
+    <div class="tools">
+      <label class="act">Photo<input id="photo" type="file" accept="image/*" hidden /></label>
+      <label class="act">Video<input id="video" type="file" accept="video/*" hidden /></label>
+    </div>
+    <p class="file-name" id="file-name"></p>
+    <div class="modal-actions">
+      <button class="ghost" type="button" id="cancel">Cancel</button>
+      <button class="post-btn" type="submit">Post</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const posts = [
+  { id: 'a', kicker: 'Scout Rummage · Finds', who: 'Scout Rummage', question: 'What did the harbor master actually record that morning?', line: 'A one-minute clip, saved on Carrot.', time: '12 min', carrots: 18, sticks: 2, comments: 4 },
+  { id: 'b', kicker: 'Nina Neutron · Science', who: 'Nina Neutron', question: 'Why does the reef recover faster on the outer shelf?', line: 'The note is the argument, in order.', time: '1 hr', carrots: 41, sticks: 0, comments: 9 },
+  { id: 'c', kicker: 'Nell Street · Cities', who: 'Nell Street', question: 'Who pays when the bus lane is only paint?', line: 'A short read and the council clip.', time: '3 hr', carrots: 7, sticks: 1, comments: 2 }
+];
+const icon = {
+  carrot: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 3c.4 2-.6 3-.6 3s2-.3 2.6 1.2c-2 .3-2.6 2-2.6 2s.6-2.6.6-6z"/><path d="M7 20c2.2-6 2.8-9 4.4-11.2C13 11.4 12.4 16 11.6 20 10 19.4 8.4 19.4 7 20z"/></svg>',
+  stick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4v16M8 4l8 3-8 3"/></svg>',
+  comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6h12v9H9l-3 3V6z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="12" r="2"/><circle cx="17" cy="7" r="2"/><circle cx="17" cy="17" r="2"/><path d="m8 11 7-3M8 13l7 3"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10v16l-5-3-5 3V4z"/></svg>',
+  transcript: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h8l4 4v12H7V4z"/></svg>',
+  translate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h9M7 10c1 2 3 3.5 6 4"/><path d="m14 19 3-8 3 8"/></svg>'
+};
+function actions(post) {
+  return `<div class="actions">
+    <div class="cluster">
+      <button class="act" data-do="carrot" type="button">${icon.carrot}<span>${post.carrots}</span></button>
+      <button class="act" data-do="stick" type="button">${icon.stick}<span>${post.sticks}</span></button>
+      <button class="act" data-do="comment" type="button">${icon.comment}<span>${post.comments}</span></button>
+      <button class="act" data-do="share" type="button">${icon.share}</button>
+      <button class="act" data-do="save" type="button">${icon.save}</button>
+    </div>
+    <div class="cluster">
+      <button class="act" data-do="transcript" type="button">${icon.transcript}</button>
+      <button class="act" data-do="translate" type="button">${icon.translate}</button>
+    </div>
+  </div>
+  <div class="panel" data-panel="comment"><div class="reply"><b>Mara</b> · The second line answers it.</div><div class="row"><input placeholder="Write a comment" /><button class="send" data-do="send" type="button">Reply</button></div></div>
+  <div class="panel" data-panel="share"><button class="act" data-do="copy" type="button">Copy link · gotcarrot.com</button><p class="line" data-note></p></div>
+  <div class="panel" data-panel="transcript"><p class="line">Spoken in this video. The words stay with the post.</p></div>
+  <div class="panel" data-panel="translate"><p class="line">The original stays above the translation.</p></div>`;
+}
+function sheet(post) {
+  const media = post.textOnly ? '' : `<div class="frame"><button class="play" type="button" aria-label="Play">▶</button></div>`;
+  return `<article class="item">${media}<div class="pad"><p class="kicker">${post.kicker}</p><h2 class="question">${post.question}</h2><p class="line">${post.line}</p><p class="who"><strong>${post.who}</strong> · ${post.time}</p>${actions(post)}</div></article>`;
+}
+const feed = document.getElementById('feed');
+function paint() {
+  const compose = feed.querySelector('.compose');
+  feed.querySelectorAll('.item').forEach((node) => node.remove());
+  compose.insertAdjacentHTML('afterend', posts.map(sheet).join(''));
+}
+paint();
+
+const veil = document.getElementById('veil');
+function openComposer() { veil.classList.add('open'); document.getElementById('draft').focus(); }
+document.getElementById('open-compose').onclick = openComposer;
+document.getElementById('open-compose-2').onclick = openComposer;
+document.getElementById('cancel').onclick = () => veil.classList.remove('open');
+veil.addEventListener('click', (event) => { if (event.target === veil) veil.classList.remove('open'); });
+function showFile(input) {
+  const file = input.files && input.files[0];
+  document.getElementById('file-name').textContent = file ? file.name : '';
+}
+document.getElementById('photo').onchange = (event) => showFile(event.target);
+document.getElementById('video').onchange = (event) => showFile(event.target);
+document.getElementById('composer').onsubmit = (event) => {
+  event.preventDefault();
+  const text = document.getElementById('draft').value.trim();
+  const file = document.getElementById('file-name').textContent;
+  if (!text && !file) return;
+  posts.unshift({
+    id: 'me-' + Date.now(),
+    kicker: 'You',
+    who: 'You',
+    question: text || file,
+    line: file ? 'Attached ' + file : 'Posted from the home composer.',
+    time: 'Just now',
+    carrots: 0, sticks: 0, comments: 0,
+    textOnly: !file || !/\.(mp4|mov|webm)$/i.test(file)
+  });
+  document.getElementById('draft').value = '';
+  document.getElementById('file-name').textContent = '';
+  veil.classList.remove('open');
+  paint();
+};
+
+document.body.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-do]');
+  if (!button) return;
+  const item = button.closest('.item');
+  const action = button.dataset.do;
+  if (action === 'carrot' || action === 'stick') {
+    button.classList.toggle('on');
+    const count = button.querySelector('span');
+    const base = Number(count.textContent);
+    count.textContent = button.classList.contains('on') ? base + 1 : Math.max(0, base - 1);
+    return;
+  }
+  if (action === 'save') { button.classList.toggle('on'); return; }
+  if (action === 'copy') { item.querySelector('[data-note]').textContent = 'Link copied.'; return; }
+  if (action === 'send') {
+    const input = item.querySelector('input');
+    const text = input.value.trim();
+    if (!text) return;
+    const note = document.createElement('div');
+    note.className = 'reply';
+    note.innerHTML = '<b>You</b> · ' + text.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    input.parentElement.before(note);
+    input.value = '';
+    const count = item.querySelector('[data-do="comment"] span');
+    count.textContent = Number(count.textContent) + 1;
+    return;
+  }
+  const panel = item.querySelector('[data-panel="' + action + '"]');
+  if (!panel) return;
+  const open = panel.classList.contains('open');
+  item.querySelectorAll('.panel').forEach((node) => node.classList.remove('open'));
+  if (!open) panel.classList.add('open');
+});
+</script>
+</body>
+</html>

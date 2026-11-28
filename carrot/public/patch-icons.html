@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patch menu icons</title>
+  <style>
+    :root {
+      --ink: #374151;
+      --orange: #f97316;
+      --muted: #60646C;
+      --line: #e5e7eb;
+      --page: #F6F3EE;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: #0B0B0F;
+      font-family: "Segoe UI", sans-serif;
+    }
+    main { max-width: 880px; margin: 0 auto; padding: 36px 24px 72px; }
+    h1 { margin: 0 0 6px; font-size: 1.5rem; letter-spacing: -0.03em; }
+    .lead { margin: 0 0 28px; color: var(--muted); }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #FF6A00;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 36px; }
+    .item { width: 88px; text-align: center; }
+    .tile {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .tile svg { width: 24px; height: 24px; }
+    .big {
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+    }
+    .big svg { width: 56px; height: 56px; }
+    .cap { font-size: 12px; color: var(--muted); }
+    .opt { width: 180px; }
+    .num {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    article {
+      background: white;
+      border: 1px solid #E6E8EC;
+      border-radius: 20px;
+      padding: 16px 12px 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Patch menu icons</h1>
+    <p class="lead">Same stroke, size, and tile as the menu. No carrot. Pick a number.</p>
+
+    <h2>The menu now</h2>
+    <div class="row">
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cap">Search</div></div>
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke="currentColor" stroke-width="2"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cap">Alerts</div></div>
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="12" height="2" rx="1" fill="currentColor"/><rect x="4" y="9" width="10" height="2" rx="1" fill="currentColor"/><rect x="4" y="12" width="14" height="2" rx="1" fill="currentColor"/><rect x="4" y="15" width="8" height="2" rx="1" fill="currentColor"/></svg></div><div class="cap">Patch now</div></div>
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10M8 20V6M12 20V9M16 20V4M20 20V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cap">Watch</div></div>
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2"/></svg></div><div class="cap">Messages</div></div>
+      <div class="item"><div class="tile"><svg viewBox="0 0 24 24" fill="none"><line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cap">Funds</div></div>
+    </div>
+
+    <h2>Four options</h2>
+    <div class="row">
+      <article class="opt">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="2"/></svg></div>
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="num">1 · Round</p>
+        <div class="cap">Merit-badge circle, two stitched rings.</div>
+      </article>
+      <article class="opt">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 19.2 6.2v5.8c0 4-3 6.6-7.2 8.8-4.2-2.2-7.2-4.8-7.2-8.8V6.2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 19.2 6.2v5.8c0 4-3 6.6-7.2 8.8-4.2-2.2-7.2-4.8-7.2-8.8V6.2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+        <p class="num">2 · Shield</p>
+        <div class="cap">One outline, pointed at the bottom.</div>
+      </article>
+      <article class="opt">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3.5" stroke="currentColor" stroke-width="2"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="2"/></svg></div>
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3.5" stroke="currentColor" stroke-width="2"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="num">3 · Square</p>
+        <div class="cap">Camp patch, rounded square, inner stitch.</div>
+      </article>
+      <article class="opt">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="12" rx="9" ry="6.5" stroke="currentColor" stroke-width="2"/><ellipse cx="12" cy="12" rx="5.5" ry="3.2" stroke="currentColor" stroke-width="2"/></svg></div>
+        <div class="tile"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="12" rx="9" ry="6.5" stroke="currentColor" stroke-width="2"/><ellipse cx="12" cy="12" rx="5.5" ry="3.2" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="num">4 · Oval</p>
+        <div class="cap">Shoulder patch, wide oval, inner stitch.</div>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

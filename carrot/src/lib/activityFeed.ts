@@ -5,9 +5,15 @@ import { invalidateFeedCache } from '@/lib/feedCache'
 export async function showFollowers(userId: string, text: string): Promise<void> {
   const content = text.replace(/\s+/g, ' ').trim().slice(0, 500)
   if (!userId || content.length < 8) return
+  const handle = content.match(/\/patch\/([a-z0-9-]+)/i)?.[1]
+  let patchId: string | undefined
+  if (handle) {
+    const patch = await prisma.patch.findUnique({ where: { handle }, select: { id: true } }).catch(() => null)
+    patchId = patch?.id
+  }
   try {
     await prisma.post.create({
-      data: { userId, content, emoji: '▸' }
+      data: { userId, content, emoji: '▸', ...(patchId ? { patchId } : {}) }
     })
     invalidateFeedCache()
   } catch (error) {

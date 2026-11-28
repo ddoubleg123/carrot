@@ -87,6 +87,23 @@ export async function ensureStoredHero(id: string, title: string, current: strin
   return found?.url || null
 }
 
+/** Questions already saved with no picture, or with a file that is not on this machine. */
+export async function backfillSearchPhotos(rows: Array<{ id: string; title: string; image: string }>): Promise<Map<string, string>> {
+  const missing = rows.filter((row) => !row.image || row.image.startsWith('/curator-thumbs/') || row.image.startsWith('/topic-')).slice(0, 4)
+  const found = new Map<string, string>()
+  await Promise.all(missing.map(async (row) => {
+    const photo = await cardPhoto(row.title).catch(() => null)
+    if (!photo) return
+    await prisma.$executeRaw`
+      UPDATE discovered_content
+      SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{image}', to_jsonb(${photo}::text), true)
+      WHERE id = ${row.id} AND type = 'topic'
+    `.catch(() => null)
+    found.set(row.id, photo)
+  }))
+  return found
+}
+
 async function commonsPhoto(query: string, tokens: string[]): Promise<string | null> {
   const search = new URL('https://commons.wikimedia.org/w/api.php')
   search.searchParams.set('action', 'query')
@@ -140,8 +157,8 @@ export async function questionPhoto(question: string): Promise<string | null> {
   const focus = [...tokens].sort((a, b) => b.length - a.length)[0]
   const candidates = [await wikiPhoto(question, tokens), await commonsPhoto(`${focus} ${tokens.find((token) => token !== focus) || ''}`, tokens)]
   const ranked = candidates
-    .filter((url): url is string => typeof url === 'string' && isRaster(url) && !GRAPHIC.test(url) && decodeURIComponent(url).toLowerCase().includes(focus || ''))
-    .map((url) => ({ url: url.split('?')[0], points: score(decodeURIComponent(url), tokens) }))
+    .filter((url): url is string => typeof url === 'string' && isRaster(url) && !GRAPHIC.test(url))
+    .map((url) => ({ url: url.split('?')[0], points: score(decodeURIComponent(url), tokens) + (decodeURIComponent(url).toLowerCase().includes(focus || '') ? 5 : 0) }))
     .sort((a, b) => b.points - a.points)
   return ranked[0]?.url || null
 }

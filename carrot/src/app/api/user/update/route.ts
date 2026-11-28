@@ -2,6 +2,8 @@ export const runtime = 'nodejs';
 
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { sanitizePicks } from "@/lib/interestCatalog";
+import { saveInterestPicks } from "@/lib/recordInterest";
 
 const prisma = new PrismaClient();
 
@@ -20,6 +22,13 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     const body = await req.json();
     log('Request body:', JSON.stringify(body));
     const { firstName, lastName, username, phone, country, postalCode, image, profilePhoto, interests } = body;
+    const picks = Array.isArray(body?.interestPicks) ? sanitizePicks(body.interestPicks) : null;
+    if (picks && picks.length < 3) {
+      return new Response(JSON.stringify({ error: 'Choose at least three topics.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     // --- LOG PROFILE PHOTO DETAILS ---
     if (profilePhoto !== undefined) {
       log('[profilePhoto] type:', typeof profilePhoto, '| length:', profilePhoto?.length, '| sample:', typeof profilePhoto === 'string' ? profilePhoto.slice(0, 80) : '[not string]');
@@ -71,7 +80,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       image,
       profilePhoto: safeProfilePhoto,
       isOnboarded: true,
-      interests: safeInterests,
+      interests: picks ? picks.map((pick) => pick.label).join(', ').slice(0, 255) : safeInterests,
     };
     // Remove 'interests' from updateData if present (handled above)
 
@@ -87,6 +96,7 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
       },
       update: updateData,
     });
+    if (picks) await saveInterestPicks(result.id, picks);
     log('Prisma update result:', JSON.stringify(result));
     // Fetch user again to verify DB value
     const verifyUser = await prisma.user.findUnique({ where: { email: session.user.email } });

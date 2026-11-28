@@ -6,6 +6,7 @@ import { EmojiStyle } from 'emoji-picker-react';
 import { Image as ImageIcon, Mic, Smile, Square, X } from 'lucide-react';
 import GifPicker from '@/app/(app)/dashboard/components/GifPicker';
 import type { MediaKind } from './commentCodec';
+import { imageFromClipboard } from '@/lib/clipboardImage';
 
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 
@@ -32,6 +33,7 @@ function pickRecorderMime() {
 
 export default function RichComposer({
   onSend,
+  onDraft,
   disabled = false,
   placeholder = 'Message',
   submitLabel = 'Send',
@@ -39,6 +41,7 @@ export default function RichComposer({
   focusToken = 0,
 }: {
   onSend: (message: { text: string; attachment?: OutgoingAttachment }) => Promise<void> | void;
+  onDraft?: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
   submitLabel?: string;
@@ -102,6 +105,7 @@ export default function RichComposer({
     try {
       await onSend({ text, attachment });
       setDraft('');
+      onDraft?.('');
       setShowEmoji(false);
       setPending((current) => {
         releasePending(current);
@@ -269,7 +273,11 @@ export default function RichComposer({
             lazyLoadEmojis={false}
             previewConfig={{ showPreview: false }}
             onEmojiClick={(emoji: { emoji: string }) => {
-              setDraft((current) => current + emoji.emoji);
+              setDraft((current) => {
+                const next = current + emoji.emoji;
+                onDraft?.(next);
+                return next;
+              });
               setShowEmoji(false);
               composerRef.current?.focus();
             }}
@@ -283,7 +291,16 @@ export default function RichComposer({
           rows={4}
           placeholder={notePlaceholder}
           disabled={disabled || sending}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            onDraft?.(event.target.value);
+          }}
+          onPaste={(event) => {
+            const file = imageFromClipboard(event.clipboardData);
+            if (!file) return;
+            event.preventDefault();
+            chooseFile(file);
+          }}
           className="min-h-24 w-full resize-y rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-orange-400"
         />
         <div className="flex w-full items-end gap-2">

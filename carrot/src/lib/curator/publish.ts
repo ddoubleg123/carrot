@@ -11,9 +11,9 @@ import { youtubeIdFromText } from '@/lib/youtube'
 import { saysSomething } from '@/lib/curator/meaning'
 import { deskGrade, feedLine, patchQuestion, worthPosting } from '@/lib/curator/voice'
 import { sameStory } from '@/lib/curator/judge'
-import { quoteGrade, quotePost, quoteSentence, strangerPass } from '@/lib/curator/quoteCard'
-import { linkResolves, postRules, quoteIsExact, reviewAgainstSource } from '@/lib/curator/qa'
-import { lowQualitySource, sourceCleared } from '@/lib/curator/cleared'
+import { quotePost } from '@/lib/curator/quoteCard'
+import { linkResolves, postRules, reviewAgainstSource } from '@/lib/curator/qa'
+import { lowQualitySource } from '@/lib/curator/cleared'
 import { logQa, notifyDutyReviewer } from '@/lib/curator/qaLog'
 import { oneQuoteCard } from '@/lib/curator/quoteCardPick'
 import { renderQuoteCard } from '@/lib/curator/quoteImage'
@@ -315,37 +315,28 @@ export async function publishFinding(desk: Desk, finding: {
   invalidateFeedCache()
   await logQa({ kind: 'check', severity: 0, postId: post.id, sourceUrl: finding.url, reason: 'Posted.' })
   void topicId
-  const sourceName = link?.site || finding.publisher
-  const when = link?.published || ''
-  const quotePassage = [finding.excerpt, finding.transcript || ''].filter(Boolean).join('\n')
-  const ready = quotePassage.replace(/\s+/g, ' ').split(/(?<=[.])\s+/).map((part) => part.trim())
-  for (const spoken of ready) {
-    if (quoteSentence(spoken) !== spoken) continue
-    if (!quoteIsExact(spoken, quotePassage)) continue
-    const grade = quoteGrade({ sentence: spoken, source: sourceName, date: when, image: preview || 'pending' })
-    if (grade.failures.some((reason) => reason !== 'The card has no picture.')) continue
-    if (!(await strangerPass(spoken))) continue
-    if (!sourceCleared(finding.url) && !sourceCleared(preview || '')) {
-      await logQa({ kind: 'check', severity: 2, sourceUrl: finding.url, reason: 'The source is not cleared for a quote card.' })
-      break
-    }
-    await publishQuoteCard(desk, user.id, spoken, sourceName, preview, when).catch(() => null)
-    break
-  }
   return { topicUrl, postId: post.id, username: user.username || desk.username }
 }
 
+/** A line kept from the question's saved text. The card names the person who said it. */
+export async function publishKeptQuote(desk: Desk, quote: { sentence: string; speaker: string; date: string; image?: string | null }, sourceUrl = ''): Promise<boolean> {
+  const user = await deskUser(desk)
+  const posted = await publishQuoteCard(desk, user.id, quote.sentence, quote.speaker, quote.image || null, quote.date)
+  if (posted) await logQa({ kind: 'check', severity: 0, sourceUrl, reason: 'Quote from the patch.' })
+  return posted
+}
+
 /** A second post. The sentence only, set as a card. The article post stays the article. */
-async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null, date: string) {
+async function publishQuoteCard(desk: Desk, userId: string, sentence: string, source: string, image: string | null, date: string): Promise<boolean> {
   const cards = await renderQuoteCard({ sentence, speaker: source, date, imageUrl: image })
   const chosen = oneQuoteCard(cards)
-  if (!chosen) return
+  if (!chosen) return false
   const content = quotePost(sentence, source, date)
   const prior = await prisma.post.findFirst({
     where: { content: { contains: sentence.slice(0, 140) } },
     select: { id: true }
   })
-  if (prior) return
+  if (prior) return false
   const look = palette(`${sentence}:${desk.id}`)
   await prisma.post.create({
     data: {
@@ -362,4 +353,5 @@ async function publishQuoteCard(desk: Desk, userId: string, sentence: string, so
     }
   })
   invalidateFeedCache()
+  return true
 }

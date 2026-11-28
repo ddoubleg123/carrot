@@ -20,9 +20,10 @@ import PostActionBar from "../../../../components/post/PostActionBar";
 import ShareSheet from "../../../../components/share/ShareSheet";
 import VideoErrorBoundary from "../../../../components/VideoErrorBoundary";
 import { youtubeEmbedSrc, youtubeIdFromText } from "../../../../lib/youtube";
-import { directArticleNote, parseFeedPost, patchConversation, patchName } from "../../../../lib/feedPost";
+import { articleExplanation, parseFeedPost, patchConversation, patchName, plainAccount } from "../../../../lib/feedPost";
+import { deskByUsername } from "../../../../lib/curator/desks";
 import { readQuote } from "../../../../lib/curator/quoteCard";
-import QuoteMeme from "../../../../components/QuoteMeme";
+import QuoteLooks from "../../../../components/QuoteLooks";
 import { isFinishedQuote, pickQuoteCard } from "../../../../lib/curator/quoteCardPick";
 
 export type VoteType = "carrot" | "stick" | null;
@@ -223,29 +224,24 @@ function FeedYoutube({ videoId, poster, postId }: { videoId: string; poster?: st
 }
 
 function ArticlePreview({ url, title, published, site, image, embedded }: { url: string; title: string; published: string; site: string; image?: string; embedded?: boolean }) {
-  const [src, setSrc] = useState(image || '')
-  const tried = useRef(false)
+  const remote = Boolean(image && /^https?:\/\//i.test(image))
+  const [src, setSrc] = useState(remote ? (image || '') : '')
   let host = site
   if (!host) {
     try { host = new URL(url).hostname.replace(/^www\./, '') } catch {}
   }
-  const recover = () => {
-    if (tried.current || !url) {
-      setSrc('')
+  useEffect(() => {
+    if (remote) {
+      setSrc(image || '')
       return
     }
-    tried.current = true
-    fetch(`/api/internal/preview-image?url=${encodeURIComponent(url)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const next = typeof data?.image === 'string' ? data.image : ''
-        setSrc(next ? `${next}?v=${Date.now()}` : '')
-      })
-      .catch(() => setSrc(''))
-  }
-  useEffect(() => {
-    if (!src && url) recover()
-  }, [])
+    const here = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+    if (url && (here || !image)) {
+      setSrc(`/api/internal/preview-image?url=${encodeURIComponent(url)}&file=1`)
+      return
+    }
+    setSrc(image || '')
+  }, [remote, image, url])
   return (
     <a
       href={url}
@@ -258,7 +254,7 @@ function ArticlePreview({ url, title, published, site, image, embedded }: { url:
     >
       {src ? (
         <div className="relative w-full overflow-hidden rounded-lg bg-[#F6F3EE]" style={{ aspectRatio: '16 / 9' }}>
-          <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover object-center" onError={recover} />
+          <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover object-center" onError={() => setSrc('')} />
         </div>
       ) : null}
       <div className={embedded ? 'px-0.5 pt-3' : 'px-3 py-3'}>
@@ -660,8 +656,11 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
   const parts = parseFeedPost(content);
   const quoteCard = readQuote(content);
   const article = !quoteCard && !youtubeId && parts.url ? parts : null;
+  const desk = Boolean(deskByUsername(author?.username));
+  const told = plainAccount(parts.note);
+  const explanation = article ? articleExplanation(parts.note, article.title) : '';
   const articleText = article
-    ? [directArticleNote(parts.note), patchConversation(content)].filter(Boolean).join('\n')
+    ? [explanation, patchConversation(content)].filter(Boolean).join('\n')
     : '';
   const textOnGradient = Boolean(
     hasGradient && !gifUrl && !videoUrl && !cfUid && !cfPlaybackUrlHls && !audioUrl
@@ -870,24 +869,34 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
         ) : quoteCard ? (
           <div className="mt-3">
             {isFinishedQuote(imageUrls?.[0] || thumbnailUrl) ? (
-              <img
-                src={pickQuoteCard(imageUrls?.length ? imageUrls : [thumbnailUrl || ''], id)}
-                alt=""
-                className="w-full cursor-pointer rounded-2xl"
-                onClick={() => openCard()}
-              />
+              <div className="cursor-pointer overflow-hidden rounded-2xl" onClick={() => openCard()}>
+                <img
+                  src={pickQuoteCard(imageUrls?.length ? imageUrls : [thumbnailUrl || ''], id)}
+                  alt=""
+                  className="w-full"
+                />
+              </div>
             ) : (
-              <QuoteMeme
+              <QuoteLooks
                 sentence={quoteCard.sentence}
                 source={quoteCard.source}
+                date={quoteCard.date}
                 image={imageUrls?.[0] || thumbnailUrl}
-                onClick={() => openCard()}
+                seed={id}
               />
             )}
           </div>
         ) : (
           article ? (
             <>
+              {explanation ? (
+                <p
+                  className="mt-3 text-[17px] leading-snug text-[#1C1917] whitespace-pre-wrap break-words cursor-pointer"
+                  onClick={() => openCard()}
+                >
+                  {explanation}
+                </p>
+              ) : null}
               <ArticlePreview
                 url={article.url}
                 title={article.title}
@@ -895,21 +904,16 @@ const CommitmentCard = forwardRef<HTMLDivElement, CommitmentCardProps>(function 
                 site={article.site}
                 image={article.image || imageUrls?.[0]}
               />
-              {articleText ? (
-                <div
-                  className="mt-3 text-[15px] leading-relaxed text-[#60646C] whitespace-pre-wrap break-words cursor-pointer"
-                  onClick={() => openCard()}
-                >
-                  <PostCopy content={articleText} name={author?.name} />
-                </div>
+              {patchConversation(content) ? (
+                <PostCopy content={patchConversation(content) || ''} name={author?.name} />
               ) : null}
             </>
-          ) : content ? (
+          ) : content && (!desk || told) ? (
             <div
-              className="mt-3 text-[15px] leading-relaxed text-[#60646C] whitespace-pre-wrap break-words cursor-pointer"
+              className="mt-3 text-[15px] leading-relaxed text-[#1C1917] whitespace-pre-wrap break-words cursor-pointer"
               onClick={() => openCard()}
             >
-              <PostCopy content={youtubeId ? parts.note : content} name={author?.name} />
+              <PostCopy content={desk ? told : (youtubeId ? parts.note : content)} name={author?.name} />
             </div>
           ) : null
         )}

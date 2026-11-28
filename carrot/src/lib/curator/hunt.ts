@@ -2,10 +2,12 @@ import { mkdir, open, readFile, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 import { readPublicUrl } from '@/lib/learn/publicUrl'
 import { chooseDesk, isPast } from '@/lib/curator/assign'
+import { staleReason } from '@/lib/curator/stale'
 import { listChannels, recentUploads } from '@/lib/curator/channels'
 import { DAILY_CAP, DESKS, type Desk } from '@/lib/curator/desks'
 import { judgeReading, sameStory } from '@/lib/curator/judge'
 import { alreadyPosted, publishFinding } from '@/lib/curator/publish'
+import { pullPatchQuote } from '@/lib/curator/patchQuote'
 import { fillQuery, itemsFrom, linksIn, readCaptions, searchPosts, youtubeLatest, type FoundItem } from '@/lib/curator/read'
 import { profileQrUrl } from '@/lib/learn/brandClip'
 import { ensureMediaBins } from '@/lib/mediaBins'
@@ -13,7 +15,9 @@ import { runQaMonitor } from '@/lib/curator/qaMonitor'
 import { storeClip } from '@/lib/curator/storeClip'
 import { startClipOnce } from '@/lib/learn/clipOnce'
 import { citedPages } from '@/lib/curator/wikiRefs'
+import { pickQuietGroup, postBucket, QUIET_GAP_MS, QUIET_LOOK_MS } from '@/lib/curator/quiet'
 import { applyCardNames, readNameCard } from '@/lib/learn/nameCard'
+import prisma from '@/lib/prisma'
 
 export interface Dropped {
   title: string
@@ -59,6 +63,14 @@ interface Memory {
   titles: string[]
   hunted: Record<string, number>
   captionMiss: Record<string, number>
+  /** When a quiet group was last forced through its own sources. */
+  quietTry: Record<string, number>
+  /** Buckets that already have a save inside the quiet gap. */
+  quietFresh: string[]
+  /** When those buckets were last read from the database. */
+  quietLookedAt: number
+  /** The last read succeeded. A failed read must not be treated as every group being empty. */
+  quietOk: boolean
 }
 
 const HUNT_WORKERS = 4
@@ -94,7 +106,7 @@ function canon(url: string): string {
 async function loadMemory(): Promise<Memory> {
   const raw = await readFile(MEMORY, 'utf8').catch(() => '')
   const parsed = raw ? JSON.parse(raw) as Memory : null
-  const base: Memory = parsed && Array.isArray(parsed.seen) ? parsed : { seen: [], day: today(), posted: {}, cursor: 0, titles: [], hunted: {}, captionMiss: {} }
+  const base: Memory = parsed && Array.isArray(parsed.seen) ? parsed : { seen: [], day: today(), posted: {}, cursor: 0, titles: [], hunted: {}, captionMiss: {}, quietTry: {}, quietFresh: [], quietLookedAt: 0, quietOk: false }
   if (base.day !== today()) {
     base.day = today()
     base.posted = {}
@@ -102,6 +114,12 @@ async function loadMemory(): Promise<Memory> {
   base.titles = Array.isArray(base.titles) ? base.titles : []
   base.hunted = base.hunted && typeof base.hunted === 'object' ? base.hunted : {}
   base.captionMiss = base.captionMiss && typeof base.captionMiss === 'object' ? base.captionMiss : {}
+  base.quietTry = base.quietTry && typeof base.quietTry === 'object'
+    ? Object.fromEntries(Object.entries(base.quietTry).filter(([, at]) => typeof at === 'number'))
+    : {}
+  base.quietFresh = Array.isArray(base.quietFresh) ? base.quietFresh.filter((id) => typeof id === 'string') : []
+  base.quietLookedAt = typeof base.quietLookedAt === 'number' ? base.quietLookedAt : 0
+  base.quietOk = base.quietOk === true
   return base
 }
 
@@ -109,8 +127,9 @@ async function saveMemory(memory: Memory): Promise<void> {
   await mkdir(DIR, { recursive: true })
   memory.seen = memory.seen.slice(-2500)
   memory.titles = memory.titles.slice(-400)
-  const cutoff = Date.now() - 6 * 60 * 60 * 1000
-  memory.captionMiss = Object.fromEntries(Object.entries(memory.captionMiss || {}).filter(([, at]) => at > cutoff))
+  const now = Date.now()
+  memory.captionMiss = Object.fromEntries(Object.entries(memory.captionMiss || {}).filter(([, at]) => at > now - 6 * 60 * 60 * 1000))
+  memory.quietTry = Object.fromEntries(Object.entries(memory.quietTry || {}).filter(([, at]) => at > now - QUIET_GAP_MS))
   await writeFile(MEMORY, JSON.stringify(memory))
 }
 
@@ -132,8 +151,8 @@ async function saveHunt(hunt: Hunt): Promise<void> {
   await writeFile(JOURNAL, JSON.stringify({ updatedAt: hunt.at, hunts }))
 }
 
-function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
-  const hour = Math.floor(Date.now() / 3_600_000) + postedToday
+function feedWindow(desk: Desk, postedToday: number, shift = 0): Desk['sources'] {
+  const hour = Math.floor(Date.now() / 3_600_000) + postedToday + shift
   const feeds = desk.sources.filter((source) => source.kind === 'rss')
   const opened = desk.sources.filter((source) => source.kind === 'site' || source.kind === 'query')
   const picked: Desk['sources'] = []
@@ -152,9 +171,41 @@ function feedWindow(desk: Desk, postedToday: number): Desk['sources'] {
   return picked.slice(0, 2)
 }
 
+function rememberSave(memory: Memory, deskId: string): void {
+  const bucket = postBucket(deskId)
+  if (!memory.quietFresh.includes(bucket)) memory.quietFresh.push(bucket)
+}
+
+/** Buckets with a save inside the gap. Null means the database could not be read, so no group is forced. */
+async function quietSaved(memory: Memory, now: number): Promise<Set<string> | null> {
+  const cached = memory.quietLookedAt > 0 && now - memory.quietLookedAt < QUIET_LOOK_MS
+  if (cached) return memory.quietOk ? new Set(memory.quietFresh) : null
+  try {
+    const rows = await prisma.post.findMany({
+      where: { bucket: { not: null }, createdAt: { gte: new Date(now - QUIET_GAP_MS) } },
+      distinct: ['bucket'],
+      select: { bucket: true }
+    })
+    const buckets = rows.map((row) => row.bucket).filter((bucket): bucket is string => Boolean(bucket))
+    memory.quietFresh = buckets
+    memory.quietLookedAt = now
+    memory.quietOk = true
+    return new Set(buckets)
+  } catch (error) {
+    console.error('[curator] quiet groups', error instanceof Error ? error.message : error)
+    memory.quietLookedAt = now
+    memory.quietOk = false
+    return null
+  }
+}
+
 function onBeat(desk: Desk, title: string, extra = ''): boolean {
   if (!desk.past) return true
   return isPast(`${title} ${extra}`.toLowerCase())
+}
+
+function oldCopy(desk: Desk, url: string, text: string, when?: string): string | null {
+  return staleReason(Boolean(desk.past), { url, text, when })
 }
 
 function domainOf(url: string): string {
@@ -235,6 +286,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
   const videosPerChannel = options.videosPerChannel ?? 1
   const articleCount = options.articles ?? 2
   let desks: Desk[]
+  let forcedId = ''
   if (options.deskIds?.length) {
     desks = DESKS.filter((desk) => options.deskIds?.includes(desk.id))
   } else if (options.rotate) {
@@ -245,6 +297,17 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
     const now = Date.now()
     for (const desk of desks) memory.hunted[desk.id] = now
     memory.cursor = (memory.cursor + desks.length) % ready.length
+    const saved = await quietSaved(memory, now)
+    const quietId = saved
+      ? pickQuietGroup(ready.map((desk) => desk.id), saved, memory.quietTry, now, QUIET_GAP_MS, new Set(desks.map((desk) => desk.id)))
+      : null
+    const quiet = quietId ? ready.find((desk) => desk.id === quietId) : undefined
+    if (quiet) {
+      desks.push(quiet)
+      memory.quietTry[quiet.id] = now
+      forcedId = quiet.id
+      console.log(`[curator] quiet ${quiet.name}`)
+    }
   } else {
     desks = DESKS
   }
@@ -252,6 +315,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
   await Promise.all(desks.map(async (desk) => {
     const posted = memory.posted[desk.id] || 0
     const pass: DeskPass = { id: desk.id, name: desk.name, handle: desk.handle, looked: [], dropped: [], kept: [] }
+    if (desk.id === forcedId) pass.looked.push(`Quiet group · nothing saved in the last ${QUIET_GAP_MS / 3_600_000} hours`)
     if (posted >= DAILY_CAP) {
       pass.dropped.push({ title: desk.name, from: 'cap', reason: `Already posted ${DAILY_CAP} times today.` })
       passes.push(pass)
@@ -317,10 +381,11 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         })
         memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
         memory.titles.push(title)
+        rememberSave(memory, desk.id)
         console.log(`[curator] kept ${title}`)
       }
     }
-    const feeds = feedWindow(desk, memory.posted[desk.id] || 0)
+    const feeds = feedWindow(desk, memory.posted[desk.id] || 0, desk.id === forcedId ? 1 : 0)
     let articles = 0
     for (const feed of feeds) {
       const label = feed.kind === 'query' ? 'Record' : feed.kind === 'site' ? 'Site' : 'Feed'
@@ -351,6 +416,11 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
           pass.dropped.push({ title, from: feed.name, reason: reading.reason })
           continue
         }
+        const old = oldCopy(desk, page?.finalUrl || url, text, item.when)
+        if (old) {
+          pass.dropped.push({ title, from: feed.name, reason: old })
+          continue
+        }
         const published = await publishFinding(desk, {
           title: cleanTitle(page?.title || title, feed.name),
           url: page?.finalUrl || url,
@@ -378,6 +448,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         })
         memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
         memory.titles.push(title)
+        rememberSave(memory, desk.id)
       }
     }
     if (room()) {
@@ -398,6 +469,11 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         const reading = judgeReading(text, title, 'page')
         if (!reading.keep) {
           pass.dropped.push({ title, from: 'Wikipedia', reason: reading.reason })
+          continue
+        }
+        const old = oldCopy(desk, page?.finalUrl || url, text)
+        if (old) {
+          pass.dropped.push({ title, from: 'Wikipedia', reason: old })
           continue
         }
         const published = await publishFinding(desk, {
@@ -425,6 +501,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         })
         memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
         memory.titles.push(title)
+        rememberSave(memory, desk.id)
         console.log(`[curator] kept ${title}`)
       }
     }
@@ -458,6 +535,11 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
         pass.dropped.push({ title: post.title, from: account.name, reason: `The link was read. ${reading.reason}` })
         continue
       }
+      const old = oldCopy(desk, url, body, post.when)
+      if (old) {
+        pass.dropped.push({ title: post.title, from: account.name, reason: old })
+        continue
+      }
       const published = await publishFinding(desk, {
         title: cleanTitle(post.title, account.name),
         url,
@@ -483,6 +565,7 @@ async function hunt(options: HuntOptions): Promise<Hunt> {
       })
       memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
       memory.titles.push(post.title)
+      rememberSave(memory, desk.id)
     }
     passes.push(pass)
   }))
@@ -594,6 +677,7 @@ async function watchChannels(memory: Memory, passes: DeskPass[]): Promise<void> 
       })
       memory.posted[desk.id] = (memory.posted[desk.id] || 0) + 1
       memory.titles.push(title)
+      rememberSave(memory, desk.id)
       kept += 1
       console.log(`[curator] kept ${title}`)
     }
@@ -618,6 +702,8 @@ export function armCurator(): void {
           skipWatch: true
         }).catch((error) => {
           console.error('[curator] group pass failed', error instanceof Error ? error.message : error)
+        }).finally(() => {
+          void pullPatchQuote().catch((error) => console.error('[curator] quote', error instanceof Error ? error.message : error))
         })
       })
   }

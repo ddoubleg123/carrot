@@ -56,7 +56,7 @@ export default async function HomePage() {
                 </div>
 
                 {/* Right rail (hidden on small screens) */}
-                <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
+                <aside className="hidden lg:block w-[400px] shrink-0 px-4 py-6">
                   <Widgets />
                 </aside>
               </main>

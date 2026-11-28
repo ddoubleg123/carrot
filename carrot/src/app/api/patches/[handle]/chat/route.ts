@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { AgentRegistry } from '@/lib/ai-agents/agentRegistry'
 import { FeedService } from '@/lib/ai-agents/feedService'
 import { chatStream } from '@/lib/llm/providers/DeepSeekClient'
+import { groupBrief } from '@/lib/learn/topic'
+import { BRAIN_RULE } from '@/lib/learn/brain'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,7 +90,11 @@ export async function POST(
     }
 
     // Build context from discovered content
+    const held = await groupBrief(patch.id, userQuery).catch(() => '')
     const contextParts: string[] = []
+    if (held) {
+      contextParts.push(held)
+    }
     
     if (discoveredContent.length > 0) {
       contextParts.push('\n\n=== RELEVANT DISCOVERED CONTENT ===')
@@ -127,7 +133,9 @@ export async function POST(
     // Build system prompt with agent persona and context
     const systemPrompt = `${agent.persona || `You are ${agent.name}, an AI agent specialized in ${patch.title}.`}
 
-You have access to the following discovered content and memories about this topic. Use this information to provide accurate, detailed, and helpful responses. If the information doesn't fully answer the question, you can use your general knowledge but always prioritize the discovered content.
+You have the group's own documents, transcripts, and notes first, then pages found on the web.
+
+${BRAIN_RULE}
 
 ${context}
 

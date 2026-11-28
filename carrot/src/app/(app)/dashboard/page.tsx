@@ -88,8 +88,10 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     const isVercel = !!process.env.VERCEL;
     const protocol = isVercel ? 'https' : 'http';
     const baseUrl = `${protocol}://${host}`;
+    const cookie = hdrs.get('cookie')
     const response = await fetch(`${baseUrl}/api/posts`, {
-      cache: 'no-store', // Always fetch fresh data
+      cache: 'no-store',
+      headers: cookie ? { cookie } : undefined,
     });
     
     if (!response.ok) {
@@ -101,9 +103,15 @@ async function getCommitments(): Promise<CommitmentCardProps[]> {
     
     // Get session to use profile photo from session data like composer does
     const session = await auth();
+    const viewerId = session?.user?.id || ''
+    const homePosts = Array.isArray(posts) ? posts.filter((post: any) => {
+      if (!viewerId || post?.userId !== viewerId) return true
+      const by = String(post?.repostedBy || '').trim()
+      return Boolean(by) && by !== viewerId
+    }) : []
     
     // Transform database posts to CommitmentCardProps format
-    return posts.map((post: any) => ({
+    return homePosts.map((post: any) => ({
       id: post.id,
       content: post.content || '',
       carrotText: post.carrotText || '',
@@ -190,7 +198,7 @@ export default async function DashboardPage() {
           </div>
           
           {/* Right rail / Third column (hidden on small screens) */}
-          <aside className="hidden lg:block w-80 shrink-0 px-4 py-6">
+          <aside className="hidden lg:block w-[400px] shrink-0 px-4 py-6">
             <Widgets />
           </aside>
         </main>

@@ -7,6 +7,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 }
 
 export const ADMIN_LINKS = [
+  { href: '/admin/ready', label: 'Groups', note: 'What each group has saved, by type, over the last 1–72 hours.' },
   { href: '/curator', label: 'Curator', note: 'What the desks kept, dropped, and posted.' },
   { href: '/channels', label: 'Channels', note: 'The YouTube channels the bots watch.' },
   { href: '/admin/qa', label: 'QA', note: 'Holds, corrections, and the weekly counts.' },

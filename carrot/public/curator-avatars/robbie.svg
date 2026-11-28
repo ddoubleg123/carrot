@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
-  <rect width="320" height="320" fill="#163528"/>
-  <path d="M40 250h80M40 268h56" stroke="#F4F1EA" stroke-width="6"/>
-  <ellipse cx="170" cy="306" rx="118" ry="74" fill="#0C241C"/>
-  <ellipse cx="158" cy="298" rx="118" ry="74" fill="#2E8B57"/>
-  <path d="M82 176c8-62 36-104 82-104s74 42 80 104v32H82z" fill="#0C241C"/>
-  <path d="M74 168c8-62 36-104 82-104s74 42 80 104v32H74z" fill="#8A4B30"/>
-  <path d="M78 130c16-36 40-56 70-56 8 0 16 2 24 6-8 16-6 28 4 36-28 4-40-8-58-8-16 16-28 16-40 22z" fill="#1C1917"/>
-  <rect x="96" y="118" width="120" height="16" rx="8" fill="#F4F1EA"/>
-  <path d="M112 168c12-10 20-8 26 2M176 166c10-10 22-8 28 2" stroke="#1C1917" stroke-width="4" fill="none" stroke-linecap="round"/>
-  <circle cx="124" cy="182" r="5" fill="#1C1917"/>
-  <circle cx="190" cy="182" r="5" fill="#1C1917"/>
-  <path d="M132 208c16 16 36 14 50-2" stroke="#F4F1EA" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <rect width="320" height="320" fill="#FFF7ED"/>
+  <circle cx="262" cy="52" r="16" fill="#C2410C" opacity="0.9"/>
+  <circle cx="248" cy="40" r="7" fill="#FFFFFF" opacity="0.8"/>
+  <ellipse cx="160" cy="286" rx="92" ry="62" fill="#FED7AA"/>
+  <circle cx="160" cy="150" r="78" fill="#D2A679"/>
+  <path d="M98 136c8-36 30-52 62-52s54 16 62 52H98z" fill="#3A2418"/><path d="M84 136h152" stroke="#3A2418" stroke-width="12" stroke-linecap="round"/>
+  <ellipse cx="118" cy="172" rx="14" ry="8" fill="#F43F5E" opacity="0.28"/>
+  <ellipse cx="204" cy="172" rx="14" ry="8" fill="#F43F5E" opacity="0.28"/>
+  <ellipse cx="136" cy="156" rx="11" ry="13" fill="#2B2118"/><ellipse cx="188" cy="156" rx="11" ry="13" fill="#2B2118"/><circle cx="140" cy="151" r="4" fill="#FFFFFF"/><circle cx="192" cy="151" r="4" fill="#FFFFFF"/>
+  <path d="M146 186c6 10 22 10 28 0" stroke="#C2410C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <circle cx="234" cy="224" r="10" fill="#C2410C"/><path d="M226 210l8 8 8-8" fill="#FECACA"/>
 </svg>

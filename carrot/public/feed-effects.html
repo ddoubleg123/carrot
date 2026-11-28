@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feed color options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink:#0B0B0F; --muted:#60646C; --faint:#8A8F98; --line:#E6E8EC; --paper:#FAFAF8; --page:#F6F3EE; --orange:#FF6A00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--ink); background: var(--page); }
+  main { max-width: 760px; margin: 0 auto; padding: 36px 20px 80px; }
+  h1 { margin: 0 0 8px; font-size: 1.6rem; letter-spacing: -.03em; }
+  .lead { margin: 0 0 28px; color: var(--muted); max-width: 46rem; }
+  section { margin: 0 0 28px; }
+  .label { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--orange); }
+  .note { margin: 8px 2px 0; color: var(--muted); font-size: 14px; }
+  .card { background: white; border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px 14px; }
+  .who { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .who b { font-weight: 650; }
+  .who span { color: var(--faint); }
+  .dot { width: 36px; height: 36px; border-radius: 999px; background: #1F2937; color: white; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  h2 { margin: 12px 0 0; font-size: 1.35rem; line-height: 1.15; letter-spacing: -.03em; font-weight: 650; }
+  p.body { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .media { margin-top: 12px; height: 148px; border-radius: 12px; background: #141416 center/cover no-repeat; }
+  .chip { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); background: var(--paper); border-radius: 16px; padding: 10px 14px; }
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--orange); }
+  .open { color: var(--orange); font-weight: 650; font-size: 14px; }
+  .acts { display: flex; gap: 8px; margin-top: 12px; }
+  .act { height: 34px; min-width: 34px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: white; color: #374151; font-size: 13px; font-weight: 600; }
+
+  .edge { border-left: 5px solid #36D1DC; }
+  .frame { padding: 5px; background: linear-gradient(135deg, #F093FB, #F5576C); border: 0; }
+  .frame .sheet { background: white; border-radius: 14px; padding: 16px 18px 14px; }
+  .wash .media { box-shadow: 0 0 0 8px #F6D365; }
+  .glow { box-shadow: 0 10px 28px rgba(91, 134, 229, .28), 0 0 0 1px #E6E8EC; }
+  .ribbon { position: relative; overflow: hidden; }
+  .ribbon::after {
+    content: "";
+    position: absolute; top: 0; right: 0;
+    border-top: 28px solid #56AB2F; border-left: 28px solid transparent;
+  }
+  .hair { border-top: 3px solid transparent; border-image: linear-gradient(90deg, #FF7E5F, #FD3A69) 1; border-radius: 0 0 18px 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Color on the feed</h1>
+  <p class="lead">The sheets stay. Each option puts the post’s own color back in a different place. The live home is unchanged. Pick a number.</p>
+
+  <section>
+    <p class="label">1 · Color edge</p>
+    <article class="card edge">
+      <div class="who"><div class="dot">N</div><b>Nina Neutron</b><span>· 8m</span></div>
+      <h2>How far did the bird fly on the way back?</h2>
+      <p class="body">A short note under the question. The color is only a stripe on the left.</p>
+      <div class="chip"><span><span class="kicker">In the patch</span><br><b>Nina Neutron</b></span><span class="open">Open</span></div>
+      <div class="acts"><span class="act">♡ 12</span><span class="act">💬 3</span><span class="act">↗</span></div>
+    </article>
+    <p class="note">A stripe in the post’s color. Quiet, and you can still tell posts apart.</p>
+  </section>
+
+  <section>
+    <p class="label">2 · Gradient frame</p>
+    <article class="frame">
+      <div class="sheet">
+        <div class="who"><div class="dot">S</div><b>Scout Rummage</b><span>· 12m</span></div>
+        <h2>What did the harbor master write down?</h2>
+        <p class="body">This is the old border, wrapped around the whole sheet.</p>
+        <div class="chip"><span><span class="kicker">In the patch</span><br><b>Scout Rummage</b></span><span class="open">Open</span></div>
+        <div class="acts"><span class="act">♡ 18</span><span class="act">💬 4</span></div>
+      </div>
+    </article>
+    <p class="note">The color border you had, kept outside the white card.</p>
+  </section>
+
+  <section>
+    <p class="label">3 · Color around the picture</p>
+    <article class="card wash">
+      <div class="who"><div class="dot">A</div><b>Atlas Wren</b><span>· 1h</span></div>
+      <h2>Where does the river actually turn?</h2>
+      <p class="body">The sheet stays plain. The color sits only around the picture or the video.</p>
+      <div class="media" style="background-image:linear-gradient(160deg,#1c1917,#44403c)"></div>
+      <div class="acts"><span class="act">♡ 7</span><span class="act">💬 1</span></div>
+    </article>
+    <p class="note">Closest to the colored outline that used to ring the video.</p>
+  </section>
+
+  <section>
+    <p class="label">4 · Colored shadow</p>
+    <article class="card glow">
+      <div class="who"><div class="dot">C</div><b>Chip Faraday</b><span>· 2h</span></div>
+      <h2>Who keeps the spare key to the lab?</h2>
+      <p class="body">No border. The card floats on a shadow mixed from its color.</p>
+      <div class="acts"><span class="act">♡ 22</span><span class="act">💬 6</span></div>
+    </article>
+    <p class="note">Softer than a border. The feed still looks like paper.</p>
+  </section>
+
+  <section>
+    <p class="label">5 · Corner flag</p>
+    <article class="card ribbon">
+      <div class="who"><div class="dot">M</div><b>Mara Canvas</b><span>· 3h</span></div>
+      <h2>Which painting was moved first?</h2>
+      <p class="body">A small folded corner in the post’s color. The rest of the card is untouched.</p>
+      <div class="acts"><span class="act">♡ 4</span><span class="act">💬 0</span></div>
+    </article>
+    <p class="note">A sticker, not a frame. Easy to miss, easy to spot once you know it.</p>
+  </section>
+
+  <section>
+    <p class="label">6 · Top hairline</p>
+    <article class="card hair">
+      <div class="who"><div class="dot">H</div><b>Hugo History</b><span>· 5h</span></div>
+      <h2>When was the gate actually shut?</h2>
+      <p class="body">A thin gradient along the top edge. The sides stay the normal hairline.</p>
+      <div class="acts"><span class="act">♡ 9</span><span class="act">💬 2</span></div>
+    </article>
+    <p class="note">The smallest of the six. Color without a border around the card.</p>
+  </section>
+</main>
+</body>
+</html>

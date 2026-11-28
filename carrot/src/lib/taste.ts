@@ -58,8 +58,21 @@ function put(desks: Record<string, number>, subject: string, hours: number) {
   else desks[subject] = next
 }
 
+export function addHours(taste: TasteState, subject: string, hours: number): TasteState {
+  if (!subject || !hours) return taste
+  const desks = { ...taste.desks }
+  put(desks, subject, (desks[subject] || 0) + hours)
+  return { ...taste, seeded: true, desks }
+}
+
 /** Record one action on a subject. Null clears a carrot or a stick. Open does not replace either. */
-export function setMark(taste: TasteState, subject: string, postId: string, mark: TasteMark | null): TasteState {
+export function setMark(
+  taste: TasteState,
+  subject: string,
+  postId: string,
+  mark: TasteMark | null,
+  hours: { carrot: number; open: number; stick: number } = TASTE_HOURS
+): TasteState {
   const prev = taste.marks.find((item) => item.id === postId)
   if (mark === 'open' && prev) return taste
   if (mark && prev?.mark === mark) return { ...taste, seeded: true }
@@ -67,13 +80,13 @@ export function setMark(taste: TasteState, subject: string, postId: string, mark
   let signals = taste.signals
   let marks = taste.marks.filter((item) => item.id !== postId)
   if (mark === null) {
-    if (prev && prev.mark !== 'open') put(desks, subject, (desks[subject] || 0) - TASTE_HOURS[prev.mark])
+    if (prev && prev.mark !== 'open') put(desks, subject, (desks[subject] || 0) - hours[prev.mark])
     else if (prev) marks = [...marks, prev]
     return { ...taste, seeded: true, desks, marks }
   }
   if (!prev) signals += 1
-  else put(desks, subject, (desks[subject] || 0) - TASTE_HOURS[prev.mark])
-  put(desks, subject, (desks[subject] || 0) + TASTE_HOURS[mark])
+  else put(desks, subject, (desks[subject] || 0) - hours[prev.mark])
+  put(desks, subject, (desks[subject] || 0) + hours[mark])
   marks = [...marks, { id: postId, mark }]
   if (marks.length > MARK_CAP) marks = marks.slice(marks.length - MARK_CAP)
   return { ...taste, seeded: true, signals, desks, marks }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { officeHandle } from '@/lib/officeHandle'
 import type { FeedItem, Official } from '@/lib/polWatch'
+import { FeedRectangle } from '@/components/search/HalfPageAd'
 
 const WATCH_CACHE = 'carrot-pol-watch-v1'
 
@@ -20,12 +21,98 @@ const KIND: Record<FeedItem['kind'], string> = {
   mention: 'People are saying'
 }
 
-const KIND_TONE: Record<FeedItem['kind'], string> = {
-  bill: 'bg-[#FFEDD5] text-[#9A3412]',
-  hearing: 'bg-[#1C1917] text-white',
-  news: 'bg-[#F5F5F4] text-[#44403C]',
-  post: 'bg-[#DBEAFE] text-[#1E3A8A]',
-  mention: 'bg-[#DCFCE7] text-[#166534]'
+function ago(value: string) {
+  const time = Date.parse(value || '')
+  if (!Number.isFinite(time)) return ''
+  const mins = Math.max(0, Math.round((Date.now() - time) / 60000))
+  if (mins < 60) return mins < 1 ? 'just now' : `${mins}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.round(hours / 24)}d`
+}
+
+function StoryPicture({ url }: { url: string }) {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    if (!/^https?:\/\//i.test(url)) {
+      setSrc('')
+      return
+    }
+    let gone = false
+    setSrc(null)
+    fetch(`/api/internal/preview-image?url=${encodeURIComponent(url)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (gone) return
+        const next = typeof data?.image === 'string' ? data.image : ''
+        setSrc(next ? `${next}?v=${Date.now()}` : '')
+      })
+      .catch(() => {
+        if (!gone) setSrc('')
+      })
+    return () => {
+      gone = true
+    }
+  }, [url])
+  if (src === '') return null
+  return (
+    <div className="relative h-[150px] w-full overflow-hidden bg-[#F6F3EE]">
+      {src ? <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover object-center" /> : null}
+    </div>
+  )
+}
+
+function sameStaff(a: { name?: string; email?: string }, b: { name?: string; email?: string }) {
+  const email = (a.email || '').toLowerCase().replace(/\s+/g, '')
+  const other = (b.email || '').toLowerCase().replace(/\s+/g, '')
+  if (email && other && email === other) return true
+  const key = (name: string) => {
+    const bits = name.toLowerCase().split(/[^a-z]+/).filter((part) => part.length > 1)
+    if (!bits.length) return ''
+    if (bits.length === 1) return bits[0]
+    return `${bits[0][0]}:${bits[bits.length - 1]}`
+  }
+  const who = key(a.name || '')
+  return Boolean(who) && who === key(b.name || '')
+}
+
+function WatchCard({ item, photo, onPass }: { item: FeedItem; photo?: string; onPass: () => void }) {
+  const body = item.detail && item.detail !== item.title ? item.detail : item.title
+  const when = ago(item.at)
+  return (
+    <article className="flex flex-col overflow-hidden rounded-[18px] border border-[#E6E8EC] bg-white sm:flex-row">
+      <div className="min-w-0 flex-1 px-4 py-3.5">
+        <div className="flex items-center gap-2.5">
+          {photo ? (
+            <img src={photo} alt="" className="h-10 w-10 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E7E5E4] text-sm font-semibold text-[#44403C]">{item.personName.slice(0, 1)}</span>
+          )}
+          <div className="min-w-0">
+            <span className="font-semibold text-[#1C1917]">{item.personName}</span>
+            {when && <span className="text-[#A8A29E]"> · {when}</span>}
+          </div>
+        </div>
+        <p className="mt-3 text-[15.5px] leading-6 text-[#44403C]">{body}</p>
+        <a href={item.url} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-xl border border-[#E7E5E4]">
+          <StoryPicture url={item.url} />
+          <div className="px-3 py-2.5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#78716C]">{KIND[item.kind]}{item.source ? ` · ${item.source}` : ''}</div>
+            <div className="mt-1 text-[15px] font-semibold leading-5 text-[#1C1917]">{item.title}</div>
+          </div>
+        </a>
+      </div>
+      <div className="flex flex-row items-center justify-center gap-1 border-t border-[#F0EEE9] bg-[#FFFcf8] px-2 py-2 sm:w-[92px] sm:flex-col sm:self-stretch sm:border-l sm:border-t-0 sm:py-3">
+        <a href={item.url} target="_blank" rel="noreferrer" aria-label="Open this story" title="Open" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#78716C] hover:bg-[#F4F1EC] hover:text-[#1C1917]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
+        </a>
+        <button type="button" aria-label="Not interested" onClick={onPass} className="mt-1 flex w-[76px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[#78716C] hover:bg-[#F4F1EC] hover:text-[#1C1917]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M3 3l18 18M10.6 6.1A8 8 0 0 1 20 12c-.6 1-1.5 2-2.6 2.8M6.7 6.7C5 8 3.8 9.8 3 12c1.3 2.4 4.4 6 9 6 1.5 0 2.8-.4 4-.9" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+          <span className="text-center text-[11px] font-semibold leading-tight">Not interested</span>
+        </button>
+      </div>
+    </article>
+  )
 }
 
 export default function PolWatch() {
@@ -36,6 +123,8 @@ export default function PolWatch() {
   const [watching, setWatching] = useState<Official[]>([])
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [focus, setFocus] = useState('')
+  const [view, setView] = useState<string[]>([])
+  const [passed, setPassed] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -73,6 +162,7 @@ export default function PolWatch() {
   }
 
   useEffect(() => {
+    fetch('/api/pol-watch/badge', { method: 'POST' }).catch(() => {});
     try {
       const raw = localStorage.getItem(WATCH_CACHE)
       const saved = raw ? JSON.parse(raw) as { people?: Official[]; focus?: string; zip?: string } : null
@@ -144,7 +234,7 @@ export default function PolWatch() {
     setLooking(false)
   }
 
-  const searchTopic = async (value: string, personId = focus) => {
+  const searchTopic = async (value: string, personIds = view) => {
     const query = value.trim()
     if (!query) {
       setActiveTopic('')
@@ -153,7 +243,7 @@ export default function PolWatch() {
     }
     setSearching(true)
     const params = new URLSearchParams({ topic: query })
-    if (personId) params.set('person', personId)
+    if (personIds.length === 1) params.set('person', personIds[0])
     const res = await fetch(`/api/pol-watch?${params}`, { cache: 'no-store' })
     const body = res.ok ? await res.json() : { feed: [] }
     setTopicFeed(Array.isArray(body.feed) ? body.feed : [])
@@ -161,11 +251,32 @@ export default function PolWatch() {
     setSearching(false)
   }
 
+  const showAll = () => {
+    setView([])
+    setFocus('')
+    if (activeTopic) searchTopic(activeTopic, [])
+  }
+
+  const toggleView = (id: string) => {
+    const next = view.includes(id) ? view.filter((item) => item !== id) : (view.length === 0 ? [id] : [...view, id])
+    setView(next)
+    setFocus(next.includes(id) ? id : (next[0] || ''))
+    if (activeTopic) searchTopic(activeTopic, next)
+  }
+
+  const stopTracking = (id: string) => {
+    const next = view.filter((item) => item !== id)
+    setView(next)
+    if (focus === id) setFocus(next[0] || '')
+    persist(watching.filter((item) => item.id !== id))
+  }
+
   const allOn = lineup.length > 0 && lineup.every((person) => chosen[person.id])
   const chosenCount = lineup.filter((person) => chosen[person.id]).length
-  const live = focus ? feed.filter((item) => item.personId === focus) : feed
-  const shown = topicFeed ?? live
+  const inView = (item: FeedItem) => !passed[item.id] && (view.length === 0 || view.includes(item.personId))
+  const shown = (topicFeed ?? feed).filter(inView)
   const selected = watching.find((person) => person.id === focus) || null
+  const viewLabel = view.length === 0 ? 'All' : view.length === 1 ? (selected?.name || '1 person') : `${view.length} people`
 
   return (
     <div className="px-4 py-6 md:px-8">
@@ -207,14 +318,14 @@ export default function PolWatch() {
             }}
           >
             <label htmlFor="pol-topic" className="text-xs font-semibold uppercase tracking-wide text-[#A8A29E]">
-              {selected ? `Search ${selected.name}` : 'Search this watch'}
+              {view.length === 1 && selected ? `Search ${selected.name}` : view.length > 1 ? 'Search this group' : 'Search this watch'}
             </label>
             <div className="mt-2 flex gap-2">
               <input
                 id="pol-topic"
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
-                placeholder={selected ? 'A bill, a hearing, a place' : 'A topic across everyone here'}
+                placeholder={view.length === 1 && selected ? 'A bill, a hearing, a place' : 'A topic across this feed'}
                 aria-label="Topic"
                 className="h-11 min-w-0 flex-1 rounded-xl border border-[#E7E5E4] px-3 text-sm text-[#1C1917] outline-none focus:border-[#1C1917]"
               />
@@ -282,11 +393,12 @@ export default function PolWatch() {
 
       <div className="mt-6 grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)_300px]">
         <aside className="rounded-3xl bg-white p-3">
-          <button type="button" onClick={() => { setFocus(''); if (activeTopic) searchTopic(activeTopic, '') }} className={`mb-1 w-full rounded-2xl px-3 py-2 text-left text-sm ${focus ? 'text-[#57534E]' : 'bg-[#1C1917] font-semibold text-white'}`}>
-            Everyone · {watching.length}
+          <button type="button" onClick={showAll} className={`mb-1 w-full rounded-2xl px-3 py-2 text-left text-sm ${view.length === 0 ? 'bg-[#1C1917] font-semibold text-white' : 'text-[#57534E]'}`}>
+            All · {watching.length}
           </button>
+          <p className="px-3 pb-2 text-[11px] leading-4 text-[#A8A29E]">Tap names to limit this feed. × stops tracking.</p>
           {watching.map((person) => {
-            const on = focus === person.id
+            const on = view.includes(person.id)
             return (
               <div key={person.id} className={`mb-1 flex items-center gap-2 rounded-2xl px-2 py-2 ${on ? 'bg-[#1C1917] text-white' : 'hover:bg-[#FAFAF9]'}`}>
                 <a href={`/people/${person.username || officeHandle(person.id)}`} className="shrink-0" title={`${person.name} profile`}>
@@ -298,11 +410,20 @@ export default function PolWatch() {
                 </a>
                 <button
                   type="button"
-                  onClick={() => { setFocus(person.id); if (activeTopic) searchTopic(activeTopic, person.id) }}
+                  onClick={() => toggleView(person.id)}
                   className="min-w-0 flex-1 text-left"
                 >
                   <span className="block truncate text-sm font-semibold">{person.name}</span>
                   <span className={`block truncate text-xs ${on ? 'text-white/70' : 'text-[#A8A29E]'}`}>{person.office}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Stop tracking ${person.name}`}
+                  title={`Stop tracking ${person.name}`}
+                  onClick={() => stopTracking(person.id)}
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none ${on ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-[#A8A29E] hover:bg-[#F5F5F4] hover:text-[#1C1917]'}`}
+                >
+                  ×
                 </button>
               </div>
             )
@@ -313,21 +434,16 @@ export default function PolWatch() {
 
         <section className="min-w-0">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[#1C1917]">{activeTopic ? `${selected ? selected.name : 'Watch'} · ${activeTopic}` : 'What is moving'}</h2>
+            <h2 className="text-lg font-semibold text-[#1C1917]">{activeTopic ? `${viewLabel} · ${activeTopic}` : view.length === 0 ? 'What is moving' : viewLabel}</h2>
             <p className="text-xs text-[#A8A29E]">{activeTopic ? 'From the public record' : 'Refreshes every minute'}</p>
           </div>
           <div className="space-y-3">
-            {shown.length === 0 && <p className="rounded-3xl bg-white px-5 py-8 text-sm text-[#78716C]">{activeTopic ? `Nothing public matches ${activeTopic} for this search.` : 'Nothing new is on the public record for this watch yet.'}</p>}
-            {shown.map((item) => (
-              <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="block rounded-3xl bg-white px-5 py-4 transition hover:shadow-md">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_TONE[item.kind]}`}>{KIND[item.kind]}</span>
-                  <span className="text-xs text-[#A8A29E]">{item.personName}</span>
-                  {item.source && <span className="text-xs text-[#A8A29E]">· {item.source}</span>}
-                </div>
-                <p className="mt-2 text-[15px] font-medium leading-6 text-[#1C1917]">{item.title}</p>
-                {item.detail && item.detail !== item.title && <p className="mt-1 line-clamp-2 text-sm leading-5 text-[#57534E]">{item.detail}</p>}
-              </a>
+            {shown.length === 0 && <p className="rounded-[18px] border border-[#E6E8EC] bg-white px-5 py-8 text-sm text-[#78716C]">{activeTopic ? `Nothing public matches ${activeTopic} for this feed.` : 'Nothing new is on the public record for this watch yet.'}</p>}
+            {shown.map((item, index) => (
+              <Fragment key={item.id}>
+                <WatchCard item={item} photo={watching.find((person) => person.id === item.personId)?.photo} onPass={() => setPassed((current) => ({ ...current, [item.id]: true }))} />
+                {index === 1 && <FeedRectangle />}
+              </Fragment>
             ))}
           </div>
         </section>
@@ -364,8 +480,8 @@ export default function PolWatch() {
                 <p className="text-xs uppercase tracking-wide text-white/50">Staff on the public record</p>
                 {(selected.staff || []).length === 0 && <p className="mt-2 text-sm text-white/60">This office has not published staff emails.</p>}
                 <ul className="mt-2 space-y-3">
-                  {(selected.staff || []).map((member) => (
-                    <li key={member.email || member.name} className="text-sm">
+                  {(selected.staff || []).filter((member, index, rows) => rows.findIndex((item) => sameStaff(item, member)) === index).map((member, index) => (
+                    <li key={`${index}:${member.name}:${member.role}:${member.email}`} className="text-sm">
                       <span className="block font-medium">{member.name || 'Office'}</span>
                       {member.role && <span className="block text-white/50">{member.role}</span>}
                       {member.email && <a className="block break-all text-[#FDBA74]" href={`mailto:${member.email}`}>{member.email}</a>}

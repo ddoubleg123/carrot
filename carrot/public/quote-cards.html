@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ten whole sentences</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,480;0,6..72,560;1,6..72,480&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #E7E2DA; color: #1C1917; }
+    .app { display: flex; min-height: 100vh; }
+    .nav {
+      width: 72px; flex: none; position: sticky; top: 0; height: 100vh;
+      background: #FAFAF8; border-right: 1px solid #E7E5E4;
+      display: flex; justify-content: center; padding: 16px 0;
+    }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: #FF6A00; color: white; display: grid; place-items: center; font-weight: 800; }
+    .stage { flex: 1; padding: 32px 36px 80px; }
+    .feed { width: min(980px, 100%); margin: 0 auto; }
+    .note { margin: 0 0 22px; max-width: 42rem; font-size: 16px; line-height: 1.5; }
+    .note span { color: #57534E; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 22px; align-items: start; }
+    .opt { margin: 0; min-width: 0; }
+    .label { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .label b { color: #FF6A00; margin-right: 6px; }
+    .why { margin: 4px 0 10px; color: #78716C; font-size: 13px; line-height: 1.4; min-height: 2.8em; }
+    .card {
+      width: 100%; aspect-ratio: 4 / 5; border-radius: 18px; overflow: hidden;
+      position: relative; min-width: 0;
+    }
+    .serif { font-family: Newsreader, Georgia, serif; }
+    .card h3, .card p { margin: 0; }
+    .card img { display: block; }
+
+    .indigo { display: grid; grid-template-columns: 46% 1fr; background: #312E81; color: #F8F5FF; }
+    .indigo .face, .blush .face, .forest .face { position: relative; min-width: 0; overflow: hidden; }
+    .indigo img, .blush img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .indigo .copy, .blush .copy { padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+    .indigo h3 { font-weight: 480; font-style: italic; font-size: 28px; line-height: 1.08; letter-spacing: -0.02em; }
+    .meta { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .lime { background: #D9F99D; color: #14532D; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; }
+    .lime .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .lime .sq { width: 108px; height: 108px; flex: none; overflow: hidden; border-radius: 12px; }
+    .lime .sq img { width: 100%; height: 100%; object-fit: cover; object-position: center 18%; }
+    .lime h3 { font-weight: 750; font-size: 26px; line-height: 1.05; letter-spacing: -0.03em; }
+
+    .cobalt { background: #1D4ED8; color: white; display: flex; flex-direction: column; }
+    .cobalt img { width: 100%; height: 30%; object-fit: cover; object-position: center 35%; flex: none; }
+    .cobalt .copy { flex: 1; padding: 12px 14px 14px; display: flex; flex-direction: column; justify-content: space-between; }
+    .cobalt h3 { font-weight: 650; font-size: 14.5px; line-height: 1.28; letter-spacing: -0.02em; }
+
+    .crimson { background: #9F1239; color: #FFF1F2; padding: 20px 18px; display: flex; flex-direction: column; justify-content: space-between; }
+    .crimson h3 { font-weight: 560; font-size: 40px; line-height: 0.98; letter-spacing: -0.03em; }
+    .crimson img { width: 100%; height: 46%; object-fit: cover; object-position: center 16%; border-radius: 12px; }
+
+    .plate { background: #0F172A; }
+    .plate img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 70%; }
+    .plate .block {
+      position: absolute; left: 0; right: 0; bottom: 0; background: #EA580C; color: white;
+      padding: 16px 16px 14px;
+    }
+    .plate h3 { font-weight: 750; font-size: 22px; line-height: 1.15; letter-spacing: -0.03em; }
+
+    .blush { display: grid; grid-template-columns: 1fr 42%; background: #FBCFE8; color: #831843; }
+    .blush img { object-position: center 15%; }
+    .blush h3 { font-weight: 560; font-size: 26px; line-height: 1.05; letter-spacing: -0.03em; }
+
+    .magenta { background: #FDF2F8; display: flex; flex-direction: column; }
+    .magenta img { width: 100%; height: 58%; object-fit: cover; object-position: center 12%; flex: none; }
+    .magenta .bar { flex: 1; background: #DB2777; color: white; padding: 14px 16px; display: flex; flex-direction: column; justify-content: center; }
+    .magenta h3 { font-weight: 650; font-size: 18px; line-height: 1.25; }
+
+    .forest { display: grid; grid-template-columns: 42% 1fr; background: #14532D; color: #FDE68A; }
+    .forest img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+    .forest .copy { padding: 16px 14px; display: flex; flex-direction: column; justify-content: space-between; }
+    .forest h3 { font-weight: 560; font-size: 26px; line-height: 1.08; letter-spacing: -0.02em; }
+
+    .violet { background: #5B21B6; color: #F5F3FF; display: flex; flex-direction: column; }
+    .violet img { width: 100%; height: 50%; object-fit: cover; object-position: center 30%; flex: none; }
+    .violet .copy { flex: 1; padding: 14px 16px 16px; display: flex; flex-direction: column; justify-content: space-between; }
+    .violet h3 { font-weight: 560; font-size: 22px; line-height: 1.15; letter-spacing: -0.02em; }
+
+    .ice { background: #E0F2FE; color: #0C4A6E; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+    .ice img { width: 72%; height: 48%; object-fit: cover; object-position: center 18%; border-radius: 14px; align-self: flex-end; }
+    .ice h3 { font-weight: 560; font-size: 30px; line-height: 1.02; letter-spacing: -0.03em; max-width: 12em; }
+
+    .indigo .meta, .cobalt .meta, .crimson .meta, .plate .meta, .magenta .meta, .forest .meta, .violet .meta { color: inherit; opacity: 0.8; }
+    .lime .meta, .blush .meta, .ice .meta { color: inherit; opacity: 0.75; }
+
+    @media (max-width: 860px) {
+      .nav { display: none; }
+      .stage { padding: 18px 16px 64px; }
+      .grid { grid-template-columns: 1fr; }
+      .crimson h3 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" aria-hidden="true"><div class="logo">c</div></aside>
+    <div class="stage">
+      <main class="feed">
+        <p class="note">Ten new cards. <span>Each sentence is whole. A line was not cut to fit the picture. The colors are not one family.</span></p>
+        <div class="grid">
+          <figure class="opt">
+            <p class="label"><b>1</b> Indigo</p>
+            <p class="why">A whole sentence from Canandaigua. The picture is a column. The field is indigo.</p>
+            <article class="card indigo">
+              <div class="face"><img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" /></div>
+              <div class="copy">
+                <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                <p class="meta">Frederick Douglass · August 3, 1857</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>2</b> Lime</p>
+            <p class="why">The whole sentence from the House Divided speech. A small portrait on a green field.</p>
+            <article class="card lime">
+              <div class="row">
+                <p class="meta">June 16, 1858</p>
+                <div class="sq"><img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Abraham_Lincoln_O-77_matte_collodion_print.jpg" alt="Abraham Lincoln, photographed by Alexander Gardner in 1863" /></div>
+              </div>
+              <h3>I believe this government cannot endure, permanently half slave and half free.</h3>
+              <p class="meta">Abraham Lincoln</p>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>3</b> Cobalt</p>
+            <p class="why">The whole sentence from Rice, including the reason. The picture is the speech in color.</p>
+            <article class="card cobalt">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/President_Kennedy_-_We_Choose_to_Go_to_the_Moon_%2829533458786%29.jpg" alt="President Kennedy speaking at Rice University on September 12, 1962" />
+              <div class="copy">
+                <h3>We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills, because that challenge is one that we are willing to accept, one we are unwilling to postpone, and one which we intend to win, and the others, too.</h3>
+                <p class="meta">John F. Kennedy · September 12, 1962</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>4</b> Crimson</p>
+            <p class="why">One whole sentence from the First Inaugural, large, on red. The portrait sits under it.</p>
+            <article class="card crimson">
+              <h3 class="serif">We are not enemies, but friends.</h3>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Abraham_Lincoln_O-77_matte_collodion_print.jpg" alt="Abraham Lincoln, photographed by Alexander Gardner in 1863" />
+              <p class="meta">Abraham Lincoln · March 4, 1861</p>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>5</b> Orange</p>
+            <p class="why">The whole line from the landing, on a solid orange plate. Not the first half of it.</p>
+            <article class="card plate">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/Close-up_view_of_astronauts_foot_and_footprint_in_lunar_soil_%28as11-40-5880%29.jpg/1280px-Close-up_view_of_astronauts_foot_and_footprint_in_lunar_soil_%28as11-40-5880%29.jpg" alt="An astronaut's boot and footprint in lunar soil, Apollo 11" />
+              <div class="block">
+                <h3>That's one small step for man, one giant leap for mankind.</h3>
+                <p class="meta">Neil Armstrong · July 20, 1969</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>6</b> Blush</p>
+            <p class="why">The sentence he actually wrote. The popular longer version is a misquote.</p>
+            <article class="card blush">
+              <div class="copy">
+                <h3 class="serif">The report of my death was an exaggeration.</h3>
+                <p class="meta">Mark Twain · 1897</p>
+              </div>
+              <div class="face"><img src="https://upload.wikimedia.org/wikipedia/commons/0/0c/Mark_Twain_by_AF_Bradley.jpg" alt="Mark Twain, photographed by A. F. Bradley" /></div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>7</b> Magenta</p>
+            <p class="why">A whole sentence from the First Inaugural. The portrait is in color. The bar is magenta.</p>
+            <article class="card magenta">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/FDR_1944_Color_Portrait.jpg" alt="Franklin D. Roosevelt, color portrait, 1944" />
+              <div class="bar">
+                <h3>This is preeminently the time to speak the truth, the whole truth, frankly and boldly.</h3>
+                <p class="meta">Franklin D. Roosevelt · March 4, 1933</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>8</b> Forest</p>
+            <p class="why">The first sentence of The American Crisis, whole. Gold type on green. The picture is a painting.</p>
+            <article class="card forest">
+              <div class="face"><img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Thomas_Paine_rev1.jpg" alt="Portrait of Thomas Paine" /></div>
+              <div class="copy">
+                <h3 class="serif">These are the times that try men's souls.</h3>
+                <p class="meta">Thomas Paine · 1776</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>9</b> Violet</p>
+            <p class="why">The whole closing sentence, not only the last six words. The picture is a painting.</p>
+            <article class="card violet">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Patrick_Henry_Rothermel.jpg/1280px-Patrick_Henry_Rothermel.jpg" alt="Painting of Patrick Henry speaking" />
+              <div class="copy">
+                <h3 class="serif">I know not what course others may take; but as for me, give me liberty, or give me death!</h3>
+                <p class="meta">Patrick Henry · March 23, 1775</p>
+              </div>
+            </article>
+          </figure>
+
+          <figure class="opt">
+            <p class="label"><b>10</b> Ice</p>
+            <p class="why">The next whole sentence from the same speech. It stands by itself. The field is blue.</p>
+            <article class="card ice">
+              <h3 class="serif">Power concedes nothing without a demand.</h3>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" />
+              <p class="meta">Frederick Douglass · August 3, 1857</p>
+            </article>
+          </figure>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

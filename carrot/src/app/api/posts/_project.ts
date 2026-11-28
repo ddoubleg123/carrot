@@ -47,6 +47,9 @@ export function projectPost(row: any) {
     cfPlaybackUrlHls: (row as any).cfPlaybackUrlHls || (row as any).cf_playback_url_hls || null,
 
     // Visuals
+    bucket: row.bucket || null,
+    patchId: row.patchId || null,
+    office: typeof user.email === 'string' && user.email.endsWith('@office.carrot.invalid'),
     emoji: row.emoji || '🎯',
     gradientDirection: (row as any).gradientDirection || null,
     gradientFromColor: (row as any).gradientFromColor || null,

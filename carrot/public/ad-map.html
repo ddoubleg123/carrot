@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Where the ads sit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #F4F1EC;
+      color: #0B0B0F;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 36px 28px 80px; }
+    .kicker { margin: 0; color: #FF6A00; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    h1 { margin: 6px 0 0; font-size: 34px; letter-spacing: -0.03em; }
+    .lede { max-width: 720px; margin: 12px 0 0; color: #44403C; font-size: 16px; line-height: 1.55; }
+    .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 28px 0 8px; }
+    .rule { background: white; border: 1px solid #E7E5E4; border-radius: 16px; padding: 16px 16px 14px; }
+    .rule b { display: block; font-size: 15px; }
+    .rule p { margin: 6px 0 0; color: #57534E; font-size: 13.5px; line-height: 1.45; }
+    .screen { margin-top: 36px; }
+    .screen h2 { margin: 4px 0 0; font-size: 22px; letter-spacing: -0.02em; }
+    .why { margin: 6px 0 14px; color: #57534E; font-size: 14.5px; line-height: 1.5; max-width: 760px; }
+    .why code { font-size: 12.5px; background: #EFECE7; padding: 1px 6px; border-radius: 6px; }
+    .frame {
+      background: white;
+      border: 1px solid #E7E5E4;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    .bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid #F0EEE9; color: #A8A29E; font-size: 13px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 99px; background: #FF6A00; }
+    .body { padding: 18px; }
+
+    .feed { max-width: 460px; }
+    .post {
+      border: 1px solid #E7E5E4; border-left: 3px solid #E7E5E4; border-radius: 14px;
+      padding: 14px 14px 12px; margin-bottom: 12px; background: #FFFcf8;
+    }
+    .who { display: flex; gap: 10px; align-items: center; }
+    .av { width: 32px; height: 32px; border-radius: 99px; background: #E7E5E4; }
+    .who b { font-size: 14px; }
+    .who span { display: block; color: #A8A29E; font-size: 12px; font-weight: 500; }
+    .post p { margin: 10px 0 0; color: #44403C; font-size: 14px; line-height: 1.45; }
+    .photo {
+      margin-top: 10px; height: 92px; border-radius: 10px;
+      background: linear-gradient(160deg, #3a2e28, #1a1412 60%, #c47a3a);
+    }
+
+    .ad {
+      border: 1.5px dashed #FF6A00;
+      background: repeating-linear-gradient(-45deg, #FFF7F0, #FFF7F0 8px, #FFF1E6 8px, #FFF1E6 16px);
+      color: #C2410C;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; gap: 4px;
+    }
+    .ad strong { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ad span { font-size: 12px; font-weight: 600; color: #9A3412; }
+    .ad em { font-style: normal; font-size: 11px; color: #C2410C; }
+
+    .rect { width: 252px; height: 210px; border-radius: 8px; margin: 4px auto 16px; }
+    .home-row { display: flex; gap: 16px; align-items: flex-start; }
+    .rail {
+      width: 180px; flex: none; border: 1px dashed #D6D3D1; border-radius: 14px;
+      padding: 14px; color: #A8A29E; font-size: 12px; line-height: 1.4; min-height: 220px;
+    }
+    .rail b { display: block; color: #78716C; margin-bottom: 6px; }
+
+    .board { display: grid; grid-template-columns: repeat(4, 150px); gap: 12px; }
+    .card {
+      width: 150px; height: 300px; border-radius: 8px; overflow: hidden; position: relative;
+      background: #141414; color: white;
+    }
+    .card .fill { position: absolute; inset: 0; background: linear-gradient(180deg, #3f342c 0%, #1a1412 55%, #0b0b0f 100%); }
+    .card .cap {
+      position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 10px 12px;
+      background: linear-gradient(transparent, rgba(0,0,0,.85));
+    }
+    .card .cap b { display: block; font-size: 13px; line-height: 1.25; }
+    .card .cap span { display: block; margin-top: 4px; font-size: 11px; color: #D6D3D1; }
+    .half { width: 150px; height: 300px; border-radius: 8px; }
+    .note-size { margin: 10px 0 0; color: #A8A29E; font-size: 12px; }
+
+    .question { max-width: 640px; }
+    .back { color: #60646C; font-size: 13px; font-weight: 600; }
+    .qhead { display: flex; gap: 14px; margin-top: 14px; }
+    .thumb { width: 48px; height: 72px; border-radius: 6px; background: linear-gradient(180deg, #3f342c, #141414); flex: none; }
+    .qhead h3 { margin: 0; font-size: 22px; letter-spacing: -0.02em; line-height: 1.2; }
+    .qhead p { margin: 6px 0 0; color: #60646C; font-size: 13px; }
+    .status {
+      margin-top: 16px; border-left: 4px solid #8A8F98; background: #F7F4EF;
+      border-radius: 14px; padding: 12px 14px;
+    }
+    .status small { color: #6B7079; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .status p { margin: 4px 0 0; font-size: 15px; }
+    .static { width: 336px; max-width: 100%; min-height: 140px; border-radius: 10px; margin: 12px 0 0; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { border: 1px solid #E6E8EC; border-radius: 99px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #44403C; }
+    .src { margin-top: 16px; border-top: 1px solid #F0EEE9; padding-top: 12px; color: #78716C; font-size: 13px; }
+
+    .absent { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+    .chip { background: white; border: 1px solid #E7E5E4; border-radius: 99px; padding: 8px 12px; font-size: 13px; color: #57534E; }
+    @media (max-width: 900px) {
+      .rules, .home-row, .board { grid-template-columns: 1fr; display: grid; }
+      .board { grid-template-columns: repeat(2, 150px); }
+      .rail { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">Ad map</p>
+    <h1>One unit, matched to the box it sits in.</h1>
+    <p class="lede">Search boards are tall cards, so the ad is a tall card and it moves. The home column is a stack of wide posts, so the ad is a short rectangle between them. On a question, the ad is a fixed 336px box under Sources.</p>
+
+    <div class="rules">
+      <div class="rule">
+        <b>Boards · 300×600</b>
+        <p>Half page. One card on the group question grid, group search, and site search. The place changes with each new set of results.</p>
+      </div>
+      <div class="rule">
+        <b>Home · 336×280</b>
+        <p>Large rectangle. Centered under the second post. The side rail stays empty of ads.</p>
+      </div>
+      <div class="rule">
+        <b>Question · 336px</b>
+        <p>In-article. Fixed width, first thing under the Sources heading. Height follows the ad.</p>
+      </div>
+    </div>
+
+    <section class="screen">
+      <p class="kicker">1 · Home</p>
+      <h2>/home</h2>
+      <p class="why">Display ad, fixed <code>336×280</code>, slot <code>9103222486</code>. Drawn here at three-quarter size so the column still fits. It is the only ad in the feed.</p>
+      <div class="frame">
+        <div class="bar"><span class="dot"></span> localhost:3005/home</div>
+        <div class="body">
+          <div class="home-row">
+            <div class="feed">
+              <article class="post">
+                <div class="who"><div class="av"></div><div><b>First post</b><span>A group you belong to</span></div></div>
+                <p>The feed opens with a post. The ad waits until there is something above it.</p>
+                <div class="photo"></div>
+              </article>
+              <article class="post">
+                <div class="who"><div class="av"></div><div><b>Second post</b><span>Another group</span></div></div>
+                <p>After this post, the rectangle is centered in the column.</p>
+              </article>
+              <div class="ad rect">
+                <strong>Ad</strong>
+                <span>336 × 280</span>
+                <em>slot 9103222486</em>
+              </div>
+              <article class="post">
+                <div class="who"><div class="av"></div><div><b>Third post</b><span>Keeps scrolling</span></div></div>
+                <p>No second unit further down. One rectangle per visit to Home.</p>
+              </article>
+            </div>
+            <aside class="rail">
+              <b>Right rail</b>
+              Widgets only. No ad is placed here. A 300×600 unit would own this column and the feed would not.
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <p class="kicker">2 · Boards</p>
+      <h2>/patch/group · /patch search · /dashboard/search</h2>
+      <p class="why">Display ad, fixed <code>300×600</code>, slot <code>5431444472</code>. Cards are drawn at half size. On the site each cell is 300 wide and 600 tall. The ad is one card in the grid, and the site picks a new place each time the results change. The same results keep that place. The group directory, before anyone types a search, has no ad.</p>
+      <div class="frame">
+        <div class="bar"><span class="dot"></span> question grid, group search, site search</div>
+        <div class="body">
+          <div class="board">
+            <div class="card"><div class="fill"></div><div class="cap"><b>First result</b><span>A question or a post</span></div></div>
+            <div class="card"><div class="fill"></div><div class="cap"><b>Next result</b><span>The ad is not stuck here</span></div></div>
+            <div class="ad half">
+              <strong>Ad</strong>
+              <span>300 × 600</span>
+              <em>slot 5431444472</em>
+            </div>
+            <div class="card"><div class="fill"></div><div class="cap"><b>Another</b><span>This drawing put it third</span></div></div>
+          </div>
+          <p class="note-size">Half size on this page. Live cells are 300×600. One ad, and its place changes with each new set of results.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <p class="kicker">3 · Question</p>
+      <h2>/patch/group/question</h2>
+      <p class="why">In-article unit, slot <code>2609840012</code>. It was stretching to the column. The box is now a fixed 336px wide, and it is the first thing under the Sources heading. The height still follows the ad Google sends, because this unit has no height of its own.</p>
+      <div class="frame">
+        <div class="bar"><span class="dot"></span> an open question</div>
+        <div class="body">
+          <div class="question">
+            <div class="back">← Questions</div>
+            <div class="qhead">
+              <div class="thumb"></div>
+              <div>
+                <h3>The question title lives here.</h3>
+                <p>Started by a member · Quotes only</p>
+              </div>
+            </div>
+            <div class="status">
+              <small>Not checked yet</small>
+              <p>Sources are in the record. The quotes have not been checked against this question.</p>
+            </div>
+            <div class="pills" style="margin-top:16px">
+              <span class="pill">record</span>
+              <span class="pill">sources</span>
+              <span class="pill">add</span>
+            </div>
+            <div class="src" style="border-top:0; padding-top:18px">
+              <b style="color:#0B0B0F; font-size:11px; letter-spacing:0.08em">SOURCES</b>
+            </div>
+            <div class="ad static">
+              <strong>Ad</strong>
+              <span>336px wide · static</span>
+              <em>slot 2609840012 · height follows the ad</em>
+            </div>
+            <div class="src">The source list starts under the ad.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="absent">
+      <span class="chip">No ad on the group directory</span>
+      <span class="chip">No ad in the home rail</span>
+      <span class="chip">No ad in the composer</span>
+      <span class="chip">No second unit on the same page</span>
+      <span class="chip">Blank on localhost</span>
+    </div>
+  </div>
+</body>
+</html>

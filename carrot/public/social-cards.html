@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Social card options</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,480&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #EFEAE3; color: #1C1917; }
+    .app { display: flex; min-height: 100vh; }
+    .nav {
+      width: 72px; flex: none; position: sticky; top: 0; height: 100vh;
+      background: #FAFAF8; border-right: 1px solid #E7E5E4;
+      display: flex; justify-content: center; padding: 16px 0;
+    }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: #FF6A00; color: white; display: grid; place-items: center; font-weight: 800; }
+    .stage { flex: 1; padding: 32px 36px 80px; }
+    .feed { width: min(980px, 100%); margin: 0 auto; }
+    .note { margin: 0; max-width: 40rem; font-size: 16px; line-height: 1.5; }
+    .note span { color: #78716C; }
+    .group { margin-top: 40px; }
+    .kicker { margin: 0; color: #FF6A00; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    h2 { margin: 4px 0 0; font-size: 28px; letter-spacing: -0.03em; }
+    .lead { margin: 6px 0 18px; color: #57534E; font-size: 15px; line-height: 1.45; max-width: 38rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 22px; align-items: start; }
+    .opt { margin: 0; min-width: 0; }
+    .label { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .label b { color: #FF6A00; font-weight: 800; margin-right: 6px; }
+    .why { margin: 4px 0 10px; color: #78716C; font-size: 13px; line-height: 1.4; min-height: 2.8em; }
+    .card {
+      width: 100%; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden;
+      position: relative; display: flex; flex-direction: column;
+    }
+    .serif { font-family: Newsreader, Georgia, serif; }
+    .card p, .card h3 { margin: 0; }
+
+    .poster { background: #100E0C; color: #F6F1E8; padding: 28px 26px 24px; justify-content: space-between; }
+    .poster .date { color: #E0A36A; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+    .poster h3 { font-weight: 500; font-size: 58px; line-height: 0.92; letter-spacing: -0.035em; }
+    .poster .sub { color: #C9BBA8; font-size: 18px; line-height: 1.3; max-width: 16ch; }
+
+    .number { background: #F4EFE8; color: #1A120B; padding: 26px 26px 22px; justify-content: space-between; }
+    .number .big { font-weight: 500; font-size: 188px; line-height: 0.78; letter-spacing: -0.05em; }
+    .number .unit { margin-top: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #9A3412; }
+    .number h3 { font-weight: 500; font-size: 28px; line-height: 1.05; letter-spacing: -0.03em; }
+
+    .title { background: #F7F3EC; color: #1C1917; padding: 32px 28px 24px; justify-content: space-between; }
+    .title .rule { width: 56px; height: 3px; background: #C2410C; }
+    .title .desk { margin-top: 18px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #9A3412; }
+    .title h3 { font-weight: 500; font-size: 42px; line-height: 0.98; letter-spacing: -0.03em; }
+    .title .date { color: #78716C; font-size: 13px; font-weight: 600; }
+
+    .bleed { color: white; }
+    .bleed img, .doc img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; display: block;
+    }
+    .bleed .veil {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(8, 6, 4, 0.92) 0%, rgba(8, 6, 4, 0.55) 32%, rgba(8, 6, 4, 0) 58%);
+    }
+    .bleed .copy { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 22px 20px; }
+    .bleed h3 { font-weight: 500; font-size: 32px; line-height: 1.02; letter-spacing: -0.03em; }
+    .bleed .meta { margin-top: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.72); }
+
+    .shot { background: #F7F3EC; }
+    .shot img { width: 100%; height: 62%; object-fit: cover; display: block; flex: none; }
+    .shot .copy { flex: 1; padding: 16px 18px 14px; display: flex; flex-direction: column; justify-content: space-between; }
+    .shot h3 { font-weight: 500; font-size: 26px; line-height: 1.05; letter-spacing: -0.03em; }
+    .shot .meta { color: #78716C; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .veil-top {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(8, 6, 4, 0.78) 0%, rgba(8, 6, 4, 0.28) 34%, rgba(8, 6, 4, 0) 58%);
+    }
+    .topcopy { position: absolute; left: 0; right: 0; top: 0; padding: 22px 22px 0; }
+    .band { background: #F4F0E8; }
+    .band img { width: 100%; height: 64%; object-fit: cover; object-position: center 18%; display: block; flex: none; }
+    .band .copy { flex: 1; padding: 16px 18px 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+    .band h3 { font-weight: 480; font-style: italic; font-size: 26px; line-height: 1.08; letter-spacing: -0.02em; }
+    .band .who { font-size: 13px; font-weight: 700; }
+    .band .meta { color: #78716C; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    .qbleed h3 { font-weight: 480; font-style: italic; font-size: 30px; line-height: 1.08; }
+    .qbleed.tight h3 { font-size: 26px; line-height: 1.05; }
+    .qbleed .who { margin-top: 12px; font-size: 14px; font-weight: 700; }
+    .qbleed .meta { margin-top: 2px; }
+
+    .split { display: grid; grid-template-columns: 44% 1fr; background: #F7F3EC; height: 100%; min-height: 0; }
+    .face { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+    .face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 12%; }
+    .split .copy { padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+    .split h3 { font-weight: 480; font-style: italic; font-size: 26px; line-height: 1.08; letter-spacing: -0.02em; }
+    .split .who { font-size: 13px; font-weight: 700; }
+    .split .meta { margin-top: 3px; color: #78716C; font-size: 11px; line-height: 1.35; }
+
+    .pull { background: #161311; color: #F6F1E8; padding: 32px 28px 24px; justify-content: space-between; }
+    .pull .rule { width: 42px; height: 2px; background: #E0A36A; }
+    .pull h3 { font-weight: 480; font-style: italic; font-size: 36px; line-height: 1.05; letter-spacing: -0.03em; }
+    .pull .who { font-size: 14px; font-weight: 700; }
+    .pull .meta { margin-top: 4px; color: #C9BBA8; font-size: 13px; }
+
+    .steps { background: #F6F3EE; padding: 22px 22px 18px; justify-content: space-between; }
+    .steps .top { display: flex; justify-content: space-between; align-items: center; }
+    .steps .desk, .steps .badge { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    .steps .desk { color: #78716C; }
+    .steps .badge { border: 1px solid #1C1917; border-radius: 999px; padding: 4px 8px; }
+    .steps ol { list-style: none; margin: 8px 0 0; padding: 0; }
+    .steps li { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: baseline; padding: 14px 0; border-top: 1px solid #E7E5E4; }
+    .steps .n { font-family: Newsreader, Georgia, serif; font-size: 28px; color: #C2410C; line-height: 1; }
+    .steps strong { display: block; font-size: 18px; letter-spacing: -0.02em; }
+    .steps span { color: #57534E; font-size: 14px; }
+    .steps h3 { font-weight: 500; font-size: 20px; line-height: 1.2; letter-spacing: -0.02em; }
+
+    .frame { background: #F6F3EE; }
+    .frame img { width: 100%; height: 56%; object-fit: cover; object-position: center 70%; display: block; flex: none; }
+    .frame .copy { flex: 1; padding: 14px 16px 16px; display: flex; flex-direction: column; justify-content: space-between; }
+    .keys { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .keys b { display: block; font-size: 14px; }
+    .keys span { color: #78716C; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .frame h3 { font-weight: 500; font-size: 20px; line-height: 1.15; letter-spacing: -0.02em; }
+
+    .doc .bar {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      background: rgba(16, 14, 12, 0.92); color: #F6F1E8;
+      padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    .mark { background: #F4EFE6; padding: 22px 20px 0; }
+    .paper { flex: 1; background: #FBF7F0; padding: 18px 18px 8px; border: 1px solid #E7E0D4; }
+    .paper .mast { display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid #1C1917; padding-bottom: 6px; }
+    .paper h3 { margin-top: 12px; font-weight: 500; font-size: 28px; line-height: 1; letter-spacing: -0.03em; }
+    .paper .dim { margin-top: 12px; color: #A8A29E; font-size: 14px; line-height: 1.4; }
+    .paper .hit { margin: 10px 0; background: #FDE68A; color: #1C1917; font-size: 15px; line-height: 1.35; padding: 2px 4px; }
+    .mark .bar {
+      margin: 12px -20px 0; background: #1C1917; color: #F6F1E8;
+      padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    @media (max-width: 860px) {
+      .nav { display: none; }
+      .stage { padding: 18px 16px 64px; }
+      .grid { grid-template-columns: 1fr; }
+      .poster h3 { font-size: 48px; }
+      .number .big { font-size: 150px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" aria-hidden="true"><div class="logo">c</div></aside>
+    <div class="stage">
+      <main class="feed">
+        <p class="note">Portrait cards are first. <span>A real photograph, and the words set on it or beside it. The line breaks are chosen.</span></p>
+
+        <section class="group">
+          <p class="kicker">Message</p>
+          <h2>The sentence is the picture</h2>
+          <p class="lead">No drawing. The type has to carry it. Three ways to give one fact a shape.</p>
+          <div class="grid">
+            <figure class="opt">
+              <p class="label"><b>A</b> Poster</p>
+              <p class="why">Three words to a line. The rest of the fact is the small line under them.</p>
+              <article class="card poster">
+                <p class="date">November 7, 1940</p>
+                <h3 class="serif">A wind of<br>40 miles<br>an hour.</h3>
+                <p class="sub">It tore the Tacoma Narrows Bridge apart.</p>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>B</b> The number</p>
+              <p class="why">The number is the image. The sentence only has to say what the number did.</p>
+              <article class="card number">
+                <div>
+                  <p class="big serif">40</p>
+                  <p class="unit">Miles an hour</p>
+                </div>
+                <h3 class="serif">That wind tore the Tacoma Narrows Bridge apart.</h3>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>C</b> Title page</p>
+              <p class="why">A book’s opening page. One rule, the desk, then the sentence.</p>
+              <article class="card title">
+                <div>
+                  <div class="rule"></div>
+                  <p class="desk">How Things Work</p>
+                </div>
+                <h3 class="serif">The deck twisted until the wind pulled it apart.</h3>
+                <p class="date">Tacoma Narrows · November 7, 1940</p>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>D</b> One line on the photograph</p>
+              <p class="why">The picture is a frame from the collapse. One sentence sits on the bottom. It does not cover the deck.</p>
+              <article class="card bleed">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/Tacoma_Narrows_still.png" alt="The Tacoma Narrows Bridge roadway twisting on November 7, 1940" style="object-position: center 45%;" />
+                <div class="veil"></div>
+                <div class="copy">
+                  <h3 class="serif">The deck twisted until the wind tore it apart.</h3>
+                  <p class="meta">November 7, 1940 · film still</p>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>E</b> Photograph, then the line</p>
+              <p class="why">The picture stays clean. The sentence is set underneath it, on paper.</p>
+              <article class="card shot">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/Tacoma_Narrows_still.png" alt="The Tacoma Narrows Bridge roadway twisting" />
+                <div class="copy">
+                  <h3 class="serif">A wind of 40 miles an hour tore the bridge apart.</h3>
+                  <p class="meta">Tacoma Narrows · November 7, 1940</p>
+                </div>
+              </article>
+            </figure>
+          </div>
+        </section>
+
+        <section class="group">
+          <p class="kicker">Quote</p>
+          <h2>A person, and the words they said</h2>
+          <p class="lead">Frederick Douglass, from the speech at Canandaigua on August 3, 1857. The portrait is a photograph from about 1879.</p>
+          <div class="grid">
+            <figure class="opt">
+              <p class="label"><b>F</b> Words on the portrait</p>
+              <p class="why">The face fills the card. The quote sits in the dark of the coat, not across the eyes.</p>
+              <article class="card bleed qbleed">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" style="object-position: center 18%;" />
+                <div class="veil"></div>
+                <div class="copy">
+                  <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                  <p class="who">Frederick Douglass</p>
+                  <p class="meta">Canandaigua · August 3, 1857</p>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>G</b> Face beside the words</p>
+              <p class="why">The photograph is a column. The quote is set next to it, so both can be read at once.</p>
+              <article class="card split">
+                <div class="face"><img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" /></div>
+                <div class="copy">
+                  <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                  <div>
+                    <p class="who">Frederick Douglass</p>
+                    <p class="meta">Canandaigua, New York · August 3, 1857</p>
+                  </div>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>H</b> No face</p>
+              <p class="why">The same quote when there is no photograph to credit. A rule, the line, the name.</p>
+              <article class="card pull">
+                <div class="rule"></div>
+                <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                <div>
+                  <p class="who">Frederick Douglass</p>
+                  <p class="meta">Canandaigua, New York · August 3, 1857</p>
+                </div>
+              </article>
+            </figure>
+          </div>
+        </section>
+
+        <section class="group">
+          <p class="kicker">More portraits</p>
+          <h2>The same kind of card</h2>
+          <p class="lead">Five more in the pair you marked. Two move the words off the coat. Two are Abraham Lincoln, from the Second Inaugural on March 4, 1865. The photograph is Alexander Gardner’s, from 1863.</p>
+          <div class="grid">
+            <figure class="opt">
+              <p class="label"><b>M</b> Words above the face</p>
+              <p class="why">The line sits in the gray over his head. The face stays clear.</p>
+              <article class="card bleed qbleed">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" style="object-position: center 42%;" />
+                <div class="veil-top"></div>
+                <div class="topcopy">
+                  <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                  <p class="who">Frederick Douglass</p>
+                  <p class="meta">Canandaigua · August 3, 1857</p>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>N</b> Words under the portrait</p>
+              <p class="why">The photograph is left alone. The quote is set on paper beneath it.</p>
+              <article class="card band">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" />
+                <div class="copy">
+                  <h3 class="serif">If there is no struggle, there is no progress.</h3>
+                  <div>
+                    <p class="who">Frederick Douglass</p>
+                    <p class="meta">Canandaigua · August 3, 1857</p>
+                  </div>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>O</b> A longer line on the coat</p>
+              <p class="why">The next sentence from the same speech. Still set on the portrait, still off the face.</p>
+              <article class="card bleed qbleed tight">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c5/Frederick_Douglass_%28circa_1879%29.jpg" alt="Frederick Douglass, photographed circa 1879" style="object-position: center 12%;" />
+                <div class="veil"></div>
+                <div class="copy">
+                  <h3 class="serif">Power concedes nothing without a demand.</h3>
+                  <p class="who">Frederick Douglass</p>
+                  <p class="meta">Canandaigua · August 3, 1857</p>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>P</b> Lincoln, words on the portrait</p>
+              <p class="why">Same placement as the Douglass card you marked. A different person, a different sentence.</p>
+              <article class="card bleed qbleed tight">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Abraham_Lincoln_O-77_matte_collodion_print.jpg" alt="Abraham Lincoln, photographed by Alexander Gardner in 1863" style="object-position: center 15%;" />
+                <div class="veil"></div>
+                <div class="copy">
+                  <h3 class="serif">With malice toward none, with charity for all.</h3>
+                  <p class="who">Abraham Lincoln</p>
+                  <p class="meta">Second Inaugural · March 4, 1865</p>
+                </div>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>Q</b> Lincoln, face beside the words</p>
+              <p class="why">The same sentence, with the photograph as a column.</p>
+              <article class="card split">
+                <div class="face"><img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Abraham_Lincoln_O-77_matte_collodion_print.jpg" alt="Abraham Lincoln, photographed by Alexander Gardner in 1863" /></div>
+                <div class="copy">
+                  <h3 class="serif">With malice toward none, with charity for all.</h3>
+                  <div>
+                    <p class="who">Abraham Lincoln</p>
+                    <p class="meta">Second Inaugural · March 4, 1865</p>
+                  </div>
+                </div>
+              </article>
+            </figure>
+          </div>
+        </section>
+
+        <section class="group">
+          <p class="kicker">Diagram</p>
+          <h2>The mechanism, said plainly</h2>
+          <p class="lead">Either three locked steps, or the real frame with the three words under it. Both are marked as an explanation.</p>
+          <div class="grid">
+            <figure class="opt">
+              <p class="label"><b>I</b> Three steps</p>
+              <p class="why">No drawing of a bridge. The order is the picture: wind, deck, twist.</p>
+              <article class="card steps">
+                <div class="top">
+                  <p class="desk">How Things Work</p>
+                  <p class="badge">Drawing</p>
+                </div>
+                <ol>
+                  <li><span class="n">01</span><p><strong>Wind</strong><span>A push of about 40 miles an hour.</span></p></li>
+                  <li><span class="n">02</span><p><strong>Deck</strong><span>The roadway twisted.</span></p></li>
+                  <li><span class="n">03</span><p><strong>Twist</strong><span>The twist made the next one larger.</span></p></li>
+                </ol>
+                <h3 class="serif">The bridge supplied its own pushes.</h3>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>J</b> The frame, then the labels</p>
+              <p class="why">The photograph shows the twist. The three words under it are the only labels.</p>
+              <article class="card frame">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/Tacoma_Narrows_still.png" alt="The roadway of the Tacoma Narrows Bridge in a twist" />
+                <div class="copy">
+                  <div class="keys">
+                    <p><b>Wind</b><span>The push</span></p>
+                    <p><b>Deck</b><span>The twist</span></p>
+                    <p><b>Twist</b><span>The next one</span></p>
+                  </div>
+                  <h3 class="serif">The twist made the next one larger.</h3>
+                </div>
+              </article>
+            </figure>
+          </div>
+        </section>
+
+        <section class="group">
+          <p class="kicker">Record</p>
+          <h2>The page itself</h2>
+          <p class="lead">One card is the real opening program. The other marks the one sentence on a cropped page. The bar at the bottom is the only line we add.</p>
+          <div class="grid">
+            <figure class="opt">
+              <p class="label"><b>K</b> The document</p>
+              <p class="why">The June 30, 1940 opening program, cropped. We do not retype it.</p>
+              <article class="card doc">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Tacoma_Narrows_Bridge_opening_program_June_30%2C_1940.jpg/1280px-Tacoma_Narrows_Bridge_opening_program_June_30%2C_1940.jpg" alt="Cover of the Tacoma Narrows Bridge opening program, June 30, 1940" style="object-position: center top;" />
+                <p class="bar">The page · June 30, 1940</p>
+              </article>
+            </figure>
+
+            <figure class="opt">
+              <p class="label"><b>L</b> One sentence marked</p>
+              <p class="why">The rest of the page is quiet. The sentence that matters is marked.</p>
+              <article class="card mark">
+                <div class="paper">
+                  <div class="mast"><span>The Tacoma News</span><span>Nov. 8, 1940</span></div>
+                  <h3 class="serif">Narrows bridge falls</h3>
+                  <p class="dim">The towers were still standing that evening.</p>
+                  <p class="hit">The span tore apart in a wind of about 40 miles an hour.</p>
+                  <p class="dim">The center of the roadway was in the water.</p>
+                </div>
+                <p class="bar">The page · November 8, 1940</p>
+              </article>
+            </figure>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How a watched office should post</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #F4F1EC; color: #0B0B0F; }
+    button, a { font-family: inherit; color: inherit; }
+    .app { display: flex; min-height: 100vh; }
+    .nav {
+      width: 72px; flex: none; position: sticky; top: 0; height: 100vh;
+      background: #FAFAF8; border-right: 1px solid #E7E5E4;
+      display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0;
+    }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: #FF6A00; color: white; display: grid; place-items: center; font-weight: 800; }
+    .stage { flex: 1; display: flex; justify-content: center; padding: 28px 36px 80px; }
+    .feed { width: 100%; max-width: 720px; }
+    .note { margin: 0 0 6px; font-size: 15px; line-height: 1.5; }
+    .note span { color: #78716C; }
+    .ex { margin: 28px 0 0; }
+    .kicker { margin: 0; color: #FF6A00; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: -0.02em; }
+    .why { margin: 6px 0 12px; color: #78716C; font-size: 14px; line-height: 1.45; }
+    .card {
+      display: flex; align-items: stretch; overflow: hidden;
+      background: white; border: 1px solid #E7E5E4; border-left-width: 3px; border-radius: 16px;
+    }
+    .main { flex: 1; min-width: 0; padding: 16px 18px 16px; }
+    .head { display: flex; gap: 10px; align-items: center; }
+    .avatar { width: 40px; height: 40px; border-radius: 999px; object-fit: cover; background: #E7E5E4; flex: none; }
+    .mono { display: grid; place-items: center; font-weight: 700; color: #44403C; background: #E7E5E4; }
+    .who { font-weight: 700; font-size: 15px; }
+    .when { color: #A8A29E; font-weight: 500; }
+    .office { margin-top: 1px; color: #78716C; font-size: 12px; font-weight: 500; }
+    .copy { margin: 12px 0 0; font-size: 15.5px; line-height: 1.55; color: #44403C; }
+    .story {
+      margin-top: 12px; display: block; text-decoration: none;
+      border: 1px solid #E7E5E4; border-radius: 12px; overflow: hidden; background: white;
+    }
+    .photo { height: 148px; }
+    .meta { padding: 10px 12px 12px; }
+    .source { color: #A8A29E; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .headline { margin-top: 4px; font-size: 15px; font-weight: 650; line-height: 1.35; }
+    .record {
+      margin-top: 12px; border: 1px solid #E7E5E4; border-left: 3px solid #1C1917;
+      border-radius: 12px; padding: 10px 14px; background: #FAFAF8;
+    }
+    .record b { display: block; margin-top: 2px; font-size: 15px; }
+    .tag { display: block; color: #78716C; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
+    .rail {
+      width: 92px; flex: none; border-left: 1px solid #F0EEE9; background: #FFFcf8;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 8px;
+      color: #A8A29E;
+    }
+    .rail span { font-size: 12px; }
+    @media (max-width: 720px) {
+      .nav { display: none; }
+      .stage { padding: 16px; }
+      .card { flex-direction: column; }
+      .rail { width: auto; flex-direction: row; border-left: 0; border-top: 1px solid #F0EEE9; justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" aria-hidden="true"><div class="logo">c</div></aside>
+    <div class="stage">
+      <main class="feed">
+        <p class="note">Four ways a watched office can show the same kind of item. <span>The person does not write it. The link is the paper or the record, never the Google News wrapper.</span></p>
+
+        <section class="ex">
+          <p class="kicker">Example 1</p>
+          <h2>The paper</h2>
+          <p class="why">One sentence says what happened. The card is Newsweek: the picture, the paper, and the article’s own headline. The link opens Newsweek.</p>
+          <article class="card" style="border-left-color:#3D9A6A">
+            <div class="main">
+              <header class="head">
+                <img class="avatar" src="https://unitedstates.github.io/images/congress/225x275/O000174.jpg" alt="" />
+                <div class="who">Jon Ossoff <span class="when">· 14m</span></div>
+              </header>
+              <p class="copy">A bill to create a new national park moved a step ahead.</p>
+              <a class="story" href="#newsweek">
+                <div class="photo" style="background: linear-gradient(160deg, #1f4d38, #8fb59a);"></div>
+                <div class="meta">
+                  <div class="source">Newsweek</div>
+                  <div class="headline">America just got one step closer to a new national park</div>
+                </div>
+              </a>
+            </div>
+            <div class="rail" aria-hidden="true"><span>♡</span><span>0</span><span>💬</span><span>↗</span><span>Not interested</span></div>
+          </article>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Example 2</p>
+          <h2>Marked as the office</h2>
+          <p class="why">Same story. A line under the name says this is the office record, so it does not read as Jon Ossoff posting about himself.</p>
+          <article class="card" style="border-left-color:#3D9A6A">
+            <div class="main">
+              <header class="head">
+                <img class="avatar" src="https://unitedstates.github.io/images/congress/225x275/O000174.jpg" alt="" />
+                <div>
+                  <div class="who">Jon Ossoff <span class="when">· 14m</span></div>
+                  <div class="office">Office account · he does not write this</div>
+                </div>
+              </header>
+              <p class="copy">A bill to create a new national park moved a step ahead.</p>
+              <a class="story" href="#newsweek-2">
+                <div class="photo" style="background: linear-gradient(160deg, #1f4d38, #8fb59a);"></div>
+                <div class="meta">
+                  <div class="source">Newsweek</div>
+                  <div class="headline">America just got one step closer to a new national park</div>
+                </div>
+              </a>
+            </div>
+            <div class="rail" aria-hidden="true"><span>♡</span><span>0</span><span>💬</span><span>↗</span><span>Not interested</span></div>
+          </article>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Example 3</p>
+          <h2>The question stays on the article</h2>
+          <p class="why">The post is a sentence. The paper’s question stays inside the card, as the headline of the Georgia Recorder story. It is not lifted above the post.</p>
+          <article class="card" style="border-left-color:#C4556A">
+            <div class="main">
+              <header class="head">
+                <div class="avatar mono">K</div>
+                <div>
+                  <div class="who">Brian Kemp <span class="when">· 21m</span></div>
+                  <div class="office">Office account · he does not write this</div>
+                </div>
+              </header>
+              <p class="copy">Georgia is deciding whether Pathways Medicaid stays open.</p>
+              <a class="story" href="#recorder">
+                <div class="photo" style="background: linear-gradient(160deg, #6e2433, #e7b3be);"></div>
+                <div class="meta">
+                  <div class="source">Georgia Recorder</div>
+                  <div class="headline">Would Gov. Brian Kemp really shut down his Pathways Medicaid program?</div>
+                </div>
+              </a>
+            </div>
+            <div class="rail" aria-hidden="true"><span>♡</span><span>0</span><span>💬</span><span>↗</span><span>Not interested</span></div>
+          </article>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Example 4</p>
+          <h2>A hearing, not a headline</h2>
+          <p class="why">The other thing this watch finds. The post names the hearing. The card is the official notice, not a news rewrite.</p>
+          <article class="card" style="border-left-color:#3D9A6A">
+            <div class="main">
+              <header class="head">
+                <img class="avatar" src="https://unitedstates.github.io/images/congress/225x275/O000174.jpg" alt="" />
+                <div>
+                  <div class="who">Jon Ossoff <span class="when">· 1h</span></div>
+                  <div class="office">Office account · he does not write this</div>
+                </div>
+              </header>
+              <p class="copy">The committee put a park bill on a hearing notice.</p>
+              <div class="record">
+                <span class="tag">HEARING · CONGRESS.GOV</span>
+                <b>Notice of a committee hearing</b>
+              </div>
+            </div>
+            <div class="rail" aria-hidden="true"><span>♡</span><span>0</span><span>💬</span><span>↗</span><span>Not interested</span></div>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

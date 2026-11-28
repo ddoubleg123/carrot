@@ -1,4 +1,7 @@
 import prisma from '@/lib/prisma'
+import { loadFeedRank } from '@/lib/feedRankStore'
+import { bucketOf } from '@/lib/recordInterest'
+import { dropViewer } from '@/lib/feedViewer'
 import { emptyTaste, parseTaste, setMark, subjectOf, TASTE_HOURS, type TasteMark, type TasteState } from '@/lib/taste'
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -53,10 +56,16 @@ export async function recordTaste(userId: string, postId: string, mark: TasteMar
   const seededNow = !taste.seeded
   if (seededNow) taste = await foldLikes(userId)
   if (!(seededNow && (mark === 'carrot' || mark === null))) {
-    taste = setMark(taste, subjectOf(post.User?.username, post.userId), postId, mark)
+    const rank = await loadFeedRank().catch(() => null)
+    const hours = rank
+      ? { carrot: rank.carrot, open: rank.open, stick: rank.stick }
+      : TASTE_HOURS
+    const bucket = bucketOf(post)
+    if (bucket !== 'pol-watch') taste = setMark(taste, bucket, postId, mark, hours)
   }
   taste.seeded = true
   await saveTaste(userId, taste)
+  dropViewer(userId)
 }
 
 export async function markOn(userId: string, postId: string): Promise<TasteMark | null> {

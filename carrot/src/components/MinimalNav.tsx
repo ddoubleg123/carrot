@@ -45,8 +45,9 @@ const NavIcons = {
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2"/>
-        <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="2"/>
+        <ellipse cx="10" cy="7" rx="1.2" ry="4" fill="currentColor"/>
+        <ellipse cx="14" cy="7" rx="1.2" ry="4" fill="currentColor"/>
+        <ellipse cx="12" cy="14" rx="5" ry="4.5" fill="currentColor"/>
       </svg>
     </div>
   ),
@@ -61,16 +62,18 @@ const NavIcons = {
       </svg>
     </div>
   ),
-  Rabbit: ({ isActive }: { isActive: boolean }) => (
+  Live: ({ isActive }: { isActive: boolean }) => (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 transform ${
       isActive
         ? 'bg-orange-500 text-white shadow-lg scale-[1.02]'
         : 'bg-white text-gray-700 border border-gray-200 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:scale-[1.03] hover:border-transparent'
     }`}>
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <ellipse cx="10" cy="7" rx="1.2" ry="4" fill="currentColor"/>
-        <ellipse cx="14" cy="7" rx="1.2" ry="4" fill="currentColor"/>
-        <ellipse cx="12" cy="14" rx="5" ry="4.5" fill="currentColor"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        <path d="M8.5 8.5a5 5 0 0 0 0 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M15.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M5.8 5.8a8.8 8.8 0 0 0 0 12.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M18.2 5.8a8.8 8.8 0 0 1 0 12.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     </div>
   ),
@@ -156,9 +159,9 @@ const MENU_ITEMS = [
     label: 'Messages',
   },
   {
-    href: '/rabbit',
-    icon: NavIcons.Rabbit,
-    label: 'Rabbit (AI)',
+    href: '/live',
+    icon: NavIcons.Live,
+    label: 'Live',
   },
   {
     href: '/dashboard/funds',
@@ -184,15 +187,50 @@ export default function MinimalNav() {
   const { data: session } = useSession();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [polCount, setPolCount] = useState(0);
+  const [boxCount, setBoxCount] = useState(0);
   const items = isAdminEmail(session?.user?.email) ? [...MENU_ITEMS, ADMIN_ITEM] : MENU_ITEMS;
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (!session?.user) return;
+    let stop = false;
+    const pull = () => {
+      fetch('/api/messages/unread', { cache: 'no-store' })
+        .then((res) => res.ok ? res.json() : null)
+        .then((body: { messages?: number; mail?: number } | null) => {
+          if (stop || !body) return;
+          setBoxCount((body.messages || 0) + (body.mail || 0));
+        })
+        .catch(() => {});
+    };
+    pull();
+    const timer = window.setInterval(pull, 12000);
+    const onLocal = (event: Event) => {
+      const detail = (event as CustomEvent<{ messages?: number; mail?: number }>).detail;
+      if (!detail) return;
+      setBoxCount((detail.messages || 0) + (detail.mail || 0));
+    };
+    window.addEventListener('carrot-mail-unread', onLocal);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+      window.removeEventListener('carrot-mail-unread', onLocal);
+    };
+  }, [session?.user]);
+  useEffect(() => {
+    if (!session?.user) return;
+    fetch('/api/pol-watch/badge')
+      .then((res) => res.json())
+      .then((body) => setPolCount(typeof body?.count === 'number' ? body.count : 0))
+      .catch(() => {});
+  }, [session?.user]);
 
   // Build the menu pages one at a time after the current page is up, so the
   // first click is not waiting on a cold compile.
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
-    const hrefs = MENU_ITEMS.map((item) => item.href).filter((href) => href !== '/rabbit');
+    const hrefs = MENU_ITEMS.map((item) => item.href);
     const warm = (index: number) => {
       if (cancelled || index >= hrefs.length) return;
       try { router.prefetch(hrefs[index]); } catch {}
@@ -241,25 +279,29 @@ export default function MinimalNav() {
             <div key={item.href} className="relative">
               <Link
                 href={item.href}
-                prefetch={item.href !== '/rabbit'}
+                prefetch={true}
                 className="block"
                 aria-label={item.label}
                 onPointerDown={() => {
                   if (item.href === '/dashboard/notifications') prefetchNotifications();
-                  if (item.href === '/rabbit') {
-                    try { router.prefetch(item.href); } catch {}
-                  }
                 }}
                 onMouseEnter={() => {
                   setHoveredItem(item.href);
                   if (item.href === '/dashboard/notifications') prefetchNotifications();
-                  if (item.href === '/rabbit') {
-                    try { router.prefetch(item.href); } catch {}
-                  }
                 }}
                 onMouseLeave={() => setHoveredItem(null)}
               >
                 <MenuIcon icon={IconComponent} active={isActive} />
+                {item.href === '/pol-watch' && polCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                    {polCount > 9 ? '9+' : polCount}
+                  </span>
+                )}
+                {item.href === '/messages' && boxCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                    {boxCount > 9 ? '9+' : boxCount}
+                  </span>
+                )}
               </Link>
               
               {/* Tooltip */}

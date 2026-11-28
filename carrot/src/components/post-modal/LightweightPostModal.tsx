@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import ShareSheet from '@/components/share/ShareSheet';
 import { youtubeEmbedSrc, youtubeIdFromText } from '@/lib/youtube';
-import { directArticleNote, parseFeedPost } from '@/lib/feedPost';
+import { articleExplanation, parseFeedPost, plainAccount } from '@/lib/feedPost';
+import { deskByUsername } from '@/lib/curator/desks';
 import { readQuote } from '@/lib/curator/quoteCard';
-import QuoteMeme from '@/components/QuoteMeme';
+import QuoteLooks from '@/components/QuoteLooks';
 import { isFinishedQuote, pickQuoteCard } from '@/lib/curator/quoteCardPick';
 
 interface Comment {
@@ -271,9 +272,11 @@ export default function LightweightPostModal({
             return (
               <div className="px-4 py-4">
                 {isFinishedQuote(picture) ? (
-                  <img src={pickQuoteCard([picture], post.id)} alt="" className="w-full rounded-2xl" />
+                  <div className="overflow-hidden rounded-2xl">
+                    <img src={pickQuoteCard([picture], post.id)} alt="" className="w-full" />
+                  </div>
                 ) : (
-                  <QuoteMeme sentence={quote.sentence} source={quote.source} image={picture} />
+                  <QuoteLooks sentence={quote.sentence} source={quote.source} date={quote.date} image={picture} seed={post.id} />
                 )}
               </div>
             )
@@ -285,6 +288,8 @@ export default function LightweightPostModal({
               const video = youtubeIdFromText(post.content)
               const article = !video && parts.url
               const picture = parts.image || post.thumbnailUrl || post.mediaUrl || ''
+              const desk = Boolean(deskByUsername(post.author?.username))
+              const body = article ? articleExplanation(parts.note, parts.title) : (desk ? plainAccount(parts.note) : parts.note)
               return (
                 <>
                   {!article && picture ? (
@@ -294,7 +299,7 @@ export default function LightweightPostModal({
                       className="mb-4 max-h-[58vh] w-full rounded-xl object-contain"
                     />
                   ) : null}
-                  {(article ? directArticleNote(parts.note) : parts.note).split('\n').filter(Boolean).map((line, index) => (
+                  {body.split('\n').filter(Boolean).map((line, index) => (
                     <p key={index} className="text-[17px] leading-8 text-[#1C1917]">{line}</p>
                   ))}
                   {article ? (

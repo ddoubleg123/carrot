@@ -97,7 +97,7 @@ export const cache = new MemoryCache();
 
 // Cache key generators
 export const cacheKeys = {
-  posts: (limit?: number) => `posts:v3:${limit || 'all'}`,
+  posts: (limit?: number) => `posts:v7:${limit || 'all'}`,
   patch: (handle: string) => `patch:${handle}`,
   user: (id: string) => `user:${id}`,
   patchFollowers: (patchId: string) => `patch:${patchId}:followers`,

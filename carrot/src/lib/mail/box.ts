@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { mailAddress, sendCarroMail } from '@/lib/mail/send'
 import { botReply, ensureBot } from '@/lib/mail/botReply'
+import { presentLetter } from '@/lib/mail/letter'
+import { mailNote } from '@/lib/mail/noteHtml'
 
 const DOMAIN = 'carro7.com'
 const RESERVED = new Set(['postmaster', 'abuse', 'support', 'admin', 'noreply', 'mailer-daemon'])
@@ -27,10 +29,15 @@ export type MailLine = {
   at: number
   state: string
   reason: string | null
+  earlier: string
 }
 
 function clean(value: string, max: number) {
   return value.replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function escapeQuote(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
 }
 
 function addressOf(raw: string): string | null {
@@ -86,7 +93,7 @@ export async function listThreads(user: { id: string; username: string | null })
         handle: email ? (thread.outside || '') : (other?.username || ''),
         subject: thread.subject,
         unread: membership.unread,
-        preview: last?.body || '',
+        preview: last ? presentLetter(last.body).text : '',
         at: last ? last.createdAt.getTime() : null,
         mine: last?.senderId === userId,
         bot: !email && Boolean(other?.email?.endsWith('@bots.carrot.invalid')),
@@ -96,6 +103,20 @@ export async function listThreads(user: { id: string; username: string | null })
     .sort((a, b) => (b.at || b.updated) - (a.at || a.updated))
     .map(({ updated: _updated, ...thread }) => thread)
   return { address: user.username ? mailAddress(user.username) : null, threads }
+}
+
+export async function unreadCounts(userId: string): Promise<{ messages: number; mail: number }> {
+  const rows = await prisma.mailMember.findMany({
+    where: { userId, unread: { gt: 0 } },
+    select: { unread: true, thread: { select: { kind: true } } },
+  })
+  let messages = 0
+  let mail = 0
+  for (const row of rows) {
+    if (row.thread.kind === 'email') mail += row.unread
+    else messages += row.unread
+  }
+  return { messages, mail }
 }
 
 export async function readThread(userId: string, threadId: string): Promise<{ thread: MailView; lines: MailLine[]; typing: string | null } | null> {
@@ -111,14 +132,14 @@ export async function readThread(userId: string, threadId: string): Promise<{ th
     },
   })
   if (!membership) return null
-  if (membership.unread > 0) {
-    await prisma.mailMember.update({ where: { id: membership.id }, data: { unread: 0 } })
-  }
   const thread = membership.thread
   const other = thread.members.find((member) => member.userId !== userId)?.user
   const email = thread.kind === 'email'
+  if (membership.unread > 0) {
+    void prisma.mailMember.update({ where: { id: membership.id }, data: { unread: 0 } }).catch(() => undefined)
+  }
   const since = new Date(Date.now() - TYPING_MS)
-  const typing = await prisma.mailTyping.findFirst({
+  const typing = email ? null : await prisma.mailTyping.findFirst({
     where: { threadId, userId: { not: userId }, at: { gt: since } },
     include: { user: { select: { name: true, username: true } } },
   })
@@ -131,20 +152,24 @@ export async function readThread(userId: string, threadId: string): Promise<{ th
       handle: email ? (thread.outside || '') : (other?.username || ''),
       subject: thread.subject,
       unread: 0,
-      preview: last?.body || '',
+      preview: last ? presentLetter(last.body).text : '',
       at: last ? last.createdAt.getTime() : null,
       mine: last?.senderId === userId,
       bot: !email && Boolean(other?.email?.endsWith('@bots.carrot.invalid')),
     },
-    lines: thread.messages.map((message) => ({
-      id: message.id,
-      from: message.senderId === userId ? 'me' as const : 'them' as const,
-      text: message.body,
-      image: message.image,
-      at: message.createdAt.getTime(),
-      state: message.state,
-      reason: message.failReason,
-    })),
+    lines: thread.messages.map((message) => {
+      const letter = message.direction === 'in' || email ? presentLetter(message.body) : { text: message.body, earlier: '' }
+      return {
+        id: message.id,
+        from: message.senderId === userId ? 'me' as const : 'them' as const,
+        text: letter.text,
+        earlier: letter.earlier,
+        image: message.image,
+        at: message.createdAt.getTime(),
+        state: message.state,
+        reason: message.failReason,
+      }
+    }),
     typing: typing ? display(typing.user) : null,
   }
 }
@@ -240,8 +265,9 @@ async function answerBot(userId: string, threadId: string, humanText: string) {
   await prisma.mailMember.updateMany({ where: { threadId, userId }, data: { unread: { increment: 1 } } })
 }
 
-export async function speak(userId: string, threadId: string, text: string, image?: string | null) {
-  const body = text.replace(/\r/g, '').trim().slice(0, 8000)
+export async function speak(userId: string, threadId: string, text: string, image?: string | null, html?: string | null) {
+  const note = html ? mailNote(html) : null
+  const body = (note?.text || text).replace(/\r/g, '').trim().slice(0, 8000)
   const photo = photoData(image)
   if (!body && !photo) return { error: 'Write a message first.' }
   const membership = await prisma.mailMember.findUnique({
@@ -265,6 +291,14 @@ export async function speak(userId: string, threadId: string, text: string, imag
     fromAddr = mailAddress(username)
     toAddr = thread.outside
     const prior = await prisma.mailMessage.count({ where: { threadId } })
+    const earlier = prior > 0
+      ? await prisma.mailMessage.findFirst({
+        where: { threadId, direction: 'in' },
+        orderBy: { createdAt: 'desc' },
+        select: { body: true },
+      })
+      : null
+    const quote = earlier ? presentLetter(earlier.body).text.slice(0, 500) : ''
     const subject = prior > 0 && thread.subject && !thread.subject.toLowerCase().startsWith('re:')
       ? `Re: ${thread.subject}`
       : (thread.subject || '(no subject)')
@@ -273,6 +307,7 @@ export async function speak(userId: string, threadId: string, text: string, imag
       to: toAddr || '',
       subject,
       text: body || (photo ? 'Photo' : ''),
+      html: note?.html ? `${note.html}${quote ? `<p style="margin:16px 0 0;padding-left:12px;border-left:2px solid #dadce0;color:#5f6368;">${escapeQuote(quote)}</p>` : ''}` : undefined,
       image: photo,
       name: display(membership.user),
       username,

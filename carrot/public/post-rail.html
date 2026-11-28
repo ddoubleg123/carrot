@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Five ways to put the actions on the side</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #F4F1EC; color: #0B0B0F; }
+    button, a { font-family: inherit; }
+    button { cursor: pointer; }
+    svg.ic { display: block; }
+    .app { display: flex; min-height: 100vh; }
+    .rail-nav {
+      width: 72px; flex: none; position: sticky; top: 0; height: 100vh;
+      background: #FAFAF8; border-right: 1px solid #E7E5E4;
+      display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0;
+    }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: #FF6A00; color: white; display: grid; place-items: center; font-weight: 800; }
+    .navbtn { width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: #57534E; display: grid; place-items: center; }
+    .navbtn.active { background: #FF6A00; color: white; }
+    .stage { flex: 1; display: flex; justify-content: center; padding: 28px 36px 96px; }
+    .feed { width: 100%; max-width: 760px; }
+    .note { margin: 0 0 8px; color: #44403C; font-size: 15px; line-height: 1.5; }
+    .note span { color: #78716C; }
+    .ex { margin: 28px 0 8px; }
+    .kicker { margin: 0; color: #FF6A00; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ex h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: -0.02em; }
+    .why { margin: 6px 0 12px; color: #78716C; font-size: 14px; line-height: 1.45; }
+    .signal { margin: 8px 2px 0; min-height: 18px; color: #A8A29E; font-size: 13px; }
+    .signal.on { color: #44403C; }
+
+    .card { background: white; border: 1px solid #E7E5E4; border-left: 3px solid #FF6A00; border-radius: 16px; }
+    .head { display: flex; gap: 10px; align-items: center; }
+    .avatar { width: 40px; height: 40px; border-radius: 999px; object-fit: cover; background: #E7E5E4; flex: none; }
+    .who { font-weight: 700; font-size: 15px; }
+    .when { color: #A8A29E; font-weight: 500; }
+    .more { margin-left: auto; border: 0; background: transparent; color: #A8A29E; font-size: 18px; letter-spacing: 2px; }
+    .copy { margin: 12px 0 0; font-size: 15.5px; line-height: 1.55; color: #44403C; white-space: pre-wrap; }
+    .patch {
+      margin-top: 14px; display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid #E7E5E4; border-left: 3px solid #FF6A00;
+      background: #FAFAF8; border-radius: 12px; padding: 10px 14px;
+    }
+    .tag { display: block; color: #FF6A00; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
+    .patch b { display: block; margin-top: 2px; font-size: 15px; }
+    .open { color: #FF6A00; font-size: 14px; font-weight: 700; }
+    .story { margin-top: 12px; display: block; text-decoration: none; color: inherit; }
+    .photo { height: 168px; border-radius: 12px; background: linear-gradient(160deg, #3a2e28, #1a1412 55%, #c47a3a); position: relative; overflow: hidden; }
+    .photo:after { content: ""; position: absolute; left: 18%; top: 18%; width: 46%; height: 70%; border-radius: 46% 46% 40% 40%; background: #140f0d; box-shadow: 18px -28px 0 -8px #140f0d, 78px -26px 0 -10px #140f0d; }
+    .source { margin-top: 10px; color: #A8A29E; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .headline { margin-top: 4px; font-size: 15px; font-weight: 650; line-height: 1.35; }
+    .gone .copy, .gone .patch, .gone .story, .gone .under, .gone .split { display: none; }
+    .undo { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #F6F3EE; color: #44403C; font-size: 14px; }
+    .gone .undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .undo button { border: 0; background: transparent; color: #FF6A00; font-weight: 700; font-size: 14px; }
+
+    .act, .pass {
+      border: 0; background: transparent; color: #78716C;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .act { width: 40px; height: 40px; border-radius: 999px; }
+    .act:hover, .pass:hover { background: #F4F1EC; color: #1C1917; }
+    .act.on { color: #FF6A00; background: #FFF1E6; }
+    .act.save.on { color: #1C1917; background: #F4F1EC; }
+    .count { font-size: 12px; color: #78716C; font-variant-numeric: tabular-nums; text-align: center; }
+    .pass { border-radius: 12px; gap: 6px; padding: 8px; }
+    .pass span { font-size: 11px; font-weight: 700; line-height: 1.15; text-align: center; }
+    .pass.on { background: #1C1917; color: white; }
+
+    /* 1. rail inside the card */
+    .t1 { display: flex; align-items: stretch; overflow: hidden; }
+    .t1 .main { flex: 1; min-width: 0; padding: 16px 18px 16px; }
+    .t1 .actions {
+      width: 92px; flex: none; border-left: 1px solid #F0EEE9; background: #FFFcf8;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 12px 8px;
+    }
+    .t1 .split { width: 28px; height: 1px; background: #E7E5E4; margin: 8px 0; }
+    .t1 .pass { width: 76px; flex-direction: column; }
+
+    /* 2. rail in the margin, post unchanged */
+    .t2-wrap { position: relative; margin-right: 78px; }
+    .t2 { padding: 16px 18px 16px; }
+    .t2 .actions {
+      position: absolute; left: calc(100% + 10px); top: 72px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .t2 .split { width: 22px; height: 1px; background: #E7E5E4; margin: 6px 0; }
+    .t2 .pass { width: 68px; flex-direction: column; }
+
+    /* 3. each action has its name */
+    .t3 { display: flex; align-items: stretch; overflow: hidden; }
+    .t3 .main { flex: 1; min-width: 0; padding: 16px 18px 16px; }
+    .t3 .actions {
+      width: 176px; flex: none; border-left: 1px solid #F0EEE9;
+      display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 14px 10px;
+    }
+    .t3 .act, .t3 .pass {
+      width: 100%; height: auto; min-height: 36px; border-radius: 10px;
+      justify-content: flex-start; gap: 8px; padding: 6px 8px;
+    }
+    .t3 .act span, .t3 .pass span { font-size: 13px; font-weight: 600; }
+    .t3 .count { margin-left: auto; }
+    .t3 .rule { height: 1px; background: #F0EEE9; margin: 8px 4px; }
+
+    /* 4. only the two taste buttons move */
+    .t4 .top { display: flex; align-items: flex-start; gap: 8px; padding: 16px 8px 0 18px; }
+    .t4 .main { flex: 1; min-width: 0; }
+    .t4 .taste {
+      width: 84px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 28px;
+    }
+    .t4 .taste .act { width: 48px; height: 48px; }
+    .t4 .pass { width: 76px; flex-direction: column; margin-top: 6px; }
+    .t4 .rest { padding: 0 18px 16px; }
+    .t4 .under {
+      display: flex; align-items: center; gap: 4px; margin-top: 4px; padding-top: 4px;
+    }
+
+    /* 5. writing full width, actions beside the story */
+    .t5 { padding: 16px 18px 16px; }
+    .t5 .split { margin-top: 12px; display: grid; grid-template-columns: 1fr 92px; gap: 8px; align-items: center; }
+    .t5 .story { margin-top: 0; }
+    .t5 .actions {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    }
+    .t5 .rule { width: 28px; height: 1px; background: #E7E5E4; margin: 6px 0; }
+    .t5 .pass { width: 76px; flex-direction: column; }
+
+    @media (max-width: 820px) {
+      .rail-nav { display: none; }
+      .stage { padding: 16px 14px 64px; }
+      .t2-wrap { margin-right: 0; }
+      .t2 .actions { position: static; flex-direction: row; flex-wrap: wrap; margin-top: 10px; }
+      .t1, .t3, .t4 .top, .t5 .split { display: block; }
+      .t1 .actions, .t3 .actions, .t4 .taste, .t5 .actions {
+        width: auto; flex-direction: row; flex-wrap: wrap; border-left: 0; justify-content: flex-start; padding: 8px 0 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M19.5 12.6 12 20l-7.5-7.4a4.5 4.5 0 0 1 6.4-6.3L12 7.2l1.1-.9a4.5 4.5 0 0 1 6.4 6.3Z"/></symbol>
+    <symbol id="i-talk" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 18.5 4 21V6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8A2.5 2.5 0 0 1 17.5 17H8Z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="7" r="2.2"/><circle cx="17" cy="17" r="2.2"/><path d="m8 11 7-3M8 13l7 3"/></g></symbol>
+    <symbol id="i-mark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-3.2L6 20V5.5a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5.5 19 19"/><path d="M9.5 9.7A4 4 0 0 0 14.2 15M6.2 7.4C4.4 8.7 3 10.6 3 12c1.6 3.2 5 6 9 6 1.5 0 2.9-.4 4.2-1.1M10 6.2A9.6 9.6 0 0 1 12 6c4 0 7.4 2.8 9 6-.4.9-1 1.8-1.7 2.5"/></g></symbol>
+  </svg>
+
+  <div class="app">
+    <aside class="rail-nav" aria-hidden="true">
+      <div class="logo">c</div>
+      <button class="navbtn" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <button class="navbtn" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9Z" stroke="currentColor" stroke-width="2"/></svg></button>
+      <button class="navbtn active" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    </aside>
+    <div class="stage">
+      <main class="feed">
+        <p class="note">Five templates, same post. <span>Carrot means more of this subject. Not interested means less of it. Comment, share, and save do not train the feed.</span></p>
+
+        <section class="ex">
+          <p class="kicker">Template 1</p>
+          <h2>Rail inside the card</h2>
+          <p class="why">The actions are part of the post, in a column on its right edge. Not interested sits under a divider.</p>
+          <article class="card t1">
+            <div class="main">
+              <header class="head">
+                <img class="avatar" src="/curator-avatars/pet-bowl.jpg" alt="" />
+                <div class="who">Pets <span class="when">· 13h</span></div>
+                <button class="more" type="button" aria-label="More">···</button>
+              </header>
+              <p class="copy">A country vet learns quick that a cat's meow is rarely just noise. It's a ask, plain as day, and most times it's aimed square at the person it's got wrapped round its paw.
+
+Seems there's a study in the Animal Behaviour journal backing that up. They put 38 cats in front of a clear box with food inside they could see but couldn't reach, and the meowing was the cat telling whoever was nearest to sort it out.
+
+Funny thing is we spend years thinking we're training them and all the while they've been working us just fine. Sweet, really, when you think on it.</p>
+              <div class="patch"><span><span class="tag">IN THE PATCH</span><b>Pets</b></span><span class="open">Open</span></div>
+              <a class="story" href="#1"><div class="photo"></div><div class="source">The Guardian · November 16, 2026</div><div class="headline">Miaow! What your cat is really trying to tell you</div></a>
+              <div class="undo"><span>Less from Pets about cats.</span><button type="button" data-undo>Undo</button></div>
+            </div>
+            <div class="actions">
+              <button class="act like" type="button" aria-label="Carrot" title="Carrot"><svg class="ic" width="20" height="20"><use href="#i-heart"/></svg></button>
+              <div class="count like-count">0</div>
+              <button class="act" type="button" aria-label="Comment" title="Comment"><svg class="ic" width="20" height="20"><use href="#i-talk"/></svg></button>
+              <div class="count">0</div>
+              <button class="act" type="button" aria-label="Share" title="Share"><svg class="ic" width="20" height="20"><use href="#i-share"/></svg></button>
+              <button class="act save" type="button" aria-label="Save" title="Save"><svg class="ic" width="20" height="20"><use href="#i-mark"/></svg></button>
+              <div class="split"></div>
+              <button class="pass" type="button" aria-label="Not interested"><svg class="ic" width="18" height="18"><use href="#i-eye"/></svg><span>Not interested</span></button>
+            </div>
+          </article>
+          <p class="signal" data-signal>No signal yet.</p>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Template 2</p>
+          <h2>Rail in the margin</h2>
+          <p class="why">The post stays the width it is today. The actions hang in the empty space to its right.</p>
+          <div class="t2-wrap">
+            <article class="card t2">
+              <header class="head">
+                <img class="avatar" src="/curator-avatars/pet-bowl.jpg" alt="" />
+                <div class="who">Pets <span class="when">· 13h</span></div>
+                <button class="more" type="button" aria-label="More">···</button>
+              </header>
+              <p class="copy">A country vet learns quick that a cat's meow is rarely just noise. It's a ask, plain as day, and most times it's aimed square at the person it's got wrapped round its paw.
+
+Seems there's a study in the Animal Behaviour journal backing that up. They put 38 cats in front of a clear box with food inside they could see but couldn't reach, and the meowing was the cat telling whoever was nearest to sort it out.
+
+Funny thing is we spend years thinking we're training them and all the while they've been working us just fine. Sweet, really, when you think on it.</p>
+              <div class="patch"><span><span class="tag">IN THE PATCH</span><b>Pets</b></span><span class="open">Open</span></div>
+              <a class="story" href="#2"><div class="photo"></div><div class="source">The Guardian · November 16, 2026</div><div class="headline">Miaow! What your cat is really trying to tell you</div></a>
+              <div class="undo"><span>Less from Pets about cats.</span><button type="button" data-undo>Undo</button></div>
+              <div class="actions">
+                <button class="act like" type="button" aria-label="Carrot" title="Carrot"><svg class="ic" width="20" height="20"><use href="#i-heart"/></svg></button>
+                <div class="count like-count">0</div>
+                <button class="act" type="button" aria-label="Comment" title="Comment"><svg class="ic" width="20" height="20"><use href="#i-talk"/></svg></button>
+                <div class="count">0</div>
+                <button class="act" type="button" aria-label="Share" title="Share"><svg class="ic" width="20" height="20"><use href="#i-share"/></svg></button>
+                <button class="act save" type="button" aria-label="Save" title="Save"><svg class="ic" width="20" height="20"><use href="#i-mark"/></svg></button>
+                <div class="split"></div>
+                <button class="pass" type="button" aria-label="Not interested"><svg class="ic" width="18" height="18"><use href="#i-eye"/></svg><span>Not interested</span></button>
+              </div>
+            </article>
+          </div>
+          <p class="signal" data-signal>No signal yet.</p>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Template 3</p>
+          <h2>Named actions</h2>
+          <p class="why">Same side of the card, but every action has its word. Not interested does not have to be guessed from an icon.</p>
+          <article class="card t3">
+            <div class="main">
+              <header class="head">
+                <img class="avatar" src="/curator-avatars/pet-bowl.jpg" alt="" />
+                <div class="who">Pets <span class="when">· 13h</span></div>
+                <button class="more" type="button" aria-label="More">···</button>
+              </header>
+              <p class="copy">A country vet learns quick that a cat's meow is rarely just noise. It's a ask, plain as day, and most times it's aimed square at the person it's got wrapped round its paw.
+
+Seems there's a study in the Animal Behaviour journal backing that up. They put 38 cats in front of a clear box with food inside they could see but couldn't reach, and the meowing was the cat telling whoever was nearest to sort it out.
+
+Funny thing is we spend years thinking we're training them and all the while they've been working us just fine. Sweet, really, when you think on it.</p>
+              <div class="patch"><span><span class="tag">IN THE PATCH</span><b>Pets</b></span><span class="open">Open</span></div>
+              <a class="story" href="#3"><div class="photo"></div><div class="source">The Guardian · November 16, 2026</div><div class="headline">Miaow! What your cat is really trying to tell you</div></a>
+              <div class="undo"><span>Less from Pets about cats.</span><button type="button" data-undo>Undo</button></div>
+            </div>
+            <div class="actions">
+              <button class="act like" type="button"><svg class="ic" width="18" height="18"><use href="#i-heart"/></svg><span>Carrot</span><b class="count like-count">0</b></button>
+              <button class="act" type="button"><svg class="ic" width="18" height="18"><use href="#i-talk"/></svg><span>Comment</span><b class="count">0</b></button>
+              <button class="act" type="button"><svg class="ic" width="18" height="18"><use href="#i-share"/></svg><span>Share</span></button>
+              <button class="act save" type="button"><svg class="ic" width="18" height="18"><use href="#i-mark"/></svg><span>Save</span></button>
+              <div class="rule"></div>
+              <button class="pass" type="button"><svg class="ic" width="18" height="18"><use href="#i-eye"/></svg><span>Not interested</span></button>
+            </div>
+          </article>
+          <p class="signal" data-signal>No signal yet.</p>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Template 4</p>
+          <h2>Only the taste buttons move</h2>
+          <p class="why">Carrot and Not interested stand beside the writing. Comment, share, and save stay in a row under the story, where they are now.</p>
+          <article class="card t4">
+            <div class="top">
+              <div class="main">
+                <header class="head">
+                  <img class="avatar" src="/curator-avatars/pet-bowl.jpg" alt="" />
+                  <div class="who">Pets <span class="when">· 13h</span></div>
+                  <button class="more" type="button" aria-label="More">···</button>
+                </header>
+                <p class="copy">A country vet learns quick that a cat's meow is rarely just noise. It's a ask, plain as day, and most times it's aimed square at the person it's got wrapped round its paw.
+
+Seems there's a study in the Animal Behaviour journal backing that up. They put 38 cats in front of a clear box with food inside they could see but couldn't reach, and the meowing was the cat telling whoever was nearest to sort it out.
+
+Funny thing is we spend years thinking we're training them and all the while they've been working us just fine. Sweet, really, when you think on it.</p>
+              </div>
+              <div class="taste">
+                <button class="act like" type="button" aria-label="Carrot" title="Carrot"><svg class="ic" width="22" height="22"><use href="#i-heart"/></svg></button>
+                <div class="count like-count">0</div>
+                <button class="pass" type="button" aria-label="Not interested"><svg class="ic" width="18" height="18"><use href="#i-eye"/></svg><span>Not interested</span></button>
+              </div>
+            </div>
+            <div class="rest">
+              <div class="patch"><span><span class="tag">IN THE PATCH</span><b>Pets</b></span><span class="open">Open</span></div>
+              <a class="story" href="#4"><div class="photo"></div><div class="source">The Guardian · November 16, 2026</div><div class="headline">Miaow! What your cat is really trying to tell you</div></a>
+              <div class="under">
+                <button class="act" type="button" aria-label="Comment" title="Comment"><svg class="ic" width="18" height="18"><use href="#i-talk"/></svg></button>
+                <span class="count">0</span>
+                <button class="act" type="button" aria-label="Share" title="Share"><svg class="ic" width="18" height="18"><use href="#i-share"/></svg></button>
+                <button class="act save" type="button" aria-label="Save" title="Save"><svg class="ic" width="18" height="18"><use href="#i-mark"/></svg></button>
+              </div>
+              <div class="undo"><span>Less from Pets about cats.</span><button type="button" data-undo>Undo</button></div>
+            </div>
+          </article>
+          <p class="signal" data-signal>No signal yet.</p>
+        </section>
+
+        <section class="ex">
+          <p class="kicker">Template 5</p>
+          <h2>Beside the story</h2>
+          <p class="why">The writing keeps the full width. The actions sit next to the article, where the eye already stops.</p>
+          <article class="card t5">
+            <header class="head">
+              <img class="avatar" src="/curator-avatars/pet-bowl.jpg" alt="" />
+              <div class="who">Pets <span class="when">· 13h</span></div>
+              <button class="more" type="button" aria-label="More">···</button>
+            </header>
+            <p class="copy">A country vet learns quick that a cat's meow is rarely just noise. It's a ask, plain as day, and most times it's aimed square at the person it's got wrapped round its paw.
+
+Seems there's a study in the Animal Behaviour journal backing that up. They put 38 cats in front of a clear box with food inside they could see but couldn't reach, and the meowing was the cat telling whoever was nearest to sort it out.
+
+Funny thing is we spend years thinking we're training them and all the while they've been working us just fine. Sweet, really, when you think on it.</p>
+            <div class="patch"><span><span class="tag">IN THE PATCH</span><b>Pets</b></span><span class="open">Open</span></div>
+            <div class="split">
+              <a class="story" href="#5"><div class="photo"></div><div class="source">The Guardian · November 16, 2026</div><div class="headline">Miaow! What your cat is really trying to tell you</div></a>
+              <div class="actions">
+                <button class="act like" type="button" aria-label="Carrot" title="Carrot"><svg class="ic" width="20" height="20"><use href="#i-heart"/></svg></button>
+                <div class="count like-count">0</div>
+                <button class="act" type="button" aria-label="Comment" title="Comment"><svg class="ic" width="20" height="20"><use href="#i-talk"/></svg></button>
+                <div class="count">0</div>
+                <button class="act" type="button" aria-label="Share" title="Share"><svg class="ic" width="20" height="20"><use href="#i-share"/></svg></button>
+                <button class="act save" type="button" aria-label="Save" title="Save"><svg class="ic" width="20" height="20"><use href="#i-mark"/></svg></button>
+                <div class="rule"></div>
+                <button class="pass" type="button" aria-label="Not interested"><svg class="ic" width="18" height="18"><use href="#i-eye"/></svg><span>Not interested</span></button>
+              </div>
+            </div>
+            <div class="undo"><span>Less from Pets about cats.</span><button type="button" data-undo>Undo</button></div>
+          </article>
+          <p class="signal" data-signal>No signal yet.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script>
+    document.querySelectorAll('.card').forEach((card) => {
+      const like = card.querySelector('.like');
+      const pass = card.querySelector('.pass');
+      const save = card.querySelector('.save');
+      const count = card.querySelector('.like-count');
+      const signal = card.closest('.ex').querySelector('[data-signal]');
+      const set = (text) => {
+        signal.textContent = text;
+        signal.classList.toggle('on', text !== 'No signal yet.');
+      };
+      like.addEventListener('click', () => {
+        const on = like.classList.toggle('on');
+        pass.classList.remove('on');
+        card.classList.remove('gone');
+        count.textContent = on ? '1' : '0';
+        set(on ? 'More from Pets about cats.' : 'No signal yet.');
+      });
+      pass.addEventListener('click', () => {
+        const on = !pass.classList.contains('on');
+        pass.classList.toggle('on', on);
+        card.classList.toggle('gone', on);
+        if (on) { like.classList.remove('on'); count.textContent = '0'; }
+        set(on ? 'Less from Pets about cats.' : 'No signal yet.');
+      });
+      card.querySelector('[data-undo]').addEventListener('click', () => {
+        pass.classList.remove('on');
+        card.classList.remove('gone');
+        set('No signal yet.');
+      });
+      save.addEventListener('click', () => save.classList.toggle('on'));
+    });
+  </script>
+</body>
+</html>

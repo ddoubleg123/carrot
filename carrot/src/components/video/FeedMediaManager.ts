@@ -285,7 +285,10 @@ class FeedMediaManager {
       case 'image':
         let imageUrl: string | null = null;
         if (post.thumbnailUrl) {
-          imageUrl = this.validateUrl(post.thumbnailUrl, 'image thumbnailUrl');
+          const localThumb = post.thumbnailUrl.startsWith('/curator-thumbs/')
+          const here = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+          // The file lives on the hunt machine. Preloading it here is the 404 in the console.
+          if (!(localThumb && here)) imageUrl = this.validateUrl(post.thumbnailUrl, 'image thumbnailUrl');
         } else if (post.bucket && post.path) {
           imageUrl = this.validateUrl(`/api/img?bucket=${post.bucket}&path=${post.path}`, 'image bucket/path');
         }

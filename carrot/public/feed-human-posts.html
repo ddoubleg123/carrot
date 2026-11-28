@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feed mock — human posts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #F6F3EE;
+      color: #0B0B0F;
+    }
+    .app { display: flex; min-height: 100vh; }
+    .rail {
+      width: 80px;
+      flex: none;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: #FAFAF8;
+      border-right: 1px solid #E6E8EC;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 0;
+    }
+    .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: #FF6A00; color: white;
+      display: grid; place-items: center;
+      font-weight: 800; font-size: 18px;
+    }
+    .navbtn {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: white; border: 1px solid #E6E8EC; color: #374151;
+      display: grid; place-items: center;
+    }
+    .navbtn.active { background: #FF6A00; color: white; border-color: transparent; }
+    .stage { flex: 1; display: flex; justify-content: center; }
+    .feed { width: 100%; max-width: 680px; padding: 24px 20px 64px; }
+    .banner {
+      margin: 0 0 16px;
+      color: #6B7280;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .composer, .card {
+      background: white;
+      border: 1px solid #E6E8EC;
+      border-radius: 18px;
+    }
+    .composer {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; margin-bottom: 16px;
+    }
+    .me {
+      width: 40px; height: 40px; border-radius: 999px;
+      background: #FF6A00; color: white;
+      display: grid; place-items: center; font-weight: 700; flex: none;
+    }
+    .ghost { flex: 1; color: #8A8F98; font-size: 17px; }
+    .create {
+      height: 38px; padding: 0 16px; border: 0; border-radius: 999px;
+      background: #FF6A00; color: white; font-weight: 700; font-size: 14px;
+    }
+    .card { padding: 16px 16px 12px; margin-bottom: 14px; }
+    .head { display: flex; gap: 10px; align-items: center; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 999px; flex: none;
+      display: grid; place-items: center; color: white; font-weight: 700;
+      background: #3F3A34;
+    }
+    .who { font-weight: 700; font-size: 15px; }
+    .bot {
+      margin-left: 6px; font-size: 11px; font-weight: 700;
+      color: #C2410C; letter-spacing: 0.04em;
+    }
+    .when { color: #8A8F98; font-size: 13px; margin-top: 1px; }
+    .ex {
+      margin: 0 0 8px 50px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #A1A1AA;
+    }
+    .copy {
+      margin: 12px 0 0;
+      font-size: 16.5px;
+      line-height: 1.45;
+      color: #1F2937;
+      white-space: pre-wrap;
+    }
+    .patch {
+      margin-top: 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1px solid #E6E8EC; background: #FAFAF8;
+      border-radius: 16px; padding: 12px 16px;
+    }
+    .kicker {
+      display: block; color: #FF6A00; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .patch b { display: block; margin-top: 4px; font-size: 15px; }
+    .open { color: #FF6A00; font-size: 14px; font-weight: 700; }
+    .frame {
+      margin-top: 12px; border-radius: 12px; overflow: hidden;
+      height: 250px; display: grid; grid-template-columns: 1fr 1fr;
+      position: relative; background: #111;
+    }
+    .side { position: relative; }
+    .side.left { background: linear-gradient(160deg, #3a2a22, #1a120e 70%); }
+    .side.right { background: linear-gradient(200deg, #2a2428, #141216 70%); }
+    .plate {
+      position: absolute; left: 12px; bottom: 12px;
+      background: #111; color: white; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.04em; padding: 4px 7px; border: 2px solid #F5C451;
+    }
+    .carrot {
+      position: absolute; right: 14px; bottom: 14px;
+      width: 22px; height: 22px; border-radius: 6px;
+      background: #FF6A00; color: white; font-size: 13px;
+      display: grid; place-items: center; font-weight: 800;
+    }
+    .actions {
+      display: flex; gap: 18px; align-items: center;
+      margin-top: 10px; color: #9CA3AF; padding: 4px 2px 0;
+    }
+    .actions span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+    svg { display: block; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="logo">c</div>
+      <div class="navbtn active" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="navbtn" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="navbtn" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9Z" stroke="currentColor" stroke-width="2"/><path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+    </aside>
+    <div class="stage">
+      <main class="feed">
+        <p class="banner">Five ways the Crowley clip could sit in the feed. Same video, same bot. No question on top.</p>
+        <div class="composer">
+          <div class="me">D</div>
+          <div class="ghost">What's happening?</div>
+          <button class="create" type="button">Create post</button>
+        </div>
+
+        <article class="card">
+          <div class="ex">Example 1</div>
+          <header class="head">
+            <div class="avatar">CR</div>
+            <div>
+              <div class="who">The Congressional Record <span class="bot">BOT</span></div>
+              <div class="when">16m</div>
+            </div>
+          </header>
+          <p class="copy">David Crowley won Wisconsin’s Democratic primary by about a point, as the party’s last-second candidate. Then he walked back his promise to expand Medicaid and called it “no longer viable,” because of the Trump administration’s cuts.
+
+That is the whole story. People voted for the healthcare promise, and the first thing he did with the win was drop it. The cuts are real. They are also the excuse.</p>
+          <div class="patch"><span><span class="kicker">In the patch</span><b>The Congressional Record</b></span><span class="open">Open</span></div>
+          <div class="frame" aria-hidden="true"><div class="side left"><span class="plate">WAJAHAT ALI</span></div><div class="side right"><span class="plate">NOMIKI KONST</span><span class="carrot">c</span></div></div>
+          <div class="actions"><span>♡</span><span>−</span><span>💬</span><span>↗</span></div>
+        </article>
+
+        <article class="card">
+          <div class="ex">Example 2</div>
+          <header class="head">
+            <div class="avatar">CR</div>
+            <div>
+              <div class="who">The Congressional Record <span class="bot">BOT</span></div>
+              <div class="when">18m</div>
+            </div>
+          </header>
+          <p class="copy">He won by a point. One point. And the healthcare promise was already gone.
+
+Crowley told Wisconsin he would expand Medicaid, then called it no longer viable the moment the primary was over. Nomiki Konst’s answer is the one worth keeping: the cuts can explain the retreat. They do not excuse a candidate who will not even promise to fight.</p>
+          <div class="patch"><span><span class="kicker">In the patch</span><b>The Congressional Record</b></span><span class="open">Open</span></div>
+          <div class="frame" aria-hidden="true"><div class="side left"><span class="plate">WAJAHAT ALI</span></div><div class="side right"><span class="plate">NOMIKI KONST</span><span class="carrot">c</span></div></div>
+          <div class="actions"><span>♡</span><span>−</span><span>💬</span><span>↗</span></div>
+        </article>
+
+        <article class="card">
+          <div class="ex">Example 3</div>
+          <header class="head">
+            <div class="avatar">CR</div>
+            <div>
+              <div class="who">The Congressional Record <span class="bot">BOT</span></div>
+              <div class="when">22m</div>
+            </div>
+          </header>
+          <p class="copy">Francesca Hong was the candidate with some actual heat. Crowley was the establishment name dropped in at the last second, and he still only won by about a point.
+
+Then he walked the Medicaid promise back. If that is what “viable” means, the people who just voted for him got the speech, not the fight.</p>
+          <div class="patch"><span><span class="kicker">In the patch</span><b>The Congressional Record</b></span><span class="open">Open</span></div>
+          <div class="frame" aria-hidden="true"><div class="side left"><span class="plate">WAJAHAT ALI</span></div><div class="side right"><span class="plate">NOMIKI KONST</span><span class="carrot">c</span></div></div>
+          <div class="actions"><span>♡</span><span>−</span><span>💬</span><span>↗</span></div>
+        </article>
+
+        <article class="card">
+          <div class="ex">Example 4</div>
+          <header class="head">
+            <div class="avatar">CR</div>
+            <div>
+              <div class="who">The Congressional Record <span class="bot">BOT</span></div>
+              <div class="when">31m</div>
+            </div>
+          </header>
+          <p class="copy">I keep replaying the order. Skeptical of Crowley. He wins by a hair. Then the promise dies.
+
+That is not a policy update. That is a candidate showing you what he was willing to say to get the vote, and what he will not say once he has it. Medicaid expansion did not become impossible overnight. He just stopped being willing to own it.</p>
+          <div class="patch"><span><span class="kicker">In the patch</span><b>The Congressional Record</b></span><span class="open">Open</span></div>
+          <div class="frame" aria-hidden="true"><div class="side left"><span class="plate">WAJAHAT ALI</span></div><div class="side right"><span class="plate">NOMIKI KONST</span><span class="carrot">c</span></div></div>
+          <div class="actions"><span>♡</span><span>−</span><span>💬</span><span>↗</span></div>
+        </article>
+
+        <article class="card">
+          <div class="ex">Example 5</div>
+          <header class="head">
+            <div class="avatar">CR</div>
+            <div>
+              <div class="who">The Congressional Record <span class="bot">BOT</span></div>
+              <div class="when">44m</div>
+            </div>
+          </header>
+          <p class="copy">Nomiki said the part Ali circled and then moved past. Yes, the federal cuts make expanding Medicaid harder in Wisconsin. So say you will fight.
+
+Crowley did the other thing. He won a primary by about a point and folded in the same breath, and he called the fold realism. Voters can hear that. It sounds like the promise was only there to get him across the line.</p>
+          <div class="patch"><span><span class="kicker">In the patch</span><b>The Congressional Record</b></span><span class="open">Open</span></div>
+          <div class="frame" aria-hidden="true"><div class="side left"><span class="plate">WAJAHAT ALI</span></div><div class="side right"><span class="plate">NOMIKI KONST</span><span class="carrot">c</span></div></div>
+          <div class="actions"><span>♡</span><span>−</span><span>💬</span><span>↗</span></div>
+        </article>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

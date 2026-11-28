@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Five looks for each quote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,560;1,6..72,560&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #E7E2DA; color: #1C1917; }
+    .app { display: flex; min-height: 100vh; }
+    .nav {
+      width: 72px; flex: none; position: sticky; top: 0; height: 100vh;
+      background: #FAFAF8; border-right: 1px solid #E7E5E4;
+      display: flex; justify-content: center; padding: 16px 0;
+    }
+    .logo { width: 36px; height: 36px; border-radius: 12px; background: #FF6A00; color: white; display: grid; place-items: center; font-weight: 800; }
+    .stage { flex: 1; padding: 28px 28px 72px; min-width: 0; }
+    .note { margin: 0 0 28px; max-width: 40rem; font-size: 16px; line-height: 1.5; }
+    .note span { color: #57534E; }
+    .group { margin: 0 0 34px; }
+    .group h2 { margin: 0; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .group h2 b { color: #FF6A00; margin-right: 6px; }
+    .row { display: flex; gap: 14px; overflow-x: auto; padding: 12px 2px 8px; }
+    .opt { flex: 0 0 300px; margin: 0; }
+    .tag { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #78716C; }
+    .card { width: 100%; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; position: relative; background: #111; }
+    .card h3, .card p { margin: 0; }
+    .card h3 { font-weight: 700; }
+    .serif { font-family: Newsreader, Georgia, serif; }
+    .meta { margin-top: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    .bleed { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .clip { height: 148% !important; top: 0 !important; object-position: center top; }
+    .face, .shot { position: relative; overflow: hidden; min-width: 0; min-height: 0; }
+    .face img, .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+    .band .copy { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 14px 12px; }
+    .band h3 { font-size: 18px; line-height: 1.16; letter-spacing: -0.02em; }
+    .crimson { background: #7F1D1D; color: #FFF7ED; }
+    .teal { background: #134E4A; color: #F0FDFA; }
+    .blue { background: #1E3A8A; color: white; }
+    .amber { background: #B45309; color: #FFFBEB; }
+    .paper { background: #F8FAFC; color: #14532D; }
+    .violet { background: #3B0764; color: #FAF5FF; }
+
+    .field { display: flex; flex-direction: column; padding: 14px; }
+    .field h3 { font-size: 20px; line-height: 1.12; letter-spacing: -0.03em; }
+    .field .copy { margin-top: auto; }
+    .shot.sq { width: 42%; aspect-ratio: 1; border-radius: 12px; align-self: flex-end; }
+    .shot.wide { width: 100%; height: 38%; border-radius: 12px; flex: none; }
+    .shot.round { width: 46%; aspect-ratio: 1; border-radius: 50%; align-self: flex-start; }
+    .shot.tall { width: 38%; height: 46%; border-radius: 14px; align-self: flex-start; }
+    .cream { background: #F4EFE6; color: #1C1917; }
+    .navy { background: #0F172A; color: #F8FAFC; }
+    .white { background: #FAFAF9; color: #1C1917; }
+    .ink { background: #18181B; color: #FAFAF9; }
+    .green { background: #14532D; color: #F0FDF4; }
+
+    .split { display: grid; grid-template-columns: 46% 1fr; }
+    .split.flip { grid-template-columns: 1fr 46%; }
+    .split .copy { padding: 12px; display: flex; flex-direction: column; justify-content: flex-end; }
+    .split h3 { font-size: 15px; line-height: 1.2; letter-spacing: -0.02em; }
+    .indigo { background: #312E81; color: #EEF2FF; }
+    .sand { background: #E7D3A1; color: #1C1917; }
+    .rose { background: #9F1239; color: #FFF1F2; }
+    .forest { background: #14532D; color: #ECFCCB; }
+    .char { background: #1C1917; color: #FAFAF9; }
+    .butter { background: #FEF3C7; color: #1C1917; }
+
+    .stack { display: flex; flex-direction: column; }
+    .stack .copy { flex: 0 0 52%; padding: 12px 12px 10px; display: flex; flex-direction: column; justify-content: space-between; }
+    .stack .face { flex: 1; }
+    .stack h3 { font-size: 15px; line-height: 1.18; letter-spacing: -0.02em; }
+    .stack.short .copy { flex-basis: 42%; }
+    .stack.short h3 { font-size: 22px; line-height: 1.08; }
+    .black { background: #111827; color: white; }
+    .burn { background: #C2410C; color: #FFF7ED; }
+    .ice { background: #E0F2FE; color: #0C4A6E; }
+    .wine { background: #881337; color: #FFF1F2; }
+    .plum { background: #9D174D; color: #FFF1F2; }
+
+    .float .box { position: absolute; padding: 12px; border-radius: 12px; }
+    .float h3 { font-size: 16px; line-height: 1.16; letter-spacing: -0.02em; }
+    .float.bottom .box { left: 10px; right: 10px; bottom: 10px; }
+    .float.top .box { left: 10px; top: 10px; width: 62%; }
+    .float.side .box { right: 10px; bottom: 10px; width: 58%; }
+    .float.left .box { left: 10px; bottom: 10px; width: 64%; }
+    .float.slim .box { width: 48%; }
+    .gold { background: #FDE68A; color: #1C1917; }
+    .yellow { background: #FACC15; color: #1C1917; }
+    @media (max-width: 860px) { .nav { display: none; } .stage { padding: 16px 14px 48px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" aria-hidden="true"><div class="logo">c</div></aside>
+    <div class="stage">
+      <p class="note">Same six sentences. <span>Five looks for each. Scroll a row sideways. The words do not change.</span></p>
+
+      <section class="group">
+        <h2><b>1</b> House floor</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Band</p>
+            <article class="card band">
+              <img class="bleed clip" src="/quote-stills/frame-343.jpg" alt="Mark DeSaulnier on the House floor" />
+              <div class="copy crimson">
+                <h3 class="serif">In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.</h3>
+                <p class="meta">Mark DeSaulnier · November 18, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Split</p>
+            <article class="card split">
+              <div class="face"><img class="clip" src="/quote-stills/frame-343.jpg" alt="" /></div>
+              <div class="copy indigo">
+                <h3>In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.</h3>
+                <p class="meta">Mark DeSaulnier</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Field</p>
+            <article class="card field cream">
+              <div class="shot sq"><img class="clip" src="/quote-stills/frame-343.jpg" alt="" /></div>
+              <div class="copy">
+                <h3 class="serif">In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.</h3>
+                <p class="meta">House floor · November 18, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Plate</p>
+            <article class="card float bottom">
+              <img class="bleed clip" src="/quote-stills/frame-343.jpg" alt="" />
+              <div class="box white">
+                <h3>In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.</h3>
+                <p class="meta">Mark DeSaulnier</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Stack</p>
+            <article class="card stack">
+              <div class="copy black">
+                <h3 class="serif">In my pocket I have pills that were largely developed by American taxpayers that have kept me alive for 10 years. And when I was diagnosed, the house physician, Dr. Moynihan, who's an oncologist, told me, you're lucky.</h3>
+                <p class="meta">Mark DeSaulnier · November 18, 2026</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/frame-343.jpg" alt="" /></div>
+            </article>
+          </figure>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2><b>2</b> The lake</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Stack</p>
+            <article class="card stack short">
+              <div class="copy burn">
+                <h3>The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.</h3>
+                <p class="meta">The narration · 2:55</p>
+              </div>
+              <div class="face"><img src="/quote-stills/baray.jpg" alt="The West Baray" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Band</p>
+            <article class="card band">
+              <img class="bleed" src="/quote-stills/baray.jpg" alt="" style="object-position: center 40%" />
+              <div class="copy teal">
+                <h3>The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.</h3>
+                <p class="meta">The narration · 2:55</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Plate</p>
+            <article class="card float top">
+              <img class="bleed" src="/quote-stills/baray.jpg" alt="" style="object-position: center 60%" />
+              <div class="box cream">
+                <h3 class="serif">The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.</h3>
+                <p class="meta">2:55</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Split</p>
+            <article class="card split flip">
+              <div class="copy sand">
+                <h3>The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.</h3>
+                <p class="meta">The narration</p>
+              </div>
+              <div class="face"><img src="/quote-stills/baray.jpg" alt="" style="object-position: center" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Field</p>
+            <article class="card field navy">
+              <div class="shot wide"><img src="/quote-stills/baray.jpg" alt="" /></div>
+              <div class="copy">
+                <h3 class="serif">The West Baray alone is a man-made lake that stretches for nearly 8 kilometers.</h3>
+                <p class="meta">The narration · 2:55</p>
+              </div>
+            </article>
+          </figure>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2><b>3</b> Measles</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Field</p>
+            <article class="card field white">
+              <div class="shot round"><img class="clip" src="/quote-stills/m-025.jpg" alt="A vaccine vial" /></div>
+              <div class="copy">
+                <h3>For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.</h3>
+                <p class="meta">The report · November 17, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Plate</p>
+            <article class="card float bottom">
+              <img class="bleed clip" src="/quote-stills/m-025.jpg" alt="" />
+              <div class="box yellow">
+                <h3>For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.</h3>
+                <p class="meta">November 17, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Band</p>
+            <article class="card band">
+              <img class="bleed clip" src="/quote-stills/m-025.jpg" alt="" />
+              <div class="copy blue">
+                <h3>For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.</h3>
+                <p class="meta">The report · November 17, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Split</p>
+            <article class="card split flip">
+              <div class="copy rose">
+                <h3>For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.</h3>
+                <p class="meta">The report</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/m-025.jpg" alt="" style="object-position: 22% top" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Stack</p>
+            <article class="card stack">
+              <div class="copy ice">
+                <h3 class="serif">For the first time in 26 years, the US has lost its measles-free status. It's currently going through the largest outbreak in over three decades.</h3>
+                <p class="meta">November 17, 2026</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/m-025.jpg" alt="" /></div>
+            </article>
+          </figure>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2><b>4</b> Two wars</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Split</p>
+            <article class="card split">
+              <div class="face"><img src="/quote-stills/dawson.jpg" alt="Paul Dawson" style="object-position: center 15%" /></div>
+              <div class="copy forest">
+                <h3 class="serif">I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.</h3>
+                <p class="meta">Paul Dawson</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Stack</p>
+            <article class="card stack">
+              <div class="copy plum">
+                <h3>I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.</h3>
+                <p class="meta">Paul Dawson</p>
+              </div>
+              <div class="face"><img src="/quote-stills/dawson.jpg" alt="" style="object-position: center 20%" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Plate</p>
+            <article class="card float left">
+              <img class="bleed" src="/quote-stills/dawson.jpg" alt="" style="object-position: 80% 8%" />
+              <div class="box white">
+                <h3 class="serif">I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.</h3>
+                <p class="meta">Retired fire safety officer</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Field</p>
+            <article class="card field ink">
+              <div class="shot tall"><img src="/quote-stills/dawson.jpg" alt="" style="object-position: center 18%" /></div>
+              <div class="copy">
+                <h3 class="serif">I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.</h3>
+                <p class="meta">Paul Dawson</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Band</p>
+            <article class="card band">
+              <img class="bleed" src="/quote-stills/dawson.jpg" alt="" style="object-position: center 8%" />
+              <div class="copy amber">
+                <h3>I was brought up by my grandmother who'd lived through two wars and nearly starved in the First World War when her mother died and her father was away fighting.</h3>
+                <p class="meta">Paul Dawson</p>
+              </div>
+            </article>
+          </figure>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2><b>5</b> 1.5 degrees</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Plate</p>
+            <article class="card float left slim">
+              <img class="bleed" src="/quote-stills/cop15.jpg" alt="Rachel Cleetus in Antalya" style="height: 160%; top: -16%; object-position: 28% top" />
+              <div class="box gold">
+                <h3>The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.</h3>
+                <p class="meta">Rachel Cleetus · Antalya</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Field</p>
+            <article class="card field green">
+              <div class="shot round"><img class="clip" src="/quote-stills/cop15.jpg" alt="" /></div>
+              <div class="copy">
+                <h3 class="serif">The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.</h3>
+                <p class="meta">Union of Concerned Scientists</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Stack</p>
+            <article class="card stack">
+              <div class="copy ice">
+                <h3>The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.</h3>
+                <p class="meta">Rachel Cleetus · Antalya</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/cop15.jpg" alt="" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Band</p>
+            <article class="card band">
+              <img class="bleed clip" src="/quote-stills/cop15.jpg" alt="" />
+              <div class="copy paper">
+                <h3>The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.</h3>
+                <p class="meta">Rachel Cleetus · Antalya</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Split</p>
+            <article class="card split">
+              <div class="face"><img class="clip" src="/quote-stills/cop15.jpg" alt="" style="object-position: 30% top" /></div>
+              <div class="copy char">
+                <h3 class="serif">The world now inevitably is going to breach 1.5°C of global warming, that treasured guard rail that we had secured in the Paris Agreement.</h3>
+                <p class="meta">Rachel Cleetus</p>
+              </div>
+            </article>
+          </figure>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2><b>6</b> The hearing</h2>
+        <div class="row">
+          <figure class="opt">
+            <p class="tag">A · Field</p>
+            <article class="card field navy">
+              <div class="shot wide"><img src="/quote-stills/aijobs.jpg" alt="Mr. Gallagher at the hearing" style="object-position: center 35%" /></div>
+              <div class="copy">
+                <h3 class="serif">AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.</h3>
+                <p class="meta">Mr. Gallagher · November 20, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">B · Plate</p>
+            <article class="card float left">
+              <img class="bleed clip" src="/quote-stills/aijobs.jpg" alt="" />
+              <div class="box white">
+                <h3>AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.</h3>
+                <p class="meta">November 20, 2026</p>
+              </div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">C · Split</p>
+            <article class="card split flip">
+              <div class="copy butter">
+                <h3>AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.</h3>
+                <p class="meta">Mr. Gallagher</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/aijobs.jpg" alt="" style="object-position: 60% top" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">D · Stack</p>
+            <article class="card stack short">
+              <div class="copy wine">
+                <h3 class="serif">AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.</h3>
+                <p class="meta">Mr. Gallagher · November 20, 2026</p>
+              </div>
+              <div class="face"><img class="clip" src="/quote-stills/aijobs.jpg" alt="" /></div>
+            </article>
+          </figure>
+          <figure class="opt">
+            <p class="tag">E · Band</p>
+            <article class="card band">
+              <img class="bleed clip" src="/quote-stills/aijobs.jpg" alt="" />
+              <div class="copy violet">
+                <h3>AI will create jobs more rapidly and it will displace jobs more rapidly than the prior ones.</h3>
+                <p class="meta">Mr. Gallagher · November 20, 2026</p>
+              </div>
+            </article>
+          </figure>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

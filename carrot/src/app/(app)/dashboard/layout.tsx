@@ -19,7 +19,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
           <MinimalNav />
         </aside>
         <main className="flex-1 min-w-0">
-          <div className="w-full max-w-3xl px-6 py-8 mx-auto">
+          <div className="w-full max-w-3xl px-6 py-8">
             {children}
           </div>
         </main>

@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import { uploadFilesToFirebase, uploadFileToFirebase } from '../../../../lib/uploadToFirebase';
 import COLOR_SCHEMES from '../../../../config/colorSchemes';
 import { uploadToCloudflareStream } from '../../../../lib/cfStreamUpload';
+import { imageFromClipboard } from '../../../../lib/clipboardImage';
 import dynamic from 'next/dynamic';
 
 import { IconPhoto, IconGif, IconEmoji, IconAudio, IconCarrot, IconLightning } from './icons';
@@ -742,21 +743,17 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     }
   };
 
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const stageFile = async (file: File) => {
     
     // File size validation
     if (file.type.startsWith('image/')) {
       if (file.size > 10 * 1024 * 1024) { // 10 MB limit for images
         alert("Image exceeds 10 MB. Please use a smaller image.");
-        e.target.value = "";
         return;
       }
     } else if (file.type.startsWith('video/')) {
       if (file.size > 100 * 1024 * 1024) { // 100 MB limit for videos
         alert("Video exceeds 100 MB. Please trim/compress your video first. Current size: " + Math.round(file.size / 1024 / 1024 * 100) / 100 + " MB");
-        e.target.value = "";
         return;
       }
     }
@@ -777,7 +774,6 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
       
       setMediaPreview(previewUrl);
       setSelectedFile(file);
-      e.target.value = "";
       
       console.log('File selected:', {
         name: file.name,
@@ -799,6 +795,19 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
     // Start background upload and remember the promise so we can await uid on save
     const p = uploadFileInBackground(file);
     setCfUploadPromise(p);
+  };
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) await stageFile(file);
+  };
+
+  const pasteImage = (event: React.ClipboardEvent) => {
+    const file = imageFromClipboard(event.clipboardData);
+    if (!file) return;
+    event.preventDefault();
+    void stageFile(file);
   };
 
   const cancelUpload = () => {
@@ -985,6 +994,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                 placeholder="What's happening?"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
+                onPaste={pasteImage}
               />
             </div>
 
@@ -1373,6 +1383,7 @@ export default function CommitmentComposer({ onPost, onPostUpdate }: CommitmentC
                 placeholder="What's happening?"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
+                onPaste={pasteImage}
               />
               
               {/* B/I/S formatting tools - spaced evenly within white card */}

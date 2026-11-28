@@ -1,5 +1,3 @@
-'use client';
-
 import MinimalNav from '@/components/MinimalNav';
 import Messenger from '@/components/messaging/Messenger';
 

@@ -2,6 +2,10 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { officeHandle } from '@/lib/officeHandle'
 import { sameStory } from '@/lib/curator/judge'
+import { happened } from '@/lib/curator/voice'
+import { articleLines } from '@/lib/feedPost'
+import { resolveGoogleNews } from '@/lib/learn/publicUrl'
+import { readLinkCard, savePreview } from '@/lib/curator/preview'
 import type { FeedItem, Official } from '@/lib/polWatch'
 
 const PORTRAIT = 'https://unitedstates.github.io/images/congress/225x275'
@@ -208,8 +212,26 @@ export function worthSharing(item: FeedItem): boolean {
   return true
 }
 
-export function storyText(item: FeedItem): string {
-  const detail = item.detail && item.detail !== item.title ? `${item.detail}\n` : ''
-  const source = item.source ? `${item.source}\n` : ''
-  return `${item.title}\n${detail}${source}${item.url}`.slice(0, 2000)
+/** Example 1: one sentence, then the paper itself. A Google News wrapper is not a post. */
+export async function officePost(item: FeedItem): Promise<string | null> {
+  let url = String(item.url || '').trim()
+  if (!/^https?:\/\//i.test(url)) return null
+  if (/news\.google\.com/i.test(url)) {
+    const resolved = await resolveGoogleNews(url).catch(() => url)
+    if (!resolved || /news\.google\.com/i.test(resolved)) return null
+    url = resolved
+  }
+  const card = await readLinkCard(url).catch(() => null)
+  const title = (card?.title || item.title || '').replace(/\s+/g, ' ').trim()
+  const sentence = await happened(title)
+  if (!sentence) return null
+  const remote = card?.image || ''
+  const image = remote ? await savePreview(remote, url).catch(() => null) : null
+  const meta = articleLines({
+    title,
+    site: card?.site || item.source || '',
+    published: card?.published || '',
+    image: image || ''
+  })
+  return [sentence, '', url, meta].filter((part) => part !== '').join('\n')
 }

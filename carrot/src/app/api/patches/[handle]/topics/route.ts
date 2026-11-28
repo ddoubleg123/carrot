@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import prisma from '@/lib/prisma'
-import { createTopic, fillTopicPhotos, listTopics, topicPath, widenTopics } from '@/lib/learn/topic'
+import { createTopic, fillTopicPhotos, listTopics, oneTopic, topicPath, widenTopics } from '@/lib/learn/topic'
 import { showFollowers } from '@/lib/activityFeed'
 
 export const runtime = 'nodejs'
@@ -49,6 +49,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ hand
     }
   }
   const url = new URL(request.url)
+  const one = (url.searchParams.get('topic') || '').trim()
+  if (one && url.searchParams.get('fill') !== '1' && url.searchParams.get('photos') !== '1') {
+    const topic = await oneTopic(patch.id, session?.user?.id || '', one)
+    return NextResponse.json({ topics: topic ? [topic] : [] })
+  }
   if (url.searchParams.get('photos') === '1') {
     const withPhotos = await fillTopicPhotos(patch.id, patch.title, topics)
     return NextResponse.json({ topics: withPhotos })

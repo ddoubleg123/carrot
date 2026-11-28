@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '../../../../lib/prisma'
 import { auth } from '@/auth'
+import { deskByUsername } from '@/lib/curator/desks'
 import { projectPost } from '../../posts/_project'
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -12,8 +13,10 @@ function followingIds(meta: Record<string, unknown>): string[] {
 }
 
 async function findPerson(username: string) {
+  const desk = deskByUsername(username)
+  const names = [...new Set([username, desk?.username, desk?.priorUsername].filter((name): name is string => Boolean(name)))]
   return prisma.user.findFirst({
-    where: { username },
+    where: { username: { in: names } },
     select: {
       id: true,
       name: true,

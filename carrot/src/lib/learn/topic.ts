@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'fs/promises'
+import { existsSync } from 'fs'
+import { mkdir, readFile, writeFile } from 'fs/promises'
 import path from 'path'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
@@ -14,6 +15,7 @@ import { describePassage, explainPhotograph, lookupStatusPhoto, splitReading, st
 import { readXPost } from '@/lib/learn/xPost'
 import { searchScholarly } from '@/lib/learn/beyond'
 import { searchPosts } from '@/lib/learn/xSearch'
+import { buildShelves, postKnowledge, readShelves, type BrainItem } from '@/lib/learn/brain'
 
 export interface TopicSource {
   id: string
@@ -21,6 +23,7 @@ export interface TopicSource {
   url: string
   domain: string
   quote: string
+  body?: string
   image?: string
   video?: string
   cfUid?: string
@@ -103,6 +106,7 @@ interface TopicMeta {
   messages?: TopicMessage[]
   slug?: string
   spoken?: Record<string, TopicSpoken>
+  library?: Record<string, string>
 }
 
 function idFor(): string {
@@ -454,6 +458,7 @@ function keptSource(item: unknown): TopicSource[] {
     url: source.url,
     domain: typeof source.domain === 'string' ? source.domain : domainOf(source.url),
     quote: source.quote,
+    body: typeof source.body === 'string' && source.body.trim().length >= 40 ? source.body.trim().slice(0, 20000) : undefined,
     image: typeof source.image === 'string' ? source.image : undefined,
     video,
     cfUid,
@@ -493,7 +498,7 @@ function transcriptFromCaption(raw: string): string {
     }
   }
   if (current) blocks.push(current)
-  return blocks.join('\n\n').slice(0, 6000)
+  return blocks.join('\n\n').slice(0, 200000)
 }
 
 async function readCaption(raw: string): Promise<string> {
@@ -547,8 +552,27 @@ function readMeta(value: unknown): TopicMeta | null {
     }) : [],
     sources: Array.isArray(meta.sources) ? meta.sources.flatMap((item) => keptSource(item)) : [],
     replies: Array.isArray(meta.replies) ? meta.replies.filter((item) => item && typeof item.text === 'string') : [],
-    spoken: readSpoken(meta.spoken)
+    spoken: readSpoken(meta.spoken),
+    library: readLibrary(meta.library)
   }
+}
+
+const FULL_TEXT = 400000
+
+function readLibrary(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  const saved: Record<string, string> = {}
+  for (const [key, text] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof text !== 'string') continue
+    const trimmed = text.trim().slice(0, FULL_TEXT)
+    if (trimmed.length >= 40) saved[key.slice(0, 40)] = trimmed
+  }
+  return saved
+}
+
+function keepFull(text: string): string {
+  const trimmed = text.trim().slice(0, FULL_TEXT)
+  return trimmed.length >= 40 ? trimmed : ''
 }
 
 function readSpoken(value: unknown): Record<string, TopicSpoken> {
@@ -586,8 +610,10 @@ function keptNotes(value: unknown): TopicNote[] {
 function presentSource(source: TopicSource, viewerId: string): TopicSource {
   const up = source.up || []
   const down = source.down || []
+  const rest = { ...source }
+  delete rest.body
   return {
-    ...source,
+    ...rest,
     addedBy: '',
     up: [],
     down: [],
@@ -634,17 +660,40 @@ async function writeMeta(id: string, meta: TopicMeta, question: string) {
   })
 }
 
-export async function listTopics(patchId: string, viewerId: string): Promise<TopicCard[]> {
-  const rows = await prisma.discoveredContent.findMany({
-    where: { patchId, type: 'topic' },
-    select: { id: true, title: true, metadata: true, createdAt: true },
-    orderBy: { createdAt: 'desc' },
-    take: 40
-  })
+type TopicRow = { id: string; title: string; metadata: unknown; createdAt: Date }
+
+function cardRows(rows: TopicRow[], viewerId: string): TopicCard[] {
   return withSlugs(rows.flatMap((row) => {
-    const card = toCard(row, viewerId)
+    const card = toCard({ ...row, createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt) }, viewerId)
     return card ? [card] : []
   }))
+}
+
+export async function listTopics(patchId: string, viewerId: string): Promise<TopicCard[]> {
+  const rows = await prisma.$queryRaw<TopicRow[]>`
+    SELECT id, title, (metadata - 'library') AS metadata, created_at AS "createdAt"
+    FROM discovered_content
+    WHERE patch_id = ${patchId} AND type = 'topic'
+    ORDER BY created_at DESC
+    LIMIT 40
+  `
+  return cardRows(rows, viewerId)
+}
+
+export async function oneTopic(patchId: string, viewerId: string, key: string): Promise<TopicCard | null> {
+  const clean = key.trim().slice(0, 180)
+  if (!clean) return null
+  const rows = await prisma.$queryRaw<TopicRow[]>`
+    SELECT id, title, (metadata - 'library') AS metadata, created_at AS "createdAt"
+    FROM discovered_content
+    WHERE patch_id = ${patchId} AND type = 'topic'
+      AND (id = ${clean} OR metadata->>'slug' = ${clean})
+    LIMIT 1
+  `
+  const found = cardRows(rows, viewerId)[0]
+  if (found) return found
+  const topics = await listTopics(patchId, viewerId)
+  return topics.find((topic) => topic.id === clean || topic.slug === clean || (topic.slug.length > 8 && (topic.slug.startsWith(clean) || clean.startsWith(topic.slug)))) || null
 }
 
 const SOURCE_TARGET = 10
@@ -916,7 +965,7 @@ export async function saveTopicNote(patchId: string, id: string, userId: string,
   const row = await topicRow(patchId, id)
   const meta = row ? readMeta(row.metadata) : null
   if (!row || !meta || meta.adminId !== userId) return null
-  meta.note = note.trim().slice(0, 8000)
+  meta.note = note.trim().slice(0, 400000)
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -939,7 +988,8 @@ export async function addTopicSource(patchId: string, id: string, userId: string
   let source: TopicSource
   if (target && !post) {
     const viewed = await readXPost(url).catch(() => null)
-    const quote = (viewed?.text || '').trim().slice(0, 6000) || 'Post added to this question.'
+    const postText = (viewed?.text || '').trim()
+    const quote = postText.slice(0, 6000) || 'Post added to this question.'
     const placed = await placeOnQuestion(row.title, quote, 'Post', { url: `https://x.com/${target.user}/status/${target.id}` })
     source = {
       id: idFor(),
@@ -957,6 +1007,8 @@ export async function addTopicSource(patchId: string, id: string, userId: string
     if (previous?.image) return toCard({ ...row, metadata: meta }, userId)
     if (previous) source.id = previous.id
     meta.sources = [source, ...rest].slice(0, 24)
+    const fullPost = keepFull(postText)
+    if (fullPost) meta.library = { ...(meta.library || {}), [source.id]: fullPost }
     await writeMeta(row.id, meta, row.title)
     return toCard({ ...row, metadata: meta }, userId)
   }
@@ -1019,6 +1071,8 @@ export async function addTopicSource(patchId: string, id: string, userId: string
     down: already?.down
   }
   meta.sources = [source, ...meta.sources.filter((item) => item.id !== source.id)].slice(0, 24)
+  const full = keepFull(page.text)
+  if (full) meta.library = { ...(meta.library || {}), [source.id]: full }
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -1037,10 +1091,10 @@ export async function addTopicVideo(
   const video = input.videoUrl && hostedVideo(input.videoUrl) ? input.videoUrl : undefined
   const cfUid = input.cfUid && /^[A-Za-z0-9]{16,40}$/.test(input.cfUid) ? input.cfUid : undefined
   if (!video && !cfUid) throw new PublicUrlError('That video was not saved to a copy we can play.')
-  const written = typeof input.transcript === 'string' ? input.transcript.trim().slice(0, 6000) : ''
+  const written = typeof input.transcript === 'string' ? keepFull(input.transcript) : ''
   const transcript = written.length >= 40 ? written : input.captionUrl ? await readCaption(input.captionUrl).catch(() => '') : ''
   const quote = transcript.length >= 40
-    ? transcript
+    ? transcript.slice(0, 6000)
     : 'The video is saved here and plays from our copy.\n\nA transcript was not included with it.'
   let image: string | undefined
   if (input.thumbnail?.startsWith('/topic-videos/') && !input.thumbnail.includes('..')) {
@@ -1067,6 +1121,8 @@ export async function addTopicVideo(
     addedByName: name
   }
   meta.sources = [source, ...meta.sources.filter((item) => item.url !== source.url)].slice(0, 24)
+  const full = keepFull(transcript)
+  if (full) meta.library = { ...(meta.library || {}), [source.id]: full }
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
@@ -1095,6 +1151,174 @@ async function withPictures(sources: TopicSource[]): Promise<TopicSource[]> {
   })
 }
 
+function toBrain(question: string, source: TopicSource, library?: Record<string, string>): BrainItem {
+  return {
+    title: source.title,
+    url: source.url,
+    quote: source.quote,
+    body: library?.[source.id] || source.body || source.quote,
+    origin: source.origin,
+    video: source.video,
+    question
+  }
+}
+
+async function documentText(source: TopicSource): Promise<string> {
+  const clean = source.url.split('?')[0]
+  if (clean.startsWith('/topic-docs/') && !clean.includes('..') && clean.toLowerCase().endsWith('.pdf')) {
+    const file = path.join(process.cwd(), 'public', clean.slice(1))
+    if (!existsSync(file)) return ''
+    const bytes = await readFile(file).catch(() => null)
+    return bytes ? keepFull(await textFromPdf(bytes)) : ''
+  }
+  if (!/^https?:\/\//i.test(source.url)) return ''
+  let host = ''
+  try {
+    host = new URL(source.url).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+  if (host === 'x.com' || host === 'twitter.com' || host.endsWith('youtube.com') || host === 'youtu.be' || host.endsWith('tiktok.com')) return ''
+  const page = await readPublicUrl(source.url).catch(() => null)
+  return page?.text ? keepFull(page.text) : ''
+}
+
+async function groupSources(patchId: string): Promise<BrainItem[]> {
+  const rows = await prisma.discoveredContent.findMany({
+    where: { patchId, type: 'topic' },
+    select: { id: true, title: true, metadata: true },
+    take: 80
+  })
+  const items: BrainItem[] = []
+  let remote = 0
+  for (const row of rows) {
+    const meta = readMeta(row.metadata)
+    if (!meta) continue
+    let dirty = false
+    for (const source of meta.sources) {
+      if ((meta.library?.[source.id] || '').length >= 40) continue
+      if (remote >= 8) continue
+      const text = await documentText(source)
+      if (!text) continue
+      if (/^https?:\/\//i.test(source.url)) remote += 1
+      meta.library = { ...(meta.library || {}), [source.id]: text }
+      dirty = true
+    }
+    if (dirty) await writeMeta(row.id, meta, row.title).catch(() => undefined)
+    if (meta.note.trim().length >= 40) {
+      items.push({ title: 'Note', url: '', quote: meta.note, origin: 'member', question: row.title })
+    }
+    for (const spoken of Object.values(meta.spoken || {})) {
+      if (spoken.state !== 'ready' || spoken.text.trim().length < 40) continue
+      items.push({ title: 'Transcript', url: '', quote: spoken.text.slice(0, 1500), body: spoken.text, origin: 'member', question: row.title })
+    }
+    for (const reply of meta.replies || []) {
+      if ((reply.text || '').trim().length < 40) continue
+      items.push({ title: reply.name || 'Reply', url: '', quote: reply.text, origin: 'member', question: row.title })
+    }
+    for (const source of meta.sources) items.push(toBrain(row.title, source, meta.library))
+  }
+  return items
+}
+
+export async function fillAllLibraries(): Promise<{ topics: number; filled: number; unread: number }> {
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM discovered_content WHERE type = 'topic' ORDER BY created_at DESC
+  `
+  let filled = 0
+  let unread = 0
+  for (let index = 0; index < ids.length; index += 1) {
+    const entry = ids[index]
+    const row = await prisma.discoveredContent.findUnique({
+      where: { id: entry.id },
+      select: { id: true, title: true, metadata: true }
+    })
+    const meta = row ? readMeta(row.metadata) : null
+    if (!row || !meta) continue
+    let dirty = false
+    for (const source of meta.sources) {
+      if ((meta.library?.[source.id] || '').length >= 40) continue
+      const text = await documentText(source)
+      if (!text) {
+        if (/^https?:\/\//i.test(source.url) && !/x\.com|twitter\.com|youtube\.com|youtu\.be|tiktok\.com/i.test(source.url)) unread += 1
+        continue
+      }
+      meta.library = { ...(meta.library || {}), [source.id]: text }
+      filled += 1
+      dirty = true
+    }
+    if (dirty) await writeMeta(row.id, meta, row.title).catch(() => undefined)
+    if (dirty || index % 25 === 0) console.log(JSON.stringify({ seen: index + 1, of: ids.length, filled, unread }))
+  }
+  return { topics: ids.length, filled, unread }
+}
+
+async function savedPosts(patchId: string, query: string): Promise<BrainItem[]> {
+  const wanted = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((word) => word.length > 3)
+  const mine = await prisma.post.findMany({
+    where: { patchId },
+    select: { content: true, audioTranscription: true },
+    orderBy: { createdAt: 'desc' },
+    take: 100
+  })
+  const spoken = wanted.length
+    ? await prisma.post.findMany({
+      where: { audioTranscription: { not: null }, NOT: { patchId } },
+      select: { content: true, audioTranscription: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+    : []
+  const items = mine.flatMap((post) => postKnowledge(post.content || '', post.audioTranscription, ''))
+  const elsewhere = spoken.flatMap((post) => postKnowledge(post.content || '', post.audioTranscription, ''))
+  const matched = wanted.length
+    ? elsewhere.filter((item) => {
+      const hay = `${item.title} ${item.quote}`.toLowerCase()
+      return wanted.some((word) => hay.includes(word))
+    })
+    : []
+  return [...items, ...matched]
+}
+
+async function knownItems(patchId: string, query: string): Promise<BrainItem[]> {
+  const [here, posts, elsewhere] = await Promise.all([
+    groupSources(patchId),
+    savedPosts(patchId, query).catch(() => []),
+    otherHeld(patchId, query).catch(() => [])
+  ])
+  return [...here, ...posts, ...elsewhere]
+}
+
+async function otherHeld(patchId: string, query: string): Promise<BrainItem[]> {
+  const wanted = new Set(query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((word) => word.length > 3))
+  if (!wanted.size) return []
+  const rows = await prisma.$queryRaw<Array<{ title: string; metadata: unknown }>>`
+    SELECT title, (metadata - 'library') AS metadata
+    FROM discovered_content
+    WHERE type = 'topic' AND patch_id <> ${patchId}
+    ORDER BY created_at DESC
+    LIMIT 30
+  `
+  const items: BrainItem[] = []
+  for (const row of rows) {
+    const meta = readMeta(row.metadata)
+    if (!meta) continue
+    for (const source of meta.sources) {
+      const item = toBrain(row.title, source)
+      const hay = `${row.title} ${source.title} ${source.quote}`.toLowerCase()
+      if (![...wanted].some((word) => hay.includes(word))) continue
+      items.push(item)
+      if (items.length >= 8) return items
+    }
+  }
+  return items
+}
+
+export async function groupBrief(patchId: string, query: string): Promise<string> {
+  const shelves = buildShelves(await knownItems(patchId, query), '')
+  return shelves[0] || ''
+}
+
 export async function askTopic(patchId: string, id: string, groupTitle: string, userId: string, name: string, text: string): Promise<TopicCard | null> {
   const row = await topicRow(patchId, id)
   const meta = row ? readMeta(row.metadata) : null
@@ -1106,8 +1330,13 @@ export async function askTopic(patchId: string, id: string, groupTitle: string, 
   const query = followTokens.length >= 2 ? follow : `${row.title} ${follow}`
   const remembered = await rememberedSources(patchId, query, groupTitle, skip).catch(() => [])
   const found = [...remembered, ...await withPictures(await gatherTopicSources(query, groupTitle, skip))]
+  const shelves = buildShelves(await knownItems(patchId, follow).catch(() => []), row.title)
+  const reading = await readShelves(row.title, follow, shelves).catch(() => null)
+  const fresh = await topicRow(patchId, id)
+  const saved = fresh ? readMeta(fresh.metadata) : null
+  if (!saved) return null
   const now = new Date().toISOString()
-  meta.pending = [...(meta.pending || []), ...found].slice(-12)
+  saved.pending = [...(saved.pending || []), ...found].slice(-12)
   const userMessage: TopicMessage = {
     id: idFor(),
     role: 'user',
@@ -1119,14 +1348,16 @@ export async function askTopic(patchId: string, id: string, groupTitle: string, 
   const assistantMessage: TopicMessage = {
     id: idFor(),
     role: 'assistant',
-    name: 'Search',
-    text: found.length ? 'These passages match what you asked. Add the ones that belong on this question.' : 'Nothing new matched that. Ask more specifically, or add a page, a photo, or what you know.',
+    name: reading ? 'Record' : 'Search',
+    text: reading
+      ? (found.length ? `${reading}\n\nThese outside pages also matched. Add one if it belongs on the question.` : reading)
+      : (found.length ? 'These passages match what you asked. Add the ones that belong on this question.' : 'Nothing new matched that. Ask more specifically, or add a page, a photo, or what you know.'),
     sourceIds: found.map((item) => item.id),
     createdAt: now
   }
-  meta.messages = [...(meta.messages || []), userMessage, assistantMessage].slice(-40)
-  await writeMeta(row.id, meta, row.title)
-  return toCard({ ...row, metadata: meta }, userId)
+  saved.messages = [...(saved.messages || []), userMessage, assistantMessage].slice(-40)
+  await writeMeta(row.id, saved, row.title)
+  return toCard({ ...row, metadata: saved }, userId)
 }
 
 export async function addTopicClip(patchId: string, id: string, userId: string, name: string, input: { url: string; title: string; quote: string }): Promise<TopicCard | null> {
@@ -1245,8 +1476,10 @@ export async function addTopicUploadedPdf(patchId: string, id: string, userId: s
   const fallback = pdfFileName(fileName)
   const quote = quoteFromMemberPage(text, row.title, patch?.title || '', lookFor) || 'The PDF is the source. Open the file to read it.'
   const placed = await placeOnQuestion(row.title, quote, fallback, { name: fallback, url, lookFor })
+  const sourceId = idFor()
+  const full = keepFull(text)
   meta.sources = [memberSource({
-    id: idFor(),
+    id: sourceId,
     title: placed.title || fallback,
     url,
     domain: '',
@@ -1256,6 +1489,7 @@ export async function addTopicUploadedPdf(patchId: string, id: string, userId: s
     addedBy: userId,
     addedByName: name
   }), ...meta.sources].slice(0, 24)
+  if (full) meta.library = { ...(meta.library || {}), [sourceId]: full }
   await writeMeta(row.id, meta, row.title)
   return toCard({ ...row, metadata: meta }, userId)
 }
