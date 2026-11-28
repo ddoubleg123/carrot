@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type LegacyRef, type RefObject } from 'react'
 import { peekRail } from '@/components/live/LiveFeedCard'
 import { FeedRectangle, LivePosterAd } from '@/components/search/HalfPageAd'
 import { embedParent } from '@/lib/live/embed'
@@ -333,7 +333,7 @@ function Stage({ item, parent, frameRef, watchId, clipTitle }: { item: RailItem;
       <div className={`relative overflow-hidden rounded-2xl bg-black ${showing ? '' : 'hidden'}`}>
         <div className="aspect-video w-full">
           <iframe
-            ref={frameRef}
+            ref={frameRef as LegacyRef<HTMLIFrameElement>}
             src={frameSrc}
             title={item.name}
             className={`h-full w-full ${paused && !commandable ? 'invisible' : ''}`}

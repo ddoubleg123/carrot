@@ -104,7 +104,7 @@ function forHome<T extends { author?: { id?: string | null } | null; userId?: st
   })
 }
 
-function unstacked<T extends { author?: { id?: string | null } | null }>(posts: T[]): T[] {
+function unstacked<T extends { author?: { id?: string | null } | null; content?: string | null; imageUrls?: string[] | null }>(posts: T[]): T[] {
   const pending = posts.filter(hasQuotePhoto)
   const out: T[] = []
   while (pending.length) {

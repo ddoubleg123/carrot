@@ -470,7 +470,7 @@ export function categoryFor(id: string, topic?: string | null, parent?: string |
   if (group === 'sports' || isSportBroadcast(text)) return 'sports'
   if (group === 'music' || /\bmusic\b/.test(text)) return 'music'
   if (group === 'news' || /\b(news|politics)\b/.test(text)) return 'news'
-  if (isChatting(text) || group === 'irl') return base === 'sports' ? 'sports' : 'talk'
+  if (isChatting(text) || group === 'irl') return 'talk'
   if (group === 'games' || text) return 'gaming'
   return base
 }
