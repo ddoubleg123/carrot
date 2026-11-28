@@ -269,11 +269,13 @@ export async function speak(userId: string, threadId: string, text: string, imag
       ? `Re: ${thread.subject}`
       : (thread.subject || '(no subject)')
     failReason = await sendCarroMail({
-      from: `${display(membership.user)} <${fromAddr}>`,
+      from: fromAddr,
       to: toAddr || '',
       subject,
       text: body || (photo ? 'Photo' : ''),
       image: photo,
+      name: display(membership.user),
+      username,
     })
     state = failReason ? 'failed' : 'sent'
   }

@@ -2,3 +2,4 @@ name = "carrot-mail"
 main = "worker.js"
 compatibility_date = "2026-11-27"
 workers_dev = false
+addresses = ["*@carro7.com"]
