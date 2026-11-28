@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Right rail preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f3f0ea;
+      --card: #fffcf8;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #efeae3;
+      --orange: #f26b1d;
+      --orange-deep: #d4530c;
+      --peach: #fff1e6;
+      --green: #3f6b4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 420px at 10% -10%, #ffe7d2 0%, transparent 55%),
+        var(--paper);
+      color: var(--ink);
+      font-family: Outfit, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }
+    header h1 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 40px;
+      font-weight: 560;
+      letter-spacing: -0.03em;
+    }
+    header p {
+      max-width: 46rem;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .stages {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      margin-top: 36px;
+      align-items: flex-start;
+    }
+    .stage { width: 340px; }
+    .stage h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .rail { display: flex; flex-direction: column; gap: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(80, 48, 20, 0.04);
+    }
+    .invite {
+      padding: 22px 22px 18px;
+      background:
+        linear-gradient(180deg, #fff8f2 0%, #fffcf8 42%);
+    }
+    .mark {
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+    }
+    .invite h3, .score h3, .people h3 {
+      margin: 14px 0 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 28px;
+      font-weight: 560;
+      letter-spacing: -0.03em;
+    }
+    .invite p, .quiet {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.45;
+    }
+    .linkrow {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .linkrow input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid #f0d7c4;
+      background: white;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    button.copy, button.connect {
+      border: 0;
+      border-radius: 999px;
+      background: var(--orange);
+      color: white;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    button.copy:hover, button.connect:hover { background: var(--orange-deep); }
+    .score, .people, .ledger { padding: 18px 20px 16px; }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .total {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+    .total strong {
+      font-family: Outfit, "Segoe UI", sans-serif;
+      font-size: 64px;
+      font-weight: 600;
+      font-variant-numeric: lining-nums tabular-nums;
+      letter-spacing: -0.04em;
+      line-height: 0.9;
+    }
+    .total span { color: var(--muted); font-size: 13px; padding-bottom: 6px; }
+    .week {
+      margin-top: 16px;
+    }
+    .week .row, .ledger li, .person {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .week .row { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #f3eee8;
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #ffb067, var(--orange));
+    }
+    .bar.later i { width: 34%; }
+    .ledger { padding-top: 8px; }
+    .ledger h3 {
+      margin: 0 0 4px;
+      font-family: Outfit, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .ledger ul, .people ul { list-style: none; margin: 0; padding: 0; }
+    .ledger li {
+      padding: 11px 0;
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .ledger b { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .people li + li { margin-top: 12px; }
+    .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      flex: none;
+    }
+    .who strong { display: block; font-size: 14px; font-weight: 600; }
+    .who em { display: block; font-style: normal; color: var(--muted); font-size: 12px; }
+    button.connect { padding: 7px 12px; }
+    .note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>The right rail, without the sample data.</h1>
+      <p>Trending tags, made-up people, and the week-in-review counts come out. What stays is an invitation and a true count of carrots. People appear only when three real suggestions exist.</p>
+    </header>
+    <div class="stages">
+      <section class="stage">
+        <h2>Starting out</h2>
+        <div class="rail">
+          <article class="card invite">
+            <img class="mark" src="/carrot-logo.png" alt="" />
+            <h3>Bring a friend.</h3>
+            <p>The feed is already public. A friend is how it becomes a place you share.</p>
+            <div class="linkrow">
+              <input id="invite" readonly value="https://gotcarrot.com" aria-label="Invite link" />
+              <button class="copy" type="button" id="copy">Copy</button>
+            </div>
+          </article>
+          <article class="card score">
+            <div class="eyebrow">Carrots earned</div>
+            <div class="total">
+              <strong>0</strong>
+              <span>all time</span>
+            </div>
+            <div class="week">
+              <div class="row"><span>This week</span><span>0</span></div>
+              <div class="bar"><i></i></div>
+            </div>
+          </article>
+          <article class="card ledger">
+            <h3>Where they come from</h3>
+            <p class="quiet">This sits here until three people are ready to suggest.</p>
+            <ul>
+              <li><span>Carrots on your posts</span><b>0</b></li>
+              <li><span>Replies, saves, and likes</span><b>0</b></li>
+              <li><span>Patches you joined</span><b>0</b></li>
+            </ul>
+          </article>
+        </div>
+      </section>
+      <section class="stage">
+        <h2>After three people are ready</h2>
+        <div class="rail">
+          <article class="card invite">
+            <img class="mark" src="/carrot-logo.png" alt="" />
+            <h3>Bring another.</h3>
+            <p>The invite stays. The count below is still yours.</p>
+            <div class="linkrow">
+              <input readonly value="https://gotcarrot.com" aria-label="Invite link" />
+              <button class="copy" type="button" data-copy>Copy</button>
+            </div>
+          </article>
+          <article class="card score">
+            <div class="eyebrow"><span>Carrots earned</span><span>this week 4</span></div>
+            <div class="total">
+              <strong>17</strong>
+              <span>all time</span>
+            </div>
+            <div class="week">
+              <div class="row"><span>This week</span><span>4</span></div>
+              <div class="bar later"><i></i></div>
+            </div>
+          </article>
+          <article class="card people">
+            <div class="eyebrow"><span>New connections</span></div>
+            <ul>
+              <li class="person">
+                <div class="who">
+                  <div class="avatar" style="background:#c2410c">A</div>
+                  <div><strong>A friend of a friend</strong><em>Shown only as a real account</em></div>
+                </div>
+                <button class="connect" type="button">Connect</button>
+              </li>
+              <li class="person">
+                <div class="who">
+                  <div class="avatar" style="background:#9a3412">B</div>
+                  <div><strong>Someone in your patch</strong><em>Shown only as a real account</em></div>
+                </div>
+                <button class="connect" type="button">Connect</button>
+              </li>
+              <li class="person">
+                <div class="who">
+                  <div class="avatar" style="background:#7c2d12">C</div>
+                  <div><strong>A third real person</strong><em>The box needs all three</em></div>
+                </div>
+                <button class="connect" type="button">Connect</button>
+              </li>
+            </ul>
+            <p class="note">Two suggestions would still show the carrot ledger, not a short list of people.</p>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    function copyFrom(button) {
+      const input = button.parentElement.querySelector('input');
+      navigator.clipboard.writeText(input.value).then(() => {
+        const previous = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = previous; }, 1200);
+      }).catch(() => {});
+    }
+    document.getElementById('copy').addEventListener('click', (event) => copyFrom(event.currentTarget));
+    document.querySelector('[data-copy]').addEventListener('click', (event) => copyFrom(event.currentTarget));
+  </script>
+</body>
+</html>

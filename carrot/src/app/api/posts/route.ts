@@ -14,7 +14,9 @@ import { hoursForPost, loadViewerContext } from '@/lib/feedViewer';
 import { mediaKind } from '@/lib/mediaKind';
 import { laneOf, outletFromContent } from '@/lib/curator/variety';
 import { interestGroups } from '@/lib/interestCatalog';
-import { picksFrom, recordInterest } from '@/lib/recordInterest';
+import { chooseDesk } from '@/lib/curator/assign';
+import { deskById } from '@/lib/curator/desks';
+import { recordInterest } from '@/lib/recordInterest';
 
 let botAuthorCache: { at: number; ids: Set<string> } | null = null
 
@@ -380,14 +382,13 @@ export async function POST(req: Request, _ctx: { params: Promise<{}> }) {
     const safeThumbUrl = thumbInfo.url ?? thumbnailUrl ?? null;
 
     let bucket = 'finds'
-    if (typeof requestedBucket === 'string') {
-      const id = requestedBucket.trim()
-      if (id === 'pol-watch' || id.startsWith('ask:') || interestGroups().some((group) => group.id === id)) bucket = id
+    const asked = typeof requestedBucket === 'string' ? requestedBucket.trim() : ''
+    if (asked === 'pol-watch' || asked.startsWith('ask:') || interestGroups().some((group) => group.id === asked) || deskById(asked)) {
+      bucket = asked
     }
-    if (bucket === 'finds') {
-      const viewer = await prisma.user.findUnique({ where: { id: session.user.id }, select: { metadata: true } })
-      const first = picksFrom(viewer?.metadata)[0]?.id
-      if (first && (typeof requestedBucket !== 'string' || !requestedBucket.trim())) bucket = first
+    if (!asked) {
+      const desk = chooseDesk(typeof content === 'string' ? content : '')
+      if (desk.id !== 'finds') bucket = desk.id
     }
     // Create post first
     const post = await prisma.post.create({

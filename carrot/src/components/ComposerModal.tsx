@@ -46,18 +46,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
   
   // Content state
   const [content, setContent] = useState('');
-  const [bucket, setBucket] = useState('finds');
-  const [topicGroups, setTopicGroups] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    fetch('/api/interests/catalog')
-      .then((res) => res.json())
-      .then((body) => {
-        if (Array.isArray(body?.groups)) setTopicGroups(body.groups);
-        const first = body?.picks?.[0]?.id;
-        if (typeof first === 'string') setBucket(first);
-      })
-      .catch(() => {});
-  }, []);
   const [isPosting, setIsPosting] = useState(false);
   
   // Media state
@@ -1326,7 +1314,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             audioUrl: newPost.audioUrl || null,
             audioTranscription: audioTranscription || null,
             thumbnailUrl: thumbnailUrlToSend || null,
-            bucket,
           }),
         });
         if (!res.ok) {
@@ -1409,18 +1396,6 @@ export default function ComposerModal({ isOpen, onClose, onPost, onPostUpdate }:
             }}
           >
             <form onSubmit={handleSubmit}>
-              <label className="mb-3 flex items-center justify-between gap-3 text-sm text-white">
-                <span>Topic</span>
-                <select
-                  value={bucket}
-                  onChange={(event) => setBucket(event.target.value)}
-                  className="max-w-[240px] rounded-lg bg-white px-2 py-1 text-sm text-gray-900"
-                  aria-label="Topic"
-                >
-                  {topicGroups.length === 0 && <option value="finds">Everything Else</option>}
-                  {topicGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
-              </label>
               <ComposeTextArea value={content} onChange={setContent} textareaRef={textareaRef} onPasteImage={(file) => { handleFileSelect(file); setEditedThumb(null); }} />
               {/* Action Row */}
               <div className="mt-4 mb-4 flex items-center gap-2">
